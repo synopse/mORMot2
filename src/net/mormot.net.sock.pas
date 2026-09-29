@@ -8133,7 +8133,7 @@ var
   expected, read, pending: integer;
   events: TNetEvents;
   res: TNetResult;
-  start, wait: Int64;
+  endtix, remaining: Int64;
 begin
   if RawError <> nil then
     RawError^ := NO_ERROR;
@@ -8149,7 +8149,7 @@ begin
       // first check for any available data
       // - some may be available at fSecure/TLS level, but not from fSock/TCP
       // - a blocking Recv() may itself wait up to SO_RCVTIMEO = ReceiveTimeout
-      start := mormot.core.os.GetTickCount64;
+      endtix := mormot.core.os.GetTickCount64 + TimeOut;
       read := MinPtrInt(CrtSocketSendRecvMaxBytes, expected - Length);
       if fSecure <> nil then
         res := fSecure.Receive(Buffer, read)
@@ -8170,9 +8170,7 @@ begin
           end;
         nrRetry:
           begin
-            // no data yet (e.g. WSAETIMEDOUT/EAGAIN or TLS renegotiation):
-            // keep res = nrRetry so that RecvPending + WaitFor below are
-            // called before Recv is retried - never loop on Recv() itself
+            // keep nrRetry so WaitFor() enforces the remaining timeout
             inc(fRetryCount);
             read := 0;
           end;
@@ -8189,19 +8187,18 @@ begin
           (read <> 0) and
           (read < CrtSocketSendRecvMaxBytes)) then
         break; // good enough for now
-      if (res = nrOk) or // a full chunk was received: some more may be pending
-         ((fSock.RecvPending(pending) = nrOk) and
-          (pending > 0)) then
-        continue; // no need to call WaitFor()
+      if res = nrOk then
+        continue; // a full chunk was received: try another one immediately
+      if (fSock.RecvPending(pending) = nrOk) and
+         (pending > 0) then
+        continue; // data is already available: no need to wait
       if GetAborted then
         break;
       // wait for the remaining TimeOut - a blocking Recv() with
-      // SO_RCVTIMEO = TimeOut (as set by Open/AcceptRequest) has already
-      // waited for it, so WaitFor(0) would just check the socket state
-      wait := TimeOut - (mormot.core.os.GetTickCount64 - start);
-      if wait < 0 then
-        wait := 0;
-      events := fSock.WaitFor(wait, [neRead, neError], RawError); // select/poll
+      remaining := endtix - mormot.core.os.GetTickCount64;
+      if remaining < 0 then
+        remaining := 0;
+      events := fSock.WaitFor(remaining, [neRead, neError], RawError); // select/poll
       if neError in events then
       begin
         res := nrUnknownError;

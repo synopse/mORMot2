@@ -4048,7 +4048,6 @@ begin
   else // search from some attributes
     u := fC.FindObjectsInit(fSession, pointer(Filter^.Attrs), Filter^.Count);
   Check(u, 'FindObjectsInit');
-  finalres := CKR_SUCCESS;
   try
     arr.Clear;
     arr.Add(CKA_DEFAULT);
