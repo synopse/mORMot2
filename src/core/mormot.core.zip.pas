@@ -1217,7 +1217,7 @@ begin
   if (comp = nil) or
      ((uncomplen32 = 0) and
       (crc32 = 0)) or
-     not ToBuffer(FastSetString(RawUtf8(result), uncomplen32)) then
+     not ToBuffer(FastSetString(RawUtf8(result{%H-}), uncomplen32)) then
     FastAssignNew(result); // invalid CRC or truncated uncomplen32
 end;
 
@@ -1361,7 +1361,7 @@ end;
 function GZWrite(buf: pointer; len, level: PtrInt): RawByteString;
 begin
   if len > 0 then
-    len := GZWrite(buf, FastNewRawByteString(result, GZWriteLen(len)), len, level);
+    len := GZWrite(buf, FastNewRawByteString(result{%H-}, GZWriteLen(len)), len, level);
   if len <= 0 then
     FastAssignNew(result) // error
   else
@@ -1809,7 +1809,7 @@ begin
               begin
                 // read and move the file by 1MB chunks
                 InfoStart(len, 'Read ', s^.zipName);
-                if tmp = '' then
+                if {%H-}tmp = '' then
                   pointer(tmp) := FastNewString(1 shl 20);
                 readpos := Int64(s^.fileinfo.offset) + info.localsize;
                 repeat
@@ -3006,7 +3006,7 @@ var
   tmp: RawByteString;
   info: TFileInfoFull;
 begin
-  FastAssignNew(result);
+  FastAssignNew(result{%H-});
   if not RetrieveFileInfo(aIndex, info) or
      (info.f64.zfullSize = 0) or
      ((aMaxSize > 0) and
@@ -3283,7 +3283,7 @@ var
 begin
   aIndex := NameToIndex(aName);
   if aIndex < 0 then
-    FastAssignNew(result)
+    FastAssignNew(result{%H-})
   else
     result := UnZip(aIndex);
 end;
@@ -3650,7 +3650,7 @@ function CompressString(const data: RawByteString; failIfGrow: boolean;
 var
   len : integer;
 begin
-  FastNewRawByteString(result, 12 + zlibCompressMax(length(data)));
+  FastNewRawByteString(result{%H-}, 12 + zlibCompressMax(length(data)));
   PInt64(result)^ := length(data);
   PCardinalArray(result)^[2] := adler32(0, pointer(data), length(data));
   // use faster libdeflate instead of plain zlib if available
@@ -3666,7 +3666,7 @@ end;
 
 function UncompressString(const data: RawByteString): RawByteString;
 begin
-  FastAssignNew(result);
+  FastAssignNew(result{%H-});
   if Length(data) > 12 then
   begin
     SetLength(result, PCardinal(data)^);
