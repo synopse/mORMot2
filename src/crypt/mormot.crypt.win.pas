@@ -141,10 +141,12 @@ type
 type
   ECryptCertCng = class(ECryptCert);
 
-  /// Certificate interface with specific Windows CNG information
+  /// Certificate interface backed by a Windows CNG private key
   // - inherits all the regular ICryptCert X.509 methods
-  // - the certificate is represented internally by TX509
-  // - its private key remains in the Windows CNG Key Storage Provider
+  // - may represent an identity from a Windows system store, including a
+  // smart card/hardware KSP, or a transient PKCS#12/PFX identity
+  // - the certificate is represented internally by TX509 whereas all private
+  // key operations remain inside the Windows CNG Key Storage Provider
   ICryptCertCng = interface(ICryptCert)
     /// change the asymmetric signing algorithm used with this certificate
     // - regular RSA keys may use RSxxx or PSxxx
@@ -152,13 +154,14 @@ type
     // - ECC keys only accept their matching curve
     procedure SetAsymAlgo(caa: TCryptAsymAlgo);
     /// allow or forbid user interface from the underlying CNG provider
-    // - false by default, allowing e.g. a SmartCard PIN dialog
-    // - set true for services and other non-interactive processes
+    // - false allows e.g. a smart-card PIN dialog when signing
+    // - true is typically required for services and other unattended processes
     procedure SetSilent(Value: boolean);
     /// return true if KSP user interface has been disabled
     function Silent: boolean;
-    /// retrieve the Windows system store this certificate originated from
-    // - returns false for certificates imported from memory, e.g. PKCS#12/PFX
+    /// retrieve the Windows system store this identity originated from
+    // - returns true for instances obtained from TCryptCertAlgoCng methods
+    // - returns false for transient identities, e.g. from LoadPkcs12() factory
     function GetSystemStore(out CertStore: TSystemCertificateStore;
       out Location: TWinCertStoreLocation): boolean;
     /// the CNG Key Storage Provider name associated with this certificate
@@ -176,10 +179,14 @@ type
 
   TCryptCertCng = class;
 
-  /// enumerate CNG-backed certificates from Windows certificate stores
-  // - defaults to CurrentUser\MY and LocalMachine\MY
-  // - only certificates associated with a CNG KSP are exposed
-  // - use Cert(), Find() or FindOne() to retrieve ICryptCertCng instances
+  /// catalog of CNG-backed certificates from Windows system stores
+  // - Create() immediately enumerates the requested store and location(s),
+  // by default CurrentUser\MY and LocalMachine\MY
+  // - only certificates associated with a CNG Key Storage Provider are exposed,
+  // including smart cards and hardware tokens with a Windows CNG KSP
+  // - use Cert(), Find() or FindOne() to retrieve ready-to-use ICryptCertCng
+  // - this class is a store catalog, not a generic certificate factory:
+  // New/Load/Generate operations inherited from TCryptCertAlgo are unsupported
   TCryptCertAlgoCng = class(TCryptCertAlgo)
   protected
     fLog: TSynLogClass;
@@ -188,7 +195,7 @@ type
     fCert: ICryptCertCngs;
     procedure LoadStore(Location: TWinCertStoreLocation);
   public
-    /// enumerate certificates from the supplied Windows system store
+    /// enumerate CNG-backed identities from the supplied Windows system store
     constructor Create(aCertStore: TSystemCertificateStore = scsMY;
       aLocations: TWinCertStoreLocations = [wcslCurrentUser, wcslLocalMachine];
       aLog: TSynLogClass = nil); reintroduce;
@@ -203,11 +210,6 @@ type
     /// return the first certificate matching a given attribute
     function FindOne(const Value: RawByteString;
       Method: TCryptCertComparer = ccmSerialNumber): ICryptCertCng;
-    /// load a certificate and private key from a PKCS#12/PFX buffer
-    // - private key is imported into an ephemeral CNG KSP and is never persisted
-    // - returns the first certificate having an accessible CNG private key
-    function LoadPkcs12(const Pfx: RawByteString;
-      const Password: SpiUtf8 = ''): ICryptCertCng;
     /// access all currently recognized Windows CNG certificates
     function Cert: ICryptCertCngs;
       {$ifdef HASINLINE} inline; {$endif}
@@ -224,8 +226,11 @@ type
   end;
 
   /// ICryptCert implementation backed by a Windows CNG private key
-  // - TCryptCertX509Abstract parent class will manage the X.509 certificates
-  // - only the private key is managed by this class using the CNG API
+  // - instances are normally obtained from TCryptCertAlgoCng.Cert/Find/FindOne
+  // for Windows-store identities, or LoadPkcs12() for a transient PFX identity
+  // - TCryptCertX509Abstract/TX509 handle certificate parsing and verification
+  // whereas signing and other private operations are delegated to Windows CNG
+  // - private key material is never exposed through this class
   TCryptCertCng = class(TCryptCertX509Abstract, ICryptCertCng)
   protected
     fContext: PCCERT_CONTEXT;
@@ -240,7 +245,8 @@ type
   public
     /// create a certificate from a context currently enumerated in a store
     // - duplicates aContext so this instance owns its certificate context
-    // - you should not call this constructor directly but use
+    // - you should not call this constructor directly but TCryptCertAlgoCng
+    // methods for the system stores or TCryptCertCng.LoadPkcs12() factory
     constructor Create(aOwner: TCryptCertAlgoCng;
       aContext: PCCERT_CONTEXT; aLocation: TWinCertStoreLocation;
       aKeyOptions: TWinCertCngKeyOptions;
@@ -274,6 +280,11 @@ type
     function KeyProvider: RawUtf8;
     function KeyContainer: RawUtf8;
     function WinContext: PCCERT_CONTEXT;
+    /// load a certificate and private key from a PKCS#12/PFX buffer
+    // - private key is imported into an ephemeral CNG KSP and is never persisted
+    // - returns the first certificate having an accessible CNG private key
+    class function LoadPkcs12(const Pfx: RawByteString;
+      const Password: SpiUtf8 = ''; aLog: TSynLogClass = nil): ICryptCertCng;
   end;
 
 const
@@ -695,59 +706,6 @@ begin
     result := fCert;
 end;
 
-const
-  PKCS12_FLAGS = PKCS12_INCLUDE_EXTENDED_PROPERTIES or
-                 PKCS12_ALWAYS_CNG_KSP or
-                 PKCS12_NO_PERSIST_KEY;
-
-function TCryptCertAlgoCng.LoadPkcs12(const Pfx: RawByteString;
-  const Password: SpiUtf8): ICryptCertCng;
-var
-  store: HCERTSTORE;
-  ctxt: PCCERT_CONTEXT;
-  key: TWinCertCngKey;
-  err: cardinal;
-  log: ISynLog;
-begin
-  result := nil;
-  if (self = nil) or
-     (Pfx = '') or
-     not NCrypt.Exists then
-    exit;
-  fLog.EnterLocal(log, 'LoadPkcs12 len=%', [length(Pfx)], self);
-  err := WinCertStoreImportPfx(Pfx, Password, store, PKCS12_FLAGS);
-  if err <> NO_ERROR then
-  begin
-    log.Log(sllTrace, 'LoadPkcs12: PFXImportCertStore failed %',
-      [OsErrorShort(err)], self);
-    exit;
-  end;
-  ctxt := nil;
-  try
-    repeat
-      ctxt := CertEnumCertificatesInStore(store, ctxt);
-      if ctxt = nil then
-        exit;
-      // PKCS12_NO_PERSIST_KEY attached the ephemeral key to this context
-      err := key.Init(ctxt, [wckCache, wckSilent]);
-      if err <> NO_ERROR then
-        continue;
-      key.Done;
-      result := TCryptCertCng.Create(
-        self, ctxt, wcslCurrentUser, [wckCache, wckSilent]);
-      log.Log(sllDebug,
-        'LoadPkcs12: loaded %', [result.Instance], self);
-      exit;
-    until false;
-  finally
-    // CertEnumCertificatesInStore() releases previous contexts automatically,
-    // but the current one still belongs to us if we stopped before next()
-    if ctxt <> nil then
-      CertFreeCertificateContext(ctxt);
-    CertCloseStore(store, CERT_CLOSE_STORE_DEFAULT);
-  end;
-end;
-
 
 { TCryptCertCng }
 
@@ -774,7 +732,7 @@ begin
     fKeyProvider := aInfo^.Provider;
     fKeyContainer := aInfo^.Container;
   end;
-  fContext := CertDuplicateCertificateContext(aContext);
+  fContext := CertDuplicateCertificateContext(aContext); // increment refcount
   if fContext = nil then
     RaiseError('Create: CertDuplicateCertificateContext failed');
   FastSetRawByteString(
@@ -790,6 +748,53 @@ begin
   fCaa := XKA_TO_CAA[xka];
   // safe access of its own private key using the Windows CNG API
   fPrivateKey := TCryptPrivateKeyCng.Create(self);
+end;
+
+const
+  // PKCS12_NO_PERSIST_KEY attached the ephemeral key to TCryptCertCng context
+  PKCS12_FLAGS = PKCS12_INCLUDE_EXTENDED_PROPERTIES or
+                 PKCS12_ALWAYS_CNG_KSP or
+                 PKCS12_NO_PERSIST_KEY;
+  PKCS12_WCK = [wckCache, wckSilent]; // wckCompareKey not needed here
+
+class function TCryptCertCng.LoadPkcs12(const Pfx: RawByteString;
+  const Password: SpiUtf8; aLog: TSynLogClass): ICryptCertCng;
+var
+  store: HCERTSTORE;
+  ctxt: PCCERT_CONTEXT;
+  key: TWinCertCngKey;
+  cert: TCryptCertCng;
+  err: cardinal;
+  log: ISynLog;
+begin
+  result := nil;
+  if (Pfx = '') or
+     not NCrypt.Exists then
+    exit;
+  if aLog = nil then
+    aLog := TSynLog;
+  aLog.EnterLocal(log, '%.LoadPkcs12 len=%', [self, length(Pfx)], nil);
+  ctxt := nil;
+  err := WinCertStoreImportPfx(Pfx, Password, store, PKCS12_FLAGS);
+  if err <> NO_ERROR then
+    log.Log(sllTrace, '%.LoadPkcs12: PFXImportCertStore failed %',
+      [self, OsErrorShort(err)], nil)
+  else
+  try
+    repeat
+      ctxt := CertEnumCertificatesInStore(store, {prevcert=}ctxt);
+      if ctxt = nil then
+        exit;
+    until key.Init(ctxt, PKCS12_WCK) = NO_ERROR; // valid private key
+    key.Done;
+    cert := TCryptCertCng.Create(nil, ctxt, wcslCurrentUser, PKCS12_WCK);
+    log.Log(sllDebug, 'LoadPkcs12: loaded %', [result.Instance], cert);
+    result := cert;
+  finally
+    if ctxt <> nil then
+      CertFreeCertificateContext(ctxt); // decrement refcount is needed
+    CertCloseStore(store, CERT_CLOSE_STORE_DEFAULT);
+  end;
 end;
 
 procedure TCryptCertCng.Clear;
