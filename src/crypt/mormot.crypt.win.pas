@@ -941,15 +941,12 @@ end;
 // ICryptCertCng methods
 
 procedure TCryptCertCng.SetAsymAlgo(caa: TCryptAsymAlgo);
-var
-  xka: TXPublicKeyAlgorithm;
 begin
   if caa = fCaa then
     exit;
   if fX509 = nil then
     RaiseError('SetAsymAlgo: no X.509 certificate');
-  xka := fX509.Signed.SubjectPublicKeyAlgorithm;
-  case xka of
+  case fX509.Signed.SubjectPublicKeyAlgorithm of
     xkaRsa:
       // an unrestricted RSA CNG key may sign with PKCS#1 or PSS
       if caa in CAA_RSA then
@@ -959,7 +956,7 @@ begin
       end;
     xkaRsaPss:
       // an RSA-PSS SubjectPublicKeyInfo remains PSS-restricted
-      if caa in [caaPS256 .. caaPS512] then
+      if caa in CAA_PSS then
       begin
         fCaa := caa;
         exit;
@@ -973,7 +970,7 @@ begin
     end;
   end;
   RaiseError('SetAsymAlgo(%): incompatible with the % public key',
-    [ToText(caa)^, ToText(xka)^]);
+    [ToText(caa)^, ToText(fX509.Signed.SubjectPublicKeyAlgorithm)^]);
 end;
 
 procedure TCryptCertCng.SetSilent(Value: boolean);

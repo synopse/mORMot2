@@ -2653,6 +2653,9 @@ const
   /// the known asymmetric algorithms which implement RSA cryptography
   CAA_RSA = [caaRS256, caaRS384, caaRS512, caaPS256, caaPS384, caaPS512];
 
+  /// the known asymmetric algorithms which implement RSA-PSS cryptography
+  CAA_PSS = [caaPS256 .. caaPS512];
+
   /// the known asymmetric algorithms which expects no ASN1_SEQ in JWT/JWS
   CAA_RAWSIGNATURE = CAA_RSA + [caaEdDSA];
 

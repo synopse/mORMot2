@@ -505,6 +505,7 @@ begin
     exit; // paranoid
   obj := fCert.OpenPrivateKey;
   if obj <> CK_INVALID_HANDLE then
+  try
     try
       // see https://crypto.stackexchange.com/a/10103/40200
       Pkcs11SetMechanism(DigAlgo, mech);
@@ -529,9 +530,13 @@ begin
         // ICryptPrivateKey expects the ASN.1 DER SEQUENCE(INTEGER r, INTEGER s)
         result := SetSignatureSecurityRaw(DigAlgo, RawUtf8(result));
       log.Log(sllTrace, 'SignDigest: returns len=%', [length(result)], self);
-    finally
-      fCert.fEngine.Close;
+    except
+      on E: Exception do
+        log.Log(sllTrace, 'SignDigest failed due to %', [E], self);
     end;
+  finally
+    fCert.fEngine.Close;
+  end;
 end;
 
 function TCryptPrivateKeyPkcs11.RsaModulus: integer;
@@ -1154,7 +1159,7 @@ begin
       end;
     xkaRsaPss:
       // an RSA-PSS SubjectPublicKeyInfo remains PSS-restricted
-      if caa in [caaPS256 .. caaPS512] then
+      if caa in CAA_PSS then
       begin
         fCaa := caa;
         exit;
