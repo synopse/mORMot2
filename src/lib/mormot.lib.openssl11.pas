@@ -1476,7 +1476,7 @@ type
   public
     function Data: pointer;
       {$ifdef HASINLINE} inline; {$endif}
-    function Len: integer;
+    function Len: PtrInt;
       {$ifdef HASINLINE} inline; {$endif}
     function GetType: integer;
     procedure ToUtf8(out result: RawUtf8;
@@ -1755,7 +1755,7 @@ type
     function SerialNumber: RawUtf8;
     function RevocationDate: TDateTime;
     function Reason: integer;
-    function SetReason(value: integer): boolean;
+    function SetReason(value: PtrInt): boolean;
     function ToBinary: RawByteString;
     procedure Free;
       {$ifdef HASINLINE} inline; {$endif}
@@ -1858,7 +1858,7 @@ type
   X509_STORE_CTX = object
   public
     function CurrentCert: PX509;
-    function CurrentError(errstr: PPUtf8Char = nil): integer;
+    function CurrentError(errstr: PPUtf8Char = nil): PtrInt;
     procedure Free;
       {$ifdef HASINLINE} inline; {$endif}
   end;
@@ -1981,7 +1981,7 @@ type
     /// set the Not Before / Not After Vailidy of this Certificate
     // - ValidDays and ExpireDays are relative to the current time - ValidDays
     // is usually -1 to avoid most clock synch issues
-    function SetValidity(ValidDays, ExpireDays: integer): boolean;
+    function SetValidity(ValidDays, ExpireDays: PtrInt): boolean;
     /// low-level set an extension to a X509 Certificate
     // - any previous extension with this NID will be first deleted
     // - typical nid are NID_subject_alt_name (with 'DNS:xxx'), NID_info_access
@@ -2112,9 +2112,9 @@ type
   dyn_MEM_realloc_fn = function(p1: pointer; p2: PtrUInt; p3: PUtf8Char; p4: integer): pointer; cdecl;
   dyn_MEM_free_fn = procedure(p1: pointer; p2: PUtf8Char; p3: integer); cdecl;
 
-  PCRYPTO_EX_new = procedure(parent: pointer; ptr: pointer; ad: PCRYPTO_EX_DATA; idx: integer; argl: integer; argp: pointer); cdecl;
-  PCRYPTO_EX_free = procedure(parent: pointer; ptr: pointer; ad: PCRYPTO_EX_DATA; idx: integer; argl: integer; argp: pointer); cdecl;
-  PCRYPTO_EX_dup = function(_to: PCRYPTO_EX_DATA; from: PCRYPTO_EX_DATA; from_d: pointer; idx: integer; argl: integer; argp: pointer): integer; cdecl;
+  PCRYPTO_EX_new = procedure(parent: pointer; ptr: pointer; ad: PCRYPTO_EX_DATA; idx: integer; argl: clong; argp: pointer); cdecl;
+  PCRYPTO_EX_free = procedure(parent: pointer; ptr: pointer; ad: PCRYPTO_EX_DATA; idx: integer; argl: clong; argp: pointer); cdecl;
+  PCRYPTO_EX_dup = function(_to: PCRYPTO_EX_DATA; from: PCRYPTO_EX_DATA; from_d: pointer; idx: integer; argl: clong; argp: pointer): integer; cdecl;
 
 const
   /// password prefix recognized by X509.ToPkcs12Ex() to force legacy PBE-SHA1-3DES
@@ -2136,8 +2136,8 @@ var
 
 function SSL_CTX_new(meth: PSSL_METHOD): PSSL_CTX; cdecl;
 procedure SSL_CTX_free(p1: PSSL_CTX); cdecl;
-function SSL_CTX_set_timeout(ctx: PSSL_CTX; t: integer): integer; cdecl;
-function SSL_CTX_get_timeout(ctx: PSSL_CTX): integer; cdecl;
+function SSL_CTX_set_timeout(ctx: PSSL_CTX; t: clong): clong; cdecl;
+function SSL_CTX_get_timeout(ctx: PSSL_CTX): clong; cdecl;
 procedure SSL_CTX_set_verify(ctx: PSSL_CTX; mode: integer; callback: SSL_verify_cb); cdecl;
 function SSL_CTX_use_PrivateKey(ctx: PSSL_CTX; pkey: PEVP_PKEY): integer; cdecl;
 function SSL_CTX_use_RSAPrivateKey(ctx: PSSL_CTX; rsa: PRSA): integer; cdecl;
@@ -2158,7 +2158,7 @@ function SSL_CTX_ctrl(ctx: PSSL_CTX; cmd: integer; larg: clong; parg: pointer): 
 function SSL_CTX_set_options(ctx: PSSL_CTX; op: cardinal): cardinal; cdecl;
 function SSL_CTX_set_session_id_context(ctx: PSSL_CTX; sid_ctx: pointer; sid_ctx_len: cardinal): integer; cdecl;
 function SSL_CTX_clear_options(ctx: PSSL_CTX; op: cardinal): cardinal; cdecl;
-function SSL_CTX_callback_ctrl(p1: PSSL_CTX; p2: integer; p3: SSL_CTX_callback_ctrl_): integer; cdecl;
+function SSL_CTX_callback_ctrl(p1: PSSL_CTX; p2: integer; p3: SSL_CTX_callback_ctrl_): clong; cdecl;
 function SSL_new(ctx: PSSL_CTX): PSSL; cdecl;
 function SSL_set_SSL_CTX(ssl: PSSL; ctx: PSSL_CTX): PSSL_CTX; cdecl;
 function SSL_shutdown(s: PSSL): integer; cdecl;
@@ -2195,7 +2195,7 @@ function SSL_set_fd(s: PSSL; fd: integer): integer; cdecl;
 function SSL_get_current_cipher(s: PSSL): PSSL_CIPHER; cdecl;
 function SSL_CIPHER_description(p1: PSSL_CIPHER;
    buf: PUtf8Char; size: integer): PUtf8Char; cdecl;
-function SSL_get_verify_result(ssl: PSSL): integer;
+function SSL_get_verify_result(ssl: PSSL): clong;
   {$ifdef OPENSSLSTATIC} cdecl; {$else} {$ifdef FPC} inline; {$endif} {$endif}
 procedure SSL_set_hostflags(s: PSSL; flags: cardinal); cdecl;
 function SSL_load_client_CA_file(_file: PUtf8Char): Pstack_st_X509_NAME; cdecl;
@@ -2212,7 +2212,7 @@ function CRYPTO_set_mem_functions(m: dyn_MEM_malloc_fn; r: dyn_MEM_realloc_fn;
   f: dyn_MEM_free_fn): integer; cdecl;
 procedure CRYPTO_free(ptr: pointer; _file: PUtf8Char; line: integer); cdecl;
 function CRYPTO_get_ex_new_index(class_index: integer;
-  argl: integer; argp: pointer; new_func: PCRYPTO_EX_new;
+  argl: clong; argp: pointer; new_func: PCRYPTO_EX_new;
   dup_func: PCRYPTO_EX_dup; free_func: PCRYPTO_EX_free): integer; cdecl;
 procedure ERR_error_string_n(e: cardinal; buf: PUtf8Char; len: PtrUInt); cdecl;
 function ERR_get_error(): cardinal; cdecl;
@@ -2275,14 +2275,14 @@ procedure X509_STORE_free(v: PX509_STORE); cdecl;
 procedure X509_STORE_CTX_free(ctx: PX509_STORE_CTX); cdecl;
 procedure X509_free(a: PX509); cdecl;
 function X509_new(): PX509; cdecl;
-function X509_set_version(x: PX509; version: integer): integer; cdecl;
+function X509_set_version(x: PX509; version: clong): integer; cdecl;
 function X509_set_serialNumber(x: PX509; serial: PASN1_INTEGER): integer; cdecl;
 function X509_set_issuer_name(x: PX509; name: PX509_NAME): integer; cdecl;
 function X509_set_subject_name(x: PX509; name: PX509_NAME): integer; cdecl;
 function X509_set_pubkey(x: PX509; pkey: PEVP_PKEY): integer; cdecl;
 function X509_sign(x: PX509; pkey: PEVP_PKEY; md: PEVP_MD): integer; cdecl;
 function X509_REQ_new(): PX509_REQ; cdecl;
-function X509_REQ_set_version(x: PX509_REQ; version: integer): integer; cdecl;
+function X509_REQ_set_version(x: PX509_REQ; version: clong): integer; cdecl;
 procedure X509_REQ_free(a: PX509_REQ); cdecl;
 function X509_REQ_sign(x: PX509_REQ; pkey: PEVP_PKEY; md: PEVP_MD): integer; cdecl;
 function X509_REQ_verify(a: PX509_REQ; r: PEVP_PKEY): integer; cdecl;
@@ -2300,13 +2300,13 @@ function X509_add_ext(x: PX509; ex: PX509_EXTENSION; loc: integer): integer;
 function X509_delete_ext(x: PX509; loc: integer): PX509_EXTENSION; cdecl;
 procedure X509V3_set_ctx(ctx: PX509V3_CTX; issuer, subject: PX509; req: PX509_REQ; crl: PX509_CRL; flags: integer);
   {$ifdef OPENSSLSTATIC} cdecl; {$else} {$ifdef FPC} inline; {$endif} {$endif}
-function X509_gmtime_adj(s: PASN1_TIME; adj: integer): PASN1_TIME; cdecl;
+function X509_gmtime_adj(s: PASN1_TIME; adj: clong): PASN1_TIME; cdecl;
 function X509_EXTENSION_create_by_OBJ(ex: PPX509_EXTENSION; obj: PASN1_OBJECT;
   crit: integer; data: PASN1_OCTET_STRING): PX509_EXTENSION; cdecl;
 procedure X509_EXTENSION_free(a: PX509_EXTENSION); cdecl;
 procedure BASIC_CONSTRAINTS_free(a: PBASIC_CONSTRAINTS);
   {$ifdef OPENSSLSTATIC} cdecl; {$else} {$ifdef FPC} inline; {$endif} {$endif}
-function d2i_BASIC_CONSTRAINTS(a: PPBASIC_CONSTRAINTS; _in: PPByte; len: integer): PBASIC_CONSTRAINTS;
+function d2i_BASIC_CONSTRAINTS(a: PPBASIC_CONSTRAINTS; _in: PPByte; len: clong): PBASIC_CONSTRAINTS;
   {$ifdef OPENSSLSTATIC} cdecl; {$else} {$ifdef FPC} inline; {$endif} {$endif}
 function X509_NAME_add_entry_by_txt(name: PX509_NAME; field: PUtf8Char; typ: integer; bytes: PAnsiChar; len: integer; loc: integer; _set: integer): integer; cdecl;
 function X509_NAME_print_ex(_out: PBIO; nm: PX509_NAME; indent: integer; flags: cardinal): integer; cdecl;
@@ -2323,7 +2323,7 @@ procedure X509_NAME_ENTRY_free(a: PX509_NAME_ENTRY); cdecl;
 function X509_NAME_oneline(a: PX509_NAME; buf: PUtf8Char; size: integer): PUtf8Char; cdecl;
 function X509_NAME_hash(x: PX509_NAME): cardinal; cdecl;
 function X509_NAME_cmp(a: PX509_NAME; b: PX509_NAME): integer; cdecl;
-function d2i_X509_NAME(a: PPX509_NAME; _in: PPByte; len: integer): PX509_NAME; cdecl;
+function d2i_X509_NAME(a: PPX509_NAME; _in: PPByte; len: clong): PX509_NAME; cdecl;
 function i2d_X509_NAME(a: PX509_NAME; _out: PPByte): integer; cdecl;
 function X509_STORE_CTX_get_current_cert(ctx: PX509_STORE_CTX): PX509; cdecl;
 function X509_digest(data: PX509; typ: PEVP_MD; md: PEVP_MD_DIG; len: PCardinal): integer; cdecl;
@@ -2340,7 +2340,7 @@ function X509_EXTENSION_get_data(ne: PX509_EXTENSION): PASN1_OCTET_STRING;
   {$ifdef OPENSSLSTATIC} cdecl; {$else} {$ifdef FPC} inline; {$endif} {$endif}
 function X509_EXTENSION_get_critical(ex: PX509_EXTENSION): integer;
   {$ifdef OPENSSLSTATIC} cdecl; {$else} {$ifdef FPC} inline; {$endif} {$endif}
-function X509_get_version(x: PX509): integer; cdecl;
+function X509_get_version(x: PX509): clong; cdecl;
 function X509_get0_notBefore(x: PX509): PASN1_TIME; cdecl;
 function X509_get0_notAfter(x: PX509): PASN1_TIME; cdecl;
 function X509_get_extension_flags(x: PX509): cardinal; cdecl;
@@ -2357,12 +2357,12 @@ function X509_CRL_sign(x: PX509_CRL; pkey: PEVP_PKEY; md: PEVP_MD): integer; cde
 function X509_CRL_dup(crl: PX509_CRL): PX509_CRL; cdecl;
 function X509_CRL_up_ref(crl: PX509_CRL): integer;
   {$ifdef OPENSSLSTATIC} cdecl; {$else} {$ifdef FPC} inline; {$endif} {$endif}
-function X509_CRL_set_version(x: PX509_CRL; version: integer): integer; cdecl;
+function X509_CRL_set_version(x: PX509_CRL; version: clong): integer; cdecl;
 function X509_CRL_set_issuer_name(x: PX509_CRL; name: PX509_NAME): integer; cdecl;
 function X509_CRL_set_lastUpdate(x: PX509_CRL; tm: PASN1_TIME): integer; cdecl;
 function X509_CRL_set_nextUpdate(x: PX509_CRL; tm: PASN1_TIME): integer; cdecl;
 function X509_CRL_get_issuer(crl: PX509_CRL): PX509_NAME; cdecl;
-function X509_CRL_get_version(crl: PX509_CRL): integer; cdecl;
+function X509_CRL_get_version(crl: PX509_CRL): clong; cdecl;
 function X509_CRL_get_lastUpdate(crl: PX509_CRL): PASN1_TIME; cdecl;
 function X509_CRL_get_nextUpdate(crl: PX509_CRL): PASN1_TIME; cdecl;
 function X509_CRL_print(bp: PBIO; x: PX509_CRL): integer; cdecl;
@@ -2385,7 +2385,7 @@ function X509_REVOKED_get0_serialNumber(x: PX509_REVOKED): PASN1_INTEGER; cdecl;
 function X509_REVOKED_get0_revocationDate(x: PX509_REVOKED): PASN1_TIME; cdecl;
 function X509_REVOKED_get_ext_d2i(x: PX509_REVOKED; nid: integer; crit: PInteger; idx: PInteger): pointer; cdecl;
 function X509_REVOKED_add1_ext_i2d(x: PX509_REVOKED; nid: integer; value: pointer; crit: integer; flags: cardinal): integer; cdecl;
-function d2i_X509_REVOKED(a: PPX509_REVOKED; _in: PPByte; len: integer): PX509_REVOKED; cdecl;
+function d2i_X509_REVOKED(a: PPX509_REVOKED; _in: PPByte; len: clong): PX509_REVOKED; cdecl;
 function i2d_X509_REVOKED(a: PX509_REVOKED; _out: PPByte): integer; cdecl;
 function X509_STORE_new(): PX509_STORE; cdecl;
 function X509_STORE_load_locations(ctx: PX509_STORE; _file: PUtf8Char; dir: PUtf8Char): integer; cdecl;
@@ -2408,7 +2408,7 @@ function X509_OBJECT_get0_X509_CRL(a: PX509_OBJECT): PX509_CRL;
 function X509_LOOKUP_hash_dir(): PX509_LOOKUP_METHOD; cdecl;
 function X509_LOOKUP_file(): PX509_LOOKUP_METHOD; cdecl;
 function X509_LOOKUP_ctrl(ctx: PX509_LOOKUP; cmd: integer; argc: PUtf8Char;
-  argl: integer; ret: PPUtf8Char): integer; cdecl;
+  argl: clong; ret: PPUtf8Char): integer; cdecl;
 function X509_load_cert_file(ctx: PX509_LOOKUP; _file: PUtf8Char; typ: integer): integer; cdecl;
 function X509_load_crl_file(ctx: PX509_LOOKUP; _file: PUtf8Char; typ: integer): integer; cdecl;
 function X509_load_cert_crl_file(ctx: PX509_LOOKUP; _file: PUtf8Char; typ: integer): integer; cdecl;
@@ -2419,7 +2419,7 @@ procedure X509_STORE_CTX_set_verify_cb(ctx: PX509_STORE_CTX; verify: X509_STORE_
 procedure X509_STORE_CTX_set_cert(c: PX509_STORE_CTX; x: PX509); cdecl;
 function X509_verify_cert(ctx: PX509_STORE_CTX): integer; cdecl;
 function X509_STORE_CTX_get_error(ctx: PX509_STORE_CTX): integer; cdecl;
-function X509_verify_cert_error_string(n: integer): PUtf8Char; cdecl;
+function X509_verify_cert_error_string(n: clong): PUtf8Char; cdecl;
 function X509_verify(a: PX509; r: PEVP_PKEY): integer; cdecl;
 procedure X509_STORE_CTX_set_time(ctx: PX509_STORE_CTX; flags: cardinal; t: time_t); cdecl;
 function X509_STORE_CTX_set_purpose(ctx: PX509_STORE_CTX; purpose: integer): integer; cdecl;
@@ -2557,8 +2557,8 @@ function ASN1_bn_print(bp: PBIO; number: PUtf8Char;
 function ASN1_INTEGER_to_BN(ai: PASN1_INTEGER; bn: PBIGNUM): PBIGNUM; cdecl;
 function ASN1_INTEGER_new(): PASN1_INTEGER; cdecl;
 procedure ASN1_INTEGER_free(a: PASN1_INTEGER); cdecl;
-function ASN1_ENUMERATED_set(a: PASN1_ENUMERATED; v: integer): integer; cdecl;
-function ASN1_ENUMERATED_get(a: PASN1_ENUMERATED): integer; cdecl;
+function ASN1_ENUMERATED_set(a: PASN1_ENUMERATED; v: clong): integer; cdecl;
+function ASN1_ENUMERATED_get(a: PASN1_ENUMERATED): clong; cdecl;
 function ASN1_ENUMERATED_new(): PASN1_ENUMERATED; cdecl;
 procedure ASN1_ENUMERATED_free(a: PASN1_ENUMERATED); cdecl;
 function EC_POINT_bn2point(p1: PEC_GROUP; p2: PBIGNUM; p3: PEC_POINT; p4: PBN_CTX): PEC_POINT; cdecl;
@@ -2658,7 +2658,7 @@ function OpenSSL_error_eof(error: integer): boolean;
 function SSL_is_fatal_error(get_error: integer): boolean;
 procedure SSL_get_error_text(get_error: integer; var result: RawUtf8);
 procedure SSL_get_error_short(get_error: integer; var dest: ShortString);
-function SSL_get_ex_new_index(l: integer; p: pointer; newf: PCRYPTO_EX_new;
+function SSL_get_ex_new_index(l: clong; p: pointer; newf: PCRYPTO_EX_new;
   dupf: PCRYPTO_EX_dup; freef: PCRYPTO_EX_free): integer;
 
 // allocate a new TLS_server_method with a genuine session id
@@ -2680,7 +2680,7 @@ function SSL_CTX_set_max_proto_version(ctx: PSSL_CTX; version: integer): integer
   {$ifdef HASINLINE} inline; {$endif}
 function SSL_set_tlsext_host_name(const s: PSSL; const name: RawUtf8): integer;
   {$ifdef HASINLINE} inline; {$endif}
-function SSL_CTX_set_tlsext_servername_callback(ctx: PSSL_CTX; cb: SSL_SNI_servername_cb): integer;
+function SSL_CTX_set_tlsext_servername_callback(ctx: PSSL_CTX; cb: SSL_SNI_servername_cb): clong;
   {$ifdef HASINLINE} inline; {$endif}
 function SSL_CTX_set_tlsext_servername_arg(ctx: PSSL_CTX; arg: pointer): integer;
   {$ifdef HASINLINE} inline; {$endif}
@@ -3011,8 +3011,8 @@ type
   public
     SSL_CTX_new: function(meth: PSSL_METHOD): PSSL_CTX; cdecl;
     SSL_CTX_free: procedure(p1: PSSL_CTX); cdecl;
-    SSL_CTX_set_timeout: function(ctx: PSSL_CTX; t: integer): integer; cdecl;
-    SSL_CTX_get_timeout: function(ctx: PSSL_CTX): integer; cdecl;
+    SSL_CTX_set_timeout: function(ctx: PSSL_CTX; t: clong): clong; cdecl;
+    SSL_CTX_get_timeout: function(ctx: PSSL_CTX): clong; cdecl;
     SSL_CTX_set_verify: procedure(ctx: PSSL_CTX; mode: integer; callback: SSL_verify_cb); cdecl;
     SSL_CTX_use_PrivateKey: function(ctx: PSSL_CTX; pkey: PEVP_PKEY): integer; cdecl;
     SSL_CTX_use_RSAPrivateKey: function(ctx: PSSL_CTX; rsa: PRSA): integer; cdecl;
@@ -3028,7 +3028,7 @@ type
     SSL_CTX_set_options: pointer; // variable signature between 1.1 vs 3.0 :(
     SSL_CTX_set_session_id_context: function(ctx: PSSL_CTX; sid_ctx: pointer; sid_ctx_len: cardinal): integer; cdecl;
     SSL_CTX_clear_options: pointer;
-    SSL_CTX_callback_ctrl: function(p1: PSSL_CTX; p2: integer; p3: SSL_CTX_callback_ctrl_): integer; cdecl;
+    SSL_CTX_callback_ctrl: function(p1: PSSL_CTX; p2: integer; p3: SSL_CTX_callback_ctrl_): clong; cdecl;
     SSL_new: function(ctx: PSSL_CTX): PSSL; cdecl;
     SSL_set_SSL_CTX: function(ssl: PSSL; ctx: PSSL_CTX): PSSL_CTX; cdecl;
     SSL_shutdown: function(s: PSSL): integer; cdecl;
@@ -3063,7 +3063,7 @@ type
     SSL_set_fd: function(s: PSSL; fd: integer): integer; cdecl;
     SSL_get_current_cipher: function(s: PSSL): PSSL_CIPHER; cdecl;
     SSL_CIPHER_description: function(p1: PSSL_CIPHER; buf: PUtf8Char; size: integer): PUtf8Char; cdecl;
-    SSL_get_verify_result: function(ssl: PSSL): integer; cdecl;
+    SSL_get_verify_result: function(ssl: PSSL): clong; cdecl;
     SSL_set_hostflags: procedure(s: PSSL; flags: cardinal); cdecl;
     SSL_load_client_CA_file: function(_file: PUtf8Char): Pstack_st_X509_NAME; cdecl;
     SSL_CTX_set_client_CA_list: procedure(ctx: PSSL_CTX; list: Pstack_st_X509_NAME); cdecl;
@@ -3151,12 +3151,12 @@ begin
   libssl.SSL_CTX_free(p1);
 end;
 
-function SSL_CTX_set_timeout(ctx: PSSL_CTX; t: integer): integer;
+function SSL_CTX_set_timeout(ctx: PSSL_CTX; t: clong): clong;
 begin
   result := libssl.SSL_CTX_set_timeout(ctx, t);
 end;
 
-function SSL_CTX_get_timeout(ctx: PSSL_CTX): integer;
+function SSL_CTX_get_timeout(ctx: PSSL_CTX): clong;
 begin
   result := libssl.SSL_CTX_get_timeout(ctx);
 end;
@@ -3251,7 +3251,7 @@ begin
   result := libssl.SSL_CTX_set_session_id_context(ctx, sid_ctx, sid_ctx_len);
 end;
 
-function SSL_CTX_callback_ctrl(p1: PSSL_CTX; p2: integer; p3: SSL_CTX_callback_ctrl_): integer;
+function SSL_CTX_callback_ctrl(p1: PSSL_CTX; p2: integer; p3: SSL_CTX_callback_ctrl_): clong;
 begin
   result := libssl.SSL_CTX_callback_ctrl(p1, p2, p3);
 end;
@@ -3429,7 +3429,7 @@ begin
   result := libssl.SSL_CIPHER_description(p1, buf, size);
 end;
 
-function SSL_get_verify_result(ssl: PSSL): integer;
+function SSL_get_verify_result(ssl: PSSL): clong;
 begin
   result := libssl.SSL_get_verify_result(ssl);
 end;
@@ -3473,7 +3473,7 @@ type
     CRYPTO_malloc: function(num: PtrUInt; _file: PUtf8Char; line: integer): pointer; cdecl;
     CRYPTO_set_mem_functions: function(m: dyn_MEM_malloc_fn; r: dyn_MEM_realloc_fn; f: dyn_MEM_free_fn): integer; cdecl;
     CRYPTO_free: procedure(ptr: pointer; _file: PUtf8Char; line: integer); cdecl;
-    CRYPTO_get_ex_new_index: function(class_index: integer; argl: integer; argp: pointer; new_func: PCRYPTO_EX_new; dup_func: PCRYPTO_EX_dup; free_func: PCRYPTO_EX_free): integer; cdecl;
+    CRYPTO_get_ex_new_index: function(class_index: integer; argl: clong; argp: pointer; new_func: PCRYPTO_EX_new; dup_func: PCRYPTO_EX_dup; free_func: PCRYPTO_EX_free): integer; cdecl;
     ERR_error_string_n: procedure(e: cardinal; buf: PUtf8Char; len: PtrUInt); cdecl;
     ERR_get_error: function(): cardinal; cdecl;
     ERR_clear_error: procedure(); cdecl;
@@ -3522,14 +3522,14 @@ type
     X509_STORE_CTX_free: procedure(ctx: PX509_STORE_CTX); cdecl;
     X509_free: procedure(a: PX509); cdecl;
     X509_new: function(): PX509; cdecl;
-    X509_set_version: function(x: PX509; version: integer): integer; cdecl;
+    X509_set_version: function(x: PX509; version: clong): integer; cdecl;
     X509_set_serialNumber: function(x: PX509; serial: PASN1_INTEGER): integer; cdecl;
     X509_set_issuer_name: function(x: PX509; name: PX509_NAME): integer; cdecl;
     X509_set_subject_name: function(x: PX509; name: PX509_NAME): integer; cdecl;
     X509_set_pubkey: function(x: PX509; pkey: PEVP_PKEY): integer; cdecl;
     X509_sign: function(x: PX509; pkey: PEVP_PKEY; md: PEVP_MD): integer; cdecl;
     X509_REQ_new: function(): PX509_REQ; cdecl;
-    X509_REQ_set_version: function(x: PX509_REQ; version: integer): integer; cdecl;
+    X509_REQ_set_version: function(x: PX509_REQ; version: clong): integer; cdecl;
     X509_REQ_free: procedure(a: PX509_REQ); cdecl;
     X509_REQ_sign: function(x: PX509_REQ; pkey: PEVP_PKEY; md: PEVP_MD): integer; cdecl;
     X509_REQ_verify: function(a: PX509_REQ; r: PEVP_PKEY): integer; cdecl;
@@ -3545,12 +3545,12 @@ type
     X509_add_ext: function(x: PX509; ex: PX509_EXTENSION; loc: integer): integer; cdecl;
     X509_delete_ext: function(x: PX509; loc: integer): PX509_EXTENSION; cdecl;
     X509V3_set_ctx: procedure(ctx: PX509V3_CTX; issuer: PX509; subject: PX509; req: PX509_REQ; crl: PX509_CRL; flags: integer); cdecl;
-    X509_gmtime_adj: function(s: PASN1_TIME; adj: integer): PASN1_TIME; cdecl;
+    X509_gmtime_adj: function(s: PASN1_TIME; adj: clong): PASN1_TIME; cdecl;
     X509_EXTENSION_create_by_OBJ: function(ex: PPX509_EXTENSION; obj: PASN1_OBJECT;
       crit: integer; data: PASN1_OCTET_STRING): PX509_EXTENSION; cdecl;
     X509_EXTENSION_free: procedure(a: PX509_EXTENSION); cdecl;
     BASIC_CONSTRAINTS_free: procedure(a: PBASIC_CONSTRAINTS); cdecl;
-    d2i_BASIC_CONSTRAINTS: function(a: PPBASIC_CONSTRAINTS; _in: PPByte; len: integer): PBASIC_CONSTRAINTS; cdecl;
+    d2i_BASIC_CONSTRAINTS: function(a: PPBASIC_CONSTRAINTS; _in: PPByte; len: clong): PBASIC_CONSTRAINTS; cdecl;
     X509_NAME_add_entry_by_txt: function(name: PX509_NAME; field: PUtf8Char; typ: integer; bytes: PAnsiChar; len: integer; loc: integer; _set: integer): integer; cdecl;
     X509_NAME_print_ex: function(_out: PBIO; nm: PX509_NAME; indent: integer; flags: cardinal): integer; cdecl;
     X509_NAME_print_ex_fp: function(fp: PPointer; nm: PX509_NAME; indent: integer; flags: cardinal): integer; cdecl;
@@ -3565,7 +3565,7 @@ type
     X509_NAME_oneline: function(a: PX509_NAME; buf: PUtf8Char; size: integer): PUtf8Char; cdecl;
     X509_NAME_hash: function(x: PX509_NAME): cardinal; cdecl;
     X509_NAME_cmp: function(a: PX509_NAME; b: PX509_NAME): integer; cdecl;
-    d2i_X509_NAME: function(a: PPX509_NAME; _in: PPByte; len: integer): PX509_NAME; cdecl;
+    d2i_X509_NAME: function(a: PPX509_NAME; _in: PPByte; len: clong): PX509_NAME; cdecl;
     i2d_X509_NAME: function(a: PX509_NAME; _out: PPByte): integer; cdecl;
     X509_STORE_CTX_get_current_cert: function(ctx: PX509_STORE_CTX): PX509; cdecl;
     X509_digest: function(data: PX509; typ: PEVP_MD; md: PEVP_MD_DIG; len: PCardinal): integer; cdecl;
@@ -3577,7 +3577,7 @@ type
     X509_EXTENSION_get_object: function(ex: PX509_EXTENSION): PASN1_OBJECT; cdecl;
     X509_EXTENSION_get_data: function(ne: PX509_EXTENSION): PASN1_OCTET_STRING; cdecl;
     X509_EXTENSION_get_critical: function(ex: PX509_EXTENSION): integer; cdecl;
-    X509_get_version: function(x: PX509): integer; cdecl;
+    X509_get_version: function(x: PX509): clong; cdecl;
     X509_get0_notBefore: function(x: PX509): PASN1_TIME; cdecl;
     X509_get0_notAfter: function(x: PX509): PASN1_TIME; cdecl;
     X509_get_extension_flags: function(x: PX509): cardinal; cdecl;
@@ -3593,12 +3593,12 @@ type
     X509_CRL_sign: function(x: PX509_CRL; pkey: PEVP_PKEY; md: PEVP_MD): integer; cdecl;
     X509_CRL_dup: function(crl: PX509_CRL): PX509_CRL; cdecl;
     X509_CRL_up_ref: function(crl: PX509_CRL): integer; cdecl;
-    X509_CRL_set_version: function(x: PX509_CRL; version: integer): integer; cdecl;
+    X509_CRL_set_version: function(x: PX509_CRL; version: clong): integer; cdecl;
     X509_CRL_set_issuer_name: function(x: PX509_CRL; name: PX509_NAME): integer; cdecl;
     X509_CRL_set_lastUpdate: function(x: PX509_CRL; tm: PASN1_TIME): integer; cdecl;
     X509_CRL_set_nextUpdate: function(x: PX509_CRL; tm: PASN1_TIME): integer; cdecl;
     X509_CRL_get_issuer: function(crl: PX509_CRL): PX509_NAME; cdecl;
-    X509_CRL_get_version: function(crl: PX509_CRL): integer; cdecl;
+    X509_CRL_get_version: function(crl: PX509_CRL): clong; cdecl;
     X509_CRL_get_lastUpdate: function(crl: PX509_CRL): PASN1_TIME; cdecl;
     X509_CRL_get_nextUpdate: function(crl: PX509_CRL): PASN1_TIME; cdecl;
     X509_CRL_print: function(bp: PBIO; x: PX509_CRL): integer; cdecl;
@@ -3621,7 +3621,7 @@ type
     X509_REVOKED_get0_revocationDate: function(x: PX509_REVOKED): PASN1_TIME; cdecl;
     X509_REVOKED_get_ext_d2i: function(x: PX509_REVOKED; nid: integer; crit: PInteger; idx: PInteger): pointer; cdecl;
     X509_REVOKED_add1_ext_i2d: function(x: PX509_REVOKED; nid: integer; value: pointer; crit: integer; flags: cardinal): integer; cdecl;
-    d2i_X509_REVOKED: function(a: PPX509_REVOKED; _in: PPByte; len: integer): PX509_REVOKED; cdecl;
+    d2i_X509_REVOKED: function(a: PPX509_REVOKED; _in: PPByte; len: clong): PX509_REVOKED; cdecl;
     i2d_X509_REVOKED: function(a: PX509_REVOKED; _out: PPByte): integer; cdecl;
     X509_STORE_new: function(): PX509_STORE; cdecl;
     X509_STORE_load_locations: function(ctx: PX509_STORE; _file: PUtf8Char; dir: PUtf8Char): integer; cdecl;
@@ -3641,7 +3641,7 @@ type
     X509_OBJECT_get0_X509_CRL: function(a: PX509_OBJECT): PX509_CRL; cdecl;
     X509_LOOKUP_hash_dir: function(): PX509_LOOKUP_METHOD; cdecl;
     X509_LOOKUP_file: function(): PX509_LOOKUP_METHOD; cdecl;
-    X509_LOOKUP_ctrl: function(ctx: PX509_LOOKUP; cmd: integer; argc: PUtf8Char; argl: integer; ret: PPUtf8Char): integer; cdecl;
+    X509_LOOKUP_ctrl: function(ctx: PX509_LOOKUP; cmd: integer; argc: PUtf8Char; argl: clong; ret: PPUtf8Char): integer; cdecl;
     X509_load_cert_file: function(ctx: PX509_LOOKUP; _file: PUtf8Char; typ: integer): integer; cdecl;
     X509_load_crl_file: function(ctx: PX509_LOOKUP; _file: PUtf8Char; typ: integer): integer; cdecl;
     X509_load_cert_crl_file: function(ctx: PX509_LOOKUP; _file: PUtf8Char; typ: integer): integer; cdecl;
@@ -3651,7 +3651,7 @@ type
     X509_STORE_CTX_set_cert: procedure(c: PX509_STORE_CTX; x: PX509); cdecl;
     X509_verify_cert: function(ctx: PX509_STORE_CTX): integer; cdecl;
     X509_STORE_CTX_get_error: function(ctx: PX509_STORE_CTX): integer; cdecl;
-    X509_verify_cert_error_string: function(n: integer): PUtf8Char; cdecl;
+    X509_verify_cert_error_string: function(n: clong): PUtf8Char; cdecl;
     X509_verify: function(a: PX509; r: PEVP_PKEY): integer; cdecl;
     X509_STORE_CTX_set_time: procedure(ctx: PX509_STORE_CTX; flags: cardinal; t: time_t); cdecl;
     X509_STORE_CTX_set_purpose: function(ctx: PX509_STORE_CTX; purpose: integer): integer; cdecl;
@@ -3766,8 +3766,8 @@ type
     ASN1_INTEGER_to_BN: function(ai: PASN1_INTEGER; bn: PBIGNUM): PBIGNUM; cdecl;
     ASN1_INTEGER_new: function(): PASN1_INTEGER; cdecl;
     ASN1_INTEGER_free: procedure(a: PASN1_INTEGER); cdecl;
-    ASN1_ENUMERATED_set: function(a: PASN1_ENUMERATED; v: integer): integer; cdecl;
-    ASN1_ENUMERATED_get: function(a: PASN1_ENUMERATED): integer; cdecl;
+    ASN1_ENUMERATED_set: function(a: PASN1_ENUMERATED; v: clong): integer; cdecl;
+    ASN1_ENUMERATED_get: function(a: PASN1_ENUMERATED): clong; cdecl;
     ASN1_ENUMERATED_new: function(): PASN1_ENUMERATED; cdecl;
     ASN1_ENUMERATED_free: procedure(a: PASN1_ENUMERATED); cdecl;
     EC_POINT_bn2point: function(p1: PEC_GROUP; p2: PBIGNUM; p3: PEC_POINT; p4: PBN_CTX): PEC_POINT; cdecl;
@@ -4214,7 +4214,7 @@ begin
   libcrypto.CRYPTO_free(ptr, _file, line);
 end;
 
-function CRYPTO_get_ex_new_index(class_index: integer; argl: integer; argp: pointer;
+function CRYPTO_get_ex_new_index(class_index: integer; argl: clong; argp: pointer;
   new_func: PCRYPTO_EX_new; dup_func: PCRYPTO_EX_dup; free_func: PCRYPTO_EX_free): integer;
 begin
   result := libcrypto.CRYPTO_get_ex_new_index(
@@ -4478,7 +4478,7 @@ begin
   result := libcrypto.X509_new();
 end;
 
-function X509_set_version(x: PX509; version: integer): integer;
+function X509_set_version(x: PX509; version: clong): integer;
 begin
   result := libcrypto.X509_set_version(x, version);
 end;
@@ -4513,7 +4513,7 @@ begin
   result := libcrypto.X509_REQ_new();
 end;
 
-function X509_REQ_set_version(x: PX509_REQ; version: integer): integer;
+function X509_REQ_set_version(x: PX509_REQ; version: clong): integer;
 begin
   result := libcrypto.X509_REQ_set_version(x, version);
 end;
@@ -4595,7 +4595,7 @@ begin
   libcrypto.X509V3_set_ctx(ctx, issuer, subject, req, crl, flags);
 end;
 
-function X509_gmtime_adj(s: PASN1_TIME; adj: integer): PASN1_TIME;
+function X509_gmtime_adj(s: PASN1_TIME; adj: clong): PASN1_TIME;
 begin
   result := libcrypto.X509_gmtime_adj(s, adj);
 end;
@@ -4617,7 +4617,7 @@ begin
 end;
 
 function d2i_BASIC_CONSTRAINTS(a: PPBASIC_CONSTRAINTS;
-  _in: PPByte; len: integer): PBASIC_CONSTRAINTS;
+  _in: PPByte; len: clong): PBASIC_CONSTRAINTS;
 begin
   result := libcrypto.d2i_BASIC_CONSTRAINTS(a, _in, len);
 end;
@@ -4699,7 +4699,7 @@ begin
   result := libcrypto.X509_NAME_cmp(a, b);
 end;
 
-function d2i_X509_NAME(a: PPX509_NAME; _in: PPByte; len: integer): PX509_NAME;
+function d2i_X509_NAME(a: PPX509_NAME; _in: PPByte; len: clong): PX509_NAME;
 begin
   result := libcrypto.d2i_X509_NAME(a, _in, len);
 end;
@@ -4759,7 +4759,7 @@ begin
   result := libcrypto.X509_EXTENSION_get_critical(ex);
 end;
 
-function X509_get_version(x: PX509): integer;
+function X509_get_version(x: PX509): clong;
 begin
   result := libcrypto.X509_get_version(x);
 end;
@@ -4840,7 +4840,7 @@ begin
   result := libcrypto.X509_CRL_up_ref(crl);
 end;
 
-function X509_CRL_set_version(x: PX509_CRL; version: integer): integer;
+function X509_CRL_set_version(x: PX509_CRL; version: clong): integer;
 begin
   result := libcrypto.X509_CRL_set_version(x, version);
 end;
@@ -4865,7 +4865,7 @@ begin
   result := libcrypto.X509_CRL_get_issuer(crl);
 end;
 
-function X509_CRL_get_version(crl: PX509_CRL): integer;
+function X509_CRL_get_version(crl: PX509_CRL): clong;
 begin
   result := libcrypto.X509_CRL_get_version(crl);
 end;
@@ -4984,7 +4984,7 @@ begin
   result := libcrypto.X509_REVOKED_add1_ext_i2d(x, nid, value, crit, flags);
 end;
 
-function d2i_X509_REVOKED(a: PPX509_REVOKED; _in: PPByte; len: integer): PX509_REVOKED;
+function d2i_X509_REVOKED(a: PPX509_REVOKED; _in: PPByte; len: clong): PX509_REVOKED;
 begin
   result := libcrypto.d2i_X509_REVOKED(a, _in, len);
 end;
@@ -5085,7 +5085,7 @@ begin
 end;
 
 function X509_LOOKUP_ctrl(ctx: PX509_LOOKUP; cmd: integer; argc: PUtf8Char;
-  argl: integer; ret: PPUtf8Char): integer;
+  argl: clong; ret: PPUtf8Char): integer;
 begin
   result := libcrypto.X509_LOOKUP_ctrl(ctx, cmd, argc, argl, ret);
 end;
@@ -5137,7 +5137,7 @@ begin
   result := libcrypto.X509_STORE_CTX_get_error(ctx);
 end;
 
-function X509_verify_cert_error_string(n: integer): PUtf8Char;
+function X509_verify_cert_error_string(n: clong): PUtf8Char;
 begin
   result := libcrypto.X509_verify_cert_error_string(n);
 end;
@@ -5758,12 +5758,12 @@ begin
   libcrypto.ASN1_INTEGER_free(a);
 end;
 
-function ASN1_ENUMERATED_set(a: PASN1_ENUMERATED; v: integer): integer;
+function ASN1_ENUMERATED_set(a: PASN1_ENUMERATED; v: clong): integer;
 begin
   result := libcrypto.ASN1_ENUMERATED_set(a, v);
 end;
 
-function ASN1_ENUMERATED_get(a: PASN1_ENUMERATED): integer;
+function ASN1_ENUMERATED_get(a: PASN1_ENUMERATED): clong;
 begin
   result := libcrypto.ASN1_ENUMERATED_get(a);
 end;
@@ -6423,10 +6423,10 @@ function SSL_CTX_new(meth: PSSL_METHOD): PSSL_CTX; cdecl;
 procedure SSL_CTX_free(p1: PSSL_CTX); cdecl;
   external LIB_SSL name _PU + 'SSL_CTX_free';
 
-function SSL_CTX_set_timeout(ctx: PSSL_CTX; t: integer): integer; cdecl;
+function SSL_CTX_set_timeout(ctx: PSSL_CTX; t: clong): clong; cdecl;
   external LIB_SSL name _PU + 'SSL_CTX_set_timeout';
 
-function SSL_CTX_get_timeout(ctx: PSSL_CTX): integer; cdecl;
+function SSL_CTX_get_timeout(ctx: PSSL_CTX): clong; cdecl;
   external LIB_SSL name _PU + 'SSL_CTX_get_timeout';
 
 procedure SSL_CTX_set_verify(ctx: PSSL_CTX; mode: integer; callback: SSL_verify_cb); cdecl;
@@ -6476,7 +6476,7 @@ function SSL_CTX_set_session_id_context(ctx: PSSL_CTX; sid_ctx: pointer; sid_ctx
 function SSL_CTX_clear_options(ctx: PSSL_CTX; op: cardinal): cardinal; cdecl;
   external LIB_SSL name _PU + 'SSL_CTX_clear_options';
 
-function SSL_CTX_callback_ctrl(p1: PSSL_CTX; p2: integer; p3: SSL_CTX_callback_ctrl_): integer; cdecl;
+function SSL_CTX_callback_ctrl(p1: PSSL_CTX; p2: integer; p3: SSL_CTX_callback_ctrl_): clong; cdecl;
   external LIB_SSL name _PU + 'SSL_CTX_callback_ctrl';
 
 function SSL_new(ctx: PSSL_CTX): PSSL; cdecl;
@@ -6586,7 +6586,7 @@ function SSL_get_current_cipher(s: PSSL): PSSL_CIPHER; cdecl;
 function SSL_CIPHER_description(p1: PSSL_CIPHER; buf: PUtf8Char; size: integer): PUtf8Char; cdecl;
   external LIB_SSL name _PU + 'SSL_CIPHER_description';
 
-function SSL_get_verify_result(ssl: PSSL): integer; cdecl;
+function SSL_get_verify_result(ssl: PSSL): clong; cdecl;
   external LIB_SSL name _PU + 'SSL_get_verify_result';
 
 procedure SSL_set_hostflags(s: PSSL; flags: cardinal); cdecl;
@@ -6620,7 +6620,7 @@ function CRYPTO_set_mem_functions(m: dyn_MEM_malloc_fn; r: dyn_MEM_realloc_fn;
 procedure CRYPTO_free(ptr: pointer; _file: PUtf8Char; line: integer); cdecl;
   external LIB_CRYPTO name _PU + 'CRYPTO_free';
 
-function CRYPTO_get_ex_new_index(class_index: integer; argl: integer;
+function CRYPTO_get_ex_new_index(class_index: integer; argl: clong;
   argp: pointer; new_func: PCRYPTO_EX_new; dup_func: PCRYPTO_EX_dup;
   free_func: PCRYPTO_EX_free): integer; cdecl;
   external LIB_CRYPTO name _PU + 'CRYPTO_get_ex_new_index';
@@ -6774,7 +6774,7 @@ procedure X509_free(a: PX509); cdecl;
 function X509_new(): PX509; cdecl;
   external LIB_CRYPTO name _PU + 'X509_new';
 
-function X509_set_version(x: PX509; version: integer): integer; cdecl;
+function X509_set_version(x: PX509; version: clong): integer; cdecl;
   external LIB_CRYPTO name _PU + 'X509_set_version';
 
 function X509_set_serialNumber(x: PX509; serial: PASN1_INTEGER): integer; cdecl;
@@ -6795,7 +6795,7 @@ function X509_sign(x: PX509; pkey: PEVP_PKEY; md: PEVP_MD): integer; cdecl;
 function X509_REQ_new(): PX509_REQ; cdecl;
   external LIB_CRYPTO name _PU + 'X509_REQ_new';
 
-function X509_REQ_set_version(x: PX509_REQ; version: integer): integer; cdecl;
+function X509_REQ_set_version(x: PX509_REQ; version: clong): integer; cdecl;
   external LIB_CRYPTO name _PU + 'X509_REQ_set_version';
 
 procedure X509_REQ_free(a: PX509_REQ); cdecl;
@@ -6845,7 +6845,7 @@ procedure X509V3_set_ctx(ctx: PX509V3_CTX; issuer: PX509; subject: PX509;
   req: PX509_REQ; crl: PX509_CRL; flags: integer); cdecl;
   external LIB_CRYPTO name _PU + 'X509V3_set_ctx';
 
-function X509_gmtime_adj(s: PASN1_TIME; adj: integer): PASN1_TIME; cdecl;
+function X509_gmtime_adj(s: PASN1_TIME; adj: clong): PASN1_TIME; cdecl;
   external LIB_CRYPTO name _PU + 'X509_gmtime_adj';
 
 function X509_EXTENSION_create_by_OBJ(ex: PPX509_EXTENSION; obj: PASN1_OBJECT; crit: integer; data: PASN1_OCTET_STRING): PX509_EXTENSION; cdecl;
@@ -6858,7 +6858,7 @@ procedure BASIC_CONSTRAINTS_free(a: PBASIC_CONSTRAINTS); cdecl;
   external LIB_CRYPTO name _PU + 'BASIC_CONSTRAINTS_free';
 
 function d2i_BASIC_CONSTRAINTS(a: PPBASIC_CONSTRAINTS; _in: PPByte;
-  len: integer): PBASIC_CONSTRAINTS; cdecl;
+  len: clong): PBASIC_CONSTRAINTS; cdecl;
   external LIB_CRYPTO name _PU + 'd2i_BASIC_CONSTRAINTS';
 
 function X509_NAME_add_entry_by_txt(name: PX509_NAME; field: PUtf8Char;
@@ -6908,7 +6908,7 @@ function X509_NAME_hash(x: PX509_NAME): cardinal; cdecl;
 function X509_NAME_cmp(a: PX509_NAME; b: PX509_NAME): integer; cdecl;
   external LIB_CRYPTO name _PU + 'X509_NAME_cmp';
 
-function d2i_X509_NAME(a: PPX509_NAME; _in: PPByte; len: integer): PX509_NAME; cdecl;
+function d2i_X509_NAME(a: PPX509_NAME; _in: PPByte; len: clong): PX509_NAME; cdecl;
   external LIB_CRYPTO name _PU + 'd2i_X509_NAME';
 
 function i2d_X509_NAME(a: PX509_NAME; _out: PPByte): integer; cdecl;
@@ -6944,7 +6944,7 @@ function X509_EXTENSION_get_data(ne: PX509_EXTENSION): PASN1_OCTET_STRING; cdecl
 function X509_EXTENSION_get_critical(ex: PX509_EXTENSION): integer; cdecl;
   external LIB_CRYPTO name _PU + 'X509_EXTENSION_get_critical';
 
-function X509_get_version(x: PX509): integer; cdecl;
+function X509_get_version(x: PX509): clong; cdecl;
   external LIB_CRYPTO name _PU + 'X509_get_version';
 
 function X509_get0_notBefore(x: PX509): PASN1_TIME; cdecl;
@@ -6993,7 +6993,7 @@ function X509_CRL_dup(crl: PX509_CRL): PX509_CRL; cdecl;
 function X509_CRL_up_ref(crl: PX509_CRL): integer; cdecl;
   external LIB_CRYPTO name _PU + 'X509_CRL_up_ref';
 
-function X509_CRL_set_version(x: PX509_CRL; version: integer): integer; cdecl;
+function X509_CRL_set_version(x: PX509_CRL; version: clong): integer; cdecl;
   external LIB_CRYPTO name _PU + 'X509_CRL_set_version';
 
 function X509_CRL_set_issuer_name(x: PX509_CRL; name: PX509_NAME): integer; cdecl;
@@ -7008,7 +7008,7 @@ function X509_CRL_set_nextUpdate(x: PX509_CRL; tm: PASN1_TIME): integer; cdecl;
 function X509_CRL_get_issuer(crl: PX509_CRL): PX509_NAME; cdecl;
   external LIB_CRYPTO name _PU + 'X509_CRL_get_issuer';
 
-function X509_CRL_get_version(crl: PX509_CRL): integer; cdecl;
+function X509_CRL_get_version(crl: PX509_CRL): clong; cdecl;
   external LIB_CRYPTO name _PU + 'X509_CRL_get_version';
 
 function X509_CRL_get_lastUpdate(crl: PX509_CRL): PASN1_TIME; cdecl;
@@ -7082,7 +7082,7 @@ function X509_REVOKED_add1_ext_i2d(x: PX509_REVOKED; nid: integer;
   value: pointer; crit: integer; flags: cardinal): integer; cdecl;
   external LIB_CRYPTO name _PU + 'X509_REVOKED_add1_ext_i2d';
 
-function d2i_X509_REVOKED(a: PPX509_REVOKED; _in: PPByte; len: integer): PX509_REVOKED; cdecl;
+function d2i_X509_REVOKED(a: PPX509_REVOKED; _in: PPByte; len: clong): PX509_REVOKED; cdecl;
   external LIB_CRYPTO name _PU + 'd2i_X509_REVOKED';
 
 function i2d_X509_REVOKED(a: PX509_REVOKED; _out: PPByte): integer; cdecl;
@@ -7143,7 +7143,7 @@ function X509_LOOKUP_file(): PX509_LOOKUP_METHOD; cdecl;
   external LIB_CRYPTO name _PU + 'X509_LOOKUP_file';
 
 function X509_LOOKUP_ctrl(ctx: PX509_LOOKUP; cmd: integer; argc: PUtf8Char;
-  argl: integer; ret: PPUtf8Char): integer; cdecl;
+  argl: clong; ret: PPUtf8Char): integer; cdecl;
   external LIB_CRYPTO name _PU + 'X509_LOOKUP_ctrl';
 
 function X509_load_cert_file(ctx: PX509_LOOKUP; _file: PUtf8Char; typ: integer): integer; cdecl;
@@ -7175,7 +7175,7 @@ function X509_verify_cert(ctx: PX509_STORE_CTX): integer; cdecl;
 function X509_STORE_CTX_get_error(ctx: PX509_STORE_CTX): integer; cdecl;
   external LIB_CRYPTO name _PU + 'X509_STORE_CTX_get_error';
 
-function X509_verify_cert_error_string(n: integer): PUtf8Char; cdecl;
+function X509_verify_cert_error_string(n: clong): PUtf8Char; cdecl;
   external LIB_CRYPTO name _PU + 'X509_verify_cert_error_string';
 
 function X509_verify(a: PX509; r: PEVP_PKEY): integer; cdecl;
@@ -7545,10 +7545,10 @@ function ASN1_INTEGER_new(): PASN1_INTEGER; cdecl;
 procedure ASN1_INTEGER_free(a: PASN1_INTEGER); cdecl;
   external LIB_CRYPTO name _PU + 'ASN1_INTEGER_free';
 
-function ASN1_ENUMERATED_set(a: PASN1_ENUMERATED; v: integer): integer; cdecl;
+function ASN1_ENUMERATED_set(a: PASN1_ENUMERATED; v: clong): integer; cdecl;
   external LIB_CRYPTO name _PU + 'ASN1_ENUMERATED_set';
 
-function ASN1_ENUMERATED_get(a: PASN1_ENUMERATED): integer; cdecl;
+function ASN1_ENUMERATED_get(a: PASN1_ENUMERATED): clong; cdecl;
   external LIB_CRYPTO name _PU + 'ASN1_ENUMERATED_get';
 
 function ASN1_ENUMERATED_new(): PASN1_ENUMERATED; cdecl;
@@ -7935,7 +7935,7 @@ end;
 
 function SSL.IsVerified(msg: PRawUtf8): boolean;
 var
-  res: integer;
+  res: clong;
 begin
   res := X509_V_OK;
   if @self <> nil then
@@ -8545,7 +8545,7 @@ begin
   end;
 end;
 
-function X509_REVOKED.SetReason(value: integer): boolean;
+function X509_REVOKED.SetReason(value: PtrInt): boolean;
 var
   enum: PASN1_ENUMERATED;
 begin
@@ -8703,11 +8703,11 @@ begin
   tm := ASN1_TIME_new(); // now
   X509_CRL_set_lastUpdate(@self, tm);
   if lastUpdateDays >= 0 then
-    X509_gmtime_adj(tm, SecsPerDay * lastUpdateDays);
+    X509_gmtime_adj(tm, PtrInt(SecsPerDay) * lastUpdateDays);
   X509_REVOKED_set_revocationDate(rev, tm);
   if lastUpdateDays >= 0 then
-    X509_gmtime_adj(tm, -SecsPerDay * lastUpdateDays);
-  X509_gmtime_adj(tm, SecsPerDay * nextUpdateDays);
+    X509_gmtime_adj(tm, PtrInt(-SecsPerDay) * lastUpdateDays);
+  X509_gmtime_adj(tm, PtrInt(SecsPerDay) * nextUpdateDays);
   X509_CRL_set_nextUpdate(@self, tm);
   ASN1_TIME_free(tm);
   if reason = CRL_REASON_UNSPECIFIED then
@@ -8818,7 +8818,7 @@ begin
     result := X509_STORE_CTX_get_current_cert(@self);
 end;
 
-function X509_STORE_CTX.CurrentError(errstr: PPUtf8Char): integer;
+function X509_STORE_CTX.CurrentError(errstr: PPUtf8Char): PtrInt;
 begin
   if @self = nil then
     result := -1
@@ -9388,7 +9388,7 @@ begin
     result := ASN1_STRING_data(@self);
 end;
 
-function asn1_string_st.Len: integer;
+function asn1_string_st.Len: PtrInt;
 begin
   if @self = nil then
     result := 0
@@ -9942,7 +9942,7 @@ begin
     result := MacToHex(@dig, len);
 end;
 
-function X509.SetValidity(ValidDays, ExpireDays: integer): boolean;
+function X509.SetValidity(ValidDays, ExpireDays: PtrInt): boolean;
 begin
   // any recent supported X509_gmtime_adj() accepts negative values
   result := (@self <> nil) and
@@ -10755,7 +10755,7 @@ begin
   FastSetString(result, @tmp[1], ord(tmp[0]));
 end;
 
-function SSL_get_ex_new_index(l: integer; p: pointer; newf: PCRYPTO_EX_new;
+function SSL_get_ex_new_index(l: clong; p: pointer; newf: PCRYPTO_EX_new;
   dupf: PCRYPTO_EX_dup; freef: PCRYPTO_EX_free): integer;
 begin
   result := CRYPTO_get_ex_new_index(CRYPTO_EX_INDEX_SSL, l, p, newf, dupf, freef);
@@ -10853,7 +10853,7 @@ begin
     TLSEXT_NAMETYPE_host_name, pointer(name));
 end;
 
-function SSL_CTX_set_tlsext_servername_callback(ctx: PSSL_CTX; cb: SSL_SNI_servername_cb): integer;
+function SSL_CTX_set_tlsext_servername_callback(ctx: PSSL_CTX; cb: SSL_SNI_servername_cb): clong;
 begin
   result := SSL_CTX_callback_ctrl(
     ctx, SSL_CTRL_SET_TLSEXT_SERVERNAME_CB, SSL_CTX_callback_ctrl_(cb));
