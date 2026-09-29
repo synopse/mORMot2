@@ -1145,6 +1145,32 @@ function DefaultDeriveMechanism(kt: CK_KEY_TYPE;
   out uu: CK_MECHANISM_TYPE_ULONG): boolean;
 
 type
+  /// identifies a Mask Generation Function used by RSA-OAEP and RSA-PSS
+  // - defined by PKCS#11 as CK_ULONG
+  CK_RSA_PKCS_MGF_TYPE = type CK_ULONG;
+  CK_RSA_PKCS_MGF_TYPE_PTR = ^CK_RSA_PKCS_MGF_TYPE;
+
+const
+  /// PKCS#1 MGF1 functions
+  CKG_MGF1_SHA1   = $00000001;
+  CKG_MGF1_SHA256 = $00000002;
+  CKG_MGF1_SHA384 = $00000003;
+  CKG_MGF1_SHA512 = $00000004;
+  CKG_MGF1_SHA224 = $00000005;
+
+type
+  /// parameters supplied to CKM_RSA_PKCS_PSS
+  CK_RSA_PKCS_PSS_PARAMS = record
+    /// hash algorithm used for PSS encoding
+    hashAlg: CK_MECHANISM_TYPE_ULONG;
+    /// mask generation function
+    mgf: CK_RSA_PKCS_MGF_TYPE;
+    /// salt length in bytes
+    sLen: CK_ULONG;
+  end;
+  CK_RSA_PKCS_PSS_PARAMS_PTR = ^CK_RSA_PKCS_PSS_PARAMS;
+
+type
   /// specifies a particular mechanism and any parameters it requires
   CK_MECHANISM = record
     /// the type of mechanism, mapped as CK_MECHANISM_TYPE

@@ -51,6 +51,10 @@ uses
 /// fill a PKCS#11 Mechanism structure with the parameters for a given algorithm
 procedure Pkcs11SetMechanism(Algo: TCryptAsymAlgo; out Mech: CK_MECHANISM);
 
+/// fill PKCS#11 CKM_RSA_PKCS_PSS with the parameters for a given algorithm
+function Pkcs11SetPssParams(Algo: TCryptAsymAlgo;
+  out Pss: CK_RSA_PKCS_PSS_PARAMS; out Mech: CK_MECHANISM): boolean;
+
 /// guess the TX509.SubjectPublicKeyAlgorithm of a given PKCS#11 Object
 // - supports only CKO_PUBLIC_KEY and CKO_PRIVATE_KEY kind of objects
 // - CKO_CERTIFICATE should be parsed and inspected directly
@@ -315,6 +319,35 @@ begin
   // EC type is set as CKA_EC_PARAMS attribute
 end;
 
+function Pkcs11SetPssParams(Algo: TCryptAsymAlgo;
+  out Pss: CK_RSA_PKCS_PSS_PARAMS; out Mech: CK_MECHANISM): boolean;
+begin
+  case Algo of
+    caaPS256:
+      begin
+        Pss.hashAlg := ToULONG(CKM_SHA256);
+        Pss.mgf := CKG_MGF1_SHA256;
+      end;
+    caaPS384:
+      begin
+        Pss.hashAlg := ToULONG(CKM_SHA384);
+        Pss.mgf := CKG_MGF1_SHA384;
+      end;
+    caaPS512:
+      begin
+        Pss.hashAlg := ToULONG(CKM_SHA512);
+        Pss.mgf := CKG_MGF1_SHA512;
+      end;
+  else
+    result := false;
+    exit;
+  end;
+  Pss.sLen := HASH_SIZE[CAA_HF[Algo]];
+  Mech.pParameter := @Pss;
+  Mech.ulParameterLen := SizeOf(Pss);
+  result := true;
+end;
+
 function Pkcs11KeyAlgorithm(const obj: TPkcs11Object): TXPublicKeyAlgorithm;
 begin
   result := xkaNone;
@@ -441,6 +474,7 @@ function TCryptPrivateKeyPkcs11.SignDigest(const Dig: THash512Rec;
 var
   obj: CK_OBJECT_HANDLE;
   mech: CK_MECHANISM;
+  pss: CK_RSA_PKCS_PSS_PARAMS;
   hf: THashAlgo;
   seq: TAsnObject;
   log: ISynLog; // seldom called, and better be traced (and profiled)
@@ -455,10 +489,20 @@ begin
     try
       // see https://crypto.stackexchange.com/a/10103/40200
       Pkcs11SetMechanism(DigAlgo, mech);
-      if fCert.fCaa in CAA_RSA then // CKM_RSA_PKCS or CKM_RSA_PKCS_PSS
-        seq := RsaSignHashToDer(@Dig.b, hf)
+      case DigAlgo of
+        caaRS256 .. caaRS512:
+          // CKM_RSA_PKCS signs a PKCS#1 v1.5 DigestInfo structure
+          seq := RsaSignHashToDer(@Dig.b, hf);
+        caaPS256 .. caaPS512:
+          // CKM_RSA_PKCS_PSS signs the already computed raw hash
+          if Pkcs11SetPssParams(DigAlgo, pss, mech) then
+            FastSetRawByteString(seq, @Dig.b, DigLen)
+          else
+            exit;
       else
-        FastSetRawByteString(seq, @Dig, DigLen); // CKM_ECDSA (to be validated)
+        // e.g. CKM_ECDSA expects the already computed raw hash
+        FastSetRawByteString(seq, @Dig.b, DigLen);
+      end;
       result := fCert.fEngine.Sign(pointer(seq), length(seq), obj, mech);
       case fCert.fCaa of
         caaES256:
