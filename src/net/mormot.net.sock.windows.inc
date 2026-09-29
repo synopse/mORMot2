@@ -2233,13 +2233,10 @@ procedure TSChannelServerContext.LoadCertificate(Socket: TNetSocket;
   var Context: TNetTlsContext);
 var
   pfx: RawByteString;
-  blob: TCryptDataBlob;
   password: RawUtf8;
-  flags, keyspec: cardinal;
+  err, flags, keyspec: cardinal;
   prov: HCRYPTPROV;
   freeprov: BOOL;
-  utf16: PWideChar;
-  tmp: TSynTempBuffer;
 begin
   if Context.CertificateRaw <> nil then
   begin
@@ -2272,27 +2269,16 @@ begin
     //   c := Cert('x509-rs256');
     //   c.Generate([cuTlsServer], 'toto.com', nil, 3650);
     //   FileFromString(c.Save('3des=pass', ccfBinary), WorkDir + 'privkeycert.pfx');
-    blob.cbData := Length(pfx);
-    blob.pbData := pointer(pfx);
     password := Context.PrivatePassword;
     if Assigned(Context.OnPrivatePassword) then
       password := Context.OnPrivatePassword(Socket, @Context, nil);
-    utf16 := nil;
-    if password <> '' then
-      utf16 := Utf8ToWin32PWideChar(password, tmp);
-    FillZero(RawByteString(password));
     flags := PKCS12_INCLUDE_EXTENDED_PROPERTIES;
     if (OSVersion < wVista) or
        (wsWine in WindowsSpecs) then
       flags := 0;
-    fStore := PFXImportCertStore(@blob, utf16, flags);
-    if utf16 <> nil then
-    begin
-      FillCharFast(tmp.buf^, tmp.len * 2, 0); // len in WideChar (not bytes)
-      tmp.Done;
-    end;
-    if fStore = nil then
-      RaiseLastError('AfterBind: PFXImportCertStore', ESChannel);
+    err := WinCertStoreImportPfx(pfx, password, fStore, flags);
+    FillZero(RawByteString(password)); // wipe UTF-8
+    CheckOK('PFXImportCertStore', err);
   end;
   // find first certificate in store with private key
   flags := 0;

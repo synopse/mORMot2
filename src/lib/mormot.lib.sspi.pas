@@ -2058,7 +2058,7 @@ begin
   finally
     if pwd <> nil then
     begin
-      FillCharFast(tmp.buf^, tmp.len * SizeOf(WideChar), 0);
+      FillCharFast(tmp.buf^, tmp.len * SizeOf(WideChar), 0); // wipe UTF-16
       tmp.Done;
     end;
   end;

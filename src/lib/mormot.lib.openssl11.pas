@@ -1230,7 +1230,7 @@ type
   {$ifdef OSWINDOWS}
 
   // minimal C-like definitions to mimic unixtype FPC unit on Windows
-  clong = integer; // C long is 32-bit on CPU64
+  clong = integer; // C long is 32-bit on Windows, including Win64
   time_t = PtrInt; // may suffer Year2038 issue on CPU32 - not used in practice
   ptime_t = ^time_t;
 
