@@ -411,6 +411,8 @@ begin
     else
       include(result, posDecrypt);
   if cuKeyAgreement in cu then
+    include(result, posDerive);
+  if cuKeyEncipherment in cu then
     if forpubkey then
       include(result, posWrap)
     else
@@ -775,10 +777,11 @@ var
   ecp, ecv: RawByteString;
 begin
   Attr.New(CKO_PRIVATE_KEY, StoreLabel, BinaryID);
-  AddToAttributes(Attr, [posToken,
-                         posPrivate,
-                         posSensitive,
-                         posSign]);
+  AddToAttributes(Attr,
+    [posToken,
+     posPrivate,
+     posSensitive] +
+    CertUsagesToPkcs11Flags(Cert.GetUsage, {forpubkey=}false));
   caa := Cert.AsymAlgo;
   Attr.Add(CKA_KEY_TYPE, ToULONG(CAA_TO_CKK[caa]));
   if caa in CAA_RSA then
