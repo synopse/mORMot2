@@ -33,7 +33,8 @@ uses
   mormot.crypt.jwt,
   mormot.crypt.ecc,
   mormot.crypt.rsa,
-  mormot.crypt.x509;
+  mormot.crypt.x509,
+  mormot.crypt.win;
 
 type
   /// regression tests for mormot.crypt.core and mormot.crypt.jwt features

@@ -106,6 +106,11 @@ High-Performance Cryptographic Features using *OpenSSL* 1.1 / 3.x / 4.x
 TL;DR: On x86_64, our `mormot.crypt.pas` asm is stand-alone and faster than *OpenSSL* for most algorithms, and only 20% slower for `AES-GCM` (but faster for *OpenSSL* 3.0).
 For `ECC` or `RSA`, our `mormot.crypt.ecc256r1` or `mormot.crypt.rsa` units are noticeably slower than *OpenSSL*, but fully stand-alone.
 
+### mormot.crypt.win
+
+Direct Cryptography using Windows API
+- AES cypher/uncypher using PROV_RSA_AES CryptoApi
+
 ### mormot.crypt.pkcs11
 
 Access Hardware Security Modules (HSM) via PKCS#11

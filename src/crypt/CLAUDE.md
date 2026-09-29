@@ -221,7 +221,8 @@ As stated in LICENSE.md: **Ensure compliance with cryptographic software restric
 | `mormot.crypt.jwt.pas` | JSON Web Tokens | N/A (protocol) |
 | `mormot.crypt.openssl.pas` | OpenSSL bindings | Faster RSA/ECC |
 | `mormot.crypt.pkcs11.pas` | HSM support | Hardware-dependent |
-| `mormot.crypt.other.pas` | Deprecated algorithms | Avoid in new code |
+| `mormot.crypt.other.pas` | Deprecated or Less used algorithms | Faster SSE2 variants |
+| `mormot.crypt.win.pas` | Windows support | Depends on the OS version |
 
 ## Anti-Patterns to Avoid
 

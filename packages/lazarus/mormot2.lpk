@@ -49,7 +49,7 @@
     <Description Value="mORMot 2 ORM/SOA/MVC framework"/>
     <License Value="MPL, GPL or LGPL"/>
     <Version Major="2" Minor="4"/>
-    <Files Count="124">
+    <Files Count="125">
       <Item1>
         <Filename Value="../../src/app/mormot.app.console.pas"/>
         <UnitName Value="mormot.app.console"/>
@@ -547,6 +547,10 @@
         <Filename Value="../../src/lib/mormot.lib.uniscribe.pas"/>
         <UnitName Value="mormot.lib.uniscribe"/>
       </Item124>
+      <Item125>
+        <Filename Value="../../src/crypt/mormot.crypt.win.pas"/>
+        <UnitName Value="mormot.crypt.win"/>
+      </Item125>
     </Files>
     <CompatibilityMode Value="True"/>
     <UsageOptions>
