@@ -236,9 +236,9 @@ type
     fContext: PCCERT_CONTEXT;
     fCertStore: TSystemCertificateStore;
     fStoreLocation: TWinCertStoreLocation;
-    fFromSystemStore: boolean;
     fKeyOptions: TWinCertCngKeyOptions;
     fCaa: TCryptAsymAlgo;
+    fLogClass: TSynLogClass;
     fKeyProvider: RawUtf8;
     fKeyContainer: RawUtf8;
     procedure RaiseError(const Msg: ShortString); overload; override;
@@ -247,15 +247,12 @@ type
     // - duplicates aContext so this instance owns its certificate context
     // - you should not call this constructor directly but TCryptCertAlgoCng
     // methods for the system stores or TCryptCertCng.LoadPkcs12() factory
-    constructor Create(aOwner: TCryptCertAlgoCng;
+    constructor Create(aOwner: TCryptCertAlgoCng; aLogClass: TSynLogClass;
       aContext: PCCERT_CONTEXT; aLocation: TWinCertStoreLocation;
       aKeyOptions: TWinCertCngKeyOptions;
       aInfo: PWinCertKeyProviderInfo = nil); reintroduce;
     /// clear both the TX509 representation and retained Windows context
     procedure Clear; override;
-    /// return the logging class from the associated CNG catalog
-    function Log: TSynLogClass;
-      {$ifdef HASINLINE} inline; {$endif}
     // ICryptCert methods
     function AsymAlgo: TCryptAsymAlgo; override;
     function CertAlgo: TCryptCertAlgo; override;
@@ -545,7 +542,7 @@ begin
      (HASH_SIZE[CAA_HF[DigAlgo]] <> DigLen) or
      not CngSignParams(DigAlgo, hash, mode) then
     exit;
-  fCert.Log.EnterLocal(log,
+  fCert.fLogClass.EnterLocal(log,
     'SignDigest % %', [ToText(DigAlgo)^, fCert], self);
   err := key.Init(fCert.fContext, fCert.fKeyOptions);
   if err <> NO_ERROR then
@@ -639,7 +636,7 @@ begin
            (info.ProviderType <> 0) then
           continue; // no private key or a legacy CryptoAPI CSP
         try
-          cert := TCryptCertCng.Create(self, store.Context,
+          cert := TCryptCertCng.Create(self, fLog, store.Context,
             Location, [wckCompareKey], @info);
           n := length(fCert);
           SetLength(fCert, n + 1);
@@ -710,23 +707,24 @@ end;
 { TCryptCertCng }
 
 constructor TCryptCertCng.Create(aOwner: TCryptCertAlgoCng;
-  aContext: PCCERT_CONTEXT; aLocation: TWinCertStoreLocation;
+  aLogClass: TSynLogClass; aContext: PCCERT_CONTEXT; aLocation: TWinCertStoreLocation;
   aKeyOptions: TWinCertCngKeyOptions; aInfo: PWinCertKeyProviderInfo);
 var
   der: RawByteString;
   xka: TXPublicKeyAlgorithm;
 begin
-  if (aOwner = nil) or
-     (aContext = nil) then
-    ECryptCertCng.RaiseU('TCryptCertCng.Create: invalid owner/context');
+  if aContext = nil then
+    ECryptCertCng.RaiseU('TCryptCertCng.Create: invalid context');
   inherited Create;
-  fCryptAlgo := aOwner;
   fKeyOptions := aKeyOptions;
-  fCertStore := aOwner.fCertStore;
-  fStoreLocation := aLocation;
-  if aInfo <> nil then
+  fLogClass := aLogClass;
+  if aOwner <> nil then
   begin
-    fFromSystemStore := true;
+    fCryptAlgo := aOwner;
+    fCertStore := aOwner.fCertStore;
+    fStoreLocation := aLocation;
+    if aInfo = nil then
+      ECryptCertCng.RaiseU('TCryptCertCng.Create: missing provider info');
     if aInfo^.ProviderType <> 0 then
       RaiseError('Create: certificate is not backed by a CNG KSP');
     fKeyProvider := aInfo^.Provider;
@@ -763,7 +761,6 @@ var
   store: HCERTSTORE;
   ctxt: PCCERT_CONTEXT;
   key: TWinCertCngKey;
-  cert: TCryptCertCng;
   err: cardinal;
   log: ISynLog;
 begin
@@ -787,9 +784,8 @@ begin
         exit;
     until key.Init(ctxt, PKCS12_WCK) = NO_ERROR; // valid private key
     key.Done;
-    cert := TCryptCertCng.Create(nil, ctxt, wcslCurrentUser, PKCS12_WCK);
-    log.Log(sllDebug, 'LoadPkcs12: loaded %', [result.Instance], cert);
-    result := cert;
+    result := TCryptCertCng.Create(nil, aLog, ctxt, wcslCurrentUser, PKCS12_WCK);
+    log.Log(sllDebug, '%.LoadPkcs12: loaded %', [self, result.Instance]);
   finally
     if ctxt <> nil then
       CertFreeCertificateContext(ctxt); // decrement refcount is needed
@@ -812,14 +808,6 @@ procedure TCryptCertCng.RaiseError(const Msg: ShortString);
 begin
   ECryptCertCng.RaiseUtf8('% (provider=% key=%) %',
     [self, fKeyProvider, fKeyContainer, Msg]);
-end;
-
-function TCryptCertCng.Log: TSynLogClass;
-begin
-  if fCryptAlgo = nil then
-    result := TSynLog
-  else
-    result := TCryptCertAlgoCng(fCryptAlgo).fLog;
 end;
 
 // ICryptCert methods
@@ -950,7 +938,7 @@ function TCryptCertCng.GetSystemStore(out CertStore: TSystemCertificateStore;
 begin
   CertStore := fCertStore;
   Location := fStoreLocation;
-  result := fFromSystemStore;
+  result := fCryptAlgo <> nil;
 end;
 
 function TCryptCertCng.KeyProvider: RawUtf8;

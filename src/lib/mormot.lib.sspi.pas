@@ -1360,8 +1360,9 @@ type
     Handle: NCRYPT_KEY_HANDLE;
     /// acquire the CNG private key associated with a certificate
     // - returns NO_ERROR on success, or a Win32/NTE_* error code
-    // - Silent forbids any KSP user interface, e.g. PIN dialogs
-    // - CompareKey verifies that the private key matches the certificate
+    // - wckSilent forbids any KSP user interface
+    // - default wckCompareKey verifies the key against the certificate
+    // - wckCache reuses/caches CERT_KEY_CONTEXT_PROP_ID and takes precedence
     function Init(Ctxt: PCCERT_CONTEXT;
       Options: TWinCertCngKeyOptions = [wckCompareKey]): cardinal;
     /// release the CNG key if Windows told us that we own the handle
