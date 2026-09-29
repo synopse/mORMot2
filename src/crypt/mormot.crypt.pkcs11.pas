@@ -1141,11 +1141,34 @@ end;
 procedure TCryptCertPkcs11.SetAsymAlgo(caa: TCryptAsymAlgo);
 begin
   if caa = fCaa then
-    exit; // nothing to change
-  if CAA_CKA[fCaa] <> CAA_CKA[caa] then
-    RaiseError('SetAsymAlgo(%): incompatible with the % public key',
-      [ToText(caa)^, ToText(CAA_CKA[fCaa])^]);
-  fCaa := caa;
+    exit;
+  if fX509 = nil then
+    RaiseError('SetAsymAlgo: no X.509 certificate');
+  case fX509.Signed.SubjectPublicKeyAlgorithm of
+    xkaRsa:
+      // an unrestricted RSA key may sign with PKCS#1 or PSS
+      if caa in CAA_RSA then
+      begin
+        fCaa := caa;
+        exit;
+      end;
+    xkaRsaPss:
+      // an RSA-PSS SubjectPublicKeyInfo remains PSS-restricted
+      if caa in [caaPS256 .. caaPS512] then
+      begin
+        fCaa := caa;
+        exit;
+      end;
+  else
+    // ECC curves should remain compatible with their actual key type
+    if CAA_CKA[fCaa] = CAA_CKA[caa] then
+    begin
+      fCaa := caa;
+      exit;
+    end;
+  end;
+  RaiseError('SetAsymAlgo(%): incompatible with the % public key',
+    [ToText(caa)^, ToText(fX509.Signed.SubjectPublicKeyAlgorithm)^]);
 end;
 
 function TCryptCertPkcs11.SetPin(const PinCode: SpiUtf8): boolean;
