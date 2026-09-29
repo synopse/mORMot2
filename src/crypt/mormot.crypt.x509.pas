@@ -1209,8 +1209,8 @@ procedure RegisterX509;
 type
   /// abstract parent class implementing ICryptCert using our TX509 class
   // - will store a certificate as TX509 and an abstract ICryptPrivateKey
-  // - is the parent of both TCryptCertX509 in this unit and TCryptCertPkcs11
-  // in mormot.crypt.pkcs11.pas
+  // - is the parent of TCryptCertX509 in this unit, TCryptCertPkcs11 in
+  // mormot.crypt.pkcs11.pas and TCryptCertCng in mormot.crypt.win.pas
   TCryptCertX509Abstract = class(TCryptCert)
   protected
     fX509: TX509;

@@ -751,6 +751,7 @@ end;
 
 function TCryptCertCng.AsymAlgo: TCryptAsymAlgo;
 begin
+  // don't return fCryptAlgo.AsymAlgo which is not relevant here
   result := fCaa;
 end;
 

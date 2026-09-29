@@ -3773,7 +3773,7 @@ var
 
   /// direct access to the mormot.crypt.x509.pas ICryptCert factories
   // - may be nil if this unit was not included
-  // - to get a new ICryptCert using OpenSSL RSA 2048 key over SHA-256, use e.g.
+  // - to get a void ICryptCert instance for RSA 2048 key over SHA-256, use e.g.
   // ! CryptCertX509[caaRS256].New
   CryptCertX509: array[TCryptAsymAlgo] of TCryptCertAlgo;
 
@@ -9281,7 +9281,7 @@ function TCryptCertAlgo.CreateSelfSignedCsr(const Subjects: RawUtf8;
   const PrivateKeyPassword: SpiUtf8; var PrivateKeyPem: RawUtf8;
   Usages: TCryptCertUsages; Fields: PCryptCertFields): RawUtf8;
 var
-  csr: ICryptCert;
+  csr: ICryptCert; // temporary certificate instance
 begin
   FastAssignNew(result);
   if PrivateKeyPem <> '' then
@@ -9302,7 +9302,7 @@ function TCryptCertAlgo.GenerateFromCsr(const Csr: RawByteString;
 begin
   result := New;
   if Assigned(result) then // some classes may return nil
-    result := GenerateFromCsr(Csr, Authority, ExpireDays, ValidDays);
+    result.GenerateFromCsr(Csr, Authority, ExpireDays, ValidDays);
 end;
 
 function TCryptCertAlgo.JwtName: RawUtf8;
