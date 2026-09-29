@@ -1309,7 +1309,7 @@ class function TRestClientAuthentication.ClientGetSessionKey(
   Sender: TRestClientUri; User: TAuthUser;
   const aNameValueParameters: array of const): RawUtf8;
 var
-  resp, hdr: RawUtf8;
+  resp, hdr, name: RawUtf8;
   values: array[0..high(AUTH_N)] of TValuePUtf8Char;
   cookie, eq: PUtf8Char;
   a: integer;
@@ -1360,6 +1360,7 @@ begin
     // SessionCreate() and make any further signature fail with 403
     // - the server names its session cookie after Model.Root: search for it
     // among all Set-Cookie headers, ignoring any other (e.g. proxy) cookie
+    name := StringReplaceChars(Sender.fModel.Root, '/', '_'); // as SetOutCookie()
     cookie := pointer(hdr);
     repeat
       cookie := FindNameValue(cookie, 'SET-COOKIE: ');
@@ -1370,7 +1371,7 @@ begin
         inc(cookie, 9); // e.g. if rsoCookieSecure is in Server.Options
       eq := PosChar(cookie, '='); // bounded by #0, so never reads beyond hdr
       if (eq <> nil) and
-         IdemPropNameU(Sender.fModel.Root, cookie, eq - cookie) then
+         IdemPropNameU(name, cookie, eq - cookie) then
       begin
         GetNextItem(cookie, ';', Sender.fSession.IDHexa8); // 'root=value'
         exit;
