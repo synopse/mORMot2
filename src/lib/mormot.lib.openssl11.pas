@@ -1231,6 +1231,7 @@ type
 
   // minimal C-like definitions to mimic unixtype FPC unit on Windows
   clong = integer; // C long is 32-bit on Windows, including Win64
+  culong = cardinal;
   time_t = PtrInt; // may suffer Year2038 issue on CPU32 - not used in practice
   ptime_t = ^time_t;
 
@@ -2155,9 +2156,9 @@ function SSL_CTX_set_alpn_protos(ctx: PSSL_CTX;
    protos: PByte; protos_len: cardinal): integer; cdecl;
 function SSL_CTX_ctrl(ctx: PSSL_CTX; cmd: integer; larg: clong; parg: pointer): clong; cdecl;
 // op/result are cardinal for OpenSSL 1.1, but QWord since OpenSSL 3.0 :(
-function SSL_CTX_set_options(ctx: PSSL_CTX; op: cardinal): cardinal; cdecl;
+function SSL_CTX_set_options(ctx: PSSL_CTX; op: QWord): QWord; cdecl;
 function SSL_CTX_set_session_id_context(ctx: PSSL_CTX; sid_ctx: pointer; sid_ctx_len: cardinal): integer; cdecl;
-function SSL_CTX_clear_options(ctx: PSSL_CTX; op: cardinal): cardinal; cdecl;
+function SSL_CTX_clear_options(ctx: PSSL_CTX; op: QWord): QWord; cdecl;
 function SSL_CTX_callback_ctrl(p1: PSSL_CTX; p2: integer; p3: SSL_CTX_callback_ctrl_): clong; cdecl;
 function SSL_new(ctx: PSSL_CTX): PSSL; cdecl;
 function SSL_set_SSL_CTX(ssl: PSSL; ctx: PSSL_CTX): PSSL_CTX; cdecl;
@@ -2214,7 +2215,7 @@ procedure CRYPTO_free(ptr: pointer; _file: PUtf8Char; line: integer); cdecl;
 function CRYPTO_get_ex_new_index(class_index: integer;
   argl: clong; argp: pointer; new_func: PCRYPTO_EX_new;
   dup_func: PCRYPTO_EX_dup; free_func: PCRYPTO_EX_free): integer; cdecl;
-procedure ERR_error_string_n(e: cardinal; buf: PUtf8Char; len: PtrUInt); cdecl;
+procedure ERR_error_string_n(e: culong; buf: PUtf8Char; len: PtrUInt); cdecl;
 function ERR_get_error(): cardinal; cdecl;
 procedure ERR_clear_error(); cdecl;
 function ERR_load_BIO_strings(): integer; cdecl;
@@ -3223,27 +3224,27 @@ end;
 
 type
   // OpenSSL 3.0 changed the SSL_CTX_set_options() parameter types to 64-bit
-  TSSL_CTX_set_options32 = function(ctx: PSSL_CTX; op: cardinal): cardinal; cdecl;
-  TSSL_CTX_set_options64 = function(ctx: PSSL_CTX; op: qword): qword; cdecl;
-  TSSL_CTX_clear_options32 = function(ctx: PSSL_CTX; op: cardinal): cardinal; cdecl;
-  TSSL_CTX_clear_options64 = function(ctx: PSSL_CTX; op: qword): qword; cdecl;
+  TSSL_CTX_set_options1 = function(ctx: PSSL_CTX; op: clong): cardinal; cdecl;
+  TSSL_CTX_set_options3 = function(ctx: PSSL_CTX; op: qword): qword; cdecl;
+  TSSL_CTX_clear_options1 = function(ctx: PSSL_CTX; op: clong): cardinal; cdecl;
+  TSSL_CTX_clear_options3 = function(ctx: PSSL_CTX; op: qword): qword; cdecl;
 
-function SSL_CTX_set_options(ctx: PSSL_CTX; op: cardinal): cardinal;
+function SSL_CTX_set_options(ctx: PSSL_CTX; op: QWord): QWord;
 begin
   // we publish a 32-bit 1.1 version anyway - enough for SSL_OP_LEGACY_SERVER_CONNECT
   if OpenSslVersion < OPENSSL3_VERNUM then
-    result := TSSL_CTX_set_options32(libssl.SSL_CTX_set_options)(ctx, op)
+    result := TSSL_CTX_set_options1(libssl.SSL_CTX_set_options)(ctx, op)
   else
-    result := TSSL_CTX_set_options64(libssl.SSL_CTX_set_options)(ctx, op);
+    result := TSSL_CTX_set_options3(libssl.SSL_CTX_set_options)(ctx, op);
 end;
 
-function SSL_CTX_clear_options(ctx: PSSL_CTX; op: cardinal): cardinal;
+function SSL_CTX_clear_options(ctx: PSSL_CTX; op: QWord): QWord;
 begin
   // we publish a 32-bit 1.1 version anyway
   if OpenSslVersion < OPENSSL3_VERNUM then
-    result := TSSL_CTX_clear_options32(libssl.SSL_CTX_clear_options)(ctx, op)
+    result := TSSL_CTX_clear_options1(libssl.SSL_CTX_clear_options)(ctx, op)
   else
-    result := TSSL_CTX_clear_options64(libssl.SSL_CTX_clear_options)(ctx, op);
+    result := TSSL_CTX_clear_options3(libssl.SSL_CTX_clear_options)(ctx, op);
 end;
 
 function SSL_CTX_set_session_id_context(ctx: PSSL_CTX; sid_ctx: pointer; sid_ctx_len: cardinal): integer;
