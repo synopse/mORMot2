@@ -226,7 +226,7 @@ type
     fContext: PCCERT_CONTEXT;
     fCertStore: TSystemCertificateStore;
     fStoreLocation: TWinCertStoreLocation;
-    fSilent: boolean;
+    fKeyOptions: TWinCertCngKeyOptions;
     fCaa: TCryptAsymAlgo;
     fKeyProvider: RawUtf8;
     fKeyContainer: RawUtf8;
@@ -528,7 +528,7 @@ begin
     exit;
   fCert.Log.EnterLocal(log,
     'SignDigest % %', [ToText(DigAlgo)^, fCert], self);
-  err := key.Init(fCert.fContext, fCert.fSilent, {CompareKey=}true);
+  err := key.Init(fCert.fContext, fCert.fKeyOptions);
   if err <> NO_ERROR then
     log.Log(sllTrace,
       'SignDigest: CryptAcquireCertificatePrivateKey failed %',
@@ -539,7 +539,7 @@ begin
       // TNCrypt.KeySign() avoids an extra size-query signing operation,
       // which is important for smartcards and interactive hardware KSPs
       result := NCrypt.KeySign(key.Handle, @Dig.b, DigLen,
-        hash, mode, {PssSaltLen=}0, fCert.fSilent);
+        hash, mode, {PssSaltLen=}0, wckSilent in fCert.fKeyOptions);
       if (mode = nsmEcdsa) and
          (result <> '') then
         // CNG returns fixed-width r || s whereas ICryptCert expects DER
@@ -692,6 +692,7 @@ begin
   if (aOwner = nil) or
      (aContext = nil) then
     ECryptCertCng.RaiseU('TCryptCertCng.Create: invalid owner/context');
+  fKeyOptions := [wckCompareKey];
   inherited Create;
   try
     fContext := CertDuplicateCertificateContext(aContext);
@@ -857,12 +858,15 @@ end;
 
 procedure TCryptCertCng.SetSilent(Value: boolean);
 begin
-  fSilent := Value;
+  if Value then
+    include(fKeyOptions, wckSilent)
+  else
+    exclude(fKeyOptions, wckSilent);
 end;
 
 function TCryptCertCng.Silent: boolean;
 begin
-  result := fSilent;
+  result := wckSilent in fKeyOptions;
 end;
 
 function TCryptCertCng.SystemStore: TSystemCertificateStore;

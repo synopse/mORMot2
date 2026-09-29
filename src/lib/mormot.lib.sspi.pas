@@ -498,6 +498,7 @@ const
   SP_PROT_TLS_UNSAFE = pred(SP_PROT_TLS1_2_SERVER);
 
   PKCS12_INCLUDE_EXTENDED_PROPERTIES = $10;
+  PKCS12_NO_PERSIST_KEY = $00008000;
 
   CRYPT_ACQUIRE_COMPARE_KEY_FLAG     = $00000004;
   CRYPT_ACQUIRE_SILENT_FLAG          = $00000040;
@@ -1329,6 +1330,12 @@ type
     function LapsDecrypt(const bin: RawByteString): RawUtf8;
   end;
 
+  /// define how TWinCertCngKey.Init() should allocate its CNG key
+  TWinCertCngKeyOptions = set of (
+    wckSilent,
+    wckCompareKey,
+    wckCache);
+
   /// short-lived CNG private key associated with a Windows certificate
   // - call Init() then Done(), typically within a try..finally block
   // - hides CryptAcquireCertificatePrivateKey() ownership semantics
@@ -1342,8 +1349,8 @@ type
     // - returns NO_ERROR on success, or a Win32/NTE_* error code
     // - Silent forbids any KSP user interface, e.g. PIN dialogs
     // - CompareKey verifies that the private key matches the certificate
-    function Init(Ctxt: PCCERT_CONTEXT; Silent: boolean = false;
-      CompareKey: boolean = true): cardinal;
+    function Init(Ctxt: PCCERT_CONTEXT;
+      Options: TWinCertCngKeyOptions = [wckCompareKey]): cardinal;
     /// release the CNG key if Windows told us that we own the handle
     procedure Done;
   end;
@@ -2842,7 +2849,7 @@ end;
 { TWinCertCngKey }
 
 function TWinCertCngKey.Init(Ctxt: PCCERT_CONTEXT;
-  Silent, CompareKey: boolean): cardinal;
+  Options: TWinCertCngKeyOptions): cardinal;
 var
   h: HCRYPTPROV;
   keyspec, flags: cardinal;
@@ -2853,10 +2860,12 @@ begin
   result := ERROR_INVALID_PARAMETER;
   if Ctxt = nil then
     exit;
-  flags := CRYPT_ACQUIRE_ONLY_NCRYPT_KEY_FLAG;
-  if CompareKey then
+  flags := CRYPT_ACQUIRE_ONLY_NCRYPT_KEY_FLAG; // this is a CNG-only wrapper
+  if wckCache in Options then
+    flags := flags or CRYPT_ACQUIRE_CACHE_FLAG
+  else if wckCompareKey in Options then
     flags := flags or CRYPT_ACQUIRE_COMPARE_KEY_FLAG;
-  if Silent then
+  if wckSilent in Options then
     flags := flags or CRYPT_ACQUIRE_SILENT_FLAG;
   h := nil;
   keyspec := 0;
