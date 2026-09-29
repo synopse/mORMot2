@@ -809,6 +809,7 @@ begin
   if LogClass <> nil then
     fSocket.OnLog := LogClass.DoLog; // verbose log
   {$endif VERBOSECLIENTLOG}
+  fSocket.SetTimeouts(fConnectTimeout, fSendTimeout, fReceiveTimeout);
   // note that first registered algo will be the preferred one
   {$ifndef PUREMORMOT2}
   if hcSynShaAes in Compression then
