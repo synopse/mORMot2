@@ -626,14 +626,18 @@ begin
   fLog.EnterLocal(l, 'Create %', [aLibraryName], self);
   fLibraryName := aLibraryName;
   fEngine := TPkcs11.Create; // the dll/so is loaded in BackgroundLoad
-  fLoader := TLoggedWorkThread.Create(fLog, 'BackgroundLoad',
-    self, BackgroundLoad, {suspended=}false, {manualwaitfor=}true);
+  fLoader := TLoggedWorkThread.Create(fLog, 'BackgroundLoad', self,
+               BackgroundLoad, {suspended=}false, {manualwaitfor=}true);
 end;
 
 destructor TCryptCertAlgoPkcs11.Destroy;
+var
+  l: ISynLog;
 begin
+  fLog.EnterLocal(l, 'Destroy % count=% config=%',
+    [fLibraryName, length(fCert), ord(fConfigRetrieved)], self);
   fLoader.Free; // would wait for any pending BackgroundLoad
-  fEngine.Free;
+  fEngine.Free; // may take some time to unload the library
   fSafe.Done;   // needed for TOSLock
   inherited Destroy;
 end;
@@ -781,14 +785,14 @@ begin
   begin
     if not rsa.FromDer(PrivKeyDer) then
       ECryptCertPkcs11.RaiseUtf8('%.Import: no RSA Key', [self]);
-    Attr.Add(CKA_MODULUS, rsa.Modulus);
-    Attr.Add(CKA_PUBLIC_EXPONENT, rsa.PublicExponent);
-    Attr.Add(CKA_PRIME_1, rsa.Prime1);
-    Attr.Add(CKA_PRIME_2, rsa.Prime2);
+    Attr.Add(CKA_MODULUS,          rsa.Modulus);
+    Attr.Add(CKA_PUBLIC_EXPONENT,  rsa.PublicExponent);
+    Attr.Add(CKA_PRIME_1,          rsa.Prime1);
+    Attr.Add(CKA_PRIME_2,          rsa.Prime2);
     Attr.Add(CKA_PRIVATE_EXPONENT, rsa.PrivateExponent);
-    Attr.Add(CKA_EXPONENT_1, rsa.Exponent1);
-    Attr.Add(CKA_EXPONENT_2, rsa.Exponent2);
-    Attr.Add(CKA_COEFFICIENT, rsa.Coefficient);
+    Attr.Add(CKA_EXPONENT_1,       rsa.Exponent1);
+    Attr.Add(CKA_EXPONENT_2,       rsa.Exponent2);
+    Attr.Add(CKA_COEFFICIENT,      rsa.Coefficient);
     exit;
     // NO rsa.Done: anti-forensic measure would flush all Attr values
   end
@@ -800,7 +804,6 @@ begin
         '%.Import: unsupported %', [self, Cert.CertAlgo.JwtName]);
     Attr.Add(CKA_EC_PARAMS, ecp);
     ecv := SeqToEccPrivKey(CAA_CKA[caa], PrivKeyDer);
-    writeln(length(ecv));
     if ecv = '' then
       ECryptCertPkcs11.RaiseUtf8(
         '%.Import: incorrect % PrivKeyDer', [self, Cert.CertAlgo.JwtName]);
@@ -809,49 +812,72 @@ begin
 end;
 
 function TCryptCertAlgoPkcs11.Import(const CertWithPrivKey: ICryptCert;
-  Slot: TPkcs11SlotID; const ID: RawUtf8; const SoPinCode: SpiUtf8): ICryptCertPkcs11;
+  Slot: TPkcs11SlotID; const ID: RawUtf8;
+  const SoPinCode: SpiUtf8): ICryptCertPkcs11;
 var
-  der, key, binid: RawByteString;
+  der, key, binid, val: RawByteString;
   cert, priv: CK_OBJECT_HANDLE;
   lab: RawUtf8;
   a: CK_ATTRIBUTES;
+  info: TPkcs11Object;
+  obj: TPkcs11ObjectDynArray;
+  values: TRawByteStringDynArray;
+  c: ICryptCertPkcs11;
+  imported: boolean;
 begin
   result := nil;
+  binid := HexToBin(ID);
   if not Assigned(CertWithPrivKey) or
      not CertWithPrivKey.HasPrivateSecret or
      (SoPinCode = '') or
-     (ID = '') then
+     (binid = '') then
     exit;
-  binid := HexToBin(ID);
-  if binid = '' then
-    exit;
-  der := CertWithPrivKey.Save; // to be stored as CKO_CERTIFICATE
+  der := CertWithPrivKey.Save; // X.509 DER to be stored as CKO_CERTIFICATE
   if der = '' then
     exit;
   lab := CertWithPrivKey.GetSubject; // subject CN
   cert := CK_INVALID_HANDLE;
   priv := CK_INVALID_HANDLE;
+  imported := false;
   fEngine.Open(Slot, SoPinCode, {rw=}true, {so=}true);
   try
     // import the X.509 certificate
-    cert := fEngine.AddSessionCertificate(der, CertWithPrivKey.GetSubject('DER'),
-      binid, CertUsagesToPkcs11Flags(CertWithPrivKey.GetUsage, {pub=}true), lab);
-    // import the associated private key
-    key := CertWithPrivKey.GetPrivateKey; // raw PKCS#8 DER into CKO_PRIVATE_KEY
+    cert := fEngine.AddSessionCertificate(
+      der, CertWithPrivKey.GetSubject('DER'), binid,
+      CertUsagesToPkcs11Flags(CertWithPrivKey.GetUsage, {pub=}true), lab);
+    // import its associated private key
+    key := CertWithPrivKey.GetPrivateKey; // raw PKCS#8 DER
     if key = '' then
       exit;
-    CryptCertToPkcs11PrivKeyAttributes(CertWithPrivKey, lab, key, binid, a);
+    CryptCertToPkcs11PrivKeyAttributes(
+      CertWithPrivKey, lab, key, binid, a);
     priv := fEngine.SessionCreateObject(a);
+    // reload the stored certificate exactly as BackgroundLoad() would see it
+    if not fEngine.GetObject(CKO_CERTIFICATE, info, '', binid, @val) then
+      ECryptCertPkcs11.RaiseUtf8(
+        '%.Import: unable to retrieve imported certificate', [self]);
+    SetLength(obj, 1);
+    obj[0] := info;
+    SetLength(values, 1);
+    values[0] := val;
+    // StorageID has now been normalized from the actual CKA_ID
+    c := TCryptCertPkcs11.Create(
+      self, Slot, obj, values, info.StorageID);
+    imported := true; // don't remove token objects from now on
   finally
     FillZero(key);
-    if result = nil then
+    if not imported then
     begin
-      // on failure, delete any transient stored objects
-      fEngine.SessionDestroyObject(cert);
+      // rollback in reverse creation order
       fEngine.SessionDestroyObject(priv);
+      fEngine.SessionDestroyObject(cert);
     end;
     fEngine.Close;
   end;
+  // expose the newly imported certificate in this catalog
+  InterfaceArrayAdd(fCert, c);
+  ObjArraySort(fCert, CertStorageCompare);
+  result := c;
 end;
 
 function TCryptCertAlgoPkcs11.Cert: ICryptCertPkcs11s;
@@ -863,7 +889,7 @@ end;
 
 procedure TCryptCertAlgoPkcs11.Lock;
 begin
-  fSafe.Lock;
+  fSafe.Lock; // reentrant TOSLock
 end;
 
 procedure TCryptCertAlgoPkcs11.UnLock;
