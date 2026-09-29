@@ -4033,6 +4033,7 @@ function TPkcs11.GetObjects(Filter: PCK_ATTRIBUTES;
   Values: PRawByteStringDynArray): TPkcs11ObjectDynArray;
 var
   n, count, u: CK_ULONG;
+  finalres: CK_RVULONG;
   i: PtrInt;
   s: TPkcs11ObjectStorage;
   b: boolean;
@@ -4047,31 +4048,33 @@ begin
   else // search from some attributes
     u := fC.FindObjectsInit(fSession, pointer(Filter^.Attrs), Filter^.Count);
   Check(u, 'FindObjectsInit');
-  arr.Clear;
-  arr.Add(CKA_DEFAULT);
-  for s := low(POS2CKA) to high(POS2CKA) do
-    arr.Add(POS2CKA[s]);
-  if Values <> nil then
-    arr.Add(CKA_VALUE);
-  repeat
-    n := 0;
-    Check(fC.FindObjects(fSession, @obj, length(obj), n), 'FindObjects');
-    if n = 0 then
-      break;
-    SetLength(result, n + count);
-    if Handles <> nil then
-      SetLength(Handles^, n + count);
+  finalres := CKR_SUCCESS;
+  try
+    arr.Clear;
+    arr.Add(CKA_DEFAULT);
+    for s := low(POS2CKA) to high(POS2CKA) do
+      arr.Add(POS2CKA[s]);
     if Values <> nil then
-      SetLength(Values^, n + count);
-    for i := 0 to CK_LONG(n) - 1 do
-    begin
-      arr.ClearValues;    // keep _type
-      CheckAttr(fC.GetAttributeValue(
-        fSession, obj[i], pointer(arr.Attrs), arr.Count)); // get length
-      arr.AllocateValues; // fill pValue
-      CheckAttr(fC.GetAttributeValue(
-        fSession, obj[i], pointer(arr.Attrs), arr.Count)); // get data
-      if arr.Find(CKA_CLASS, u) then
+      arr.Add(CKA_VALUE);
+    repeat
+      n := 0;
+      Check(fC.FindObjects(fSession, @obj, length(obj), n), 'FindObjects');
+      if n = 0 then
+        break;
+      SetLength(result, n + count);
+      if Handles <> nil then
+        SetLength(Handles^, n + count);
+      if Values <> nil then
+        SetLength(Values^, n + count);
+      for i := 0 to CK_LONG(n) - 1 do
+      begin
+        arr.ClearValues;    // keep _type
+        CheckAttr(fC.GetAttributeValue(
+          fSession, obj[i], pointer(arr.Attrs), arr.Count)); // get length
+        arr.AllocateValues; // fill pValue
+        CheckAttr(fC.GetAttributeValue(
+          fSession, obj[i], pointer(arr.Attrs), arr.Count)); // get data
+        if arr.Find(CKA_CLASS, u) then
         with result[count] do
         begin
           ObjClass := ToCKO(u);
@@ -4119,9 +4122,12 @@ begin
             arr.Find(CKA_VALUE, Values^[count]);
           inc(count);
         end;
-    end;
-  until false;
-  Check(fc.FindObjectsFinal(fSession), 'FindObjectsFinal');
+      end;
+    until false;
+  finally
+    finalres := fc.FindObjectsFinal(fSession);
+  end;
+  Check(finalres, 'FindObjectsFinal');
   if count <> CK_ULONG(length(result)) then
     SetLength(result, count);
  if (Values <> nil) and
