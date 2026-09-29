@@ -95,7 +95,7 @@ uses
   {$endif FPC}
   {$endif OSPOSIX}
   mormot.core.os,
-  mormot.core.os.security, // for TSystemCertificateStore
+  mormot.core.os.security, // for TSystemCertificateStore and TRsaSealHeader
   mormot.net.sock;         // for INetTls
 
 
@@ -10385,18 +10385,6 @@ begin
   if @self <> nil then
     EVP_PKEY_free(@self);
 end;
-
-type
-  // extra header for IV and plain text / key size storage
-  // - should match the very same record definition in TRsa.Seal/Open
-  // from mormot.crypt.rsa.pas, which is fully compatible with this unit
-  TRsaSealHeader = packed record
-    iv: THash128;
-    plainlen: integer;
-    encryptedkeylen: word; // typically 256 bytes for RSA-2048
-    // followed by the encrypted key then the encrypted message
-  end;
-  PRsaSealHeader = ^TRsaSealHeader;
 
 function EVP_PKEY.RsaSeal(Cipher: PEVP_CIPHER;
   const Msg: RawByteString): RawByteString;

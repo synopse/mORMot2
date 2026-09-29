@@ -2386,8 +2386,7 @@ begin
     case fKeyAlgo of
       ckaRsa,
       ckaRsaPss:
-        result := fPrivKey.RsaOpen(
-                    EVP_get_cipherbyname(pointer(Cipher)), Message);
+        result := fPrivKey.RsaOpen(EVP_get_cipherbyname(pointer(Cipher)), Message);
       ckaEcc256:
         if GetEs256Private(fPrivKey, priv) then
         try

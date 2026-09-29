@@ -2408,6 +2408,20 @@ procedure SymmetricEncrypt(key: cardinal; var data: RawByteString); overload;
 /// simple symmetric obfuscation scheme using a 32-bit key and crc32c lookup tables
 procedure SymmetricEncrypt(key: PtrUInt; data: PCardinal; len: PtrInt); overload;
 
+type
+  /// header structure definition for IV and plain text / key size storage
+  // - as used by TRsa.Seal/Open and RsaOpen() in mormot.crypt.rsa.pas, and
+  // EVP_PKEY.RsaSeal/RsaOpen in mormot.lib.openssl11.pas
+  // - follows OpenSSL EVP_SealInit/EVP_SealFinal from crypto/evp/p_seal.c
+  // algorithm, so that RSA Message encoding would stay compatible everywhere
+  TRsaSealHeader = packed record
+    iv: THash128;
+    plainlen: integer;
+    encryptedkeylen: word; // typically 256 bytes for RSA-2048
+    // followed by the encrypted key, then the encrypted message
+  end;
+  PRsaSealHeader = ^TRsaSealHeader;
+
 
 { ****************** Windows API Specific Security Types and Functions }
 

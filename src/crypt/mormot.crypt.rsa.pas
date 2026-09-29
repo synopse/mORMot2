@@ -827,7 +827,7 @@ type
 // - shares the exact same EVP_SealInit/EVP_OpenInit compatible envelope as
 // TRsa.Open(), but delegates the PKCS#1 private operation to Decrypt
 function RsaOpen(Cipher: TAesAbstractClass; AesBits, ModulusLen: integer;
-  const Message: RawByteString; Decrypt: TRsaPkcs1Decrypt): RawByteString;
+  const Message: RawByteString; const Decrypt: TRsaPkcs1Decrypt): RawByteString;
 
 /// low-level computation of the ASN.1 sequence of a hash signature
 // - following RSASSA-PKCS1-v1_5 signature scheme RFC 8017 #9.2 steps 1 and 2
@@ -2294,24 +2294,8 @@ begin
             ]);
 end;
 
-type
-  // extra header for IV and plain text / key size storage
-  // - should match the very same record definition in EVP_PKEY.RsaSeal/RsaOpen
-  // from mormot.lib.openssl11.pas, which is fully compatible with this unit
-  // - see also the matching python code as comment in mormot.crypt.openssl
-  TRsaSealHeader = packed record
-    iv: TAesBlock;
-    plainlen: integer;
-    encryptedkeylen: word; // typically 256 bytes for RSA-2048
-    // followed by the encrypted key then the encrypted message
-  end;
-  PRsaSealHeader = ^TRsaSealHeader;
-
-// this code follows OpenSSL EVP_SealInit/EVP_SealFinal from crypto/evp/p_seal.c
-// algorithm, so that RSA Message encoding would stay compatible
-
 function RsaOpen(Cipher: TAesAbstractClass; AesBits, ModulusLen: integer;
-  const Message: RawByteString; Decrypt: TRsaPkcs1Decrypt): RawByteString;
+  const Message: RawByteString; const Decrypt: TRsaPkcs1Decrypt): RawByteString;
 var
   msgpos, msglen: PtrInt;
   a: TAesAbstract;
@@ -2332,7 +2316,7 @@ begin
   msgpos := SizeOf(head^) + head^.encryptedkeylen;
   if msglen < msgpos + head^.plainlen then
     exit;
-  key := Decrypt(@input[SizeOf(head^)]);
+  key := Decrypt(@input[SizeOf(head^)]); // using the actual private key
   if key <> '' then
     try
       if length(key) <> AesBits shr 3 then
