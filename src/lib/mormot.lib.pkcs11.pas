@@ -4369,13 +4369,11 @@ var
 begin
   result := CK_INVALID_HANDLE;
   EnsureSession('AddSessionCertificate'); // may not be r/w for a temp object
-  include(Flags, posExtractable);
   repeat
     a.New(CKO_CERTIFICATE, CertLabel);
     AddToAttributes(a, [posToken,
                         posX509] + Flags);
-    if Flags <> [] then
-      a.Add(CKA_SUBJECT, CertDerSubject);
+    a.Add(CKA_SUBJECT, CertDerSubject);
     a.Add(CKA_VALUE, CertDer);
     a.Add(CKA_PRIVATE, false); // mandatory!
     a.Add(CKA_ID, CertID);     // as binary

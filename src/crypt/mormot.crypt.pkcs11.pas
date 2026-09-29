@@ -372,7 +372,8 @@ begin
             result := xkaEcc256;
           384:
             result := xkaEcc384;
-          512:
+          512,
+          528: // secp521r1 stored as 66-byte coordinates
             result := xkaEcc512;
         end;
       CKK_EC_EDWARDS:
