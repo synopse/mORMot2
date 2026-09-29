@@ -854,10 +854,13 @@ type
     fOnProtocolRequest: TOnHttpClientRequest;
     fOnAfterRequest: TOnHttpClientSocketRequest;
     fOnRedirect: TOnHttpClientSocketRequest;
+    fConnectTimeout, fSendTimeout, fReceiveTimeout: integer;
     {$ifdef DOMAINRESTAUTH}
     fAuthorizeSspiSpn: RawUtf8;
     {$endif DOMAINRESTAUTH}
     procedure SetAuthBearer(const Value: SpiUtf8);
+    procedure SetSendTimeout(aSendTimeout: integer); override;
+    procedure SetReceiveTimeout(aReceiveTimeout: integer); override;
     procedure RequestSendHeader(const url, method: RawUtf8); virtual;
     procedure RequestClear; virtual;
     function OnAuthorizeDigest(Sender: THttpClientSocket;
@@ -883,6 +886,8 @@ type
     // - as used e.g. by TSimpleHttpClient
     constructor OpenOptions(const aUri: TUri;
       var aOptions: THttpRequestExtendedOptions; const aOnLog: TSynLogProc = nil);
+    /// change timeout details in a single call
+    procedure SetTimeouts(aConnectTimeout, aSendTimeout, aReceiveTimeout: integer);
     /// after Create(), open or bind to a given server port
     // - overriden to support HTTP proxy without CONNECT
     procedure OpenBind(const aServer, aPort: RawUtf8; doBind: boolean;
@@ -3781,6 +3786,9 @@ constructor THttpClientSocket.Create(aTimeOut: integer);
 begin
   if aTimeOut = 0 then
     aTimeOut := HTTP_DEFAULT_RECEIVETIMEOUT;
+  fConnectTimeout := aTimeOut;
+  fSendTimeout := aTimeOut;
+  fReceiveTimeout := aTimeOut;
   if Assigned(OnHttpClientSocketLog) and
      not Assigned(OnLog) then
     OnLog := OnHttpClientSocketLog;
@@ -3794,6 +3802,27 @@ destructor THttpClientSocket.Destroy;
 begin
   fExtendedOptions.Clear;
   inherited Destroy;
+end;
+
+procedure THttpClientSocket.SetSendTimeout(aSendTimeout: integer);
+begin
+  fSendTimeout := aSendTimeout;
+  inherited SetSendTimeout(aSendTimeout);
+end;
+
+procedure THttpClientSocket.SetReceiveTimeout(aReceiveTimeout: integer);
+begin
+  fReceiveTimeout := aReceiveTimeout;
+  inherited SetReceiveTimeout(aReceiveTimeout);
+end;
+
+procedure THttpClientSocket.SetTimeouts(
+  aConnectTimeout, aSendTimeout, aReceiveTimeout: integer);
+begin
+  fConnectTimeout := aConnectTimeout;
+  fTimeOut := aReceiveTimeout;  // higher-level wait used by RequestInternal()
+  SetSendTimeout(aSendTimeout); // virtual calls e.g. for THttpClientWebSockets
+  SetReceiveTimeout(aReceiveTimeout);
 end;
 
 constructor THttpClientSocket.OpenUri(const aUri: TUri; const aUriFull,
@@ -3874,37 +3903,47 @@ procedure THttpClientSocket.OpenBind(const aServer, aPort: RawUtf8; doBind,
   aTLS: boolean; aLayer: TNetLayer; aSock: TNetSocket; aReusePort: boolean);
 var
   bak: TUri;
+  backup: integer;
 begin
   if doBind then
     EHttpSocket.RaiseUtf8('%.OpenBind with doBind=true', [self]);
-  fProxyAuthHeader := '';
-  if (not aTLS) and // proxy to https:// destination requires CONNECT
-     (Tunnel.Server <> '') and
-     (Tunnel.Server <> aServer) then
-  begin
-    // plain http:// proxy is implemented in RequestSendHeader not via CONNECT
-    bak := Tunnel;
-    try
-      Tunnel.Clear; // no CONNECT
-      inherited OpenBind(bak.Server, bak.Port, false, bak.Https, bak.Layer);
-      fProxyUrl := bak.URI;
-      if bak.User <> '' then
-        Join(['Proxy-Authorization: Basic ', bak.UserPasswordBase64], fProxyAuthHeader);
-      fSocketLayer := aLayer;
-      include(fFlags, fProxyHttp);
-      if Assigned(OnLog) then
-        OnLog(sllTrace, 'Open(%:%) via proxy %', [aServer, aPort, fProxyUrl], self);
-    finally
-      // always restore server and tunnel params for proper retry
-      fServer := aServer;
-      fPort := aPort; // good enough to keep '' for default port 80
-      exclude(fFlags, fServerTlsEnabled); // any TLS was about the proxy
-      Tunnel := bak;
-    end;
-  end
-  else
-    // regular socket creation if no proxy or toward https://
-    inherited OpenBind(aServer, aPort, {doBind=}false, aTLS, aLayer);
+  backup := fTimeOut;
+  try
+    fTimeOut := fConnectTimeout;
+    fProxyAuthHeader := '';
+    if (not aTLS) and // proxy to https:// destination requires CONNECT
+       (Tunnel.Server <> '') and
+       (Tunnel.Server <> aServer) then
+    begin
+      // plain http:// proxy is implemented in RequestSendHeader not via CONNECT
+      bak := Tunnel;
+      try
+        Tunnel.Clear; // no CONNECT
+        inherited OpenBind(bak.Server, bak.Port, false, bak.Https, bak.Layer);
+        fProxyUrl := bak.URI;
+        if bak.User <> '' then
+          Join(['Proxy-Authorization: Basic ', bak.UserPasswordBase64], fProxyAuthHeader);
+        fSocketLayer := aLayer;
+        include(fFlags, fProxyHttp);
+        if Assigned(OnLog) then
+          OnLog(sllTrace, 'Open(%:%) via proxy %', [aServer, aPort, fProxyUrl], self);
+      finally
+        // always restore server and tunnel params for proper retry
+        fServer := aServer;
+        fPort := aPort; // good enough to keep '' for default port 80
+        exclude(fFlags, fServerTlsEnabled); // any TLS was about the proxy
+        Tunnel := bak;
+      end;
+    end
+    else
+      // regular socket creation if no proxy or toward https://
+      inherited OpenBind(aServer, aPort, {doBind=}false, aTLS, aLayer);
+    // now apply each proper timeout value
+    inherited SetSendTimeout(fSendTimeout);
+    inherited SetReceiveTimeout(fReceiveTimeout);
+  finally
+    fTimeOut := backup;
+  end;
 end;
 
 function THttpClientSocket.RegisterCompress(aFunction: THttpSocketCompress;
