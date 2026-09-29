@@ -805,6 +805,16 @@ begin
     fSocketClass := THttpClientSocket;
   fSocket := fSocketClass.Open(
     fServer, fPort, nlTcp, fConnectTimeout, fHttps, @fExtendedOptions.TLS);
+  // Open() did use fConnectTimeout for connection, send, receive and TimeOut
+  // (i.e. the wait for the response in RequestInternal): apply the actual
+  // values, as the other TRestHttpClientRequest classes do
+  if fReceiveTimeout > 0 then
+  begin
+    fSocket.ReceiveTimeout := fReceiveTimeout;
+    fSocket.TimeOut := fReceiveTimeout;
+  end;
+  if fSendTimeout > 0 then
+    fSocket.SendTimeout := fSendTimeout;
   {$ifdef VERBOSECLIENTLOG}
   if LogClass <> nil then
     fSocket.OnLog := LogClass.DoLog; // verbose log

@@ -2452,8 +2452,10 @@ type
       read fProxyUrl;
     /// if higher than 0, read loop will wait for incoming data till
     // TimeOut milliseconds (default value is 10000) - used also in SockSend()
+    // - is set by the constructors, and used by OpenBind() for connection: you
+    // may change it after connection, e.g. to use a distinct receive timeout
     property TimeOut: integer
-      read fTimeOut;
+      read fTimeOut write fTimeOut;
     /// total bytes received
     property BytesIn: Int64
       read fBytesIn write fBytesIn;
