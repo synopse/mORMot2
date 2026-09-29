@@ -345,20 +345,17 @@ var
 procedure EnsureCryptoApiAesProviderAvailable;
 begin
   if CryptoApiAesProvider = nil then
-    ESynCrypto.RaiseU('PROV_RSA_AES provider not installed')
-  else if CryptoApiAesProvider = HCRYPTPROV_NOTTESTED then
-  begin
-    CryptoApiAesProvider := nil;
-    if CryptoApi.Available then
-    begin
-      if not CryptoApi.AcquireContextA(CryptoApiAesProvider, nil, nil,
-              PROV_RSA_AES, CRYPT_VERIFYCONTEXT) then
-        if (HRESULT(GetLastError) <> NTE_BAD_KEYSET) or
-           not CryptoApi.AcquireContextA(CryptoApiAesProvider, nil, nil,
-             PROV_RSA_AES, CRYPT_NEWKEYSET) then
-          ESynCrypto.RaiseLastOSError('in AcquireContext', []);
-    end;
-  end;
+    ESynCrypto.RaiseU('PROV_RSA_AES provider not installed');
+  if CryptoApiAesProvider <> HCRYPTPROV_NOTTESTED then
+    exit;
+  CryptoApiAesProvider := nil;
+  if CryptoApi.Available then
+    if not CryptoApi.AcquireContextA(CryptoApiAesProvider, nil, nil,
+            PROV_RSA_AES, CRYPT_VERIFYCONTEXT) then
+      if (HRESULT(GetLastError) <> NTE_BAD_KEYSET) or
+         not CryptoApi.AcquireContextA(CryptoApiAesProvider, nil, nil,
+           PROV_RSA_AES, CRYPT_NEWKEYSET) then
+        ESynCrypto.RaiseLastOSError('in AcquireContext', []);
 end;
 
 procedure XorMemoryTrailer(Dest, Source1, Source2: PByteArray; Size: PtrUInt);
