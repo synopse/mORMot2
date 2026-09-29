@@ -739,6 +739,7 @@ type
     /// CRYPT_KEY_PROV_INFO.dwKeySpec
     KeySpec: cardinal;
   end;
+  PWinCertKeyProviderInfo = ^TWinCertKeyProviderInfo;
 
 const
   WIN_CERT_USAGE: array[wkuCrlSign .. wkuDigitalSignature] of byte = (
@@ -2921,8 +2922,7 @@ begin
   end;
   if keyspec <> CERT_NCRYPT_KEY_SPEC then
   begin
-    // impossible with CRYPT_ACQUIRE_ONLY_NCRYPT_KEY_FLAG,
-    // but properly release an unexpected legacy CSP handle
+    // paranoid (impossible with CRYPT_ACQUIRE_ONLY_NCRYPT_KEY_FLAG)
     if (h <> nil) and
        callerfree and
        CryptoApi.Available then

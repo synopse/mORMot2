@@ -160,7 +160,7 @@ type
     /// retrieve the Windows system store this certificate originated from
     // - returns false for certificates imported from memory, e.g. PKCS#12/PFX
     function GetSystemStore(out CertStore: TSystemCertificateStore;
-      out Location: TWinCertStoreLocation): boolean;
+      out Locations: TWinCertStoreLocations): boolean;
     /// the CNG Key Storage Provider name associated with this certificate
     function KeyProvider: RawUtf8;
     /// the CNG private key/container name associated with this certificate
@@ -203,6 +203,11 @@ type
     /// return the first certificate matching a given attribute
     function FindOne(const Value: RawByteString;
       Method: TCryptCertComparer = ccmSerialNumber): ICryptCertCng;
+    /// load a certificate and private key from a PKCS#12/PFX buffer
+    // - private key is imported into an ephemeral CNG KSP and is never persisted
+    // - returns the first certificate having an accessible CNG private key
+    function LoadPkcs12(const Pfx: RawByteString;
+      const Password: SpiUtf8 = ''): ICryptCertCng;
     /// access all currently recognized Windows CNG certificates
     function Cert: ICryptCertCngs;
       {$ifdef HASINLINE} inline; {$endif}
@@ -225,20 +230,19 @@ type
   protected
     fContext: PCCERT_CONTEXT;
     fCertStore: TSystemCertificateStore;
-    fStoreLocation: TWinCertStoreLocation;
+    fStoreLocations: TWinCertStoreLocations;
     fKeyOptions: TWinCertCngKeyOptions;
     fCaa: TCryptAsymAlgo;
-    fFromSystemStore: boolean;
     fKeyProvider: RawUtf8;
     fKeyContainer: RawUtf8;
-    procedure InitContext(aOwner: TCryptCertAlgoCng; aContext: PCCERT_CONTEXT);
     procedure RaiseError(const Msg: ShortString); overload; override;
   public
     /// create a certificate from a context currently enumerated in a store
     // - duplicates aContext so this instance owns its certificate context
     constructor Create(aOwner: TCryptCertAlgoCng;
-      aContext: PCCERT_CONTEXT; aLocation: TWinCertStoreLocation;
-      const aInfo: TWinCertKeyProviderInfo); reintroduce;
+      aContext: PCCERT_CONTEXT; aLocations: TWinCertStoreLocations;
+      aKeyOptions: TWinCertCngKeyOptions;
+      aInfo: PWinCertKeyProviderInfo = nil); reintroduce;
     /// clear both the TX509 representation and retained Windows context
     procedure Clear; override;
     /// return the logging class from the associated CNG catalog
@@ -264,7 +268,7 @@ type
     procedure SetSilent(Value: boolean);
     function Silent: boolean;
     function GetSystemStore(out CertStore: TSystemCertificateStore;
-      out Location: TWinCertStoreLocation): boolean;
+      out Locations: TWinCertStoreLocations): boolean;
     function KeyProvider: RawUtf8;
     function KeyContainer: RawUtf8;
     function WinContext: PCCERT_CONTEXT;
@@ -622,7 +626,8 @@ begin
            (info.ProviderType <> 0) then
           continue; // no private key or a legacy CryptoAPI CSP
         try
-          cert := TCryptCertCng.Create(self, store.Context, Location, info);
+          cert := TCryptCertCng.Create(self, store.Context,
+            [Location], [wckCompareKey], @info);
           n := length(fCert);
           SetLength(fCert, n + 1);
           fCert[n] := cert;
@@ -681,16 +686,81 @@ begin
   result := fCert;
 end;
 
+const
+  PKCS12_FLAGS = PKCS12_INCLUDE_EXTENDED_PROPERTIES or
+                 PKCS12_ALWAYS_CNG_KSP or PKCS12_NO_PERSIST_KEY;
+
+function TCryptCertAlgoCng.LoadPkcs12(const Pfx: RawByteString;
+  const Password: SpiUtf8): ICryptCertCng;
+var
+  store: HCERTSTORE;
+  ctxt: PCCERT_CONTEXT;
+  key: TWinCertCngKey;
+  err: cardinal;
+  log: ISynLog;
+begin
+  result := nil;
+  if (Pfx = '') or
+     not NCrypt.Exists then
+    exit;
+  fLog.EnterLocal(log, 'LoadPkcs12 len=%', [length(Pfx)], self);
+  err := WinCertStoreImportPfx(Pfx, Password, store, PKCS12_FLAGS);
+  if err <> NO_ERROR then
+  begin
+    log.Log(sllTrace, 'LoadPkcs12: PFXImportCertStore failed %',
+      [OsErrorShort(err)], self);
+    exit;
+  end;
+  ctxt := nil;
+  try
+    repeat
+      ctxt := CertEnumCertificatesInStore(store, ctxt);
+      if ctxt = nil then
+        exit;
+      // PKCS12_NO_PERSIST_KEY attached the ephemeral key to this context
+      err := key.Init(ctxt, [wckCache, wckSilent]);
+      if err <> NO_ERROR then
+        continue;
+      key.Done;
+      result := TCryptCertCng.Create(self, ctxt, [], [wckCache, wckSilent]);
+      log.Log(sllDebug,
+        'LoadPkcs12: loaded %', [result.Instance], self);
+      exit;
+    until false;
+  finally
+    // CertEnumCertificatesInStore() releases previous contexts automatically,
+    // but the current one still belongs to us if we stopped before next()
+    if ctxt <> nil then
+      CertFreeCertificateContext(ctxt);
+    CertCloseStore(store, CERT_CLOSE_STORE_DEFAULT);
+  end;
+end;
+
 
 { TCryptCertCng }
 
-procedure TCryptCertCng.InitContext(aOwner: TCryptCertAlgoCng;
-  aContext: PCCERT_CONTEXT);
+constructor TCryptCertCng.Create(aOwner: TCryptCertAlgoCng;
+  aContext: PCCERT_CONTEXT; aLocations: TWinCertStoreLocations;
+  aKeyOptions: TWinCertCngKeyOptions; aInfo: PWinCertKeyProviderInfo);
 var
   der: RawByteString;
   xka: TXPublicKeyAlgorithm;
 begin
+  if (aOwner = nil) or
+     (aContext = nil) then
+    ECryptCertCng.RaiseU('TCryptCertCng.Create: invalid owner/context');
+  inherited Create;
   fCryptAlgo := aOwner;
+  fKeyOptions := aKeyOptions;
+  fCertStore := aOwner.fCertStore;
+  fStoreLocations := aLocations;
+  if aInfo <> nil then
+  begin
+    if aInfo^.ProviderType <> 0 then
+      RaiseError('Create: certificate is not backed by a CNG KSP');
+    fKeyProvider := aInfo^.Provider;
+    fKeyContainer := aInfo^.Container;
+  end;
   fContext := CertDuplicateCertificateContext(aContext);
   if fContext = nil then
     RaiseError('Create: CertDuplicateCertificateContext failed');
@@ -709,32 +779,9 @@ begin
   fPrivateKey := TCryptPrivateKeyCng.Create(self);
 end;
 
-constructor TCryptCertCng.Create(aOwner: TCryptCertAlgoCng;
-  aContext: PCCERT_CONTEXT; aLocation: TWinCertStoreLocation;
-  const aInfo: TWinCertKeyProviderInfo);
-begin
-  if (aOwner = nil) or
-     (aContext = nil) then
-    ECryptCertCng.RaiseU('TCryptCertCng.Create: invalid owner/context');
-  inherited Create;
-  fKeyOptions := [wckCompareKey];
-  fFromSystemStore := true;
-  fCertStore := aOwner.fCertStore;
-  fStoreLocation := aLocation;
-  fKeyProvider := aInfo.Provider;
-  fKeyContainer := aInfo.Container;
-  if aInfo.ProviderType <> 0 then
-    RaiseError('Create: certificate is not backed by a CNG KSP');
-  try
-    InitContext(aOwner, aContext);
-  except
-    Clear;
-    raise;
-  end;
-end;
-
 procedure TCryptCertCng.Clear;
 begin
+  // also called by Destroy
   if fContext <> nil then
   begin
     CertFreeCertificateContext(fContext);
@@ -881,11 +928,11 @@ begin
 end;
 
 function TCryptCertCng.GetSystemStore(out CertStore: TSystemCertificateStore;
-  out Location: TWinCertStoreLocation): boolean;
+  out Locations: TWinCertStoreLocations): boolean;
 begin
   CertStore := fCertStore;
-  Location := fStoreLocation;
-  result := fFromSystemStore;
+  Locations := fStoreLocations;
+  result := Locations <> [];
 end;
 
 function TCryptCertCng.KeyProvider: RawUtf8;
