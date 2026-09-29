@@ -343,6 +343,7 @@ begin
     exit;
   end;
   Pss.sLen := HASH_SIZE[CAA_HF[Algo]];
+  Mech.mechanism := ToULONG(CAA_TO_CKM[Algo]); // if not already set
   Mech.pParameter := @Pss;
   Mech.ulParameterLen := SizeOf(Pss);
   result := true;
@@ -504,11 +505,11 @@ begin
         FastSetRawByteString(seq, @Dig.b, DigLen);
       end;
       result := fCert.fEngine.Sign(pointer(seq), length(seq), obj, mech);
-      case fCert.fCaa of
-        caaES256:
-          if length(result) = SizeOf(TEccSignature) then
-            result := EccToDer(PEccSignature(result)^);
-      end;
+      if (DigAlgo in [caaES256, caaES384, caaES512, caaES256K]) and
+         (result <> '') then
+        // PKCS#11 CKM_ECDSA returns fixed-width r || s whereas
+        // ICryptPrivateKey expects the ASN.1 DER SEQUENCE(INTEGER r, INTEGER s)
+        result := SetSignatureSecurityRaw(DigAlgo, RawUtf8(result));
       log.Log(sllTrace, 'SignDigest: returns len=%', [length(result)], self);
     finally
       fCert.fEngine.Close;
