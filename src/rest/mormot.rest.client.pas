@@ -1311,7 +1311,7 @@ class function TRestClientAuthentication.ClientGetSessionKey(
 var
   resp, hdr: RawUtf8;
   values: array[0..high(AUTH_N)] of TValuePUtf8Char;
-  cookie: PUtf8Char;
+  cookie, eq: PUtf8Char;
   a: integer;
 begin
   if (Sender.CallBackGet('auth', aNameValueParameters, resp,
@@ -1350,15 +1350,32 @@ begin
       Sender.fComputeSignature := TRestClientAuthenticationSignedUri.
         GetComputeSignature(TRestAuthenticationSignedUriAlgo(a))
   end
-  else
+  else if InheritsFrom(TRestClientAuthenticationHttpAbstract) then
   begin
-    cookie := FindNameValue(pointer(hdr), 'SET-COOKIE: ');
-    if cookie = nil then
-      exit; // use the default suaCRC32 algorithm as fallback
-    cookie := GotoNextNotSpace(cookie);
-    if IdemPChar(cookie, '__SECURE-') then
-      inc(cookie, 9); // e.g. if rsoCookieSecure is in Server.Options
-    GetNextItem(cookie, ';', Sender.fSession.IDHexa8); // use first cookie
+    // only HTTP-based authentication transmits its session as cookie
+    // (see TRestClientAuthenticationHttpAbstract.ClientSessionSign) - URI-based
+    // schemes (e.g. the default suaCRC32 signature) should never use a cookie,
+    // which may have been set by a reverse proxy (e.g. Azure App Proxy), since
+    // a non-void IDHexa8 would also skip the PrivateKey computation in
+    // SessionCreate() and make any further signature fail with 403
+    // - the server names its session cookie after Model.Root: search for it
+    // among all Set-Cookie headers, ignoring any other (e.g. proxy) cookie
+    cookie := pointer(hdr);
+    repeat
+      cookie := FindNameValue(cookie, 'SET-COOKIE: ');
+      if cookie = nil then
+        exit; // no session cookie: use the default suaCRC32 algorithm
+      cookie := GotoNextNotSpace(cookie);
+      if IdemPChar(cookie, '__SECURE-') then
+        inc(cookie, 9); // e.g. if rsoCookieSecure is in Server.Options
+      eq := PosChar(cookie, '='); // bounded by #0, so never reads beyond hdr
+      if (eq <> nil) and
+         IdemPropNameU(Sender.fModel.Root, cookie, eq - cookie) then
+      begin
+        GetNextItem(cookie, ';', Sender.fSession.IDHexa8); // 'root=value'
+        exit;
+      end;
+    until false;
   end;
 end;
 
