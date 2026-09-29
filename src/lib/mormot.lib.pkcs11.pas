@@ -1446,7 +1446,8 @@ const
   CKR_NOEVENT         = 8;          // = ToULONG(CKR_NO_EVENT)
   CKR_SENSITIVE       = $0011;      // = ToULONG(CKR_ATTRIBUTE_SENSITIVE)
   CKR_INVALID         = $0012;      // = ToULONG(CKR_ATTRIBUTE_TYPE_INVALID)
-  CKR_SIGNINVALID     = $00C0;      // = ToULONG(CKR_SIGNATURE_INVALID)
+  CKR_SIGNINVALID     = $00c0;      // = ToULONG(CKR_SIGNATURE_INVALID
+  CKR_SIGNLENRANGE    = $00c1;      // = ToULONG(CKR_SIGNATURE_LEN_RANGE)
   CKR_BUFFER_TOOSMALL = $0150;      // = ToULONG(CKR_BUFFER_TOO_SMALL)
   CKR_VENDORDEFINED   = $80000000;  // = ToULONG(CKR_VENDOR_DEFINED)
 
@@ -4224,8 +4225,9 @@ begin
   case res of
     CKR_SUCCESS:
       result := true;
-    CKR_SIGNINVALID:
-      exit;
+    CKR_SIGNINVALID,
+    CKR_SIGNLENRANGE:
+      exit; // invalid signature is not a fatal PKCS#11 failure at HSM level
   else
     Check(res, 'Verify'); // fatal error raise EPkcs11 exception
   end;
