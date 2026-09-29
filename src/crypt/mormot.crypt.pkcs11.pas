@@ -60,6 +60,11 @@ function Pkcs11SetPssParams(Algo: TCryptAsymAlgo;
 // - CKO_CERTIFICATE should be parsed and inspected directly
 function Pkcs11KeyAlgorithm(const obj: TPkcs11Object): TXPublicKeyAlgorithm;
 
+/// properly extract the raw public-key material from a given slot
+// - CKA_VALUE is not the public-key material of CKO_PUBLIC_KEY
+function Pkcs11PublicKey(Engine: TPkcs11; const StorageID: TPkcs11ObjectID;
+  xka: TXPublicKeyAlgorithm): RawByteString;
+
 /// guess the TCryptCert usages from raw PKCS#11 Object storage flags
 function Pkcs11FlagsToCertUsages(pos: TPkcs11ObjectStorages): TCryptCertUsages;
 
@@ -207,10 +212,10 @@ type
     function OpenPrivateKey: CK_OBJECT_HANDLE;
   public
     /// create a X.509 from the supplied information
-    // - should supply all aObjects[] and aValues[] on this SlotID and
-    // a given CKA_ID to filter
-    // - if no session is currently opened, no CKO_PRIVATE_KEY may be available:
-    // call later SetPin() or Load('', cccPrivateKeyOnly, PIN)
+    // - should supply all aObjects[] and their CKA_VALUE in aValues[] on this
+    // SlotID and a given CKA_ID to filter
+    // - caller should have a session opened on aSlotID, so that CKO_PUBLIC_KEY
+    // attributes can be retrieved when present
     constructor Create(aOwner: TCryptCertAlgoPkcs11; aSlotID: TPkcs11SlotID;
       const aObjects: TPkcs11ObjectDynArray; const aValues: TRawByteStringDynArray;
       const aStorageID: TPkcs11ObjectID); reintroduce;
@@ -379,6 +384,55 @@ begin
       CKK_EC_EDWARDS:
         result := xkaEdDSA;
     end;
+end;
+
+function Pkcs11PublicKey(Engine: TPkcs11; const StorageID: TPkcs11ObjectID;
+  xka: TXPublicKeyAlgorithm): RawByteString;
+var
+  obj: CK_OBJECT_HANDLE;
+  spki: RawByteString;
+  rsa: TRsaPublicKey;
+begin
+  FastAssignNew(result);
+  if (Engine = nil) or
+     (StorageID = '') then
+    exit;
+  // CKA_ID is stored as hexadecimal text in TPkcs11Object.StorageID
+  obj := Engine.GetObject(
+    CKO_PUBLIC_KEY, '', HexToBin(StorageID));
+  if obj = CK_INVALID_HANDLE then
+    exit;
+  // PKCS#11 2.40+ may expose the complete DER SubjectPublicKeyInfo
+  spki := Engine.SessionGetAttribute(obj, CKA_PUBLIC_KEY_INFO);
+  if spki <> '' then
+  begin
+    result := X509PubKeyFromDer(spki);
+    if result <> '' then
+      exit;
+  end;
+  // fallback for tokens which don't expose CKA_PUBLIC_KEY_INFO
+  case xka of
+    xkaRsa,
+    xkaRsaPss:
+      begin
+        // RSA may use two specific binary attributes
+        rsa.Modulus := Engine.SessionGetAttribute(obj, CKA_MODULUS);
+        rsa.Exponent := Engine.SessionGetAttribute(obj, CKA_PUBLIC_EXPONENT);
+        result := rsa.ToSubjectPublicKey;
+      end;
+    xkaEcc256 .. xkaEcc512:
+      // short Weierstrass CKA_EC_POINT is a DER OCTET STRING
+      result := AsnDecOctStr(Engine.SessionGetAttribute(obj, CKA_EC_POINT));
+    xkaEdDSA:
+      begin
+        // current PKCS#11 specifies RFC 8032 raw little-endian bytes
+        result := Engine.SessionGetAttribute(obj, CKA_EC_POINT);
+        if length(result) <> 32 then
+          // older PKCS#11 3.0 wording used a DER-wrapped representation,
+          // so tolerate that form as well - we expect Ed25519 here
+          result := AsnDecOctStr(result);
+      end;
+  end;
 end;
 
 function Pkcs11FlagsToCertUsages(pos: TPkcs11ObjectStorages): TCryptCertUsages;
@@ -1017,13 +1071,14 @@ begin
       RaiseError('Create: no matching object');
     if pub >= 0 then
     begin
-      sub := aValues[pub];
-      if xka in [xkaEcc256 .. xkaEdDSA] then
-        sub := AsnDecOctStr(sub); // ECC are encoded as ASN1_OCTSTR
+      // retrieve the raw public-key binary from all potential attributes
+      o := @aObjects[pub];
+      sub := Pkcs11PublicKey(aOwner.Engine, o^.StorageID, xka);
+      if sub = '' then
+        RaiseError('Create: unable to retrieve public key');
       if fX509 = nil then
       begin
         // no associated CKO_CERTIFICATE: create a fake X.509 certificate
-        o := @aObjects[pub]; // from the CKO_PUBLIC_KEY information
         fX509 := TX509.Create;
         fX509.Signed.Version := 3;
         fX509.Signed.SubjectPublicKeyAlgorithm := xka;
