@@ -2034,7 +2034,7 @@ type
     fSession: CK_SESSION_HANDLE;
     fSessionSlot: TPkcs11SlotID;
     fSessionFlags: set of (sfRW, sfLogIn);
-    fRetrieveConfigIncludeMechanisms: boolean;
+    fRetrieveConfigIncludeMechanisms, fInitialized: boolean;
     fOnNotify: TOnPkcs11Notify;
     procedure EnsureLoaded(const ctxt: ShortString);
     procedure EnsureSession(const ctxt: ShortString);
@@ -3733,37 +3733,45 @@ var
   info: CK_INFO;
 begin
   result := false;
-  UnLoad;
+  UnLoad; // reset any previous API mapping
   fHandle := LibraryOpen(aLibraryName);
   if fHandle = 0 then
     exit;
-  FillCharFast(info, SizeOf(info), 0);
   getlist := LibraryResolve(fHandle, 'C_GetFunctionList');
-  if Assigned(getlist) and
-     (getlist(fC) = CKR_SUCCESS) and
-     (fC^.Initialize(nil) = CKR_SUCCESS) and // Initialize() may take 10 secs
-     (fC^.GetInfo(info) = CKR_SUCCESS) and
-     (info.cryptokiVersion.major >= 2) then
+  if not Assigned(getlist) or
+     (getlist(fC) <> CKR_SUCCESS) or
+     (fC^.Initialize(nil) <> CKR_SUCCESS) then // Initialize() may take 10 secs
   begin
-    fLibraryName := aLibraryName;
-    fApiNum := info.cryptokiVersion;
-    fVersionNum := info.libraryVersion;
-    FormatUtf8('%.%', [fApiNum.major, fApiNum.minor], fApi);
-    FormatUtf8('%.%', [fVersionNum.major, fVersionNum.minor], fVersion);
-    UnPad(info.manufacturerID, SizeOf(info.manufacturerID), fManufacturer);
-    UnPad(info.libraryDescription, SizeOf(info.libraryDescription), fDescription);
-    result := true;
+    UnLoad;
     exit;
   end;
-  Unload;
+  fInitialized := true; // for UnLoad to properly call fC^.Finalize()
+  FillCharFast(info, SizeOf(info), 0);
+  if (fC^.GetInfo(info) <> CKR_SUCCESS) or
+     (info.cryptokiVersion.major < 2) then
+  begin
+    UnLoad;
+    exit;
+  end;
+  fLibraryName := aLibraryName;
+  fApiNum := info.cryptokiVersion;
+  fVersionNum := info.libraryVersion;
+  FormatUtf8('%.%', [fApiNum.major, fApiNum.minor], fApi);
+  FormatUtf8('%.%', [fVersionNum.major, fVersionNum.minor], fVersion);
+  UnPad(info.manufacturerID, SizeOf(info.manufacturerID), fManufacturer);
+  UnPad(info.libraryDescription, SizeOf(info.libraryDescription), fDescription);
+  result := true;
 end;
 
 procedure TPkcs11.UnLoad;
 begin
   if fHandle = 0 then
     exit;
-  if Assigned(fC) then
+  if fInitialized then
+  begin
     fC^.Finalize(nil);
+    fInitialized := false;
+  end;
   fC := nil;
   LibraryClose(fHandle);
   fHandle := 0;
