@@ -9319,7 +9319,7 @@ begin
   CheckEqualShort(WinErrorConstant(12002)^, 'TIMEOUT', 'wecf');
   CheckEqualShort(WinErrorConstant($800b010a)^, 'CERT_E_CHAINING', 'wecg');
   CheckEqualShort(WinErrorConstant($800b010c)^, 'CERT_E_REVOKED', 'wecG');
-  CheckEqualShort(WinErrorConstant($800b010d)^[0], #0, 'wech');
+  CheckEqualShort(WinErrorConstant($800b010e)^[0], #0, 'wech');
   CheckEqualShort(WinErrorConstant($80092002)^, 'CRYPT_E_BAD_ENCODE', 'wecH');
   CheckEqualShort(WinErrorConstant(1229)^ , 'CONNECTION_INVALID', 'weci');
   CheckEqualShort(WinErrorConstant(122)^, 'INSUFFICIENT_BUFFER', 'wecj');
@@ -9339,6 +9339,7 @@ begin
   CheckEqualShort(WinErrorShort($80090330), '80090330 SEC_E_DECRYPT_FAILURE', 'w7');
   CheckEqualShort(WinErrorShort($00090321), '590625 SEC_I_RENEGOTIATE', 'w8');
   CheckEqualShort(WinErrorShort($8009002a), '8009002a NTE_NO_MORE_ITEMS', 'w9');
+  CheckEqualShort(WinErrorShort($800b0114), '800b0114 CERT_E_INVALID_NAME', 'wa');
   CheckEqualShort(WinErrorShort(244, {noint=}false), '244', '244w');
   CheckEqualShort(WinErrorShort(245, {noint=}true), '', '245w');
   WinErrorShortVar($80092012, ss);
