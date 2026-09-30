@@ -11404,16 +11404,16 @@ begin
       server := ctx^; // transient thread-safe context
       ctx := @server;
     end;
+    ctx^.PeerIssuer := '';
+    ctx^.PeerSubject := '';
+    ctx^.PeerInfo := '';
     x := store.CurrentCert;
     if Assigned(x) then
     begin
       ctx^.PeerIssuer := x.IssuerName;
       ctx^.PeerSubject := x.SubjectName;
-    end
-    else
-    begin
-      ctx^.PeerIssuer := '';
-      ctx^.PeerSubject := '';
+      if ctx^.WithPeerInfo then
+        ctx^.PeerInfo := x.PeerInfo;
     end;
     try
       ctx^.PeerCert := x;
@@ -11938,6 +11938,9 @@ procedure TOpenSslNetTls.AfterAccept(Socket: TNetSocket;
 var
   peer: ^TOpenSslNetTls;
   prev: TOpenSslNetTls;
+  context: TNetTlsContext;
+  cert: PX509;
+  verified: boolean;
 begin
   // this method is called on the Server side for each accepted client TCP socket
   fSocket := Socket;
@@ -11959,7 +11962,32 @@ begin
     // server TLS negotiation with server
     CheckProc(@SSL_accept, 'AfterAccept SSL_accept');
     fDoSslShutdown := true; // need explicit SSL_shutdown() at closing
-    if CipherName <> nil then
+    if BoundContext.ClientCertificateAuthentication and
+       Assigned(BoundContext.OnAfterPeerValidate) then
+    begin
+      context := BoundContext; // transient thread-safe callback context
+      context.CipherName := GetCipherName;
+      if CipherName <> nil then
+        CipherName^ := context.CipherName;
+      verified := fSsl.IsVerified(@context.LastError);
+      cert := fSsl.PeerCertificate; // SSL_get_peer_certificate() needs X509_free
+      if cert = nil then
+        raise EOpenSslNetTls.Create(
+          'AfterAccept: missing required client certificate');
+      try
+        context.PeerIssuer := cert^.IssuerName;
+        context.PeerSubject := cert^.SubjectName;
+        if context.WithPeerInfo or
+           not verified then
+          context.PeerInfo := cert^.PeerInfo;
+        context.PeerCert := cert;
+        context.OnAfterPeerValidate(Socket, @context, fSsl, cert);
+      finally
+        context.PeerCert := nil;
+        cert^.Free;
+      end;
+    end
+    else if CipherName <> nil then
       CipherName^ := GetCipherName;
   finally
     fLastError := nil; // main fContext is shared, but not as error state
