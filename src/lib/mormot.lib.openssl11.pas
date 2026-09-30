@@ -11940,6 +11940,7 @@ procedure TOpenSslNetTls.AfterAccept(Socket: TNetSocket;
   var
     cert: PX509;
     context: TNetTlsContext; // local transient thread-safe context
+    verified: boolean;
   begin
     cert := fSsl.PeerCertificate; // SSL_get_peer_certificate() needs X509_free
     if cert = nil then
@@ -11954,8 +11955,10 @@ procedure TOpenSslNetTls.AfterAccept(Socket: TNetSocket;
       context.PeerIssuer := cert^.IssuerName;
       context.PeerSubject := cert^.SubjectName;
       context.PeerInfo := '';
+      context.LastError := '';
+      verified := fSsl.IsVerified(@context.LastError);
       if context.WithPeerInfo or
-         not fSsl.IsVerified(@context.LastError) then
+         not verified then
         context.PeerInfo := cert^.PeerInfo;
       context.OnAfterPeerValidate(Socket, @context, fSsl, cert);
     finally

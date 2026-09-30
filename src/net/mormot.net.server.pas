@@ -5323,7 +5323,13 @@ begin
     begin
       if not aServer.fSock.TLS.Enabled then // if not already in WaitStarted()
         aServer.InitializeTlsAfterBind;     // load certificate(s) once
-      TLS.AcceptCert := aServer.Sock.TLS.AcceptCert; // TaskProcess cstaAccept
+      if aServer.Sock.TLS.ClientCertificateAuthentication then
+      begin
+        TLS := aServer.Sock.TLS; // full mTLS policy for TaskProcess cstaAccept
+        ResetNetTlsContext(TLS); // keep AcceptCert but clear shared outputs
+      end
+      else
+        TLS.AcceptCert := aServer.Sock.TLS.AcceptCert; // historical fast path
     end;
     OnLog := aServer.Sock.OnLog;
   end;

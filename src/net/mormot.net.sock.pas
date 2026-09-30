@@ -8194,7 +8194,6 @@ begin
         continue; // data is already available: no need to wait
       if GetAborted then
         break;
-      // wait for the remaining TimeOut - a blocking Recv() with
       remaining := endtix - mormot.core.os.GetTickCount64;
       if remaining < 0 then
         remaining := 0;
@@ -8209,7 +8208,7 @@ begin
         continue; // retry Recv()
       if Assigned(OnLog) then
         OnLog(sllTrace, 'TrySockRecv: timeout after %s', [TimeOut div 1000], self);
-      res := nrTimeout;  // identify read timeout as error
+      res := nrTimeout;  // will be identified as error
       break;
     until GetAborted;
   end;
