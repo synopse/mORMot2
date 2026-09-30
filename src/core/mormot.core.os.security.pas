@@ -2706,6 +2706,10 @@ function CryptBinaryToStringA(pBinary: PByte; cbBinary, dwFlags: DWord;
   pszString: PAnsiChar; var pchString: DWord): BOOL;
     stdcall; external crypt32;
 
+function CryptStringToBinaryA(pszString: PAnsiChar; cchString, dwFlags: cardinal;
+  pbBinary: PByte; var pcbBinary: cardinal; pdwSkip, pdwFlags: PCardinal): BOOL;
+    stdcall; external crypt32;
+
 function CertCloseStore(hCertStore: HCERTSTORE; dwFlags: DWord): BOOL;
     stdcall; external crypt32;
 
@@ -2761,6 +2765,12 @@ type
 // - leaves Text unchanged on conversion failure
 procedure WinCryptBinaryAppendAsText(Data: pointer; DataLen: cardinal;
   var Text: RawUtf8; Flags: cardinal = CRYPT_STRING_BASE64HEADER);
+
+/// convert text data into binary using the Windows CryptStringToBinaryA() API
+// - default Flags are CRYPT_STRING_BASE64HEADER for PEM input
+// - returns returns empty Der on invalid input
+function WinCryptTextToBinary(const Pem: RawUtf8;
+  Flags: cardinal = CRYPT_STRING_BASE64HEADER): RawByteString;
 
 type
   /// TSynWindowsPrivileges enumeration synchronized with WinAPI
@@ -7959,13 +7969,38 @@ begin
   if (Data = nil) or
      (DataLen = 0) then
     exit;
-  len := 0; // first API call to retrieve the full length
-  if not CryptBinaryToStringA(Data, DataLen, Flags, nil, len) or
-     (len = 0) then
+  len := tmp.Init; // try once with our 4KB stack buffer
+  if not CryptBinaryToStringA(Data, DataLen, Flags, tmp.buf, len) then
+  begin
+    if GetLastError <> ERROR_MORE_DATA then
+      exit;
+    tmp.Init(len); // allocate a big enough buffer
+    if not CryptBinaryToStringA(Data, DataLen, Flags, tmp.buf, len) then
+      len := 0;    // append nothing on error, but eventual tmp.Done
+  end;
+  AppendBufferToUtf8(tmp.buf, len, Text);
+  tmp.Done;
+end;
+
+function WinCryptTextToBinary(const Pem: RawUtf8; Flags: cardinal): RawByteString;
+var
+  l, len: cardinal;
+  tmp: TSynTempBuffer;
+begin
+  FastAssignNew(result);
+  l := length(Pem);
+  if l = 0 then
     exit;
-  tmp.Init(len); // second API call for the actual conversion process
-  if CryptBinaryToStringA(Data, DataLen, Flags, tmp.buf, len) then
-    AppendBufferToUtf8(tmp.buf, len, Text);
+  len := tmp.Init; // try once with our 4KB stack buffer
+  if not CryptStringToBinaryA(pointer(Pem), l, Flags, tmp.buf, len, nil, nil) then
+  begin
+    if GetLastError <> ERROR_MORE_DATA then
+      exit;
+    tmp.Init(len); // allocate a big enough buffer
+    if not CryptStringToBinaryA(pointer(Pem), l, Flags, tmp.buf, len, nil, nil) then
+      len := 0;    // return nothing on error, but eventual tmp.Done
+  end;
+  FastSetRawByteString(result, tmp.buf, len);
   tmp.Done;
 end;
 
