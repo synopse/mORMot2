@@ -2478,6 +2478,8 @@ begin
   peer := nil;
   chain := nil;
   res := QueryContextAttributesW(Ctxt, SECPKG_ATTR_REMOTE_CERT_CONTEXT, @peer);
+  if res = SEC_E_NO_CREDENTIALS then
+    AcceptError('Missing required client certificate', Context);
   if res <> SEC_E_OK then
     CheckRes('AfterAccept: QueryContextAttributesW', res, Context);
   if peer = nil then
@@ -2579,6 +2581,8 @@ begin
           finally
             callback.PeerCert := nil;
           end;
+          if not accepted then
+            break;
         end;
       end;
     if not accepted then
@@ -2589,7 +2593,7 @@ begin
     end;
     if (policy.dwError <> 0) and
        not Assigned(Context.OnEachPeerVerify) then
-      raise ESChannel.CreateFmt('AfterAccept: invalid client certificate: %s',
+      raise ESChannel.CreateFmt('AfterAccept: invalid client certificate (%s)',
         [Context.LastError]);
     if CallAfter and
        Assigned(Context.OnAfterPeerValidate) then
