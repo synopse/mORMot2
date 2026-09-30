@@ -4191,6 +4191,12 @@ procedure ConsoleWriteRaw(const Text: RawUtf8; NoLineFeed: boolean = false); ove
 // - similar to writeln but redirect to ConsoleWrite() with proper thread safety
 procedure ConsoleWriteLn;
 
+/// redirect to the reentrant TOsLock.Lock for clean ConsoleWrite/TextColor
+procedure ConsoleLock;
+
+/// redirect to the reentrant TOsLock.UnLock for clean ConsoleWrite/TextColor
+procedure ConsoleUnLock;
+
 /// will wait for the ENTER key to be pressed, with all needed waiting process
 // - on the main thread, doCheckSynchronize=true calls Synchronize() for proper
 // work e.g. with interface-based service implemented as optExecInMainThread
@@ -9596,6 +9602,16 @@ end;
 procedure AppendSysInfo(var text: ShortString);
 begin // Linuxism, but properly emulated in thit unit on Win/Mac/BSD
   RetrieveSysInfo(nil, @text, high(text)); // syscall on Linux - 1 second cache
+end;
+
+procedure ConsoleLock;
+begin
+  ConsoleCriticalSection.Lock;
+end;
+
+procedure ConsoleUnLock;
+begin
+  ConsoleCriticalSection.UnLock;
 end;
 
 procedure ConsoleWrite(const Text: RawUtf8; Color: TConsoleColor;
