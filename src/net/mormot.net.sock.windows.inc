@@ -2103,7 +2103,8 @@ end;
 // https://learn.microsoft.com/en-us/windows/win32/secauthn/protocols-in-tls-ssl--schannel-ssp-
 
 procedure CredInit(var cred: TSChannelCred; const ctx: TNetTlsContext;
-  dwFlags: cardinal; paServCred: mormot.core.os.security.PPCCERT_CONTEXT);
+  dwFlags: cardinal; paServCred: mormot.core.os.security.PPCCERT_CONTEXT;
+  RootStore: HCERTSTORE);
 begin
   FillCharFast(cred, SizeOf(cred), 0);
   // request Schannel to reject known weak ciphers whenever possible
@@ -2125,6 +2126,7 @@ begin
       cred.Tls.grbitDisabledProtocols := SP_PROT_TLS_UNSAFE;
     end;
     cred.New.dwFlags := dwFlags;
+    cred.New.hRootStore := RootStore;
     if paServCred <> nil then
     begin
       cred.New.cCreds := 1;
@@ -2136,6 +2138,7 @@ begin
     // legacy SCHANNEL_CRED path: never enable TLS 1.3 here
     cred.Old.dwVersion := SCHANNEL_CRED_VERSION;
     cred.Old.dwFlags := dwFlags;
+    cred.Old.hRootStore := RootStore;
     if OSVersion < wSeven then
       // TLS 1.0 is the only realistic choice on these old systems
       cred.Old.grbitEnabledProtocols := SP_PROT_TLS1_0
@@ -2164,12 +2167,22 @@ type
   private
     fCertificate: mormot.core.os.security.PCCERT_CONTEXT; // not Window's
     fStore: HCERTSTORE;
+    fClientRootStore: HCERTSTORE;
+    fChainEngine: HCERTCHAINENGINE;
     fCred: TCredHandle;
     fCredAcquired: boolean;
+    fClientCACount: integer;
     fParameters: TSChannelCred;
-    procedure CheckOK(const ctx: ShortString; res: integer);
-      {$ifdef HASINLINE} inline; {$endif}
+    procedure CheckRes(const api: ShortString; res: integer;
+      var Context: TNetTlsContext);
+    procedure CheckBool(const api: ShortString; success: BOOL;
+      var Context: TNetTlsContext);
     procedure LoadCertificate(Socket: TNetSocket; var Context: TNetTlsContext);
+    procedure LoadClientTrust(const Context: TNetTlsContext);
+    procedure AddClientCa(const Encoded: RawByteString); overload;
+    procedure AddClientCa(Cert: PCCERT_CONTEXT; const Origin: ShortString); overload;
+    procedure ValidateClientCertificate(Socket: TNetSocket;
+      var Context: TNetTlsContext; Ctxt: PSecHandle; CallAfter: boolean);
   public
     constructor Create(Socket: TNetSocket; var Context: TNetTlsContext);
     destructor Destroy; override;
@@ -2196,6 +2209,7 @@ type
     fAcceptFirst: boolean;
     fServerContext: TSChannelServerContext;
     fServerContextRef: IInterface; // thread-safe shared sever-side credentials
+    fAcceptContext: TNetTlsContext; // private mTLS policy for SEC_I_RENEGOTIATE
     fPeerInfo: TWinCertInfo;
     procedure ESChannelRaiseError(const ctx: ShortString; res: cardinal);
     procedure CheckOK(const ctx: ShortString; res: integer);
@@ -2233,11 +2247,21 @@ type
 
 { TSChannelServerContext }
 
-procedure TSChannelServerContext.CheckOK(const ctx: ShortString; res: integer);
+procedure TSChannelServerContext.CheckRes(const api: ShortString; res: integer;
+  var Context: TNetTlsContext);
 begin
-  if res <> SEC_E_OK then
-    raise ESChannel.CreateFmt('AfterBind: %s returned %s',
-      [ctx, OsErrorShort(res)]);
+  if res = NO_ERROR then
+    exit;
+  Context.LastError := GetErrorText(res);
+  raise ESChannel.CreateFmt('AfterBind: %s returned %s',
+    [api, Context.LastError]);
+end;
+
+procedure TSChannelServerContext.CheckBool(const api: ShortString; success: BOOL;
+  var Context: TNetTlsContext);
+begin
+  if not success then
+    CheckRes(api, GetLastError, Context);
 end;
 
 procedure TSChannelServerContext.LoadCertificate(Socket: TNetSocket;
@@ -2289,7 +2313,7 @@ begin
       flags := 0;
     err := WinCertStoreImportPfx(pfx, password, fStore, flags);
     FillZero(RawByteString(password)); // wipe UTF-8
-    CheckOK('PFXImportCertStore', err);
+    CheckRes('AfterBind: PFXImportCertStore', err, Context);
   end;
   // find first certificate in store with private key
   flags := 0;
@@ -2321,19 +2345,278 @@ begin
       CryptoApi.ReleaseContext(prov, 0); // old API
 end;
 
+
+procedure TSChannelServerContext.AddClientCa(const Encoded: RawByteString);
+begin
+  if Encoded = '' then
+    raise ESChannel.Create('AfterBind: empty client CA certificate');
+  if not CertAddEncodedCertificateToStore(fClientRootStore,
+       X509_ASN_ENCODING or PKCS_7_ASN_ENCODING,
+       pointer(Encoded), length(Encoded), CERT_STORE_ADD_USE_EXISTING, nil) then
+    RaiseLastError('AfterBind: add client CA certificate', ESChannel);
+  inc(fClientCACount);
+end;
+
+procedure TSChannelServerContext.AddClientCa(Cert: PCCERT_CONTEXT;
+  const Origin: ShortString);
+begin
+  if not CertAddCertificateContextToStore(fClientRootStore,
+       Cert, CERT_STORE_ADD_USE_EXISTING, nil) then
+    RaiseLastError(Origin, ESChannel);
+  inc(fClientCACount);
+end;
+
+procedure TSChannelServerContext.LoadClientTrust(
+  const Context: TNetTlsContext);
+const
+  PEM_BEGIN = '-----BEGIN CERTIFICATE-----';
+  PEM_END   = '-----END CERTIFICATE-----';
+var
+  content, der: RawByteString;
+  pem: RawUtf8;
+  config: CERT_CHAIN_ENGINE_CONFIG;
+  store: TWinCertStore;
+  kind: TSystemCertificateStore;
+  i, first, last: PtrInt;
+begin
+  // nil chain engine means the normal Windows trust defaults, any explicit
+  // CA source below creates an immutable exclusive-root engine shared by all
+  // accepted connections; CryptoAPI chain engines support concurrent builds
+  if (Context.CACertificatesFile = '') and
+     (Context.CASystemStores = []) and
+     (Context.CACertificatesRaw = nil) then
+    exit;
+  fClientRootStore := CertOpenStore(PAnsiChar(CERT_STORE_PROV_MEMORY),
+    X509_ASN_ENCODING or PKCS_7_ASN_ENCODING, nil, 0, nil);
+  if fClientRootStore = nil then
+    RaiseLastError('AfterBind: client CA memory store', ESChannel);
+  fClientCACount := 0;
+  if Context.CACertificatesFile <> '' then
+  begin
+    content := StringFromFile(TFileName(Context.CACertificatesFile));
+    if content = '' then
+      raise ESChannel.CreateFmt('AfterBind: empty client CA file %s',
+        [Context.CACertificatesFile]);
+    first := PosEx(PEM_BEGIN, content);
+    if first = 0 then
+      AddClientCa(content) // expects a single DER X.509 certificate
+    else
+      repeat
+        last := PosEx(PEM_END, content, first + length(PEM_BEGIN));
+        if last = 0 then
+          raise ESChannel.CreateFmt('AfterBind: invalid PEM client CA file %s',
+            [Context.CACertificatesFile]);
+        pem := copy(content, first, last + length(PEM_END) - first);
+        der := WinCryptTextToBinary(pem);
+        if der = '' then
+          raise ESChannel.Create('AfterBind: error decoding PEM client CA');
+        AddClientCa(der);
+        first := PosEx(PEM_BEGIN, content, last + length(PEM_END));
+      until first = 0;
+  end
+  else if Context.CASystemStores <> [] then
+    for kind := low(kind) to high(kind) do
+      if kind in Context.CASystemStores then
+      begin
+        store := TWinCertStore.Create(kind);
+        try
+          if store.Handle = nil then
+            RaiseLastError('AfterBind: open client CA system store', ESChannel);
+          while store.Next do
+            AddClientCa(store.Context, 'AfterBind: copy client CA system store');
+        finally
+          store.Free;
+        end;
+      end
+  else
+    for i := 0 to high(Context.CACertificatesRaw) do
+      if Context.CACertificatesRaw[i] <> nil then
+        AddClientCa(pointer(Context.CACertificatesRaw[i]),
+          'AfterBind: copy client supplied CACertificatesRaw');
+  if fClientCACount = 0 then
+    raise ESChannel.Create('AfterBind: no client CA certificate was loaded');
+  FillCharFast(config, SizeOf(config), 0);
+  config.cbSize := SizeOf(config);
+  config.hExclusiveRoot := fClientRootStore;
+  if OSVersion >= wEight then
+    config.dwExclusiveFlags := CERT_CHAIN_EXCLUSIVE_ENABLE_CA_FLAG;
+  if not CertCreateCertificateChainEngine(config, fChainEngine) then
+    RaiseLastError('AfterBind: CertCreateCertificateChainEngine', ESChannel);
+end;
+
+procedure TSChannelServerContext.ValidateClientCertificate(Socket: TNetSocket;
+  var Context: TNetTlsContext; Ctxt: PSecHandle; CallAfter: boolean);
+var
+  res: cardinal;
+  peer: PCCERT_CONTEXT;
+  chain: PCERT_CHAIN_CONTEXT;
+  para: CERT_CHAIN_PARA;
+  policypara: CERT_CHAIN_POLICY_PARA;
+  policy: CERT_CHAIN_POLICY_STATUS;
+  ssl: SSL_EXTRA_CERT_CHAIN_POLICY_PARA;
+  usage: array[0..0] of PAnsiChar;
+  simple: PCERT_SIMPLE_CHAIN;
+  element: PCERT_CHAIN_ELEMENT;
+  info: TWinCertInfo;
+  callback: TNetTlsContext;
+  i, j: PtrInt;
+  wasok, accepted: boolean;
+begin
+  peer := nil;
+  chain := nil;
+  res := QueryContextAttributesW(Ctxt, SECPKG_ATTR_REMOTE_CERT_CONTEXT, @peer);
+  if (res <> SEC_E_OK) or
+     (peer = nil) then
+    CheckRes('AfterAccept: no client cert for QueryContextAttributesW', res, Context);
+  try
+    FillCharFast(para, SizeOf(para), 0);
+    para.cbSize := SizeOf(para);
+    usage[0] := szOID_PKIX_KP_CLIENT_AUTH;
+    para.RequestedUsage.dwType := USAGE_MATCH_TYPE_AND;
+    para.RequestedUsage.Usage.cUsageIdentifier := 1;
+    para.RequestedUsage.Usage.rgpszUsageIdentifier :=
+      PPAnsiCharArray(@usage);
+    CheckBool('AfterAccept: CertGetCertificateChain',
+      CertGetCertificateChain(fChainEngine, peer, nil, peer^.hCertStore,
+        para, CERT_CHAIN_REVOCATION_CHECK_CHAIN_EXCLUDE_ROOT,
+        nil, chain), Context);
+    FillCharFast(ssl, SizeOf(ssl), 0);
+    ssl.cbSize := SizeOf(ssl);
+    ssl.dwAuthType := AUTHTYPE_CLIENT;
+    FillCharFast(policypara, SizeOf(policypara), 0);
+    policypara.cbSize := SizeOf(policypara);
+    // match the SChannel client policy: check revocation when available, but
+    // do not fail solely because an issuer publishes no reachable CRL/OCSP
+    policypara.dwFlags := CERT_CHAIN_POLICY_IGNORE_ALL_REV_UNKNOWN_FLAGS;
+    policypara.pvExtraPolicyPara := @ssl;
+    FillCharFast(policy, SizeOf(policy), 0);
+    policy.cbSize := SizeOf(policy);
+    CheckBool('AfterAccept: CertVerifyCertificateChainPolicy',
+      CertVerifyCertificateChainPolicy(PAnsiChar(CERT_CHAIN_POLICY_SSL),
+        chain, policypara, policy), Context);
+    if policy.dwError <> 0 then
+      Context.LastError := GetErrorText(policy.dwError);
+    if (chain^.cChain = 0) or
+       (chain^.rgpChain = nil) then
+    begin
+      Context.LastError := 'Windows returned an empty client certificate chain';
+      raise ESChannel.Create('AfterAccept: empty client certificate chain');
+    end;
+    if WinCertCtxtDecode(peer, info) then
+    begin
+      Context.PeerIssuer := info.IssuerName;
+      Context.PeerSubject := info.SubjectName;
+      if (Context.WithPeerInfo or
+          (policy.dwError <> 0)) and
+         Assigned(WinCertInfoToText) then
+        Context.PeerInfo := WinCertInfoToText(info);
+    end;
+    accepted := true;
+    if Assigned(Context.OnEachPeerVerify) then
+      // Windows supplies the selected chain after validation: report its
+      // elements deterministically from leaf to root, callback result
+      // overriding any Windows error, matching OpenSSL's verification path
+      for i := 0 to chain^.cChain - 1 do
+      if accepted then
+      begin
+        simple := chain^.rgpChain^[i];
+        if (simple = nil) or
+           (simple^.cElement = 0) or
+           (simple^.rgpElement = nil) then
+        begin
+          accepted := false;
+          Context.LastError :=
+            'Windows returned an invalid client certificate chain';
+          break;
+        end;
+        for j := 0 to PtrInt(simple^.cElement) - 1 do
+        begin
+          element := simple^.rgpElement^[j];
+          if (element = nil) or
+             (element^.pCertContext = nil) then
+          begin
+            accepted := false;
+            Context.LastError :=
+              'Windows returned an invalid client certificate element';
+            break;
+          end;
+          wasok := element^.TrustStatus.dwErrorStatus = 0;
+          if (policy.dwError <> 0) and
+             ((policy.lChainIndex < 0) or
+              (policy.lElementIndex < 0) or
+              ((policy.lChainIndex = i) and
+               (policy.lElementIndex = j))) then
+            wasok := false;
+          callback := Context; // transient, like OpenSSL server callbacks
+          ResetNetTlsContext(callback);
+          if WinCertCtxtDecode(element^.pCertContext, info) then
+          begin
+            callback.PeerIssuer := info.IssuerName;
+            callback.PeerSubject := info.SubjectName;
+            if (callback.WithPeerInfo or
+                (policy.dwError <> 0)) and
+               Assigned(WinCertInfoToText) then
+              callback.PeerInfo := WinCertInfoToText(info);
+          end;
+          callback.PeerCert := element^.pCertContext;
+          try
+            try
+              accepted := callback.OnEachPeerVerify(Socket, @callback,
+                wasok, Ctxt, element^.pCertContext);
+            except
+              accepted := false;
+            end;
+          finally
+            callback.PeerCert := nil;
+          end;
+        end;
+      end;
+    if not accepted then
+    begin
+      if Context.LastError = '' then
+        Context.LastError := 'client certificate rejected by OnEachPeerVerify';
+      raise ESChannel.Create('AfterAccept: client certificate callback rejected');
+    end;
+    if (policy.dwError <> 0) and
+       not Assigned(Context.OnEachPeerVerify) then
+      raise ESChannel.CreateFmt('AfterAccept: invalid client certificate: %s',
+        [Context.LastError]);
+    if CallAfter and
+       Assigned(Context.OnAfterPeerValidate) then
+    begin
+      callback := Context; // keep callback state transient
+      callback.PeerCert := peer;
+      try
+        callback.OnAfterPeerValidate(Socket, @callback, Ctxt, peer);
+      finally
+        callback.PeerCert := nil;
+      end;
+    end;
+  finally
+    if chain <> nil then
+      CertFreeCertificateChain(chain);
+    CertFreeCertificateContext(peer); // returned by QueryContextAttributesW
+    Context.PeerCert := nil;
+  end;
+end;
+
 constructor TSChannelServerContext.Create(Socket: TNetSocket;
   var Context: TNetTlsContext);
+var
+  flags: cardinal;
 begin
   inherited Create;
-  if Context.ClientCertificateAuthentication then
-    raise ESChannel.Create(
-      'SChannel client certificate authentication is not implemented');
   LoadCertificate(Socket, Context);
   // keep both credential layouts and their referenced TLS_PARAMETERS stable
-  CredInit(fParameters, Context, 0, @fCertificate);
-  CheckOK('AcquireCredentialsHandleW',
+  if Context.ClientCertificateAuthentication then
+    LoadClientTrust(Context);
+  flags := 0;
+  if Context.ClientCertificateAuthentication then
+    flags := SCH_CRED_NO_SYSTEM_MAPPER;
+  CredInit(fParameters, Context, flags, @fCertificate, fClientRootStore);
+  CheckRes('AfterBind: AcquireCredentialsHandleW',
     AcquireCredentialsHandleW(nil, UNISP_NAME, SECPKG_CRED_INBOUND,
-      nil, @fParameters, nil, nil, @fCred, nil));
+      nil, @fParameters, nil, nil, @fCred, nil), Context);
   fCredAcquired := true;
 end;
 
@@ -2342,6 +2625,10 @@ begin
   // all accepted CtxtHandles have already been deleted by their owners
   if fCredAcquired then
     FreeCredentialsHandle(@fCred);
+  if fChainEngine <> nil then
+    CertFreeCertificateChainEngine(fChainEngine);
+  if fClientRootStore <> nil then
+    CertCloseStore(fClientRootStore, CERT_CLOSE_STORE_DEFAULT);
   if fCertificate <> nil then
     CertFreeCertificateContext(fCertificate);
   if fStore <> nil then
@@ -2563,7 +2850,7 @@ begin
   else
     f := f or SCH_CRED_REVOCATION_CHECK_CHAIN or
               SCH_CRED_IGNORE_REVOCATION_OFFLINE;
-  CredInit(cred, Context, f, nil);
+  CredInit(cred, Context, f, nil, nil);
   CheckOK('AfterConnection AcquireCredentialsHandleW',
     AcquireCredentialsHandleW(nil, UNISP_NAME, SECPKG_CRED_OUTBOUND,
       nil, @cred, nil, nil, @fCred, nil));
@@ -2626,10 +2913,36 @@ begin
   fServerContext := ctx as TSChannelServerContext;
   fServerContextRef := fServerContext; // increment RefCount
   fFlags := ASC_REQ_FLAGS;
-  // make initial TLS handshake and prepare for process
-  HandshakeLoop;
-  if CipherName <> nil then
-    CipherName^ := GetCipherName;
+  if not BoundContext.ClientCertificateAuthentication then
+  begin
+    // preserve the lightweight historical path for ordinary TLS/HTTPS
+    HandshakeLoop;
+    if CipherName <> nil then
+      CipherName^ := GetCipherName;
+    exit;
+  end;
+  // mTLS validation uses a private connection copy of the server context
+  fAcceptContext := BoundContext; // may be reused during SEC_I_RENEGOTIATE
+  ResetNetTlsContext(fAcceptContext);
+  fFlags := fFlags or ASC_REQ_MUTUAL_AUTH;
+  try
+    HandshakeLoop;
+    fAcceptContext.CipherName := GetCipherName;
+    fServerContext.ValidateClientCertificate(
+      Socket, fAcceptContext, @fCtxt, {callafter=}true);
+    if fAcceptContext.ClientVerifyOnce then
+      // keep the authenticated identity without requesting a replacement
+      // certificate during later renegotiation/post-handshake processing
+      fFlags := fFlags and not ASC_REQ_MUTUAL_AUTH;
+  finally
+    // preserve the INetTls output-pointer contract on validation failures
+    if (LastError <> nil) and
+       (fAcceptContext.LastError <> '') then
+      LastError^ := fAcceptContext.LastError;
+    if (CipherName <> nil) and
+       (fAcceptContext.CipherName <> '') then
+      CipherName^ := fAcceptContext.CipherName;
+  end;
 end;
 
 function TSChannelNetTls.GetCipherName: RawUtf8;
@@ -2961,6 +3274,14 @@ begin
               // more state logic for little gain so is not supported yet
               exit; // return nrFatalError
             HandshakeLoop({NeedRecv=}false);
+            if fAccept and
+               ((fFlags and ASC_REQ_MUTUAL_AUTH) <> 0) then
+            begin
+              ResetNetTlsContext(fAcceptContext); // new validation round
+              fAcceptContext.CipherName := GetCipherName;
+              fServerContext.ValidateClientCertificate(
+                fSocket, fAcceptContext, @fCtxt, {CallAfter=}false);
+            end;
           finally
             fSspiSafe.UnLock; // Lock was done in DecryptInput
           end;

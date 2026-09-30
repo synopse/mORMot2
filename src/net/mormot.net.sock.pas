@@ -957,7 +957,7 @@ type
   /// callback raised by INetTls.AfterConnection after validating a peer
   // - called after standard peer validation - ignored by TOnNetTlsPeerValidate
   // - Context.CipherName, LastError PeerIssuer and PeerSubject are set
-  // - TLS and Peer are opaque structures, typically OpenSSL PSSL and PX509
+  // - TLS/Peer are OpenSSL PSSL/PX509, or SChannel PCtxtHandle/PCCERT_CONTEXT
   TOnNetTlsAfterPeerValidate = procedure(Socket: TNetSocket;
     Context: PNetTlsContext; TLS, Peer: pointer) of object;
 
@@ -966,7 +966,8 @@ type
   // - should process the supplied peer information, and return true to continue
   // and accept the connection, or false to abort the connection
   // - Context.PeerIssuer, PeerSubject and PeerCert have been properly populated
-  // - TLS and Peer are opaque structures, typically OpenSSL PSSL and PX509 pointers
+  // - TLS/Peer are OpenSSL PSSL/PX509, or SChannel PCtxtHandle/PCCERT_CONTEXT
+  // - order is backend-specific; server-side Context changes may not be retained
   TOnNetTlsEachPeerVerify = function(Socket: TNetSocket; Context: PNetTlsContext;
     wasok: boolean; TLS, Peer: pointer): boolean of object;
 
@@ -1004,8 +1005,8 @@ type
     /// input: let HTTPS be less paranoid about TLS certificates
     // - on client: will avoid checking the server certificate, so will
     // allow to connect and encrypt e.g. with secTLSSelfSigned servers
-    // - on OpenSSL server, should be true if no mutual authentication is done,
-    // i.e. if OnPeerValidate/OnEachPeerVerify callbacks are not set
+    // - on a server doing mutual TLS, this flag alone never accepts an invalid
+    // client certificate; OnEachPeerVerify may explicitly override validation
     IgnoreCertificateErrors: boolean;
     /// input: if PeerInfo field should be retrieved once connected
     WithPeerInfo: boolean;
@@ -1017,16 +1018,18 @@ type
     // - could be useful if the server has some trouble with TLS 1.3
     DisableTls13: boolean;
     /// input: enable two-way TLS for the server
-    // - to be used with OnEachPeerVerify callback or CACertificatesFile
+    // - trust may come from Windows defaults, the CA fields, or a callback
     // - on OpenSSL client or server, set SSL_VERIFY_FAIL_IF_NO_PEER_CERT mode
-    // - not used on SChannel
+    // - on a SChannel server, sets ASC_REQ_MUTUAL_AUTH then validates the
+    // supplied client certificate with the native Windows chain APIs
     ClientCertificateAuthentication: boolean;
     /// input: if two-way TLS client should be verified only once on the server
     // - on OpenSSL server, set SSL_VERIFY_CLIENT_ONCE mode, i.e. do not ask for
     // a client certificate again during renegotiation or post-authentication
     // if a certificate was requested during the initial handshake
     // - ignored on OpenSSL client (documented by OpenSSL man page as a bug)
-    // - not used on SChannel
+    // - on a SChannel server, keeps the initially validated identity and avoids
+    // requesting a replacement certificate during later handshake processing
     ClientVerifyOnce: boolean;
     /// input: allow legacy insecure renegotiation for unpatched/unsafe servers
     // - on OpenSSL client, set the SSL_OP_LEGACY_SERVER_CONNECT option
@@ -1081,7 +1084,8 @@ type
     // - e.g. entrust_2048_ca.cer from https://web.entrust.com
     // - (Delphi) warning: encoded as UTF-8 not UnicodeString/TFileName
     // - on OpenSSL, calls the SSL_CTX_load_verify_locations() API
-    // - not used on SChannel
+    // - on a SChannel server, loads PEM or DER X.509 certificates into an
+    // in-memory exclusive root store for validating client certificates
     CACertificatesFile: RawUtf8;
     /// input: opaque pointers containing a set of CA certificates
     // - on OpenSSL client or server, calls SSL_CTX_get_cert_store() API then
@@ -1093,12 +1097,16 @@ type
     // !   aTlsContext.CACertificatesRaw := TPointerDynArray(certs);
     // !   // ... eventually ...
     // !   PX509DynArrayFree(certs);
+    // - on a SChannel server, expects PCCERT_CONTEXT entries and retains
+    // independent references in its in-memory trust store
     // - not used on SChannel client
     CACertificatesRaw: TPointerDynArray;
     /// input: defines a set of CA certificates to be retrieved from the OS
     // - on OpenSSL, calls and uses our cached LoadCertificatesFromSystemStore()
     // which is more versatile than default SSL_CTX_set_default_verify_paths(),
     // especially on Windows
+    // - on a SChannel server, [] uses normal Windows trust; a non-empty set is
+    // copied into an in-memory exclusive root store, restricting trust to it
     // - not used on SChannel client
     CASystemStores: TSystemCertificateStores;
     /// input: preferred Cipher List - for TLS 1.3, use CipherSuites instead
@@ -1130,27 +1138,28 @@ type
     /// output: detailed information about the connected Peer as text
     // - stored in the native format of the TLS library, e.g. X509_print()
     // or ToText(TWinCertInfo)
-    // - only populated if WithPeerInfo was set to true, or an error occurred
+    // - populated if WithPeerInfo is true, or when required by the backend
     PeerInfo: RawUtf8;
     /// output: full detailed raw information about the connected Peer
-    // - is a PX509 on OpenSSL, or a PWinCertInfo from mormot.lib.sspi on SChannel
-    // - only populated during OnEachPeerVerify callback execution
+    // - during callbacks, is an OpenSSL PX509 or SChannel PCCERT_CONTEXT
+    // - borrowed and valid only during the callback; retain it with native APIs
     PeerCert: pointer;
     /// output: low-level details about the last error at TLS level
-    // - typically one X509_V_ERR_* integer constant
+    // - contains an OpenSSL X509_V_ERR_* value or native Windows error text
     LastError: RawUtf8;
     /// called by INetTls.AfterConnection after handshake to customize peer validation
     // - set IgnoreCertificateErrors=true to fully handle validation yourself
     // - not implemented on SChannel
     OnPeerValidate: TOnNetTlsPeerValidate;
-    /// called by INetTls.AfterConnection for each certiticate during peer validation
+    /// called by INetTls.AfterConnection for each certificate during peer validation
     // - allow e.g. to verify CN or DNSName fields of each peer certificate
     // - see also ClientCertificateAuthentication and ClientVerifyOnce options
-    // - not implemented on SChannel
+    // - on a SChannel server, TLS is PCtxtHandle and Peer is PCCERT_CONTEXT
     OnEachPeerVerify: TOnNetTlsEachPeerVerify;
     /// called by INetTls.AfterConnection after standard peer validation
     // - allow e.g. to verify CN or DNSName fields of the peer certificate
-    // - not implemented on SChannel
+    // - on a SChannel server, TLS is PCtxtHandle and Peer is the remote leaf
+    // PCCERT_CONTEXT; raising an exception rejects the connection
     OnAfterPeerValidate: TOnNetTlsAfterPeerValidate;
     /// called to retrieve a private password
     // - on SChannel server, overrides PrivatePassword when importing PFX;
@@ -1186,8 +1195,8 @@ type
     /// method called for each new connection accepted on server side
     // - should make the proper server-side TLS handshake and create a session
     // - should raise an exception on error
-    // - BoundContext is the associated server instance with proper AcceptCert
-    // as filled by AfterBind()
+    // - BoundContext contains the server policy and AcceptCert from AfterBind(),
+    // and should remain valid for the accepted connection lifetime
     procedure AfterAccept(Socket: TNetSocket; const BoundContext: TNetTlsContext;
       LastError, CipherName: PRawUtf8);
     /// retrieve the textual name of the cipher used following AfterAccept()
