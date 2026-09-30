@@ -557,6 +557,7 @@ type
   // setting will disable both acoThreadCpuAffinity and acoThreadSocketAffinity
   // - acoIocpWriteDirect try sending data in the thread pool instead of the
   // THttpAsyncConnections writing thread - may help serving files on Windows
+  // - acoCreateSuspended makes TAsyncConnections thread start suspended
   TAsyncConnectionsOptions = set of (
     acoOnErrorContinue,
     acoNoLogRead,
@@ -571,7 +572,8 @@ type
     acoReusePort,
     acoThreadSmooting,
     acoWriteNoLoop,
-    acoIocpWriteDirect
+    acoIocpWriteDirect,
+    acoCreateSuspended
   );
 
   /// dynamic array of TAsyncConnectionsThread instances
@@ -2888,8 +2890,11 @@ var
   i: PtrInt;
   tix32: cardinal;
   opt: TPollAsyncSocketsOptions;
+  startmain: boolean;
   {%H-}log: ISynLog;
 begin
+  startmain := not (acoCreateSuspended in aOptions);
+  exclude(aOptions, acoCreateSuspended); // should not appear any more
   aLog.EnterLocal(log, 'Create(%,%,%)',
     [aConnectionClass, ProcessName, aThreadPoolCount], self);
   // setup connection class
@@ -2943,7 +2948,7 @@ begin
   {$endif USE_WINIOCP}
   // prepare this main thread: fThreads[] requires proper fOwner.OnStart/OnStop
   fOptions := aOptions;
-  inherited Create({suspended=}false, OnStart, OnStop, aLog, ProcessName);
+  inherited Create({suspended=}true, OnStart, OnStop, aLog, ProcessName);
   // initiate the read/receive thread(s)
   fThreadPoolCount := aThreadPoolCount;
   SetLength(fThreads, fThreadPoolCount);
@@ -2977,7 +2982,9 @@ begin
     SetServerThreadsAffinityPerCpu(log, TThreadDynArray(fThreads))
   else if acoThreadSocketAffinity in aOptions then
     SetServerThreadsAffinityPerSocket(log, TThreadDynArray(fThreads));
-  // caller will start the main thread
+  // eventually start the main thread (unless acoCreateSuspended has been set)
+  if startmain then
+    Start;
   if Assigned(log) then
     log.Log(sllTrace, 'Create: started % threads', [fThreadPoolCount + 1], self);
 end;
