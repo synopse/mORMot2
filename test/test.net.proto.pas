@@ -7214,7 +7214,7 @@ begin
   end;
   // P-256 key generation is much faster than RSA-2048 and is supported by
   // both the OpenSSL test client and the CNG-backed SChannel server
-  algo := CryptCertOpenSsl[caaES256];
+  algo := CryptCertOpenSsl[caaES256]; // CryptCertX509[] makes error
   if algo = nil then
   begin
     Check(false, 'OpenSSL X.509 ECDSA P-256 support unavailable');
@@ -7262,7 +7262,7 @@ begin
     // accept a valid client over TLS 1.2 with TLS 1.3 disabled
     RunCase('19000', sttFile, server, ca, valid,
       [stfExpected, stfDisableTls13]);
-    // prove that our previously unknown client is valid within its own CA
+    // prove that the unknown client is valid when its issuing CA is trusted
     RunCase('19001', sttFile, server, unknownca, unknown,
       [stfExpected]);
     // existing one-way SChannel HTTPS behavior must remain unchanged

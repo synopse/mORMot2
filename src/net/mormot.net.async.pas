@@ -819,8 +819,7 @@ type
     // - for TLS support, set acoEnableTls, and once WaitStarted() returned,
     // set Server.TLS.CertificateFile/PrivateKeyFile/PrivatePassword properties
     // and call Server.DoTlsAfter(cstaBind)
-    constructor Create(const aPort: RawUtf8;
-      const OnStart, OnStop: TOnNotifyThread;
+    constructor Create(const aPort: RawUtf8; const OnStart, OnStop: TOnNotifyThread;
       aConnectionClass: TAsyncConnectionClass; const ProcessName: RawUtf8;
       aLog: TSynLogClass; aOptions: TAsyncConnectionsOptions;
       aThreadPoolCount: integer); reintroduce; virtual;
@@ -1035,8 +1034,13 @@ type
     fAsyncServer: THttpAsyncServer;
     procedure IdleEverySecond; override;
     procedure SetExecuteState(State: THttpServerExecuteState); override;
-    procedure DoExecute; override;
     procedure WakeupServerMainThread;
+  public
+    /// run the HTTP server, listening on a supplied IP port
+    constructor Create(const aPort: RawUtf8; const OnStart, OnStop: TOnNotifyThread;
+      aConnectionClass: TAsyncConnectionClass; const ProcessName: RawUtf8;
+      aLog: TSynLogClass; aOptions: TAsyncConnectionsOptions;
+      aThreadPoolCount: integer); override;
   published
     /// used for hsoBan40xIP has been defined or via Banned.BlackList
     // - indicates e.g. how many accept() have been rejected from their IP
@@ -5332,10 +5336,15 @@ end;
 
 { THttpAsyncConnections }
 
-procedure THttpAsyncConnections.DoExecute;
+constructor THttpAsyncConnections.Create(const aPort: RawUtf8;
+  const OnStart, OnStop: TOnNotifyThread;
+  aConnectionClass: TAsyncConnectionClass; const ProcessName: RawUtf8;
+  aLog: TSynLogClass; aOptions: TAsyncConnectionsOptions;
+  aThreadPoolCount: integer);
 begin
-  fExecuteAcceptOnly := true; // THttpAsyncServer.Execute will do POSIX writes
-  inherited DoExecute;
+  fExecuteAcceptOnly := true;
+  inherited Create(aPort, OnStart, OnStop,
+    aConnectionClass, ProcessName, aLog, aOptions, aThreadPoolCount);
 end;
 
 procedure THttpAsyncConnections.WakeupServerMainThread;
@@ -5362,9 +5371,12 @@ end;
 procedure THttpAsyncConnections.SetExecuteState(State: THttpServerExecuteState);
 begin
   if (State = esRunning) and
-     (fAsyncServer <> nil) and
-     (fServer <> nil) then
-    fAsyncServer.fSock := fServer;
+     (fAsyncServer <> nil) then
+    if fServer = nil then // paranoid check
+      EHttpAsyncConnections.RaiseUtf8(
+        '%.SetExecuteState(esRunning) with fServer=nil', [self])
+    else
+      fAsyncServer.fSock := fServer; // publish now the main bound socket
   inherited SetExecuteState(State);
 end;
 
@@ -5430,10 +5442,14 @@ begin
   include(aco, acoCreateSuspended);
   fAsync := fConnectionsClass.Create(aPort, OnStart, OnStop,
     fConnectionClass, fProcessName, TSynLog, aco, ServerThreadPoolCount);
-  // publish every relationship needed by fAsync.DoExecute
+  // publish every relationship needed by fAsync.DoExecute and Start + Bind
   fAsync.fAsyncServer := self;
   fAsync.fBanned := THttpAcceptBan.Create; // for hsoBan40xIP and BlackList
   fAsync.Start;                            // eventually launch fAsync.DoExecute
+  fAsync.WaitStarted(10);                  // wait for actual port binding
+  if fSock <> fAsync.fServer then // paranoid
+    EHttpAsyncConnections.RaiseUtf8(
+      '%.Create: inconsistent server socket publication', [self]);
   // preserve the caller's hsoCreateSuspended semantics
   if not startmain then
     exit;
@@ -5616,86 +5632,84 @@ var
   tix64: Int64;
   tix, lasttix, idle, lastidle: cardinal;
   msidle, mscallbacks: integer;
+  pname: RawUtf8;
 begin
   // call ProcessIdleTix - and POSIX Send() output packets in the background
-  //SetCurrentThreadName('=M:%', [fAsync.fProcessName]);
-  WaitStarted(10); // wait for fAsync.Execute to bind and start
-  if fAsync <> nil then
-    try
-      fSock := fAsync.fServer;
-      fAsync.DoLog(sllTrace, 'Execute: main loop', [], self);
-      IdleEverySecond; // initialize idle process (e.g. fHttpDateNowUtc)
-      tix := GetTickSec shr 6; // delay=500 after 64s idle
-      lasttix := tix;
-      lastidle := 0;
-      mscallbacks := 0;
-      if fCallbackSendDelay <> nil then
-        mscallbacks := fCallbackSendDelay^;
+  try
+    if fAsync = nil then // paranoid
+      EHttpAsyncConnections.RaiseUtf8('%.Execute with no Async', [self]);
+    pname := fAsync.ProcessName;
+    fAsync.DoLog(sllTrace, 'Execute: main % loop over %', [pname, fSock], self);
+    IdleEverySecond; // initialize idle process (e.g. fHttpDateNowUtc)
+    tix := GetTickSec shr 6; // delay=500 after 64s idle
+    lasttix := tix;
+    lastidle := 0;
+    mscallbacks := 0;
+    if fCallbackSendDelay <> nil then
+      mscallbacks := fCallbackSendDelay^;
+    {$ifndef USE_WINIOCP}
+    ms := 1000; // fine if OnGetOneIdle is called in-between
+    if fAsync.fSocketsEpoll then
+      if mscallbacks <> 0 then
+        ms := mscallbacks; // for WebSockets frame gathering
+    {$endif USE_WINIOCP}
+    while not (fShutdownInProgress or
+               Terminated or
+               fAsync.Terminated) do
       {$ifndef USE_WINIOCP}
-      ms := 1000; // fine if OnGetOneIdle is called in-between
-      if fAsync.fSocketsEpoll then
-        if mscallbacks <> 0 then
-          ms := mscallbacks; // for WebSockets frame gathering
+      if fAsync.fSockets.fWrite.SubscribeCount +
+         fAsync.fSockets.fWrite.Count = 0  then
       {$endif USE_WINIOCP}
-      while not (fShutdownInProgress or
-                 Terminated or
-                 fAsync.Terminated) do
-        {$ifndef USE_WINIOCP}
-        if fAsync.fSockets.fWrite.SubscribeCount +
-           fAsync.fSockets.fWrite.Count = 0  then
-        {$endif USE_WINIOCP}
+      begin
+        // no socket/poll/epoll API nedeed (most common case)
+        idle := mormot.core.os.GetTickCount64 shr 6;
+        if lastidle = idle then
+          msidle := 10                 // WaitFor(10) up to 64ms
+        else if (mscallbacks <> 0) and // typically = 10ms
+                (tix = lasttix) then
+          msidle := mscallbacks        // delayed SendFrames gathering
+        else if (fAsync.fGC1.Count = 0) or
+                (fAsync.fKeepConnectionInstanceMS > 500 * 2) then
+          msidle := 500                // idle server
+        else         // default fKeepConnectionInstanceMS = 100ms
+          msidle := fAsync.fKeepConnectionInstanceMS shr 1; // follow GC pace
+        lastidle := idle;
+        fExecuteEvent.WaitFor(msidle);
+        if fShutdownInProgress or
+           Terminated or
+           fAsync.Terminated then
+          break;
+        // periodic trigger of IdleEverySecond and ProcessIdleTixSendFrames
+        tix64 := mormot.core.os.GetTickCount64;
+        tix := tix64 shr 16; // check SendFrame idle after 1 minute (64K ms)
+        fAsync.ProcessIdleTix(self, tix64);
+        if (mscallbacks <> 0) and
+           //TODO: set and check fCallbackOutgoingCount>0 instead?
+           (fAsync.fConnectionCount <> 0) then
+          lasttix := tix; // need mscallbacks for upgraded connections
+      {$ifndef USE_WINIOCP}
+      end
+      else
+      begin
+        // some huge packets queued for async sending (less common)
+        // note: fWrite.GetOne() calls ProcessIdleTix() while looping
+        if fAsync.fSockets.fWrite.GetOne(ms, 'W', notif) then
+          fAsync.fSockets.ProcessWrite(notif, 0);
+        if mscallbacks <> 0 then
         begin
-          // no socket/poll/epoll API nedeed (most common case)
-          idle := mormot.core.os.GetTickCount64 shr 6;
-          if lastidle = idle then
-            msidle := 10                 // WaitFor(10) up to 64ms
-          else if (mscallbacks <> 0) and // typically = 10ms
-                  (tix = lasttix) then
-            msidle := mscallbacks        // delayed SendFrames gathering
-          else if (fAsync.fGC1.Count = 0) or
-                  (fAsync.fKeepConnectionInstanceMS > 500 * 2) then
-            msidle := 500                // idle server
-          else         // default fKeepConnectionInstanceMS = 100ms
-            msidle := fAsync.fKeepConnectionInstanceMS shr 1; // follow GC pace
-          lastidle := idle;
-          fExecuteEvent.WaitFor(msidle);
-          if fShutdownInProgress or
-             Terminated or
-             fAsync.Terminated then
-            break;
-          // periodic trigger of IdleEverySecond and ProcessIdleTixSendFrames
-          tix64 := mormot.core.os.GetTickCount64;
-          tix := tix64 shr 16; // check SendFrame idle after 1 minute (64K ms)
-          fAsync.ProcessIdleTix(self, tix64);
-          if (mscallbacks <> 0) and
-             //TODO: set and check fCallbackOutgoingCount>0 instead?
-             (fAsync.fConnectionCount <> 0) then
-            lasttix := tix; // need mscallbacks for upgraded connections
-        {$ifndef USE_WINIOCP}
-        end
-        else
-        begin
-          // some huge packets queued for async sending (less common)
-          // note: fWrite.GetOne() calls ProcessIdleTix() while looping
-          if fAsync.fSockets.fWrite.GetOne(ms, 'W', notif) then
-            fAsync.fSockets.ProcessWrite(notif, 0);
-          if mscallbacks <> 0 then
-          begin
-            tix := mormot.core.os.GetTickCount64 shr 16; // see above
-            lasttix := tix;
-          end;
-        {$endif USE_WINIOCP}
+          tix := mormot.core.os.GetTickCount64 shr 16; // see above
+          lasttix := tix;
         end;
-    except
-      on E: Exception do
-        // callback exceptions should all be catched: so we assume that any
-        // exception in mORMot code should be considered as fatal
-        fAsync.DoLog(sllWarning, 'Execute raised uncatched % -> terminate %',
-          [PClass(E)^, fAsync.fProcessName], self);
-    end;
-  if fAsync = nil then
-    exit;
-  fAsync.DoLog(sllInfo, 'Execute: done W %', [fAsync.fProcessName], self);
+      {$endif USE_WINIOCP}
+      end;
+  except
+    on E: Exception do
+      // callback exceptions should all be catched: so we assume that any
+      // exception in mORMot code should be considered as fatal
+      fAsync.DoLog(sllWarning, 'Execute raised uncatched % -> terminate %',
+        [PClass(E)^, pname], self);
+  end;
+  fAsync.DoLog(sllInfo, 'Execute: done W %', [pname], self);
 end;
 
 

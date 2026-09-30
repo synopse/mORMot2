@@ -394,9 +394,9 @@ constructor TWebSocketAsyncConnections.Create(const aPort: RawUtf8;
   const ProcessName: RawUtf8; aLog: TSynLogClass; aOptions: TAsyncConnectionsOptions;
   aThreadPoolCount: integer);
 begin
+  fKeepConnectionInstanceMS := 500; // more conservative for blocking callbacks
   inherited Create(aPort, OnStart, OnStop, aConnectionClass, ProcessName,
     aLog, aOptions, aThreadPoolCount);
-  fKeepConnectionInstanceMS := 500; // more conservative for blocking callbacks
 end;
 
 function TWebSocketAsyncConnections.GetLastOperationIdleSeconds: cardinal;
