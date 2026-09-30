@@ -2103,8 +2103,7 @@ end;
 // https://learn.microsoft.com/en-us/windows/win32/secauthn/protocols-in-tls-ssl--schannel-ssp-
 
 procedure CredInit(var cred: TSChannelCred; const ctx: TNetTlsContext;
-  dwFlags: cardinal; paServCred: mormot.core.os.security.PPCCERT_CONTEXT;
-  RootStore: HCERTSTORE);
+  dwFlags: cardinal; paServCred: pointer; RootStore: HCERTSTORE);
 begin
   FillCharFast(cred, SizeOf(cred), 0);
   // request Schannel to reject known weak ciphers whenever possible
@@ -2165,7 +2164,7 @@ type
   // - SSPI requires all CtxtHandles to be deleted before freeing their CredHandle
   TSChannelServerContext = class(TInterfacedObject)
   private
-    fCertificate: mormot.core.os.security.PCCERT_CONTEXT; // not Window's
+    fCertificate: pointer; // PCCERT_CONTEXT from RTL Windows or mormot.core
     fStore: HCERTSTORE;
     fClientRootStore: HCERTSTORE;
     fChainEngine: HCERTCHAINENGINE;
@@ -2181,7 +2180,7 @@ type
     procedure LoadCertificate(Socket: TNetSocket; var Context: TNetTlsContext);
     procedure LoadClientTrust(const Context: TNetTlsContext);
     procedure AddClientCa(const Encoded: RawByteString); overload;
-    procedure AddClientCa(Cert: PCCERT_CONTEXT; const Origin: ShortString); overload;
+    procedure AddClientCa(Cert: pointer; const Origin: ShortString); overload;
     procedure ValidateClientCertificate(Socket: TNetSocket;
       var Context: TNetTlsContext; Ctxt: PSecHandle; CallAfter: boolean);
   public
@@ -2357,8 +2356,7 @@ begin
   inc(fClientCACount);
 end;
 
-procedure TSChannelServerContext.AddClientCa(Cert: PCCERT_CONTEXT;
-  const Origin: ShortString);
+procedure TSChannelServerContext.AddClientCa(Cert: pointer; const Origin: ShortString);
 begin
   if not CertAddCertificateContextToStore(fClientRootStore,
        Cert, CERT_STORE_ADD_USE_EXISTING, nil) then
@@ -2463,7 +2461,7 @@ procedure TSChannelServerContext.ValidateClientCertificate(Socket: TNetSocket;
   var Context: TNetTlsContext; Ctxt: PSecHandle; CallAfter: boolean);
 var
   res: cardinal;
-  peer: PCCERT_CONTEXT;
+  peer: mormot.core.os.security.PCCERT_CONTEXT;
   chain: PCERT_CHAIN_CONTEXT;
   para: CERT_CHAIN_PARA;
   policypara: CERT_CHAIN_POLICY_PARA;
@@ -2632,9 +2630,9 @@ begin
   // keep both credential layouts and their referenced TLS_PARAMETERS stable
   if Context.ClientCertificateAuthentication then
     LoadClientTrust(Context);
-  flags := 0;
+  flags := SCH_CRED_CACHE_ONLY_URL_RETRIEVAL_ON_CREATE; // no blocking OS calls
   if Context.ClientCertificateAuthentication then
-    flags := SCH_CRED_NO_SYSTEM_MAPPER;
+    flags := flags or SCH_CRED_NO_SYSTEM_MAPPER;
   CredInit(fParameters, Context, flags, @fCertificate, fClientRootStore);
   CheckRes('AfterBind: AcquireCredentialsHandleW',
     AcquireCredentialsHandleW(nil, UNISP_NAME, SECPKG_CRED_INBOUND,

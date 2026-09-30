@@ -7128,7 +7128,7 @@ begin
     sttSystem:
       tls.CASystemStores := [scsRoot];
   end;
-  http := THttpServer.Create(Port, nil, nil, 'schannel-mtls',
+  http := THttpAsyncServer.Create(Port, nil, nil, 'schannel-mtls',
     2, 5000, [hsoEnableTls]);
   try
     if Trust = sttRaw then
@@ -7207,6 +7207,11 @@ var
   ca, unknownca: ICryptCert;
   server, valid, unknown, expired, wrongusage: ICryptCert;
 begin
+  if OSVersion < wSeven then // no TLS 1.2 available before Windows Seven
+  begin
+    AddConsole('Deprecated system: skipping SChannel mTLS');
+    exit;
+  end;
   if not OpenSslIsAvailable then
   begin
     AddConsole('OpenSSL unavailable: skipping SChannel mTLS integration test');
