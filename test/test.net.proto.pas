@@ -76,10 +76,10 @@ const
 type
   {$ifdef SCHANNEL_VERIFY}
   TSChannelTestTrust = (
-    sttFile,
-    sttRaw,
-    sttDefault,
-    sttSystem);
+    sttFile, sttRaw, sttDefault, sttSystem);
+  TSChannelTestFlags = set of (
+   stfExpected, stfCallbacks, stfRejectEach, stfDisableTls13, stfOneWayTls,
+   stfOpenSslServer, stfEachInvalid);
   {$endif SCHANNEL_VERIFY}
 
   /// this test case will validate several low-level protocols
@@ -113,16 +113,6 @@ type
     tunnelappsec: RawUtf8;
     tunneloptions: TTunnelOptions;
     tunnelsequence: integer;
-    {$ifdef SCHANNEL_VERIFY}
-    // for _SChannel
-    scEachCount: integer;
-    scEachUseful: integer;
-    scEachInvalid: integer;
-    scAfterCount: integer;
-    scAfterUseful: integer;
-    scRejectEach: boolean;
-    scClientError: RawUtf8;
-    {$endif SCHANNEL_VERIFY}
     procedure Setup; override;
     procedure TunnelExecute(Sender: TObject);
     procedure TunnelDeferredExecute(Sender: TObject);
@@ -178,17 +168,9 @@ type
     procedure DoHttpOutStream(Sender: TObject);
     {$ifdef SCHANNEL_VERIFY}
     /// validate SChannel mTLS layer using OpenSSL
-    function SCOnEachCertificate(Socket: TNetSocket; Context: PNetTlsContext;
-      WasOk: boolean; TLS, Peer: pointer): boolean;
-    procedure SCOnAfterCertificate(Socket: TNetSocket;
-      Context: PNetTlsContext; TLS, Peer: pointer);
-    function SCOpenSslClient(const Port: RawUtf8;
-      const Certificate: ICryptCert; DisableTls13: boolean): boolean;
-    procedure SCRunCase(const Port: RawUtf8; Trust: TSChannelTestTrust;
-      const Server, Authority, Client: ICryptCert;
-      Expected, Callbacks, RejectEach: boolean;
-      DisableTls13: boolean = false; MutualTls: boolean = true;
-      SChannelServer: boolean = true);
+    procedure RunCase(const Port: RawUtf8; Trust: TSChannelTestTrust;
+      const Server, Authority, Client: ICryptCert; Flags: TSChannelTestFlags = []);
+    procedure DoRunCase(Sender: TObject);
     {$endif SCHANNEL_VERIFY}
   published
     {$ifdef USEWININET}
@@ -6967,12 +6949,36 @@ end;
 {$endif OSPOSIX}
 
 {$ifdef SCHANNEL_VERIFY}
-function TNetworkProtocols.ScOnEachCertificate(Socket: TNetSocket;
+
+type
+  TRunCase = class
+  public
+    Test: TSynTestCase;
+    Port: RawUtf8;
+    Trust: TSChannelTestTrust;
+    Server, Authority, Client: ICryptCert;
+    Flags: TSChannelTestFlags;
+    fEachCount: integer;
+    fEachUseful: integer;
+    fEachInvalid: integer;
+    fAfterCount: integer;
+    fAfterUseful: integer;
+    fClientError: RawUtf8;
+    procedure Execute;
+    function OnEachCertificate(Socket: TNetSocket;
+      Context: PNetTlsContext; WasOk: boolean; TLS, Peer: pointer): boolean;
+    procedure OnAfterCertificate(Socket: TNetSocket;
+      Context: PNetTlsContext; TLS, Peer: pointer);
+    function OpenSslClient(const Port: RawUtf8;
+      const Certificate: ICryptCert; DisableTls13: boolean): boolean;
+  end;
+
+function TRunCase.OnEachCertificate(Socket: TNetSocket;
   Context: PNetTlsContext; WasOk: boolean; TLS, Peer: pointer): boolean;
 begin
-  LockedInc32(@scEachCount);
+  LockedInc32(@fEachCount);
   if not WasOk then
-    LockedInc32(@scEachInvalid);
+    LockedInc32(@fEachInvalid);
   if (Socket <> nil) and
      (Context <> nil) and
      (TLS <> nil) and
@@ -6981,14 +6987,14 @@ begin
      (Context^.PeerIssuer <> '') and
      (Context^.PeerSubject <> '') and
      (Context^.PeerInfo <> '') then
-    LockedInc32(@scEachUseful);
-  result := not scRejectEach;
+    LockedInc32(@fEachUseful);
+  result := not (stfRejectEach in Flags);
 end;
 
-procedure TNetworkProtocols.ScOnAfterCertificate(Socket: TNetSocket;
+procedure TRunCase.OnAfterCertificate(Socket: TNetSocket;
   Context: PNetTlsContext; TLS, Peer: pointer);
 begin
-  LockedInc32(@scAfterCount);
+  LockedInc32(@fAfterCount);
   if (Socket <> nil) and
      (Context <> nil) and
      (TLS <> nil) and
@@ -6998,10 +7004,10 @@ begin
      (Context^.PeerSubject <> '') and
      (Context^.PeerInfo <> '') and
      (Context^.CipherName <> '') then
-    LockedInc32(@scAfterUseful);
+    LockedInc32(@fAfterUseful);
 end;
 
-function TNetworkProtocols.ScOpenSslClient(const Port: RawUtf8;
+function TRunCase.OpenSslClient(const Port: RawUtf8;
   const Certificate: ICryptCert; DisableTls13: boolean): boolean;
 const
   REQUEST: RawUtf8 = 'GET / HTTP/1.0'#13#10'Host: localhost'#13#10#13#10;
@@ -7015,7 +7021,7 @@ var
   net: TNetResult;
 begin
   result := false;
-  scClientError := '';
+  fClientError := '';
   socket := nil;
   keyfile := '';
   try
@@ -7027,7 +7033,7 @@ begin
     if Certificate <> nil then
     begin
       tls.CertificateBin := Certificate.Save(cccCertOnly, '', ccfPem);
-      keyfile := MakeString([WorkDir, 'schannel-mtls-client-', Port, '.pem']);
+      keyfile := MakeString([Test.WorkDir, 'schannel-mtls-client-', Port, '.pem']);
       if not FileFromString(
           Certificate.Save(cccPrivateKeyOnly, '', ccfPem), keyfile) then
         raise Exception.Create('unable to save the focused mTLS client key');
@@ -7047,11 +7053,11 @@ begin
     result := (net = nrOK) and
               (PosEx('HTTP/', RawUtf8(reply)) = 1);
     if not result then
-      scClientError := FormatUtf8('mTLS server closed the connection (% %)',
+      fClientError := FormatUtf8('mTLS server closed the connection (% %)',
         [ToText(net)^, tls.LastError]);
   except
     on E: Exception do
-      Make([E, ': ', E.Message], scClientError);
+      Make([E, ': ', E.Message], fClientError);
   end;
   secure := nil;
   if socket <> nil then
@@ -7060,10 +7066,30 @@ begin
     DeleteFile(keyfile);
 end;
 
-procedure TNetworkProtocols.ScRunCase(const Port: RawUtf8;
+procedure TNetworkProtocols.RunCase(const Port: RawUtf8;
   Trust: TSChannelTestTrust; const Server, Authority, Client: ICryptCert;
-  Expected, Callbacks, RejectEach, DisableTls13, MutualTls,
-  SChannelServer: boolean);
+  Flags: TSChannelTestFlags);
+var
+  c: TRunCase;
+begin
+  c := TRunCase.Create;
+  c.Test := self;
+  c.Port := Port;
+  c.Trust := Trust;
+  c.Server := Server;
+  c.Authority := Authority;
+  c.Client := Client;
+  c.Flags := Flags;
+  Run(DoRunCase, c, Port);
+end;
+
+procedure TNetworkProtocols.DoRunCase(Sender: TObject);
+begin
+  TRunCase(Sender).Execute;
+  Sender.Free;
+end;
+
+procedure TRunCase.Execute;
 var
   http: THttpServer;
   tls: TNetTlsContext;
@@ -7072,18 +7098,11 @@ var
   raw: PCCERT_CONTEXT;
   connected: boolean;
 begin
-  NotifyProgress([Port]);
-  scEachCount := 0;
-  scEachUseful := 0;
-  scEachInvalid := 0;
-  scAfterCount := 0;
-  scAfterUseful := 0;
-  scRejectEach := RejectEach;
   cafile := '';
   keyfile := '';
   raw := nil;
   InitNetTlsContext(tls);
-  if SChannelServer then
+  if not (stfOpenSslServer in Flags) then
   begin
     tls.CertificateBin := Server.Save(
       cccCertWithPrivateKey, '3des=mtls-test', ccfBinary);
@@ -7092,27 +7111,27 @@ begin
   else
   begin
     tls.CertificateBin := Server.Save(cccCertOnly, '', ccfPem);
-    keyfile := MakeString([WorkDir, 'openssl-mtls-server-', Port, '.pem']);
-    Check(FileFromString(
+    keyfile := MakeString([Test.WorkDir, 'openssl-mtls-server-', Port, '.pem']);
+    Test.Check(FileFromString(
       Server.Save(cccPrivateKeyOnly, '', ccfPem), keyfile));
     tls.PrivateKeyFile := StringToUtf8(keyfile);
   end;
-  tls.ClientCertificateAuthentication := MutualTls;
+  tls.ClientCertificateAuthentication := not (stfOneWayTls in Flags);
   tls.IgnoreCertificateErrors := true; // must not disable server mTLS checks
-  tls.DisableTls13 := DisableTls13;
+  tls.DisableTls13 := stfDisableTls13 in Flags;
   tls.WithPeerInfo := true;
-  if Callbacks then
+  if stfCallbacks in Flags then
   begin
-    tls.OnEachPeerVerify := scOnEachCertificate;
-    tls.OnAfterPeerValidate := scOnAfterCertificate;
+    tls.OnEachPeerVerify    := OnEachCertificate;
+    tls.OnAfterPeerValidate := OnAfterCertificate;
   end;
   case Trust of
     sttDefault:
       ; // no explicit CA to use normal Windows trust
     sttFile:
       begin
-        cafile := MakeString([WorkDir, 'schannel-mtls-ca-', Port, '.pem']);
-        Check(FileFromString(
+        cafile := MakeString([Test.WorkDir, 'schannel-mtls-ca-', Port, '.pem']);
+        Test.Check(FileFromString(
           Authority.Save(cccCertOnly, '', ccfPem), cafile));
         tls.CACertificatesFile := StringToUtf8(cafile);
       end;
@@ -7121,7 +7140,7 @@ begin
         der := Authority.Save(cccCertOnly, '', ccfBinary);
         raw := CertCreateCertificateContext(X509_ASN_ENCODING,
           pointer(der), length(der));
-        Check(raw <> nil);
+        Test.Check(raw <> nil);
         SetLength(tls.CACertificatesRaw, 1);
         tls.CACertificatesRaw[0] := raw;
       end;
@@ -7131,6 +7150,17 @@ begin
   http := THttpServer.Create(Port, nil, nil, 'schannel-mtls',
     2, 5000, [hsoEnableTls]);
   try
+    if Trust = sttRaw then
+    begin
+      Test.CheckEqual(length(tls.CACertificatesRaw), 1,
+        'CACertificatesRaw length before WaitStarted');
+      Test.Check(tls.CACertificatesRaw[0] = raw,
+        'CACertificatesRaw pointer before WaitStarted');
+      Test.Check(tls.CACertificatesFile = '',
+        'unexpected CACertificatesFile');
+      Test.Check(tls.CASystemStores = [],
+        'unexpected CASystemStores');
+    end;
     http.WaitStarted(10, @tls);
     // AfterBind owns independent references/copies of all custom trust input.
     if raw <> nil then
@@ -7142,21 +7172,24 @@ begin
       DeleteFile(cafile);
     if keyfile <> '' then
       DeleteFile(keyfile);
-    connected := scOpenSslClient(Port, Client, DisableTls13);
-    CheckUtf8(connected = Expected, scClientError);
-    if Callbacks and
-       not RejectEach then
+    connected := OpenSslClient(Port, Client, stfDisableTls13 in Flags);
+    Test.CheckUtf8(connected = (stfExpected in Flags), 'connected=% expected=% [%]',
+      [ord(connected), ord(stfExpected in Flags), fClientError]);
+    if (stfCallbacks in Flags) and
+       not (stfRejectEach in Flags) then
     begin
-      Check(scEachCount > 0);
-      CheckEqual(scEachUseful, scEachCount);
-      CheckEqual(scAfterCount, 1);
-      CheckEqual(scAfterUseful, 1);
+      Test.Check(fEachCount > 0, 'eachcount1');
+      Test.CheckEqual(fEachUseful, fEachCount);
+      Test.CheckEqual(fAfterCount, 1);
+      Test.CheckEqual(fAfterUseful, 1);
     end
-    else if RejectEach then
+    else if stfRejectEach in Flags then
     begin
-      Check(scEachCount > 0);
-      CheckEqual(scAfterCount, 0);
+      Test.Check(fEachCount > 0, 'eachcount2');
+      Test.CheckEqual(fAfterCount, 0);
     end;
+    if stfEachInvalid in Flags then
+      Test.Check(fEachInvalid > 0, 'EachInvalid');
   finally
     http.Free;
     if raw <> nil then
@@ -7176,7 +7209,6 @@ var
   ca, unknownca: ICryptCert;
   server, valid, unknown, expired, wrongusage: ICryptCert;
 begin
-  RegisterOpenSsl;
   if not OpenSslIsAvailable then
   begin
     AddConsole('OpenSSL unavailable: skipping SChannel mTLS integration test');
@@ -7191,66 +7223,57 @@ begin
     exit;
   end;
   ca := algo.Generate([cuCA, cuKeyCertSign], 'mORMot SChannel test CA');
-  unknownca := algo.Generate(
-    [cuCA, cuKeyCertSign], 'mORMot unknown test CA');
-  server := algo.Generate([cuTlsServer], 'localhost', ca);
-  valid := algo.Generate([cuTlsClient], 'valid client', ca);
-  unknown := algo.Generate([cuTlsClient], 'unknown client', unknownca);
-  expired := algo.Generate(
-    [cuTlsClient], 'expired client', ca, -2, -10);
+  unknownca  := algo.Generate([cuCA, cuKeyCertSign], 'mORMot unknown test CA');
+  server     := algo.Generate([cuTlsServer], 'localhost', ca);
+  valid      := algo.Generate([cuTlsClient], 'valid client', ca);
+  unknown    := algo.Generate([cuTlsClient], 'unknown client', unknownca);
+  expired    := algo.Generate([cuTlsClient], 'expired client', ca, -2, -10);
   wrongusage := algo.Generate([cuTlsServer], 'wrong usage client', ca);
-  Check((ca <> nil) and
-        (unknownca <> nil) and
-        (server <> nil) and
-        (valid <> nil) and
-        (unknown <> nil) and
-        (expired <> nil) and
-        (wrongusage <> nil));
+  Check(ca <> nil, 'ca');
+  Check(unknownca <> nil, 'unknownca');
+  Check(server <> nil, 'server');
+  Check(valid <> nil, 'valid');
+  Check(unknown <> nil, 'unknown');
+  Check(expired <> nil, 'expired');
+  Check(wrongusage <> nil, 'wrongusage');
   previous := NewNetTls;
   NewNetTls := NewSChannelNetTls; // server under test; client is explicit OpenSSL
   try
-    scRunCase('18991', sttFile, server, ca, valid,
-      {expected=}true, {callbacks=}true, {rejecteach=}false);
-    scRunCase('18992', sttFile, server, ca, nil,
-      {expected=}false, {callbacks=}false, {rejecteach=}false);
-    scRunCase('18993', sttFile, server, ca, unknown,
-      {expected=}false, {callbacks=}false, {rejecteach=}false);
-    scRunCase('18994', sttFile, server, ca, expired,
-      {expected=}false, {callbacks=}false, {rejecteach=}false);
-    scRunCase('18995', sttFile, server, ca, wrongusage,
-      {expected=}false, {callbacks=}false, {rejecteach=}false);
-    scRunCase('18996', sttRaw, server, ca, valid,
-      {expected=}true, {callbacks=}false, {rejecteach=}false);
-    scRunCase('18997', sttDefault, server, ca, valid,
-      {expected=}false, {callbacks=}false, {rejecteach=}false);
-    scRunCase('18998', sttFile, server, ca, valid,
-      {expected=}false, {callbacks=}true, {rejecteach=}true);
-    scRunCase('18999', sttFile, server, ca, expired,
-      {expected=}true, {callbacks=}true, {rejecteach=}false);
-    Check(scEachInvalid > 0);
-    scRunCase('19000', sttFile, server, ca, valid,
-      {expected=}true, {callbacks=}false, {rejecteach=}false,
-      {disabletls13=}true);
+    RunCase('18991', sttFile, server, ca, valid,
+      [stfExpected, stfCallbacks]);
+    RunCase('18992', sttFile, server, ca, nil);
+    RunCase('18993', sttFile, server, ca, unknown);
+    RunCase('18994', sttFile, server, ca, expired);
+    RunCase('18995', sttFile, server, ca, wrongusage);
+    RunCase('18996', sttRaw, server, ca, valid,
+      [stfExpected]);
+    RunCase('18997', sttDefault, server, ca, valid);
+    RunCase('18998', sttFile, server, ca, valid,
+      [stfCallbacks, stfRejectEach]);
+    RunCase('18999', sttFile, server, ca, expired,
+      [stfExpected, stfCallbacks, stfEachInvalid]);
+    RunCase('19000', sttFile, server, ca, valid,
+      [stfExpected, stfDisableTls13]);
     // Existing one-way SChannel HTTPS behavior must remain unchanged.
-    scRunCase('19001', sttFile, server, ca, nil,
-      {expected=}true, {callbacks=}false, {rejecteach=}false,
-      {disabletls13=}false, {mutualtls=}false);
-    // The same callbacks and context fields should work with OpenSSL server.
+    RunCase('19001', sttFile, server, ca, nil,
+      [stfExpected, stfOneWayTls]);
+    RunWait;
+    // the same callbacks and context fields should work with OpenSSL server
     NewNetTls := NewOpenSslNetTls;
-    scRunCase('19002', sttFile, server, ca, valid,
-      {expected=}true, {callbacks=}true, {rejecteach=}false,
-      {disabletls13=}false, {mutualtls=}true, {schannelserver=}false);
+    RunCase('19002', sttFile, server, ca, valid,
+      [stfExpected, stfCallbacks, stfOpenSslServer]);
     store := TWinCertStore.Create(scsRoot);
     try
       if store.Next then
-        scRunCase('19003', sttSystem, server, ca, valid,
-          {expected=}false, {callbacks=}false, {rejecteach=}false)
+        RunCase('19003', sttSystem, server, ca, valid,
+          [stfOpenSslServer])
       else
         AddConsole(
           'empty current-user ROOT store: skipping CASystemStores integration test');
     finally
       store.Free;
     end;
+    RunWait;
   finally
     NewNetTls := previous;
   end;
