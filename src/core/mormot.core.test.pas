@@ -1358,28 +1358,33 @@ var
   len: integer;
   nfo: PSynTestMethodInfo;
 begin
-  if fNotifyProgress = '' then
-  begin
-    DoColor(ccGreen);
-    nfo := _CurrentMethodInfo;
-    if nfo <> nil then
-      DoText(['  - ', nfo^.TestName, ':' + CRLF + '     '])
-    else
-      DoText('     ');
-    fNotifyProgressLineLen := 0;
+  ConsoleLock;
+  try
+    if fNotifyProgress = '' then
+    begin
+      DoColor(ccGreen);
+      nfo := _CurrentMethodInfo;
+      if nfo <> nil then
+        DoText(['  - ', nfo^.TestName, ':' + CRLF + '     '])
+      else
+        DoText('     ');
+      fNotifyProgressLineLen := 0;
+    end;
+    len := length(value);
+    inc(fNotifyProgressLineLen, len);
+    if (fNotifyProgress <> '') and
+       (fNotifyProgressLineLen > 73) then
+    begin
+      DoText([CRLF + '     ']);
+      fNotifyProgressLineLen := len;
+    end;
+    Append(fNotifyProgress, value);
+    DoColor(cc);
+    DoText(value);
+    DoColor(ccDefault);
+  finally
+    ConsoleUnLock;
   end;
-  len := length(value);
-  inc(fNotifyProgressLineLen, len);
-  if (fNotifyProgress <> '') and
-     (fNotifyProgressLineLen > 73) then
-  begin
-    DoText([CRLF + '     ']);
-    fNotifyProgressLineLen := len;
-  end;
-  Append(fNotifyProgress, value);
-  DoColor(cc);
-  DoText(value);
-  DoColor(ccDefault);
 end;
 
 procedure TSynTests.DoLog(Level: TSynLogLevel; const TextFmt: RawUtf8;
@@ -1554,16 +1559,21 @@ begin
             except
               on E: Exception do
               begin
-                DoColor(ccLightRed);
-                AddFailed(E.ClassName + ': ' + E.Message);
-                if nfo <> nil then
-                  DoTextLn(['! ', nfo^.IdentTestName]);
+                ConsoleLock;
+                try
+                  DoColor(ccLightRed);
+                  AddFailed(E.ClassName + ': ' + E.Message);
+                  if nfo <> nil then
+                    DoTextLn(['! ', nfo^.IdentTestName]);
+                  {$ifndef NOEXCEPTIONINTERCEPT}
+                  DoTextLn(['! ', GetLastExceptionText]); // with extended info
+                  {$endif NOEXCEPTIONINTERCEPT}
+                  DoColor(ccDefault);
+                finally
+                  ConsoleUnLock;
+                end;
                 if E.InheritsFrom(EControlC) then
                   raise; // Control-C should just abort whole test
-                {$ifndef NOEXCEPTIONINTERCEPT}
-                DoTextLn(['! ', GetLastExceptionText]); // with extended info
-                {$endif NOEXCEPTIONINTERCEPT}
-                DoColor(ccDefault);
               end;
             end;
             _CurrentMethodInfo := nil;
@@ -1605,10 +1615,15 @@ begin
       on E: Exception do
       begin
         // assume any exception not intercepted above is a failure
-        DoColor(ccLightRed);
-        err := E.ClassName + ': ' + E.Message;
-        AddFailed(err);
-        DoText(['! ', err]);
+        ConsoleLock;
+        try
+          DoColor(ccLightRed);
+          err := E.ClassName + ': ' + E.Message;
+          AddFailed(err);
+          DoText(['! ', err]);
+        finally
+          ConsoleUnLock;
+        end;
       end;
     end;
   until (fAssertionsFailed <> 0) or
