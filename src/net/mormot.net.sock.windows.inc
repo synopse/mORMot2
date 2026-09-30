@@ -2177,6 +2177,7 @@ type
       var Context: TNetTlsContext);
     procedure CheckBool(const api: ShortString; success: BOOL;
       var Context: TNetTlsContext);
+    procedure AcceptError(const msg: RawUtf8; var context: TNetTlsContext);
     procedure LoadCertificate(Socket: TNetSocket; var Context: TNetTlsContext);
     procedure LoadClientTrust(const Context: TNetTlsContext);
     procedure AddClientCa(const Encoded: RawByteString); overload;
@@ -2253,8 +2254,7 @@ begin
   if res = NO_ERROR then
     exit;
   Context.LastError := GetErrorText(res);
-  raise ESChannel.CreateFmt('AfterBind: %s returned %s',
-    [api, Context.LastError]);
+  raise ESChannel.CreateFmt('%s returned %s', [api, Context.LastError]);
 end;
 
 procedure TSChannelServerContext.CheckBool(const api: ShortString; success: BOOL;
@@ -2436,12 +2436,25 @@ begin
   if fClientCACount = 0 then
     raise ESChannel.Create('AfterBind: no client CA certificate was loaded');
   FillCharFast(config, SizeOf(config), 0);
-  config.cbSize := SizeOf(config);
-  config.hExclusiveRoot := fClientRootStore;
-  if OSVersion >= wEight then
+  if OSVersion < wEight then
+    // Windows 7 / Server 2008 R2 structure ends before dwExclusiveFlags
+    config.cbSize := PtrUInt(@config.dwExclusiveFlags) - PtrUInt(@config)
+  else
+  begin
+    config.cbSize := SizeOf(config);
+    // Windows 8+ may also use a non-self-signed CA as the trust anchor
     config.dwExclusiveFlags := CERT_CHAIN_EXCLUSIVE_ENABLE_CA_FLAG;
+  end;
+  config.hExclusiveRoot := fClientRootStore;
   if not CertCreateCertificateChainEngine(config, fChainEngine) then
     RaiseLastError('AfterBind: CertCreateCertificateChainEngine', ESChannel);
+end;
+
+procedure TSChannelServerContext.AcceptError(const msg: RawUtf8;
+  var context: TNetTlsContext);
+begin
+  context.LastError := msg;
+  raise ESChannel.CreateFmt('AfterAccept: %s', [msg]);
 end;
 
 procedure TSChannelServerContext.ValidateClientCertificate(Socket: TNetSocket;
@@ -2465,21 +2478,20 @@ begin
   peer := nil;
   chain := nil;
   res := QueryContextAttributesW(Ctxt, SECPKG_ATTR_REMOTE_CERT_CONTEXT, @peer);
-  if (res <> SEC_E_OK) or
-     (peer = nil) then
-    CheckRes('AfterAccept: no client cert for QueryContextAttributesW', res, Context);
+  if res <> SEC_E_OK then
+    CheckRes('AfterAccept: QueryContextAttributesW', res, Context);
+  if peer = nil then
+    AcceptError('Missing required client certificate', Context);
   try
     FillCharFast(para, SizeOf(para), 0);
     para.cbSize := SizeOf(para);
     usage[0] := szOID_PKIX_KP_CLIENT_AUTH;
     para.RequestedUsage.dwType := USAGE_MATCH_TYPE_AND;
     para.RequestedUsage.Usage.cUsageIdentifier := 1;
-    para.RequestedUsage.Usage.rgpszUsageIdentifier :=
-      PPAnsiCharArray(@usage);
+    para.RequestedUsage.Usage.rgpszUsageIdentifier := @usage;
     CheckBool('AfterAccept: CertGetCertificateChain',
-      CertGetCertificateChain(fChainEngine, peer, nil, peer^.hCertStore,
-        para, CERT_CHAIN_REVOCATION_CHECK_CHAIN_EXCLUDE_ROOT,
-        nil, chain), Context);
+      CertGetCertificateChain(fChainEngine, peer, nil, peer^.hCertStore, para,
+      CERT_CHAIN_REVOCATION_CHECK_CHAIN_EXCLUDE_ROOT, nil, chain), Context);
     FillCharFast(ssl, SizeOf(ssl), 0);
     ssl.cbSize := SizeOf(ssl);
     ssl.dwAuthType := AUTHTYPE_CLIENT;
@@ -2496,12 +2508,10 @@ begin
         chain, policypara, policy), Context);
     if policy.dwError <> 0 then
       Context.LastError := GetErrorText(policy.dwError);
-    if (chain^.cChain = 0) or
+    if (chain = nil) or
+       (chain^.cChain = 0) or
        (chain^.rgpChain = nil) then
-    begin
-      Context.LastError := 'Windows returned an empty client certificate chain';
-      raise ESChannel.Create('AfterAccept: empty client certificate chain');
-    end;
+      AcceptError('Windows returned an empty client certificate chain', Context);
     if WinCertCtxtDecode(peer, info) then
     begin
       Context.PeerIssuer := info.IssuerName;
@@ -2606,6 +2616,12 @@ var
   flags: cardinal;
 begin
   inherited Create;
+  if Context.ClientCertificateAuthentication and
+     (OSVersion < wSeven) then // no TLS 1.2 available before Windows Seven
+  begin
+    Context.LastError := 'SChannel mTLS requires Windows 7 or later';
+    raise ESChannel.CreateFmt('AfterBind: %s', [Context.LastError]);
+  end;
   LoadCertificate(Socket, Context);
   // keep both credential layouts and their referenced TLS_PARAMETERS stable
   if Context.ClientCertificateAuthentication then
