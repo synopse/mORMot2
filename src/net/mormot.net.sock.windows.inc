@@ -2415,6 +2415,7 @@ begin
       until first = 0;
   end
   else if Context.CASystemStores <> [] then
+  begin
     for kind := low(kind) to high(kind) do
       if kind in Context.CASystemStores then
       begin
@@ -2428,13 +2429,14 @@ begin
           store.Free;
         end;
       end
+  end
   else
     for i := 0 to high(Context.CACertificatesRaw) do
       if Context.CACertificatesRaw[i] <> nil then
         AddClientCa(pointer(Context.CACertificatesRaw[i]),
           'AfterBind: copy client supplied CACertificatesRaw');
   if fClientCACount = 0 then
-    raise ESChannel.Create('AfterBind: no client CA certificate was loaded');
+    raise ESChannel.Create('AfterBind: no client CA certificate available');
   FillCharFast(config, SizeOf(config), 0);
   if OSVersion < wEight then
     // Windows 7 / Server 2008 R2 structure ends before dwExclusiveFlags
