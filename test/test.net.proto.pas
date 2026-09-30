@@ -7085,8 +7085,11 @@ end;
 
 procedure TNetworkProtocols.DoRunCase(Sender: TObject);
 begin
-  TRunCase(Sender).Execute;
-  Sender.Free;
+  try
+    (Sender as TRunCase).Execute;
+  finally
+    Sender.Free;
+  end;
 end;
 
 procedure TRunCase.Execute;
@@ -7239,22 +7242,32 @@ begin
   previous := NewNetTls;
   NewNetTls := NewSChannelNetTls; // server under test; client is explicit OpenSSL
   try
+    // accept a valid client certificate from the configured CA
     RunCase('18991', sttFile, server, ca, valid,
       [stfExpected, stfCallbacks]);
+    // reject a client providing no certificate
     RunCase('18992', sttFile, server, ca, nil);
+    // reject a client certificate issued by an unknown CA
     RunCase('18993', sttFile, server, ca, unknown);
+    // reject an expired client certificate
     RunCase('18994', sttFile, server, ca, expired);
+    // reject a certificate without the TLS client usage
     RunCase('18995', sttFile, server, ca, wrongusage);
+    // accept a valid client using a raw PCCERT_CONTEXT trust anchor
     RunCase('18996', sttRaw, server, ca, valid,
       [stfExpected]);
+    // reject the private CA when using default Windows trust
     RunCase('18997', sttDefault, server, ca, valid);
+    // let OnEachPeerVerify reject an otherwise valid client
     RunCase('18998', sttFile, server, ca, valid,
       [stfCallbacks, stfRejectEach]);
+    // let OnEachPeerVerify override an expired-certificate error
     RunCase('18999', sttFile, server, ca, expired,
       [stfExpected, stfCallbacks, stfEachInvalid]);
+    // accept a valid client over TLS 1.2 with TLS 1.3 disabled
     RunCase('19000', sttFile, server, ca, valid,
       [stfExpected, stfDisableTls13]);
-    // Existing one-way SChannel HTTPS behavior must remain unchanged.
+    // existing one-way SChannel HTTPS behavior must remain unchanged
     RunCase('19001', sttFile, server, ca, nil,
       [stfExpected, stfOneWayTls]);
     RunWait;
@@ -7262,17 +7275,26 @@ begin
     NewNetTls := NewOpenSslNetTls;
     RunCase('19002', sttFile, server, ca, valid,
       [stfExpected, stfCallbacks, stfOpenSslServer]);
+    // CASystemStores integration test with OpenSSL
     store := TWinCertStore.Create(scsRoot);
     try
       if store.Next then
         RunCase('19003', sttSystem, server, ca, valid,
           [stfOpenSslServer])
       else
-        AddConsole(
-          'empty current-user ROOT store: skipping CASystemStores integration test');
+        AddConsole('empty current-user ROOT store: skip OpenSSL CASystemStores');
     finally
       store.Free;
     end;
+    // missing client certificate must be rejected by OpenSSL
+    RunCase('19004', sttFile, server, ca, nil,
+      [stfOpenSslServer]);
+    // an OpenSSL callback must be able to reject an otherwise valid certificate
+    RunCase('19005', sttFile, server, ca, valid,
+      [stfCallbacks, stfRejectEach, stfOpenSslServer]);
+    // an OpenSSL callback may override an expired-certificate error
+    RunCase('19006', sttFile, server, ca, expired,
+      [stfExpected, stfCallbacks, stfOpenSslServer, stfEachInvalid]);
     RunWait;
   finally
     NewNetTls := previous;
