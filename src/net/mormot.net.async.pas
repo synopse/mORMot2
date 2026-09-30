@@ -5377,7 +5377,9 @@ constructor THttpAsyncServer.Create(const aPort: RawUtf8;
   ProcessOptions: THttpServerOptions; aLog: TSynLogClass);
 var
   aco: TAsyncConnectionsOptions;
+  startmain: boolean;
 begin
+  startmain := not (hsoCreateSuspended in ProcessOptions);
   fProcessName := ProcessName;
   if fProcessName = '' then
     fProcessName := aPort;
@@ -5420,14 +5422,23 @@ begin
     fConnectionsClass := THttpAsyncConnections;
   if fRequestClass = nil then
     fRequestClass := THttpServerRequest; // may be overriden later
-  // bind and start the actual thread-pooled connections async server
+  // prepare this TThread instance as suspended
+  include(ProcessOptions, hsoCreateSuspended);
+  inherited Create(aPort, OnStart, OnStop, fProcessName, ServerThreadPoolCount,
+    KeepAliveTimeOut, ProcessOptions, aLog);
+  // bind and prepare the actual thread-pooled connections async server
+  include(aco, acoCreateSuspended);
   fAsync := fConnectionsClass.Create(aPort, OnStart, OnStop,
     fConnectionClass, fProcessName, TSynLog, aco, ServerThreadPoolCount);
+  // publish every relationship needed by fAsync.DoExecute
   fAsync.fAsyncServer := self;
   fAsync.fBanned := THttpAcceptBan.Create; // for hsoBan40xIP and BlackList
-  // launch this TThread instance
-  inherited Create(aPort, OnStart, OnStop, fProcessName,
-    ServerThreadPoolCount, KeepAliveTimeOut, ProcessOptions, aLog);
+  fAsync.Start;                            // eventually launch fAsync.DoExecute
+  // preserve the caller's hsoCreateSuspended semantics
+  if not startmain then
+    exit;
+  exclude(fOptions, hsoCreateSuspended); // has been included above
+  Start;                                 // eventually launch main DoExecute
 end;
 
 destructor THttpAsyncServer.Destroy;
