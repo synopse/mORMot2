@@ -718,10 +718,6 @@ function CertVerifyCertificateChainPolicy(pszPolicyOID: PAnsiChar;
   pChainContext: PCERT_CHAIN_CONTEXT; const pPolicyPara: CERT_CHAIN_POLICY_PARA;
   var pPolicyStatus: CERT_CHAIN_POLICY_STATUS): BOOL; stdcall;
 
-function CryptStringToBinaryA(pszString: PAnsiChar; cchString,
-  dwFlags: cardinal; pbBinary: PByte; var pcbBinary: cardinal;
-  pdwSkip, pdwFlags: PCardinal): BOOL; stdcall;
-
 function CertNameToStrW(dwCertEncodingType: cardinal; var pName: CERT_NAME_BLOB;
   dwStrType: cardinal; psz: PWideChar; csz: cardinal): cardinal; stdcall;
 
@@ -1573,7 +1569,6 @@ procedure CertFreeCertificateChainEngine;   external crypt32;
 function CertGetCertificateChain;           external crypt32;
 procedure CertFreeCertificateChain;         external crypt32;
 function CertVerifyCertificateChainPolicy;  external crypt32;
-function CryptStringToBinaryA;              external crypt32;
 function CertNameToStrW;                    external crypt32;
 function CryptFindOIDInfo;                  external crypt32;
 

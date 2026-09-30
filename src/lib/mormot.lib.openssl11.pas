@@ -11935,12 +11935,37 @@ end;
 
 procedure TOpenSslNetTls.AfterAccept(Socket: TNetSocket;
   const BoundContext: TNetTlsContext; LastError, CipherName: PRawUtf8);
+
+  procedure DoPeerValidateCallback;
+  var
+    cert: PX509;
+    context: TNetTlsContext; // local transient thread-safe context
+  begin
+    cert := fSsl.PeerCertificate; // SSL_get_peer_certificate() needs X509_free
+    if cert = nil then
+      raise EOpenSslNetTls.Create(
+        'AfterAccept: missing required client certificate');
+    try
+      context := BoundContext;
+      context.PeerCert := cert;
+      context.CipherName := GetCipherName;
+      if CipherName <> nil then
+        CipherName^ := context.CipherName;
+      context.PeerIssuer := cert^.IssuerName;
+      context.PeerSubject := cert^.SubjectName;
+      context.PeerInfo := '';
+      if context.WithPeerInfo or
+         not fSsl.IsVerified(@context.LastError) then
+        context.PeerInfo := cert^.PeerInfo;
+      context.OnAfterPeerValidate(Socket, @context, fSsl, cert);
+    finally
+      cert^.Free;
+    end;
+  end;
+
 var
   peer: ^TOpenSslNetTls;
   prev: TOpenSslNetTls;
-  context: TNetTlsContext;
-  cert: PX509;
-  verified: boolean;
 begin
   // this method is called on the Server side for each accepted client TCP socket
   fSocket := Socket;
@@ -11962,31 +11987,10 @@ begin
     // server TLS negotiation with server
     CheckProc(@SSL_accept, 'AfterAccept SSL_accept');
     fDoSslShutdown := true; // need explicit SSL_shutdown() at closing
+    // support optional OnAfterPeerValidate callback on mTLS
     if BoundContext.ClientCertificateAuthentication and
        Assigned(BoundContext.OnAfterPeerValidate) then
-    begin
-      context := BoundContext; // transient thread-safe callback context
-      context.CipherName := GetCipherName;
-      if CipherName <> nil then
-        CipherName^ := context.CipherName;
-      verified := fSsl.IsVerified(@context.LastError);
-      cert := fSsl.PeerCertificate; // SSL_get_peer_certificate() needs X509_free
-      if cert = nil then
-        raise EOpenSslNetTls.Create(
-          'AfterAccept: missing required client certificate');
-      try
-        context.PeerIssuer := cert^.IssuerName;
-        context.PeerSubject := cert^.SubjectName;
-        if context.WithPeerInfo or
-           not verified then
-          context.PeerInfo := cert^.PeerInfo;
-        context.PeerCert := cert;
-        context.OnAfterPeerValidate(Socket, @context, fSsl, cert);
-      finally
-        context.PeerCert := nil;
-        cert^.Free;
-      end;
-    end
+      DoPeerValidateCallback
     else if CipherName <> nil then
       CipherName^ := GetCipherName;
   finally
