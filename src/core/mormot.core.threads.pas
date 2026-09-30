@@ -1481,6 +1481,8 @@ type
       const OnStart, OnStop: TOnNotifyThread; Logger: TSynLogClass;
       const ProcName: RawUtf8); reintroduce; virtual;
     /// overriden to support the fStartAfterConstruction internal flag
+    // - whenever fStartAfterConstruction is used, the underlying RTL thread
+    // must always be created with CreateSuspended=true in Create()
     procedure AfterConstruction; override;
     /// notify the thread to be terminated, and wait for DoExecute to finish
     procedure TerminateAndWaitFinished(TimeOutMs: integer = 5000); virtual;
@@ -4338,9 +4340,9 @@ end;
 
 procedure TLoggedThread.AfterConstruction;
 begin
-  if fStartAfterConstruction then
-    Suspended := false; // we can do it now
   inherited AfterConstruction;
+  if fStartAfterConstruction then
+    Start;
 end;
 
 procedure TLoggedThread.Execute;

@@ -3642,8 +3642,9 @@ begin
     if hsoTelemetryJson in fOptions then
       THttpAnalyzerPersistJson.CreateOwned(fAnalyzer);
   end;
+  // Start would be done by TLoggedThread.AfterConstruction after all Creates
   fStartAfterConstruction := not (hsoCreateSuspended in fOptions);
-  inherited Create(not fStartAfterConstruction, OnStart, OnStop, aLog, ProcessName);
+  inherited Create({suspended=}true, OnStart, OnStop, aLog, ProcessName);
 end;
 
 destructor THttpServerGeneric.Destroy;
@@ -4946,9 +4947,9 @@ begin
     if (fLogClass <> nil) and
        not (hsoLogVerbose in fOptions) then
       fSock.OnLog := nil;
-    fExecuteState := esRunning;
     if not fSock.SockIsDefined then // paranoid check
       EHttpServer.RaiseUtf8('%.DoExecute: %.Bind failed', [self, fSock]);
+    fExecuteState := esRunning;
     // main ACCEPT loop
     {$ifdef OSWINDOWS}
     acceptsec := 0;

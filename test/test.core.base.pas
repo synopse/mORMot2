@@ -9319,7 +9319,7 @@ begin
   CheckEqualShort(WinErrorConstant(12002)^, 'TIMEOUT', 'wecf');
   CheckEqualShort(WinErrorConstant($800b010a)^, 'CERT_E_CHAINING', 'wecg');
   CheckEqualShort(WinErrorConstant($800b010c)^, 'CERT_E_REVOKED', 'wecG');
-  CheckEqualShort(WinErrorConstant($800b010e)^[0], #0, 'wech');
+  CheckEqualShort(WinErrorConstant($800b010e)^[0], #0, 'wec none');
   CheckEqualShort(WinErrorConstant($80092002)^, 'CRYPT_E_BAD_ENCODE', 'wecH');
   CheckEqualShort(WinErrorConstant(1229)^ , 'CONNECTION_INVALID', 'weci');
   CheckEqualShort(WinErrorConstant(122)^, 'INSUFFICIENT_BUFFER', 'wecj');

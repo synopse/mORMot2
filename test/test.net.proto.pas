@@ -7072,7 +7072,7 @@ end;
 
 procedure TRunCase.Execute;
 var
-  http: THttpServer;
+  http: THttpServerSocketGeneric;
   tls: TNetTlsContext;
   cafile, keyfile: TFileName;
   der: RawByteString;

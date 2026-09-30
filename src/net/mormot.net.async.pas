@@ -5429,7 +5429,6 @@ begin
   if fRequestClass = nil then
     fRequestClass := THttpServerRequest; // may be overriden later
   // prepare this TThread instance as suspended
-  include(ProcessOptions, hsoCreateSuspended);
   inherited Create(aPort, OnStart, OnStop, fProcessName, ServerThreadPoolCount,
     KeepAliveTimeOut, ProcessOptions, aLog);
   // bind and prepare the actual thread-pooled connections async server
