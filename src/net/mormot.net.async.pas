@@ -2894,10 +2894,9 @@ var
   i: PtrInt;
   tix32: cardinal;
   opt: TPollAsyncSocketsOptions;
-  startmain: boolean;
   {%H-}log: ISynLog;
 begin
-  startmain := not (acoCreateSuspended in aOptions);
+  fStartAfterConstruction := not (acoCreateSuspended in aOptions);
   exclude(aOptions, acoCreateSuspended); // should not appear any more
   aLog.EnterLocal(log, 'Create(%,%,%)',
     [aConnectionClass, ProcessName, aThreadPoolCount], self);
@@ -2986,9 +2985,6 @@ begin
     SetServerThreadsAffinityPerCpu(log, TThreadDynArray(fThreads))
   else if acoThreadSocketAffinity in aOptions then
     SetServerThreadsAffinityPerSocket(log, TThreadDynArray(fThreads));
-  // eventually start the main thread (unless acoCreateSuspended has been set)
-  if startmain then
-    Start;
   if Assigned(log) then
     log.Log(sllTrace, 'Create: started % threads', [fThreadPoolCount + 1], self);
 end;
@@ -5389,9 +5385,7 @@ constructor THttpAsyncServer.Create(const aPort: RawUtf8;
   ProcessOptions: THttpServerOptions; aLog: TSynLogClass);
 var
   aco: TAsyncConnectionsOptions;
-  startmain: boolean;
 begin
-  startmain := not (hsoCreateSuspended in ProcessOptions);
   fProcessName := ProcessName;
   if fProcessName = '' then
     fProcessName := aPort;
@@ -5450,11 +5444,6 @@ begin
   if fSock <> fAsync.fServer then // paranoid
     EHttpAsyncConnections.RaiseUtf8(
       '%.Create: inconsistent server socket publication', [self]);
-  // preserve the caller's hsoCreateSuspended semantics
-  if not startmain then
-    exit;
-  exclude(fOptions, hsoCreateSuspended); // has been included above
-  Start;                                 // eventually launch main DoExecute
 end;
 
 destructor THttpAsyncServer.Destroy;

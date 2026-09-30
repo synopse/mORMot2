@@ -3642,8 +3642,8 @@ begin
     if hsoTelemetryJson in fOptions then
       THttpAnalyzerPersistJson.CreateOwned(fAnalyzer);
   end;
-  inherited Create(hsoCreateSuspended in fOptions, OnStart, OnStop,
-    aLog, ProcessName);
+  fStartAfterConstruction := not (hsoCreateSuspended in fOptions);
+  inherited Create(not fStartAfterConstruction, OnStart, OnStop, aLog, ProcessName);
 end;
 
 destructor THttpServerGeneric.Destroy;
@@ -8211,11 +8211,6 @@ begin
     PtrArrayAdd(fThreads, THttpApiServerThread.Create(self));
   // eventually start the main thread
   Append(fProcessName, [' #', ServerThreadPoolCount]);
-  if not (hsoCreateSuspended in ProcessOptions) then
-  begin
-    Suspended := false;
-    exclude(fOptions, hsoCreateSuspended);
-  end;
 end;
 
 function THttpApiServer.WaitStarted(Seconds: cardinal): boolean;
