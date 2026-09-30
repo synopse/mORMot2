@@ -78,6 +78,7 @@ type
   TSChannelTestTrust = (
     sttFile,
     sttRaw,
+    sttDefault,
     sttSystem);
   {$endif SCHANNEL_VERIFY}
 
@@ -7071,6 +7072,7 @@ var
   raw: PCCERT_CONTEXT;
   connected: boolean;
 begin
+  NotifyProgress([Port]);
   scEachCount := 0;
   scEachUseful := 0;
   scEachInvalid := 0;
@@ -7105,6 +7107,8 @@ begin
     tls.OnAfterPeerValidate := scOnAfterCertificate;
   end;
   case Trust of
+    sttDefault:
+      ; // no explicit CA to use normal Windows trust
     sttFile:
       begin
         cafile := MakeString([WorkDir, 'schannel-mtls-ca-', Port, '.pem']);
@@ -7168,6 +7172,7 @@ procedure TNetworkProtocols._SChannel;
 var
   previous: TNewNetTls;
   algo: TCryptCertAlgo;
+  store: TWinCertStore;
   ca, unknownca: ICryptCert;
   server, valid, unknown, expired, wrongusage: ICryptCert;
 begin
@@ -7216,7 +7221,7 @@ begin
       {expected=}false, {callbacks=}false, {rejecteach=}false);
     scRunCase('18996', sttRaw, server, ca, valid,
       {expected=}true, {callbacks=}false, {rejecteach=}false);
-    scRunCase('18997', sttSystem, server, ca, valid,
+    scRunCase('18997', sttDefault, server, ca, valid,
       {expected=}false, {callbacks=}false, {rejecteach=}false);
     scRunCase('18998', sttFile, server, ca, valid,
       {expected=}false, {callbacks=}true, {rejecteach=}true);
@@ -7235,6 +7240,17 @@ begin
     scRunCase('19002', sttFile, server, ca, valid,
       {expected=}true, {callbacks=}true, {rejecteach=}false,
       {disabletls13=}false, {mutualtls=}true, {schannelserver=}false);
+    store := TWinCertStore.Create(scsRoot);
+    try
+      if store.Next then
+        scRunCase('19003', sttSystem, server, ca, valid,
+          {expected=}false, {callbacks=}false, {rejecteach=}false)
+      else
+        AddConsole(
+          'empty current-user ROOT store: skipping CASystemStores integration test');
+    finally
+      store.Free;
+    end;
   finally
     NewNetTls := previous;
   end;
