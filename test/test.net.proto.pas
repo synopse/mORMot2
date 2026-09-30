@@ -166,12 +166,6 @@ type
     procedure DoHttpFileRange(Sender: TObject);
     /// validate THttpServerRequestAbstract.SetOutStream streamed body download
     procedure DoHttpOutStream(Sender: TObject);
-    {$ifdef SCHANNEL_VERIFY}
-    /// validate SChannel mTLS layer using OpenSSL
-    procedure RunCase(const Port: RawUtf8; Trust: TSChannelTestTrust;
-      const Server, Authority, Client: ICryptCert; Flags: TSChannelTestFlags = []);
-    procedure DoRunCase(Sender: TObject);
-    {$endif SCHANNEL_VERIFY}
   published
     {$ifdef USEWININET}
     /// validate lazy initialization of the http.sys WebSocket API
@@ -6964,6 +6958,7 @@ type
     fAfterCount: integer;
     fAfterUseful: integer;
     fClientError: RawUtf8;
+    class procedure DoRunCase(Sender: TObject);
     procedure Execute;
     function OnEachCertificate(Socket: TNetSocket;
       Context: PNetTlsContext; WasOk: boolean; TLS, Peer: pointer): boolean;
@@ -7066,24 +7061,7 @@ begin
     DeleteFile(keyfile);
 end;
 
-procedure TNetworkProtocols.RunCase(const Port: RawUtf8;
-  Trust: TSChannelTestTrust; const Server, Authority, Client: ICryptCert;
-  Flags: TSChannelTestFlags);
-var
-  c: TRunCase;
-begin
-  c := TRunCase.Create;
-  c.Test := self;
-  c.Port := Port;
-  c.Trust := Trust;
-  c.Server := Server;
-  c.Authority := Authority;
-  c.Client := Client;
-  c.Flags := Flags;
-  Run(DoRunCase, c, Port);
-end;
-
-procedure TNetworkProtocols.DoRunCase(Sender: TObject);
+class procedure TRunCase.DoRunCase(Sender: TObject);
 begin
   try
     (Sender as TRunCase).Execute;
@@ -7205,6 +7183,23 @@ begin
 end;
 
 procedure TNetworkProtocols._SChannel;
+
+  procedure RunCase(const Port: RawUtf8; Trust: TSChannelTestTrust;
+    const Server, Authority, Client: ICryptCert; Flags: TSChannelTestFlags = []);
+  var
+    c: TRunCase;
+  begin
+    c := TRunCase.Create;
+    c.Test := self;
+    c.Port := Port;
+    c.Trust := Trust;
+    c.Server := Server;
+    c.Authority := Authority;
+    c.Client := Client;
+    c.Flags := Flags;
+    Run(TRunCase.DoRunCase, c, Port);
+  end;
+
 var
   previous: TNewNetTls;
   algo: TCryptCertAlgo;
@@ -7267,34 +7262,41 @@ begin
     // accept a valid client over TLS 1.2 with TLS 1.3 disabled
     RunCase('19000', sttFile, server, ca, valid,
       [stfExpected, stfDisableTls13]);
+    // prove that our previously unknown client is valid within its own CA
+    RunCase('19001', sttFile, server, unknownca, unknown,
+      [stfExpected]);
     // existing one-way SChannel HTTPS behavior must remain unchanged
-    RunCase('19001', sttFile, server, ca, nil,
+    RunCase('19002', sttFile, server, ca, nil,
       [stfExpected, stfOneWayTls]);
     RunWait;
     // the same callbacks and context fields should work with OpenSSL server
     NewNetTls := NewOpenSslNetTls;
-    RunCase('19002', sttFile, server, ca, valid,
+    // accept a valid client certificate from the configured CA
+    RunCase('19003', sttFile, server, ca, valid,
       [stfExpected, stfCallbacks, stfOpenSslServer]);
     // CASystemStores integration test with OpenSSL
     store := TWinCertStore.Create(scsRoot);
     try
       if store.Next then
-        RunCase('19003', sttSystem, server, ca, valid,
+        RunCase('19004', sttSystem, server, ca, valid,
           [stfOpenSslServer])
       else
-        AddConsole('empty current-user ROOT store: skip OpenSSL CASystemStores');
+        AddConsole('empty current-user ROOT store: skip 19004');
     finally
       store.Free;
     end;
     // missing client certificate must be rejected by OpenSSL
-    RunCase('19004', sttFile, server, ca, nil,
+    RunCase('19005', sttFile, server, ca, nil,
       [stfOpenSslServer]);
     // an OpenSSL callback must be able to reject an otherwise valid certificate
-    RunCase('19005', sttFile, server, ca, valid,
+    RunCase('19006', sttFile, server, ca, valid,
       [stfCallbacks, stfRejectEach, stfOpenSslServer]);
     // an OpenSSL callback may override an expired-certificate error
-    RunCase('19006', sttFile, server, ca, expired,
+    RunCase('19007', sttFile, server, ca, expired,
       [stfExpected, stfCallbacks, stfOpenSslServer, stfEachInvalid]);
+    // existing one-way OpenSSL HTTPS behavior must remain unchanged
+    RunCase('19008', sttFile, server, ca, nil,
+      [stfExpected, stfOneWayTls, stfOpenSslServer]);
     RunWait;
   finally
     NewNetTls := previous;
