@@ -298,6 +298,7 @@ const
                   ISC_REQ_ALLOCATE_MEMORY or
                   ISC_REQ_STREAM;
 
+  ASC_REQ_MUTUAL_AUTH     = $00000002;
   ASC_REQ_REPLAY_DETECT   = $00000004;
   ASC_REQ_SEQUENCE_DETECT = $00000008;
   ASC_REQ_CONFIDENTIALITY = $00000010;
@@ -477,6 +478,105 @@ type
   end;
   PCERT_ENHKEY_USAGE = ^CTL_USAGE;
 
+  CERT_USAGE_MATCH = record
+    dwType: cardinal;
+    Usage: CTL_USAGE;
+  end;
+
+  CERT_CHAIN_PARA = record
+    cbSize: cardinal;
+    RequestedUsage: CERT_USAGE_MATCH;
+    RequestedIssuancePolicy: CERT_USAGE_MATCH;
+    dwUrlRetrievalTimeout: cardinal;
+    fCheckRevocationFreshnessTime: BOOL;
+    dwRevocationFreshnessTime: cardinal;
+    pftCacheResync: pointer;
+    pStrongSignPara: pointer;
+    dwStrongSignFlags: cardinal;
+  end;
+  PCERT_CHAIN_PARA = ^CERT_CHAIN_PARA;
+
+  CERT_TRUST_STATUS = record
+    dwErrorStatus: cardinal;
+    dwInfoStatus: cardinal;
+  end;
+
+  PCERT_CHAIN_ELEMENT = ^CERT_CHAIN_ELEMENT;
+  PPCERT_CHAIN_ELEMENT_ARRAY = ^TPCERT_CHAIN_ELEMENT_ARRAY;
+  TPCERT_CHAIN_ELEMENT_ARRAY = array[0..65535] of PCERT_CHAIN_ELEMENT;
+  CERT_CHAIN_ELEMENT = record
+    cbSize: cardinal;
+    pCertContext: PCCERT_CONTEXT;
+    TrustStatus: CERT_TRUST_STATUS;
+    pRevocationInfo: pointer;
+    pIssuanceUsage: PCERT_ENHKEY_USAGE;
+    pApplicationUsage: PCERT_ENHKEY_USAGE;
+    pwszExtendedErrorInfo: PWideChar;
+  end;
+
+  PCERT_SIMPLE_CHAIN = ^CERT_SIMPLE_CHAIN;
+  PPCERT_SIMPLE_CHAIN_ARRAY = ^TPCERT_SIMPLE_CHAIN_ARRAY;
+  TPCERT_SIMPLE_CHAIN_ARRAY = array[0..65535] of PCERT_SIMPLE_CHAIN;
+  CERT_SIMPLE_CHAIN = record
+    cbSize: cardinal;
+    TrustStatus: CERT_TRUST_STATUS;
+    cElement: cardinal;
+    rgpElement: PPCERT_CHAIN_ELEMENT_ARRAY;
+    pTrustListInfo: pointer;
+    fHasRevocationFreshnessTime: BOOL;
+    dwRevocationFreshnessTime: cardinal;
+  end;
+
+  PCERT_CHAIN_CONTEXT = ^CERT_CHAIN_CONTEXT;
+  CERT_CHAIN_CONTEXT = record
+    cbSize: cardinal;
+    TrustStatus: CERT_TRUST_STATUS;
+    cChain: cardinal;
+    rgpChain: PPCERT_SIMPLE_CHAIN_ARRAY;
+    cLowerQualityChainContext: cardinal;
+    rgpLowerQualityChainContext: pointer;
+    fHasRevocationFreshnessTime: BOOL;
+    dwRevocationFreshnessTime: cardinal;
+  end;
+
+  SSL_EXTRA_CERT_CHAIN_POLICY_PARA = record
+    cbSize: cardinal;
+    dwAuthType: cardinal;
+    fdwChecks: cardinal;
+    pwszServerName: PWideChar;
+  end;
+
+  CERT_CHAIN_POLICY_PARA = record
+    cbSize: cardinal;
+    dwFlags: cardinal;
+    pvExtraPolicyPara: pointer;
+  end;
+
+  CERT_CHAIN_POLICY_STATUS = record
+    cbSize: cardinal;
+    dwError: cardinal;
+    lChainIndex: integer;
+    lElementIndex: integer;
+    pvExtraPolicyStatus: pointer;
+  end;
+
+  HCERTCHAINENGINE = pointer;
+  CERT_CHAIN_ENGINE_CONFIG = record
+    cbSize: cardinal;
+    hRestrictedRoot: HCERTSTORE;
+    hRestrictedTrust: HCERTSTORE;
+    hRestrictedOther: HCERTSTORE;
+    cAdditionalStore: cardinal;
+    rghAdditionalStore: pointer;
+    dwFlags: cardinal;
+    dwUrlRetrievalTimeout: cardinal;
+    MaximumCachedCertificates: cardinal;
+    CycleDetectionModulus: cardinal;
+    hExclusiveRoot: HCERTSTORE;
+    hExclusiveTrustedPeople: HCERTSTORE;
+    dwExclusiveFlags: cardinal;
+  end;
+
 const
   UNISP_NAME = 'Microsoft Unified Security Protocol Provider';
 
@@ -503,6 +603,19 @@ const
   CRYPT_ACQUIRE_COMPARE_KEY_FLAG     = $00000004;
   CRYPT_ACQUIRE_SILENT_FLAG          = $00000040;
   CRYPT_ACQUIRE_ONLY_NCRYPT_KEY_FLAG = $00040000;
+
+  CERT_STORE_PROV_MEMORY = 2;
+  CERT_STORE_ADD_USE_EXISTING = 2;
+
+  USAGE_MATCH_TYPE_AND = 0;
+  CERT_CHAIN_POLICY_SSL = 4;
+  AUTHTYPE_CLIENT = 1;
+
+  CERT_CHAIN_EXCLUSIVE_ENABLE_CA_FLAG            = $00000001;
+  CERT_CHAIN_POLICY_IGNORE_ALL_REV_UNKNOWN_FLAGS = $00000f00;
+  CERT_CHAIN_REVOCATION_CHECK_CHAIN_EXCLUDE_ROOT = $40000000;
+
+  szOID_PKIX_KP_CLIENT_AUTH: PAnsiChar = '1.3.6.1.5.5.7.3.2';
 
   // CERT_KEY_CONTEXT Keys associated with a CNG CSP
   CERT_NCRYPT_KEY_SPEC = $ffffffff;
@@ -549,6 +662,14 @@ function CertFindCertificateInStore(hCertStore: HCERTSTORE;
   dwCertEncodingType, dwFindFlags, dwFindType: cardinal; pvFindPara: pointer;
   pPrevCertContext: PCCERT_CONTEXT): PCCERT_CONTEXT; stdcall;
 
+function CertAddCertificateContextToStore(hCertStore: HCERTSTORE;
+  pCertContext: PCCERT_CONTEXT; dwAddDisposition: cardinal;
+  ppStoreContext: PPCCERT_CONTEXT): BOOL; stdcall;
+
+function CertAddEncodedCertificateToStore(hCertStore: HCERTSTORE;
+  dwCertEncodingType: cardinal; pbCertEncoded: PByte; cbCertEncoded,
+  dwAddDisposition: cardinal; ppCertContext: PPCCERT_CONTEXT): BOOL; stdcall;
+
 function PFXImportCertStore(pPFX: pointer; szPassword: PWideChar;
   dwFlags: cardinal): HCERTSTORE; stdcall;
 
@@ -577,6 +698,29 @@ function CertGetCertificateContextProperty(pCertContext: PCCERT_CONTEXT;
 function CryptAcquireCertificatePrivateKey(pCert: PCCERT_CONTEXT; dwFlags: cardinal;
   pvReserved: pointer; var phCryptProv: HCRYPTPROV; var pdwKeySpec: cardinal;
   var pfCallerFreeProv: BOOL): BOOL; stdcall;
+
+function CertCreateCertificateChainEngine(
+  const pConfig: CERT_CHAIN_ENGINE_CONFIG;
+  var phChainEngine: HCERTCHAINENGINE): BOOL; stdcall;
+
+procedure CertFreeCertificateChainEngine(
+  hChainEngine: HCERTCHAINENGINE); stdcall;
+
+function CertGetCertificateChain(hChainEngine: HCERTCHAINENGINE;
+  pCertContext: PCCERT_CONTEXT; pTime: pointer; hAdditionalStore: HCERTSTORE;
+  const pChainPara: CERT_CHAIN_PARA; dwFlags: cardinal; pvReserved: pointer;
+  var ppChainContext: PCERT_CHAIN_CONTEXT): BOOL; stdcall;
+
+procedure CertFreeCertificateChain(
+  pChainContext: PCERT_CHAIN_CONTEXT); stdcall;
+
+function CertVerifyCertificateChainPolicy(pszPolicyOID: PAnsiChar;
+  pChainContext: PCERT_CHAIN_CONTEXT; const pPolicyPara: CERT_CHAIN_POLICY_PARA;
+  var pPolicyStatus: CERT_CHAIN_POLICY_STATUS): BOOL; stdcall;
+
+function CryptStringToBinaryA(pszString: PAnsiChar; cchString,
+  dwFlags: cardinal; pbBinary: PByte; var pcbBinary: cardinal;
+  pdwSkip, pdwFlags: PCardinal): BOOL; stdcall;
 
 function CertNameToStrW(dwCertEncodingType: cardinal; var pName: CERT_NAME_BLOB;
   dwStrType: cardinal; psz: PWideChar; csz: cardinal): cardinal; stdcall;
@@ -1414,6 +1558,8 @@ function DeleteSecurityContext;      external secur32;
 function FreeCredentialsHandle;      external secur32;
 
 function CertFindCertificateInStore;        external crypt32;
+function CertAddCertificateContextToStore;  external crypt32;
+function CertAddEncodedCertificateToStore;  external crypt32;
 function PFXImportCertStore;                external crypt32;
 function CertCreateCertificateContext;      external crypt32;
 function CertStrToNameW;                    external crypt32;
@@ -1422,6 +1568,12 @@ function CertGetIntendedKeyUsage;           external crypt32;
 function CertGetEnhancedKeyUsage;           external crypt32;
 function CertGetCertificateContextProperty; external crypt32;
 function CryptAcquireCertificatePrivateKey; external crypt32;
+function CertCreateCertificateChainEngine;  external crypt32;
+procedure CertFreeCertificateChainEngine;   external crypt32;
+function CertGetCertificateChain;           external crypt32;
+procedure CertFreeCertificateChain;         external crypt32;
+function CertVerifyCertificateChainPolicy;  external crypt32;
+function CryptStringToBinaryA;              external crypt32;
 function CertNameToStrW;                    external crypt32;
 function CryptFindOIDInfo;                  external crypt32;
 
