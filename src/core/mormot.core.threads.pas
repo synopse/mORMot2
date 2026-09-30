@@ -1470,8 +1470,8 @@ type
     fLogClass: TSynLogClass;
     fLog: TSynLog; // the logging instance within the DoExecute thread context
     fExecuteMessage: RawUtf8;
-    fProcessing: boolean;
-    fFlag1, fFlag2, fFlag3: byte; // some inherited flags up to 32-bit
+    fProcessing, fStartAfterConstruction: boolean;
+    fFlag1, fFlag2: byte; // some inherited flags up to 32-bit
     procedure Execute; override;
     procedure DoExecute; virtual; abstract; // overriden for background process
   public
@@ -1480,6 +1480,8 @@ type
     constructor Create(CreateSuspended: boolean;
       const OnStart, OnStop: TOnNotifyThread; Logger: TSynLogClass;
       const ProcName: RawUtf8); reintroduce; virtual;
+    /// overriden to support the fStartAfterConstruction internal flag
+    procedure AfterConstruction; override;
     /// notify the thread to be terminated, and wait for DoExecute to finish
     procedure TerminateAndWaitFinished(TimeOutMs: integer = 5000); virtual;
     /// wait for DoExecute to finish
@@ -4332,6 +4334,13 @@ begin
     Logger := TSynLog;
   fLogClass := Logger;
   inherited Create(CreateSuspended, OnStart, OnStop, ProcName);
+end;
+
+procedure TLoggedThread.AfterConstruction;
+begin
+  if fStartAfterConstruction then
+    Suspended := false; // we can do it now
+  inherited AfterConstruction;
 end;
 
 procedure TLoggedThread.Execute;
