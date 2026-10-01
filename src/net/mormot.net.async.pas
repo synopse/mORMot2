@@ -3657,21 +3657,19 @@ end;
 function TAsyncConnections.GetConnectionHandles: TConnectionAsyncHandleDynArray;
 var
   i, n: PtrInt;
-  p: PAsyncConnection;
+  c: TAsyncConnection;
 begin
   n := 0;
   fConnectionLock.ReadOnlyLock;
   try
     SetLength(result, fConnectionCount);
-    p := pointer(fConnection);
-    for i := 1 to fConnectionCount do
+    for i := 0 to fConnectionCount - 1 do
     begin
-      if not p^.IsClosed then
-      begin
-        result[n] := p^.Handle;
-        inc(n);
-      end;
-      inc(p);
+      c := fConnection[i];
+      if c.IsClosed then
+        continue;
+      result[n] := c.Handle;
+      inc(n);
     end;
   finally
     fConnectionLock.ReadOnlyUnLock;
@@ -3683,21 +3681,19 @@ end;
 function TAsyncConnections.GetConnectionInstances: TAsyncConnectionDynArray;
 var
   i, n: PtrInt;
-  p: PAsyncConnection;
+  c: TAsyncConnection;
 begin
   n := 0;
   fConnectionLock.ReadOnlyLock;
   try
     SetLength(result, fConnectionCount);
-    p := pointer(fConnection);
-    for i := 1 to fConnectionCount do
+    for i := 0 to fConnectionCount - 1 do
     begin
-      if not p^.IsClosed then
-      begin
-        result[n] := p^;
-        inc(n);
-      end;
-      inc(p);
+      c := fConnection[i];
+      if c.IsClosed then
+        continue;
+      result[n] := c;
+      inc(n);
     end;
   finally
     fConnectionLock.ReadOnlyUnLock;

@@ -700,37 +700,54 @@ function TWebSocketAsyncServer.WebSocketBroadcast(const aFrame: TWebSocketFrame;
   aTimeOut: integer): integer;
 var
   i, n: PtrInt;
-  tmp: TSynTempBuffer;
-  ids: THttpServerConnectionIDDynArray;
+  ids: TConnectionAsyncHandleDynArray;
+  conns: TAsyncConnectionDynArray;
+  conn: TWebSocketAsyncConnection;
+  tmp: TSynTempBuffer; // local fame content computed once
 begin
   result := 0;
   if Terminated or
      (fAsync = nil) or
      not (aFrame.opcode in [focText, focBinary, focConnectionClose]) then
     exit;
-  ids := aClientsConnectionID;
-  if ids = nil then
-  begin
-    // broadcast to all connected clients: get their handles within the lock
-    fAsync.ConnectionLock.ReadOnlyLock;
-    try
-      n := fAsync.ConnectionCount;
-      SetLength(ids, n);
-      for i := 0 to n - 1 do
-        ids[i] := fAsync.Connection[i].Handle;
-    finally
-      fAsync.ConnectionLock.ReadOnlyUnLock;
-    end;
-  end;
-  if ids = nil then
-    exit; // no connection
   // send outside the lock: a failing Write() calls ConnectionDelete() -> WriteLock
   FrameSendEncode(aFrame, {mask=}0, tmp);
   try
+    // compute the destination TConnectionAsyncHandle
+    n := length(aClientsConnectionID);
+    if n = 0 then
+    begin
+      // broadcast to all connected clients
+      if aTimeOut = 0 then
+      begin
+        // most common case of non-blocking notifications could use instances
+        conns := fAsync.GetConnectionInstances;
+        for i := 0 to length(conns) - 1 do
+          if TWebSocketAsyncConnection(conns[i]).SendDirect(tmp, aFrame.opcode, 0) then
+            inc(result);
+        exit;
+      end;
+      // get live handles for late access within aTimeOut
+      ids := fAsync.GetConnectionHandles;
+    end
+    else
+    begin
+      // convert 64-bit THttpServerConnectionID into 32-bit TConnectionAsyncHandle
+      SetLength(ids, n);
+      for i := 0 to n - 1 do
+        ids[i] := aClientsConnectionID[i];
+    end;
+    if ids = nil then
+      exit; // no connection
     // use TWebSocketAsyncConnection.SendDirect for non-blocking socket sending
     for i := 0 to length(ids) - 1 do
-      inc(result, ord(TWebSocketAsyncConnection(fAsync.ConnectionFind(ids[i])).
-        SendDirect(tmp, aFrame.opcode, aTimeOut))); // O(log(n)) search
+    begin
+      // O(log(n)) search is safer against GC with aTimeOut > 0
+      conn := TWebSocketAsyncConnection(fAsync.ConnectionFind(ids[i]));
+      if Assigned(conn) and
+         conn.SendDirect(tmp, aFrame.opcode, aTimeOut) then
+        inc(result);
+    end;
   finally
     tmp.Done;
   end;
