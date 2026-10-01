@@ -1033,22 +1033,25 @@ type
 procedure TWebSocketBroadcastThread.DoExecute;
 var
   frame: TWebSocketFrame;
-  one, sent: integer;
-  toggle: boolean;
+  one, sent, ms: integer;
 begin
   frame.opcode := focText;
   frame.content := [];
   frame.tix := 0;
   frame.payload := '{"ping":1}';
   sent := 0;
-  toggle := false;
+  ms := 0;
   while not Terminated do
   begin
-    one := fServer.WebSocketBroadcast(frame, nil, 50 * ord(toggle));
-    TSynLog.Add.Log(sllTrace, 'DoExecute: broadcast=%', [one], self);
+    one := fServer.WebSocketBroadcast(frame, nil, ms);
     inc(sent, one);
-    toggle := not toggle;
+    TSynLog.Add.Log(sllTrace, 'DoExecute: broadcast(%)=%', [ms, one], self);
+    if ms = 0 then
+      ms := 50
+    else
+      ms := 0;
   end;
+  TSynLog.Add.Log(sllTrace, 'DoExecute: sent=%', [sent], self);
   if fSent <> nil then
     fSent^ := sent;
 end;
@@ -1064,16 +1067,15 @@ var
   status: RawUtf8;
 begin
   // WebSocketBroadcast() used to deadlock when Write() failed on a reset peer
+  wedged := false;
   sent := 0;
   server := TWebSocketAsyncServerRest.Create('8897', nil, nil, 'wsbcast',
     2, '', '', {ajax=}true, [], TSynLog);
+  server.WaitStarted(10);
   bcast := TWebSocketBroadcastThread.Create({susp=}true, nil, nil, TSynLog, 'bcast');
-  bcast.fServer := server;
-  bcast.fSent := @sent;
-  wedged := false;
   try
-    server.WaitStarted(10);
-    bcast.Start;
+    bcast.fServer := server;
+    bcast.fSent := @sent;
     for i := 1 to 50 do // connect/disconnect 50 clients while broadcasting
     begin
       TSynLog.Add.Log(sllTrace, 'WebSocketAsyncServer: client #%', [i], self);
@@ -1086,6 +1088,8 @@ begin
           'Sec-WebSocket-Version: 13'#13#10,
           'Sec-WebSocket-Protocol: synopsejson'#13#10]);
         client.SockSendFlush;
+        if i = 1 then
+          bcast.Start; // don't start too early
         // a deadlocked server would not answer any new connection
         try
           client.SockRecvLn(status); // ENetSock after 5 seconds if wedged
@@ -1107,9 +1111,11 @@ begin
       end;
     end;
   finally
-    if not wedged then
+    if wedged then
+      bcast.fSent := nil // avoid GPF at shutdown
+    else
     begin
-      bcast.Free; // Terminate + WaitFor
+      bcast.Free;       // Terminate + WaitFor
       server.Free;
     end;
   end;
