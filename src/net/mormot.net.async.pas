@@ -708,6 +708,13 @@ type
     function ConnectionRemove(Handle: TConnectionAsyncHandle): boolean;
     /// call ConnectionRemove unless acoNoConnectionTrack is set
     procedure EndConnection(connection: TAsyncConnection);
+    /// create a copy of all live TAsyncConnection.Handle (i.e. not IsClosed)
+    // - to be resolved using ConnectionFind() methods just before usage
+    function GetConnectionHandles: TConnectionAsyncHandleDynArray;
+    /// create a copy of all TAsyncConnection live instances (i.e. not IsClosed)
+    // - don't use for any potentially blocking operation: returned instances
+    // are protected from recycling only for KeepConnectionInstanceMS
+    function GetConnectionInstances: TAsyncConnectionDynArray;
     /// add some data to the asynchronous output buffer of a given connection
     // - could be executed e.g. from a TAsyncConnection.OnRead method
     function Write(connection: TAsyncConnection; data: pointer; datalen: integer;
@@ -3645,6 +3652,58 @@ begin
   end
   else
     ConnectionDelete(connection);
+end;
+
+function TAsyncConnections.GetConnectionHandles: TConnectionAsyncHandleDynArray;
+var
+  i, n: PtrInt;
+  p: PAsyncConnection;
+begin
+  n := 0;
+  fConnectionLock.ReadOnlyLock;
+  try
+    SetLength(result, fConnectionCount);
+    p := pointer(fConnection);
+    for i := 1 to fConnectionCount do
+    begin
+      if not p^.IsClosed then
+      begin
+        result[n] := p^.Handle;
+        inc(n);
+      end;
+      inc(p);
+    end;
+  finally
+    fConnectionLock.ReadOnlyUnLock;
+  end;
+  if n <> length(result) then
+    SetLength(result, n);
+end;
+
+function TAsyncConnections.GetConnectionInstances: TAsyncConnectionDynArray;
+var
+  i, n: PtrInt;
+  p: PAsyncConnection;
+begin
+  n := 0;
+  fConnectionLock.ReadOnlyLock;
+  try
+    SetLength(result, fConnectionCount);
+    p := pointer(fConnection);
+    for i := 1 to fConnectionCount do
+    begin
+      if not p^.IsClosed then
+      begin
+        result[n] := p^;
+        inc(n);
+      end;
+      inc(p);
+    end;
+  finally
+    fConnectionLock.ReadOnlyUnLock;
+  end;
+  if n <> length(result) then
+    SetLength(result, n);
 end;
 
 function TAsyncConnections.Write(connection: TAsyncConnection; data: pointer;
