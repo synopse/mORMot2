@@ -973,13 +973,13 @@ begin
         end;
       except
       end;
+    fClosed := true; // before UnLock and SetEvent
   finally
     fSendSafe.UnLock;
   end;
   if Assigned(log) then
     log.Log(sllTrace, 'ClosePort: %', [self]); // final statistics
   fPort := 0;
-  fClosed := true; // before SetEvent
   if fHandshakeEvent <> nil then
     fHandshakeEvent.SetEvent; // release a possible WaitForHandshake()
 end;

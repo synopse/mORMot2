@@ -453,7 +453,7 @@ begin
   RequestProcess := ws.fOnCallbackRequestProcess;
   if Assigned(RequestProcess) then
     result := THttpServerRequest.Create(
-      nil, 0, fOwnerThread, 0, ws.fProcess.Protocol.ConnectionFlags, nil)
+      nil, 0, fOwnerThread, 0, fProtocol.ConnectionFlags, nil)
   else
     result := nil;
 end;
@@ -597,7 +597,7 @@ end;
 
 destructor THttpClientWebSockets.Destroy;
 begin
-  FreeAndNil(fProcess);
+  FreeAndNilSafe(fProcess); // prefer Safe variant here
   inherited;
 end;
 
