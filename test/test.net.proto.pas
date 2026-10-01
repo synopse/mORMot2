@@ -1026,20 +1026,31 @@ type
   TWebSocketBroadcastThread = class(TLoggedThread)
   protected
     fServer: TWebSocketAsyncServer;
-    fSent: integer;
+    fSent: PInteger;
     procedure DoExecute; override;
   end;
 
 procedure TWebSocketBroadcastThread.DoExecute;
 var
   frame: TWebSocketFrame;
+  one, sent: integer;
+  toggle: boolean;
 begin
   frame.opcode := focText;
   frame.content := [];
   frame.tix := 0;
   frame.payload := '{"ping":1}';
+  sent := 0;
+  toggle := false;
   while not Terminated do
-    inc(fSent, fServer.WebSocketBroadcast(frame, nil, 50));
+  begin
+    one := fServer.WebSocketBroadcast(frame, nil, 50 * ord(toggle));
+    TSynLog.Add.Log(sllTrace, 'DoExecute: broadcast=%', [one], self);
+    inc(sent, one);
+    toggle := not toggle;
+  end;
+  if fSent <> nil then
+    fSent^ := sent;
 end;
 
 procedure TNetworkProtocols.DoTWebSocketAsyncServer(Sender: TObject);
@@ -1048,20 +1059,24 @@ var
   bcast: TWebSocketBroadcastThread;
   client: TCrtSocket;
   i: PtrInt;
+  sent: integer;
   wedged: boolean;
   status: RawUtf8;
 begin
   // WebSocketBroadcast() used to deadlock when Write() failed on a reset peer
+  sent := 0;
   server := TWebSocketAsyncServerRest.Create('8897', nil, nil, 'wsbcast',
     2, '', '', {ajax=}true, [], TSynLog);
   bcast := TWebSocketBroadcastThread.Create({susp=}true, nil, nil, TSynLog, 'bcast');
   bcast.fServer := server;
+  bcast.fSent := @sent;
   wedged := false;
   try
     server.WaitStarted(10);
     bcast.Start;
-    for i := 1 to 50 do
+    for i := 1 to 50 do // connect/disconnect 50 clients while broadcasting
     begin
+      TSynLog.Add.Log(sllTrace, 'WebSocketAsyncServer: client #%', [i], self);
       client := TCrtSocket.Open('127.0.0.1', '8897', nlTcp, 5000);
       try
         client.SockSend([ // SockSend() appends the final CRLF
@@ -1082,7 +1097,7 @@ begin
           end;
         end;
         if not CheckUtf8(IdemPChar(pointer(status), 'HTTP/1.1 101'),
-                 'upgrade %', [status]) then
+                         'upgrade %', [status]) then
           break;
         // close with unread frames: RST so that the next server Write() fails
         client.SockReceivePending(1000); // wait for a broadcasted frame
@@ -1091,7 +1106,6 @@ begin
         client.Free;
       end;
     end;
-    Check(bcast.fSent > 0, 'sent');
   finally
     if not wedged then
     begin
@@ -1099,6 +1113,7 @@ begin
       server.Free;
     end;
   end;
+  Check(sent > 0, 'sent');
 end;
 
 function TNetworkProtocols.DoRequest_(Ctxt: THttpServerRequestAbstract): cardinal;
