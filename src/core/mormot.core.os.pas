@@ -8813,8 +8813,7 @@ begin
        not Assigned(Handler) then
       exit;
     RawExceptionIntercepted := true; // intercept once
-    {$ifdef WITH_RAISEPROC}
-    // FPC RTL redirection function
+    {$ifdef WITH_RAISEPROC} // FPC RTL redirection function
     if not Assigned(OldRaiseProc) then
     begin
       OldRaiseProc := RaiseProc;
@@ -8830,8 +8829,7 @@ begin
       result := true;
     end;
     {$endif WITH_VECTOREXCEPT}
-    {$ifdef WITH_RTLUNWINDPROC}
-    // Delphi x86 RTL redirection function
+    {$ifdef WITH_RTLUNWINDPROC} // oldest Delphi x86 RTL redirection function
     if not Assigned(OldUnWindProc) then
     begin
       OldUnWindProc := RTLUnwindProc;
@@ -8839,6 +8837,14 @@ begin
       result := true;
     end;
     {$endif WITH_RTLUNWINDPROC}
+    {$ifdef WITH_RAISEEXCEPTOBJPROC} // Delphi 2009+ Win32 redirection function
+    if not Assigned(OldRaiseExceptObjProc) then
+    begin
+      OldRaiseExceptObjProc := RaiseExceptObjProc;
+      RaiseExceptObjProc := @SynRaiseExceptObj;
+      result := true;
+    end;
+    {$endif WITH_RAISEEXCEPTOBJPROC}
   finally
     GlobalUnLock;
   end;

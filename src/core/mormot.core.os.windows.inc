@@ -1907,24 +1907,22 @@ end;
 var
   _RawLogException: TOnRawLogException;
 
-{$ifdef FPC}
-  {$ifdef WIN64}
-    {$define WITH_VECTOREXCEPT} // use AddVectoredExceptionHandler Win64 API
-  {$else}
-    {$ifdef FPC_USE_WIN32_SEH}
-      {$define WITH_VECTOREXCEPT} // new since FPC 3.2
-    {$else}
-      // Win32, Linux: intercept via the RaiseProc global variable
-      {$define WITH_RAISEPROC} // RaiseProc is set in main mormot.core.os.pas
-    {$endif FPC_USE_WIN32_SEH}
-  {$endif WIN64}
+{$ifdef CPU64}
+  {$define WITH_VECTOREXCEPT} // Win64 SEH AddVectoredExceptionHandler API
 {$else}
-  {$ifdef CPU64}
-    {$define WITH_VECTOREXCEPT}
+  {$ifdef FPC}
+    {$ifdef FPC_USE_WIN32_SEH}
+      {$define WITH_VECTOREXCEPT} // Win32 SEH since FPC 3.2
+    {$else}                       // Win32 < FPC 3.2, Linux/POSIX
+      {$define WITH_RAISEPROC}    // RaiseProc is set in main mormot.core.os.pas
+    {$endif FPC_USE_WIN32_SEH}
   {$else}
-    {$define WITH_RTLUNWINDPROC} //  use x86_64 asm on Delphi Win32
-  {$endif CPU64}
-{$endif FPC}
+    {$define WITH_RTLUNWINDPROC}        // global raw i386 asm on Delphi Win32
+    {$ifdef UNICODE}                    // Delphi 2009+ new global variable
+      {$define WITH_RAISEEXCEPTOBJPROC} // cleaner support of Delphi exceptions
+    {$endif UNICODE}
+  {$endif FPC}
+{$endif CPU64}
 
 {$ifndef KEEP_STACKFRAMES}
 {$STACKFRAMES ON} // we need {$W+} stack frame for the backtrace API calls below
@@ -2047,7 +2045,7 @@ end;
 {$STACKFRAMES OFF} // back to {$W-} normal state, as in mormot.defines.inc
 {$endif KEEP_STACKFRAMES}
 
-{$ifdef WITH_RTLUNWINDPROC}
+{$ifdef WITH_RTLUNWINDPROC} // Delphi Win32 general exception interceptor
 
 var
   OldUnWindProc: pointer;
@@ -2058,15 +2056,39 @@ asm
         cmp     dword ptr _RawLogException, 0
         jz      @old
         pushad
+        mov     edx, ExceptionRecord
+        test    edx, edx
+        jz      @done
+        {$ifdef WITH_RAISEEXCEPTOBJPROC}
+        cmp     dword ptr [edx].TExceptionRecord.ExceptionCode, cRtlException
+        je      @done // RaiseExceptObjProc did handle Delphi exceptions
+        {$endif WITH_RAISEEXCEPTOBJPROC}
         mov     eax, TargetFrame
         mov     edx, ExceptionRecord
         call    LogExcept
-        popad
+@done:  popad
 @old:   pop     ebp // hidden push ebp at asm level
         jmp     OldUnWindProc
 end;
 
 {$endif WITH_RTLUNWINDPROC}
+
+{$ifdef WITH_RAISEEXCEPTOBJPROC} // Delphi 2009+ Delphi Exceptions interceptor
+
+var
+  OldRaiseExceptObjProc: procedure(P: PExceptionRecord);
+
+procedure SynRaiseExceptObj(P: PExceptionRecord);
+begin
+  // preserve SysUtils.Exception.RaisingException(), third-party hooks, etc.
+  if Assigned(OldRaiseExceptObjProc) then
+    OldRaiseExceptObjProc(P);
+  if Assigned(_RawLogException) and
+     (P <> nil) then
+    LogExcept(nil, P^);
+end;
+
+{$endif WITH_RAISEEXCEPTOBJPROC}
 
 {$endif WITH_RAISEPROC}
 
