@@ -1908,7 +1908,7 @@ var
   _RawLogException: TOnRawLogException;
 
 {$ifdef CPU64}
-  {$define WITH_VECTOREXCEPT} // Win64 SEH AddVectoredExceptionHandler API
+  {$define WITH_VECTOREXCEPT}     // Win64 SEH AddVectoredExceptionHandler API
 {$else}
   {$ifdef FPC}
     {$ifdef FPC_USE_WIN32_SEH}
@@ -1917,12 +1917,12 @@ var
       {$define WITH_RAISEPROC}    // RaiseProc is set in main mormot.core.os.pas
     {$endif FPC_USE_WIN32_SEH}
   {$else}
-    {$define WITH_RTLUNWINDPROC}        // global raw i386 asm on Delphi Win32
-    {$ifdef UNICODE}                    // Delphi 2009+ new global variable
-      {$define WITH_RAISEEXCEPTOBJPROC} // cleaner support of Delphi exceptions
-    {$endif UNICODE}
+    {$define WITH_RTLUNWINDPROC}  // global raw i386 asm on Delphi Win32
   {$endif FPC}
 {$endif CPU64}
+{$ifdef HASRAISEEXCEPTOBJPROC}    // Delphi 2009+ new global variable
+  {$define WITH_RAISEEXCEPTOBJPROC} // direct support of Delphi exceptions
+{$endif HASRAISEEXCEPTOBJPROC}      // (also with WITH_VECTOREXCEPT)
 
 {$ifndef KEEP_STACKFRAMES}
 {$STACKFRAMES ON} // we need {$W+} stack frame for the backtrace API calls below
@@ -1947,13 +1947,14 @@ type
         (ExceptAddr: PtrUInt;
          ExceptObject: Exception);
   end;
-  GetExceptionClass = function(const P: TExceptionRecord): ExceptClass;
+  TOnGetExceptionClass = function(const P: TExceptionRecord): ExceptClass;
 
 const
   {$ifdef FPC}
-  cRtlException = $E0465043; // $E0 F P C
+  cRtlException  = $E0465043; // $E0 F P C
   {$else}
-  cRtlException = $0EEDFADE; // Delphi exception
+  cRtlException  = $0EEDFADE; // Delphi exception
+  cLastException = $0EEDFAE5; // Delphi last fake exception (cDelphiExitFinally)
   {$endif FPC}
 
 procedure LogExcept(stack: PPtrUInt; const Exc: TExceptionRecord);
@@ -1962,6 +1963,10 @@ var
   backuplasterror: DWord;
 begin
   if (Exc.ExceptionCode = cSetThreadNameException) or
+     {$ifdef ISDELPHI}
+     ((Exc.ExceptionCode > cRtlException) and
+      (Exc.ExceptionCode <= cLastException)) or
+     {$endif ISDELPHI}
      not Assigned(_RawLogException) then
     exit;
   backuplasterror := GetLastError;
@@ -1995,7 +2000,7 @@ begin
     begin
       {$ifndef LLVM}
       if Assigned(ExceptClsProc) then
-        ctxt.EClass := GetExceptionClass(ExceptClsProc)(Exc)
+        ctxt.EClass := TOnGetExceptionClass(ExceptClsProc)(Exc)
       else
       {$endif LLVM}
         ctxt.EClass := EExternal;
@@ -2033,7 +2038,10 @@ function AddVectoredExceptionHandler(FirstHandler: cardinal;
 function SynLogVectoredHandler(ExceptionInfo: PExceptionInfo): PtrInt; stdcall;
 begin
   if Assigned(_RawLogException) then
-    LogExcept(nil, ExceptionInfo^.ExceptionRecord^);
+    {$ifdef WITH_RAISEEXCEPTOBJPROC}
+    if ExceptionInfo^.ExceptionRecord^.ExceptionCode <> cRtlException then
+    {$endif WITH_RAISEEXCEPTOBJPROC}
+      LogExcept(nil, ExceptionInfo^.ExceptionRecord^);
   result := EXCEPTION_CONTINUE_SEARCH;
 end;
 
@@ -2057,36 +2065,22 @@ asm
         mov     edx, ExceptionRecord
         test    edx, edx
         jz      @done
-        {$ifdef WITH_RAISEEXCEPTOBJPROC}
-        cmp     dword ptr [edx].TExceptionRecord.ExceptionCode, cRtlException
-        je      @done // RaiseExceptObjProc did handle Delphi exceptions
-        {$endif WITH_RAISEEXCEPTOBJPROC}
+        {$ifdef WITH_RAISEEXCEPTOBJPROC} // duplicate no RaiseExceptObjProc
+        mov     eax, dword ptr [edx].TExceptionRecord.ExceptionCode
+        cmp     eax, cRtlException
+        jb      @ok
+        cmp     eax, cLastException
+        jbe     @done                    // internal Delphi fake exceptions
+@ok:    {$endif WITH_RAISEEXCEPTOBJPROC}
         mov     eax, TargetFrame
         mov     edx, ExceptionRecord
         call    LogExcept
 @done:  popad
-@old:   pop     ebp // hidden push ebp at asm level
+@old:   pop     ebp                      // hidden push ebp at asm level
         jmp     OldUnWindProc
 end;
 
 {$endif WITH_RTLUNWINDPROC}
-
-{$ifdef WITH_RAISEEXCEPTOBJPROC} // Delphi 2009+ Delphi Exceptions interceptor
-
-var
-  OldRaiseExceptObjProc: procedure(P: PExceptionRecord);
-
-procedure SynRaiseExceptObj(P: PExceptionRecord);
-begin
-  // preserve SysUtils.Exception.RaisingException(), third-party hooks, etc.
-  if Assigned(OldRaiseExceptObjProc) then
-    OldRaiseExceptObjProc(P);
-  if Assigned(_RawLogException) and
-     (P <> nil) then
-    LogExcept(nil, P^);
-end;
-
-{$endif WITH_RAISEEXCEPTOBJPROC}
 
 {$endif WITH_RAISEPROC}
 

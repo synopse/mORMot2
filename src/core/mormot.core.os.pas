@@ -8765,12 +8765,13 @@ end;
 {$ifdef WITH_RAISEPROC} // for FPC on Win32 + Linux (Win64=WITH_VECTOREXCEPT)
 var
   OldRaiseProc: TExceptProc;
+{$endif WITH_RAISEPROC}
 
-procedure SynRaiseProc(Obj: TObject; Addr: CodePointer;
-  FrameCount: integer; Frame: PCodePointer);
+procedure SynRaiseProc(Obj: TObject; Addr: pointer;
+  FrameCount: integer = 0; Frame: pointer = nil);
 var
   ctxt: TSynLogExceptionContext;
-  backuplasterror: DWord;
+  backuplasterror: integer;
 begin
   if (Obj <> nil) and
      Obj.InheritsFrom(Exception) and
@@ -8784,20 +8785,41 @@ begin
       if Obj.InheritsFrom(EExternal) then // e.g. EDivByZero or EMathError
         ctxt.ELevel := sllExceptionOS
       else
-        ctxt.ELevel := sllException; // regular "raise" exception
-      ctxt.ETimestamp := UnixTimeUtc;
-      ctxt.EStack := pointer(Frame);
+        ctxt.ELevel := sllException;      // regular "raise" exception
+      ctxt.EStack := Frame;
       ctxt.EStackCount := FrameCount;
+      ctxt.ETimestamp := UnixTimeUtc;     // the fastest API call possible
       _RawLogException(ctxt); // e.g. SynLogException() from mormot.core.log
     except
       { ignore any nested exception }
     end;
     SetLastError(backuplasterror); // may have changed above
   end;
+  {$ifdef WITH_RAISEPROC}
   if Assigned(OldRaiseProc) then
     OldRaiseProc(Obj, Addr, FrameCount, Frame);
+  {$endif WITH_RAISEPROC}
 end;
 
+{$ifndef WITH_RAISEPROC}
+{$ifdef WITH_RAISEEXCEPTOBJPROC} // Delphi 2009+ Delphi Exceptions interceptor
+var
+  OldRaiseExceptObjProc: procedure(P: PExceptionRecord);
+
+procedure SynRaiseExceptObj(P: PExceptionRecord);
+begin
+  // preserve SysUtils.Exception.RaisingException(), third-party hooks, etc.
+  if Assigned(OldRaiseExceptObjProc) then
+    OldRaiseExceptObjProc(P);
+  if (P <> nil) and
+     Assigned(_RawLogException) then
+    {$ifdef OSWINDOWS}
+    SynRaiseProc(P^.ExceptObject, pointer(P^.ExceptAddr));
+    {$else} // modern Delphi LLVM ZCX/SJLJ targets left Addr unset with garbage
+    SynRaiseProc(P^.ExceptObject, nil);
+    {$endif OSWINDOWS}
+end;
+{$endif WITH_RAISEEXCEPTOBJPROC}
 {$endif WITH_RAISEPROC}
 
 var
