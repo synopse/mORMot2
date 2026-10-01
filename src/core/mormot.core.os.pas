@@ -3115,10 +3115,13 @@ type
 
   /// the global function signature expected by RawExceptionIntercept()
   // - assigned e.g. to SynLogException() in mormot.core.log.pas
+  // - warning: the function should ignore any potential nested call, as
+  // SynLogException() does with PerThreadInfo.ExceptionIgnore
   TOnRawLogException = procedure(const Ctxt: TSynLogExceptionContext);
 
 /// setup Exception interception for the whole process
 // - the first to call this procedure will be elected until the process ending
+// - RawExceptionIntercept(nil) would disable any existing interception function
 // - returns true on success, false if there is already an handler
 function RawExceptionIntercept(const Handler: TOnRawLogException): boolean;
 
@@ -8786,9 +8789,6 @@ begin
       ctxt.EStack := pointer(Frame);
       ctxt.EStackCount := FrameCount;
       _RawLogException(ctxt); // e.g. SynLogException() from mormot.core.log
-      // note that SynLogException() will use PerThreadInfo.ExceptionIgnore
-      // to avoid recursive exception loggin: _RawLogException should not be set
-      // to nil or exceptions on concurrent threads would not be logged
     except
       { ignore any nested exception }
     end;
@@ -8802,6 +8802,10 @@ end;
 
 var
   RawExceptionIntercepted: boolean; // single global Exception interception
+
+// note that SynLogException() will use PerThreadInfo.ExceptionIgnore to avoid
+// recursive exception logging: global _RawLogException should not be set
+// temporarly to nil or exceptions on concurrent threads would not be logged
 
 function RawExceptionIntercept(const Handler: TOnRawLogException): boolean;
 begin

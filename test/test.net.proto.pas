@@ -7091,9 +7091,8 @@ var
   raw: PCCERT_CONTEXT;
   connected: boolean;
   log: ISynLog;
-  l: TSynLog;
 begin
-  l := TSynLog.EnterLocal(log, 'Execute %', [Port], self);
+  TSynLog.EnterLocal(log, 'Execute %', [Port], self);
   cafile := '';
   keyfile := '';
   raw := nil;

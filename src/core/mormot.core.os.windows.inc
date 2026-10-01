@@ -1928,7 +1928,9 @@ var
 {$STACKFRAMES ON} // we need {$W+} stack frame for the backtrace API calls below
 {$endif KEEP_STACKFRAMES}
 
-{$ifndef WITH_RAISEPROC}
+{$ifdef WITH_RAISEPROC}
+  // RaiseProc redirection is implemented in the main mormot.core.os.pas
+{$else}
 
 type
   PExceptionRecord = ^TExceptionRecord;
@@ -1958,14 +1960,11 @@ procedure LogExcept(stack: PPtrUInt; const Exc: TExceptionRecord);
 var
   ctxt: TSynLogExceptionContext;
   backuplasterror: DWord;
-  backuphandler: TOnRawLogException;
 begin
-  if Exc.ExceptionCode = cSetThreadNameException then
+  if (Exc.ExceptionCode = cSetThreadNameException) or
+     not Assigned(_RawLogException) then
     exit;
   backuplasterror := GetLastError;
-  backuphandler := _RawLogException;
-  _RawLogException := nil; // disable nested exception at API level
-  if Assigned(backuphandler) then // paranoid check (tested before calling)
   try
     ctxt.EStack := pointer(stack); // for manual unwinding on Delphi x86
     ctxt.EStackCount := 0;
@@ -2005,11 +2004,10 @@ begin
       ctxt.EAddr := Exc.ExceptionAddress;
     end;
     ctxt.ETimestamp := UnixTimeUtc; // the fastest API call possible
-    backuphandler(ctxt);
+    _RawLogException(ctxt);
   except
     { ignore any nested exception }
   end;
-  _RawLogException := backuphandler;
   SetLastError(backuplasterror); // code above could have changed this
 end;
 
