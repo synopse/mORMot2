@@ -338,7 +338,7 @@ const
   // - TBigInt.FillPrime will ensure FIPS 186-5 minimum iteration is always used
   RSA_DEFAULT_GENERATION_ITERATIONS = 0;
 
-  /// generates RSA keypairs in a time-coherent fashion
+  /// generates RSA keypairs in a time-coherent fashion - for RSA-2048 size
   {$ifdef CPUARM3264}
   // - we have seen some weak Raspberry PI timeout so 30 seconds seems fair
   // - CPUARM3264 and not CPUARM, which FPC only defines on 32-bit ARM: aarch64
@@ -2627,6 +2627,13 @@ begin
      {$endif OSWINDOWS}
      (TimeOutMS <= 0) then
     TimeOutMS := MilliSecsPerMin; // blocking 1 minute seems fair enough
+  if TimeoutMS = RSA_DEFAULT_GENERATION_TIMEOUTMS then // calibrated for 2048
+    if Bits >= 7680 then
+      TimeoutMS := TimeoutMS * 64
+    else if Bits >= 4096 then
+      TimeoutMS := TimeoutMS * 16
+    else if Bits >= 3072 then
+      TimeoutMS := TimeoutMS * 4;
   endtix := GetTickCount64 + TimeOutMS;
   // setup local variables
   fModulusBits := Bits;
