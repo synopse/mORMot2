@@ -2734,8 +2734,9 @@ begin
       dec(len, sent);
       continue;
     end;
-    if sent = 0 then
-      raise ESChannel.CreateFmt('%s: connection closed', [ctx]);
+    result := nrClosed;
+    if sent = 0 then // graceful disconnection
+      exit;
     result := NetLastError(NO_ERROR, @err);
     case result of
       nrRetry:
