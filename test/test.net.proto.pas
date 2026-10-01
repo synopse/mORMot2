@@ -159,11 +159,15 @@ type
     procedure DoHttpFileRange(Sender: TObject);
     /// validate THttpServerRequestAbstract.SetOutStream streamed body download
     procedure DoHttpOutStream(Sender: TObject);
+    /// validate TWebSocketAsyncServer.WebSocketBroadcast with closing peers
+    procedure DoTWebSocketAsyncServer(Sender: TObject);
   published
     {$ifdef USEWININET}
     /// validate lazy initialization of the http.sys WebSocket API
     procedure _HttpApiWebSocketServer;
     {$endif USEWININET}
+    /// asynchronously start slow tests in background threads on /multithread
+    procedure SlowTests;
     /// Engine.IO and Socket.IO regression tests
     procedure _SocketIO;
     /// validate DNS and LDAP clients (and NTP/SNTP)
@@ -184,8 +188,6 @@ type
     procedure RTSPOverHTTP;
     /// RTSP over HTTP, with always temporary buffering
     procedure RTSPOverHTTPBufferedWrite;
-    /// validate TWebSocketAsyncServer.WebSocketBroadcast with closing peers
-    procedure _TWebSocketAsyncServer;
     /// validate IP processing functions
     procedure IPAddresses;
     /// validate mormot.net.openapi unit
@@ -477,6 +479,19 @@ begin
   CheckEqual(TftpOwnerAccessed, 1, 'owner access after terminate');
 end;
 
+procedure TNetworkProtocols.SlowTests;
+begin
+  // start some slow tests in background if /multithread is enabled
+  Run(DoHttpBodyDownload, self, 'HttpBodyDownload', true, false);
+  Run(DoHttpFileRange, self, 'HttpFileRange', true, false);
+  Run(DoHttpOutStream, self, 'HttpOutStream', true, false);
+  Run(DoTFTPServer, self, 'TFTPServer', true, false);
+  Run(DoTWebSocketAsyncServer, self, 'WSBroadcast', true, false);
+  {$ifdef OSPOSIX}
+  Run(DoUnixDomainSocket, self, 'UnixDomainSocket', true, false);
+  {$endif OSPOSIX}
+end;
+
 procedure TNetworkProtocols._SocketIO;
 var
   m: TSocketIOMessage;
@@ -484,14 +499,6 @@ var
   d: TDocVariantData;
   ws: TSha1Digest;
 begin
-  // start some slow tests in background if /multithread is enabled
-  Run(DoHttpBodyDownload, self, 'HttpBodyDownload', true, false);
-  Run(DoHttpFileRange, self, 'HttpFileRange', true, false);
-  Run(DoHttpOutStream, self, 'HttpOutStream', true, false);
-  Run(DoTFTPServer, self, 'TFTPServer', true, false);
-  {$ifdef OSPOSIX}
-  Run(DoUnixDomainSocket, self, 'UnixDomainSocket', true, false);
-  {$endif OSPOSIX}
   // from https://datatracker.ietf.org/doc/html/rfc6455#section-1.3
   ComputeChallenge('dGhlIHNhbXBsZSBub25jZQ==', ws);
   CheckEqual(Sha1DigestToString(ws), 'b37a4f2cc0624f1690f64606cf385945b2bec4ea');
@@ -1016,14 +1023,14 @@ end;
 
 type
   // broadcast frames to all connections, from a background thread
-  TWebSocketBroadcastThread = class(TThread)
+  TWebSocketBroadcastThread = class(TLoggedThread)
   protected
     fServer: TWebSocketAsyncServer;
     fSent: integer;
-    procedure Execute; override;
+    procedure DoExecute; override;
   end;
 
-procedure TWebSocketBroadcastThread.Execute;
+procedure TWebSocketBroadcastThread.DoExecute;
 var
   frame: TWebSocketFrame;
 begin
@@ -1035,7 +1042,7 @@ begin
     inc(fSent, fServer.WebSocketBroadcast(frame, nil, 50));
 end;
 
-procedure TNetworkProtocols._TWebSocketAsyncServer;
+procedure TNetworkProtocols.DoTWebSocketAsyncServer(Sender: TObject);
 var
   server: TWebSocketAsyncServerRest;
   bcast: TWebSocketBroadcastThread;
@@ -1045,9 +1052,9 @@ var
   status: RawUtf8;
 begin
   // WebSocketBroadcast() used to deadlock when Write() failed on a reset peer
-  server := TWebSocketAsyncServerRest.Create('8897', nil, nil, 'wsbroadcast',
+  server := TWebSocketAsyncServerRest.Create('8897', nil, nil, 'wsbcast',
     2, '', '', {ajax=}true, [], TSynLog);
-  bcast := TWebSocketBroadcastThread.Create({suspended=}true);
+  bcast := TWebSocketBroadcastThread.Create({susp=}true, nil, nil, TSynLog, 'bcast');
   bcast.fServer := server;
   wedged := false;
   try
