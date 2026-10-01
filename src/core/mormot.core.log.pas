@@ -1447,7 +1447,6 @@ type
     // - expects/requires the ISynLog to be a void (=nil) variable on stack
     // - slightly more efficient - especially on FPC - than plain Enter()
     // - optionally return the TSynLog instance (or nil) for direct usage
-    // - optionally return the TSynLog instance (or nil) for direct call
     // - typical usage is the following, very close to TSynLog.Enter:
     // ! var logger: ISynLog;
     // ! begin

@@ -74,14 +74,6 @@ const
   SYNOPSE_IP = '82.67.73.95'; // the mormot's home in the French mountains :)
 
 type
-  {$ifdef SCHANNEL_VERIFY}
-  TSChannelTestTrust = (
-    sttFile, sttRaw, sttDefault, sttSystem);
-  TSChannelTestFlags = set of (
-   stfExpected, stfCallbacks, stfRejectEach, stfDisableTls13, stfOneWayTls,
-   stfOpenSslServer, stfEachInvalid);
-  {$endif SCHANNEL_VERIFY}
-
   /// this test case will validate several low-level protocols
   TNetworkProtocols = class(TSynTestCase)
   protected
@@ -6945,6 +6937,13 @@ end;
 {$ifdef SCHANNEL_VERIFY}
 
 type
+  TSChannelTestTrust = (
+    sttFile, sttRaw, sttDefault, sttSystem);
+
+  TSChannelTestFlags = set of (
+   stfExpected, stfCallbacks, stfRejectEach, stfDisableTls13, stfOneWayTls,
+   stfOpenSslServer, stfEachInvalid);
+
   TRunCase = class
   public
     Test: TSynTestCase;
@@ -7062,9 +7061,22 @@ begin
 end;
 
 class procedure TRunCase.DoRunCase(Sender: TObject);
+var
+  runcase: TRunCase;
 begin
   try
-    (Sender as TRunCase).Execute;
+    runcase := nil;
+    try
+      runcase := Sender as TRunCase;
+      runcase.Execute;
+    except
+      on E: Exception do
+      begin
+        TSynLog.Add.Log(sllDebug, 'Execute raised %', [E.ClassType]);
+        if Assigned(runcase) then
+          runcase.Test.CheckUtf8(PClass(E)^ = ENetSock, 'Raised %', [E]);
+      end;
+    end;
   finally
     Sender.Free;
   end;
@@ -7078,7 +7090,10 @@ var
   der: RawByteString;
   raw: PCCERT_CONTEXT;
   connected: boolean;
+  log: ISynLog;
+  l: TSynLog;
 begin
+  l := TSynLog.EnterLocal(log, 'Execute %', [Port], self);
   cafile := '';
   keyfile := '';
   raw := nil;
@@ -7128,8 +7143,8 @@ begin
     sttSystem:
       tls.CASystemStores := [scsRoot];
   end;
-  http := THttpAsyncServer.Create(Port, nil, nil, 'schannel-mtls',
-    2, 5000, [hsoEnableTls]);
+  http := THttpAsyncServer.Create(Port, nil, nil, Join(['mtls-', Port]),
+    {threads=}1, 5000, [hsoEnableTls], TSynLog);
   try
     if Trust = sttRaw then
     begin
