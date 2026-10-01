@@ -214,8 +214,8 @@ type
 // e.g. on Windows, you need to run also the function on cLocalHost, and on
 // POSIX it seems to require a specific broadcast per interface network mask
 // otherwise only a single interface is broadcasted
-// - is useful only for low-level forensic tools: to find out which LDAP
-// client ot use, rather call CldapGetLdapController/CldapMyLdapController
+// - is useful only for low-level forensic tools: to properly locate a LDAP
+// server, rather call CldapGetLdapController/CldapMyLdapController
 function CldapBroadcast(var Servers: TCldapServers; TimeOutMS: integer = 100;
   const Address: RawUtf8 = cBroadcast; const Port: RawUtf8 = LDAP_PORT): integer;
 

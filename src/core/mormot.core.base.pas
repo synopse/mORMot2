@@ -2886,7 +2886,6 @@ const
   CPUAVX512X64V4 = [cfAVX512F, cfAVX512BW, cfAVX512CD, cfAVX512DQ, cfAVX512VL];
 
 type
-
   /// recognize the main Intel/AMD CPU manufacturers
   TIntelCpuManufacturer = (icmOther, icmIntel, icmAmd);
 
@@ -2973,6 +2972,7 @@ function HasHWAes: boolean;
 var
   /// the available Intel/AMD CPU features retrieved using CPUID
   CpuFeatures: TIntelCpuFeatures;
+
   /// the AVX-512 features of this CPU which can actually be used
   // - CpuFeatures reflects the raw CPUID bits, so AVX-512 flags may be set even
   // if the OS does not save the opmask/ZMM registers at context switch (e.g.
