@@ -80,7 +80,7 @@ type
     // so may be nil if the instance was created outside the SOA context
     property Factory: TServiceFactoryServer
       read fFactory;
-    /// access ot the associated REST Server, e.g. to its ORM methods
+    /// access of the associated REST Server, e.g. to its ORM methods
     // - slightly faster than Factory.RestServer
     // - this value will be injected by TServiceFactoryServer.CreateInstance,
     // so may be nil if the instance was created outside the SOA context

@@ -4260,15 +4260,15 @@ begin
   if rva = 0 then
     exit;
   s := FindSymbol(rva);
-  if (s <> nil) and
-     (FindPropName(['LogExcept', 'SynLogException', 'ThreadProc',
-       'ESynException.RaiseUtf8', 'SynLogVectoredHandler'
-       {$ifdef ISDELPHI} , 'SynRtlUnwind',  '@HandleAnyException',
-       '@HandleOnException', '@InternalRaiseAtExcept', '@RaiseAtExcept',
-       '@RaiseExcept', '@RaiseAgain', 'ThreadWrapper'
-       {$ifdef CPUX86} , 'RawStackTrace' {$endif}
-       {$endif ISDELPHI} ], s^.Name) >= 0) then
-    exit; // only meaningful entries
+  if s <> nil then
+    if FindPropName(['LogExcept', 'SynLogException', 'ThreadProc',
+         'SynLogVectoredHandler', 'SynRaiseProc'
+         {$ifdef ISDELPHI} , 'SynRtlUnwind',  '@HandleAnyException',
+         '@HandleOnException', '@RaiseExcept', '@RaiseAgain',
+         '@RaiseAtExcept', '@InternalRaiseAtExcept', 'ThreadWrapper'
+         {$ifdef CPUX86} , 'RawStackTrace' {$endif}
+         {$endif ISDELPHI} ], s^.Name) >= 0 then
+      exit; // only meaningful entries
   result := true;
   if not NoHex then
   begin

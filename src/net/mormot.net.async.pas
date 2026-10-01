@@ -756,7 +756,7 @@ type
     {$endif USE_WINIOCP}
     /// low-level unsafe direct access to the connection instances
     // - ensure this property is used in a thread-safe manner, i.e. calling
-    // ConnectionFindAndLock() high-level function, ot via manual
+    // ConnectionFindAndLock() high-level function, or via manual
     // ! ConnectionLock.ReadOnlyLock;
     // ! try ... finally ConnectionLock.ReadOnlyUnLock; end;
     // - never Write() within ReadOnlyLock: it may need ConnectionDelete()

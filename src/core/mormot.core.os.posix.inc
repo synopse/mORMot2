@@ -1663,8 +1663,10 @@ var
   // FPC: intercept via the RaiseProc global variable
   {$define WITH_RAISEPROC}
 {$else}
-  // Delphi POSIX: intercept via the RaiseExceptObjProc global variable
-  {$define WITH_RAISEEXCEPTOBJPROC}
+  {$ifdef HASRAISEEXCEPTOBJPROC}
+    // Delphi POSIX: intercept via the RaiseExceptObjProc global variable
+    {$define WITH_RAISEEXCEPTOBJPROC}
+  {$endif HASRAISEEXCEPTOBJPROC}
 {$endif FPC}
 
 {$endif NOEXCEPTIONINTERCEPT}
