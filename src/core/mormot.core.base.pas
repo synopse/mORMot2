@@ -3726,6 +3726,8 @@ type
   TBuffer8K = array[0 .. pred(8 shl 10)] of AnsiChar;
   /// define a buffer of 16KB of data
   TBuffer16K = array[0 .. pred(16 shl 10)] of AnsiChar;
+  /// define a buffer of 32KB of data
+  TBuffer32K = array[0 .. pred(32 shl 10)] of AnsiChar;
   /// define a buffer of 64KB of data
   TBuffer64K = array[word] of AnsiChar;
   /// define a buffer of 128KB of data

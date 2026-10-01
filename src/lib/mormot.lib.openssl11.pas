@@ -2201,6 +2201,7 @@ function SSL_CTX_use_PrivateKey_file(ctx: PSSL_CTX; _file: PUtf8Char;
    typ: integer): integer; cdecl;
 function SSL_CTX_set_cipher_list(ctx: PSSL_CTX; str: PUtf8Char): integer; cdecl;
 function SSL_CTX_set_ciphersuites(ctx: PSSL_CTX; str: PUtf8Char): integer; cdecl;
+function SSL_key_update(s: PSSL; updatetype: integer): integer; cdecl;
 function SSL_set_fd(s: PSSL; fd: integer): integer; cdecl;
 function SSL_get_current_cipher(s: PSSL): PSSL_CIPHER; cdecl;
 function SSL_CIPHER_description(p1: PSSL_CIPHER;
@@ -2211,7 +2212,6 @@ procedure SSL_set_hostflags(s: PSSL; flags: cardinal); cdecl;
 function SSL_load_client_CA_file(_file: PUtf8Char): Pstack_st_X509_NAME; cdecl;
 procedure SSL_CTX_set_client_CA_list(ctx: PSSL_CTX; list: Pstack_st_X509_NAME); cdecl;
 function SSL_CTX_add_client_CA(ctx: PSSL_CTX; cacert: PX509): integer; cdecl;
-function SSL_key_update(s: PSSL; updatetype: integer): integer; cdecl;
 function SSL_set1_host(s: PSSL; hostname: PUtf8Char): integer; cdecl;
 function SSL_add1_host(s: PSSL; hostname: PUtf8Char): integer; cdecl;
 
@@ -3070,6 +3070,7 @@ type
     SSL_CTX_use_PrivateKey_file: function(ctx: PSSL_CTX; _file: PUtf8Char; typ: integer): integer; cdecl;
     SSL_CTX_set_cipher_list: function(ctx: PSSL_CTX; str: PUtf8Char): integer; cdecl;
     SSL_CTX_set_ciphersuites: function(ctx: PSSL_CTX; str: PUtf8Char): integer; cdecl;
+    SSL_key_update: function(s: PSSL; updatetype: integer): integer; cdecl;
     SSL_set_fd: function(s: PSSL; fd: integer): integer; cdecl;
     SSL_get_current_cipher: function(s: PSSL): PSSL_CIPHER; cdecl;
     SSL_CIPHER_description: function(p1: PSSL_CIPHER; buf: PUtf8Char; size: integer): PUtf8Char; cdecl;
@@ -3078,7 +3079,6 @@ type
     SSL_load_client_CA_file: function(_file: PUtf8Char): Pstack_st_X509_NAME; cdecl;
     SSL_CTX_set_client_CA_list: procedure(ctx: PSSL_CTX; list: Pstack_st_X509_NAME); cdecl;
     SSL_CTX_add_client_CA: function(ctx: PSSL_CTX; cacert: PX509): integer; cdecl;
-    SSL_key_update: function(s: PSSL; updatetype: integer): integer; cdecl;
     SSL_set1_host: function(s: PSSL; hostname: PUtf8Char): integer; cdecl;
     // expected to be the last entry in OpenSslInitialize() below
     SSL_add1_host: function(s: PSSL; hostname: PUtf8Char): integer; cdecl;
@@ -3137,6 +3137,7 @@ const
     'SSL_CTX_use_PrivateKey_file',
     'SSL_CTX_set_cipher_list',
     '?SSL_CTX_set_ciphersuites', // TLS 1.3 specific for recent OpenSSL
+    '?SSL_key_update',           // TLS 1.3 specific for recent OpenSSL
     'SSL_set_fd',
     'SSL_get_current_cipher',
     'SSL_CIPHER_description',
@@ -3145,7 +3146,6 @@ const
     'SSL_load_client_CA_file',
     'SSL_CTX_set_client_CA_list',
     'SSL_CTX_add_client_CA',
-    '?SSL_key_update',
     'SSL_set1_host',
     'SSL_add1_host',
     nil);
@@ -3426,6 +3426,14 @@ begin
     result := OPENSSLSUCCESS; // OpenSSL 1.1.0 has no TLS 1.3 anyway
 end;
 
+function SSL_key_update(s: PSSL; updatetype: integer): integer;
+begin
+  if Assigned(libssl.SSL_key_update) then
+    result := libssl.SSL_key_update(s, updatetype)
+  else
+    result := OPENSSLSUCCESS; // OpenSSL 1.1.0 has no TLS 1.3 anyway
+end;
+
 function SSL_set_fd(s: PSSL; fd: integer): integer;
 begin
   result := libssl.SSL_set_fd(s, fd);
@@ -3464,11 +3472,6 @@ end;
 function SSL_CTX_add_client_CA(ctx: PSSL_CTX; cacert: PX509): integer;
 begin
   result := libssl.SSL_CTX_add_client_CA(ctx, cacert);
-end;
-
-function SSL_key_update(s: PSSL; updatetype: integer): integer;
-begin
-  result := libssl.SSL_key_update(s, updatetype);
 end;
 
 function SSL_set1_host(s: PSSL; hostname: PUtf8Char): integer;

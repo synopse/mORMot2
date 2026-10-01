@@ -7117,16 +7117,20 @@ var
   tls: TNetTlsContext;
   keyfile: TFileName;
   request, reply: RawByteString;
-  len, pos, todo: integer;
+  len, pos: integer;
+  updated: boolean;
+  ssl: PSSL;
   net: TNetResult;
+  log: ISynLog;
 begin
+  TSynLog.EnterLocal(log, 'OpenSslClient %', [Port], self);
   result := false;
   fClientError := '';
   socket := nil;
   keyfile := '';
   try
     if NewTcpClientSocket('127.0.0.1', Port, 5000, socket) <> nrOK then
-      raise Exception.Create('unable to connect the focused mTLS client');
+      raise ESynException.Create('unable to connect the focused mTLS client');
     InitNetTlsContext(tls);
     tls.IgnoreCertificateErrors := true; // the test server identity is private
     tls.DisableTls13 := stfDisableTls13 in Flags;
@@ -7136,7 +7140,7 @@ begin
       keyfile := MakeString([Test.WorkDir, 'schannel-mtls-client-', Port, '.pem']);
       if not FileFromString(
           Certificate.Save(cccPrivateKeyOnly, '', ccfPem), keyfile) then
-        raise Exception.Create('unable to save the focused mTLS client key');
+        raise ESynException.Create('unable to save the focused mTLS client key');
       tls.PrivateKeyFile := StringToUtf8(keyfile);
     end;
     secure := NewOpenSslNetTls;
@@ -7150,33 +7154,43 @@ begin
         'Connection: close'#13#10#13#10])
     else
       request := 'GET / HTTP/1.0'#13#10'Host: localhost'#13#10#13#10;
+    if Assigned(log) then
+      log.Log(sllDebug, 'OpenSslClient: Afterconnection cipher=% request=%',
+        [tls.CipherName, request], self);
     len := length(request);
     net := secure.Send(pointer(request), len);
     if (net <> nrOK) or
        (len <> length(request)) then
-      raise Exception.Create(
-        'mTLS client could not send HTTP headers');
+      raise ESynException.Create('mTLS client could not send HTTP headers');
     if stfHugeContent in Flags then
     begin
+      updated := false;
       pos := 1;
       while pos <= length(Body) do
       begin
-        todo := length(Body) - pos + 1;
-        // feliberately don't send huge chunks
-        if todo > 32749 then
-          todo := 32749;
-        len := todo;
+        len := MinPtrInt(32749, length(Body) - pos + 1);     // per 32KB chunk
         net := secure.Send(@PByteArray(Body)[pos - 1], len);
         if net = nrRetry then
           continue;
         if net <> nrOK then
-          raise Exception.CreateFmt(
-            'huge TLS send failed at %d', [pos]);
-        if len <= 0 then
-          raise Exception.Create(
-            'huge TLS send made no progress');
+          raise ESynException.CreateUtf8(
+            'huge TLS send failed % at %', [ToText(net)^, pos]);
+        if len <= 0 then // typical Send() len = 16384
+          raise ESynException.Create('huge TLS send made no progress');
         inc(pos, len);
+        if (stfKeyUpdate in Flags) and
+           not updated and
+           (pos > length(body) shr 1) then
+        begin
+          ssl := secure.GetRawTls;
+          if Test.Check(ssl <> nil, 'OpenSSL raw TLS') then
+            Test.CheckEqual(
+              SSL_key_update(ssl, SSL_KEY_UPDATE_REQUESTED), OPENSSLSUCCESS,
+              'SSL_key_update');
+          updated := true;
+        end;
       end;
+      Test.Check((stfKeyUpdate in Flags) = updated, 'missing SSL_key_update');
     end;
     SetLength(reply, 4096);
     len := length(reply);
@@ -7184,6 +7198,8 @@ begin
     SetLength(reply, len);
     result := (net = nrOK) and
               (PosEx('HTTP/', reply) = 1);
+    if Assigned(log) then
+      log.Log(sllDebug, 'OpenSslClient Receive: reply=%', [reply], self);
     if not result then
       fClientError := FormatUtf8('mTLS server closed the connection (% %)',
         [ToText(net)^, tls.LastError])
@@ -7317,6 +7333,11 @@ begin
     if keyfile <> '' then
       DeleteFile(keyfile);
     connected := OpenSslClient(Port, Client);
+    if Assigned(log) then
+      log.Log(sllDebug, 'Execute: connected=% fEachCount=% fAfterCount=% ' +
+        'fAfterUseful=% fEachCount=% fEachInvalid=%',
+        [ord(connected), fEachCount, fAfterCount,
+         fAfterUseful, fEachCount, fEachInvalid], self);
     Test.CheckUtf8(connected = (stfExpected in Flags), 'connected=% expected=% [%]',
       [ord(connected), ord(stfExpected in Flags), fClientError]);
     if (stfCallbacks in Flags) and
@@ -7407,7 +7428,7 @@ begin
   Check(unknown <> nil, 'unknown');
   Check(expired <> nil, 'expired');
   Check(wrongusage <> nil, 'wrongusage');
-  body := RandomWinAnsi(16 shl 20); // 16 MB seems fair enough
+  RandomByteString(16 shl 20 + 7777, body); // 16 MB seems fair enough
   expectedHash := crc32cHash(body);
   // -------- first pass using SChannel on server side
   previous := NewNetTls;
@@ -7449,8 +7470,12 @@ begin
       [stfExpected, stfHugeContent, stfDisableTls13]);
     // same with TLS 1.3 where supported
     if OSVersion >= wEleven then
+    begin
       RunCase('19004', sttFile, server, ca, valid,
         [stfExpected, stfHugeContent]);
+      RunCase('19005', sttFile, server, ca, valid,
+        [stfExpected, stfHugeContent, stfKeyUpdate]);
+    end;
     RunWait;
     // -------- second pass using OpenSSL on server side
     NewNetTls := NewOpenSslNetTls;
