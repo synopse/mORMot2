@@ -579,6 +579,7 @@
       http://blog.synopse.info/post/2011/01/29/record-and-object-issue-in-Delphi-2010 }
     {$define UNDIRECTDYNARRAY}
     {$define HASTTHREADFINISHED}    // Delphi 2009 introduced TThread.Finished
+    {$define HASRAISEEXCEPTOBJPROC} // Delphi 2009+ RaiseExceptObjProc() global
   {$else}
     {$define HASNOSTATICRTTI}        // Delphi 7/2007 has no TypeInfo(TGuid)
   {$endif UNICODE}
@@ -826,7 +827,6 @@
   {$else}
     {$define POSIXDELPHI}
     {$define NOASMBLOCK}             // no "asm" block support by LLVM compilers
-    {$define NOEXCEPTIONINTERCEPT}   // TODO: interception for Delphi POSIX
     {$ifdef CPUX64}
       {$define DISPINVOKE_SYSVAMD64} // use SysV AMD64 va_list layout
     {$endif CPUX64}

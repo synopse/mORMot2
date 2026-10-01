@@ -1656,11 +1656,16 @@ end;
 {$ifndef NOEXCEPTIONINTERCEPT}
 
 var
+  // RaiseProc/RaiseExceptObjProc redirection in the main mormot.core.os.pas
   _RawLogException: TOnRawLogException;
 
-// FPC: intercept via the RaiseProc global variable; Delphi: nothing yet
-{$define WITH_RAISEPROC}
-// RaiseProc redirection is implemented in the main mormot.core.os.pas
+{$ifdef FPC}
+  // FPC: intercept via the RaiseProc global variable
+  {$define WITH_RAISEPROC}
+{$else}
+  // Delphi POSIX: intercept via the RaiseExceptObjProc global variable
+  {$define WITH_RAISEEXCEPTOBJPROC}
+{$endif FPC}
 
 {$endif NOEXCEPTIONINTERCEPT}
 
