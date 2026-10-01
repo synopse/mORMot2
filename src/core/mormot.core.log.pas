@@ -7481,7 +7481,7 @@ begin
     if DefaultSynLogExceptionToStr(log.fWriter, Ctxt, {addinfo=}true) then
       goto fin;
 adr:// regular exception context log with its stack trace
-    log.fWriter.AddDirect(' ', '['); // [#1 Main]
+    log.fWriter.AddShort(' ['); // [#1 Main] with safe AddDirect() calls
     n := nfo^.ThreadNumber;
     if n <> 0 then
     begin
@@ -7493,9 +7493,14 @@ adr:// regular exception context log with its stack trace
       log.fWriter.AddDirect(' ');
       log.fWriter.AddShort(thrdnam^); // fThreadContext^.ThreadName may be ''
     end;
-    log.fWriter.AddShorter('] at ');
-    log.fWriter.AddPointer(Ctxt.EAddr);
-    log.fWriter.AddDirect(' ');
+    if Ctxt.EAddr = 0 then            // may happen e.g. with Delphi LLVM
+      log.fWriter.AddDirect(']', ' ')
+    else
+    begin
+      log.fWriter.AddShorter('] at ');
+      log.fWriter.AddPointer(Ctxt.EAddr);
+      log.fWriter.AddDirect(' ');
+    end;
     try
       DebugFileCurrent.AddLog(log.fWriter, Ctxt.EAddr, {nohex=}true);
       for i := 0 to framescount - 1 do // append pre-computed stack trace
