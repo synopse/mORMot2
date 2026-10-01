@@ -342,6 +342,7 @@ var
   end;
 
 begin
+  exit;
   if (OSVersion < wEight) or // websocket.dll is only available since Windows 8
      (wsWine in WindowsSpecs) then // Wine only implements some minimal stubs
     exit;
