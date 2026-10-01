@@ -941,8 +941,6 @@ var
 begin
   if self = nil then
     exit;
-  if fHandshakeEvent <> nil then
-    fHandshakeEvent.SetEvent; // release a possible WaitForHandshake()
   fLogClass.EnterLocal(log, 'ClosePort %', [fPort], self);
   fSendSafe.Lock; // protect fHandshake+fThread
   try
@@ -981,7 +979,9 @@ begin
   if Assigned(log) then
     log.Log(sllTrace, 'ClosePort: %', [self]); // final statistics
   fPort := 0;
-  fClosed := true;
+  fClosed := true; // before SetEvent
+  if fHandshakeEvent <> nil then
+    fHandshakeEvent.SetEvent; // release a possible WaitForHandshake()
 end;
 
 procedure TTunnelLocal.TunnelSend(const aFrame: RawByteString);
@@ -1006,9 +1006,9 @@ begin
       begin
         // received frame with only session (and no payload) to notify as closed
         include(fFlags, fClosePortNotified);
+        fClosed := true; // before SetEvent
         if fHandshakeEvent <> nil then
           fHandshakeEvent.SetEvent;
-        fClosed := true;
         exit;
       end;
       fLogClass.Add.Log(sllTrace, 'TunnelSend: into Handshake queue', self);
