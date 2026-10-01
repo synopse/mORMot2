@@ -2876,6 +2876,17 @@ type
   /// all CPU features flags, as retrieved from an Intel/AMD CPU
   TIntelCpuFeatures = set of TIntelCpuFeature;
 
+const
+  /// all AVX-512 CPUID flags, as filtered into the IntelAvx512 variable
+  CPUAVX512FEATURES = [cfAVX512F, cfAVX512DQ, cfAVX512IFMA, cfAVX512PF, cfAVX512ER,
+    cfAVX512CD, cfAVX512BW, cfAVX512VL, cfAVX512VBMI, cfAVX512VBMI2,
+    cfAVX512NNI, cfAVX512BITALG, cfAVX512VPC, cfAVX512NNIW, cfAVX512MAPS,
+    cfAVX512VP2I, cfAVX512FP16, cfAVX512BF16];
+  /// the AVX-512 subset expected by x86-64-v4, i.e. Skylake-X/Zen4 level
+  CPUAVX512X64V4 = [cfAVX512F, cfAVX512BW, cfAVX512CD, cfAVX512DQ, cfAVX512VL];
+
+type
+
   /// recognize the main Intel/AMD CPU manufacturers
   TIntelCpuManufacturer = (icmOther, icmIntel, icmAmd);
 
@@ -2962,6 +2973,13 @@ function HasHWAes: boolean;
 var
   /// the available Intel/AMD CPU features retrieved using CPUID
   CpuFeatures: TIntelCpuFeatures;
+  /// the AVX-512 features of this CPU which can actually be used
+  // - CpuFeatures reflects the raw CPUID bits, so AVX-512 flags may be set even
+  // if the OS does not save the opmask/ZMM registers at context switch (e.g.
+  // on old Windows or within some VMs) - this also checks XCR0 via XGETBV
+  // - contains CpuFeatures * CPUAVX512FEATURES, or [] if not enabled by the OS
+  // - e.g. CPUAVX512X64V4 - IntelAvx512 = [] identifies x86-64-v4 support
+  IntelAvx512: TIntelCpuFeatures;
 
   // additional low-level Intel/AMD CPU information retrieved using CPUID
   CpuManufacturer: TIntelCpuManufacturer;
@@ -3116,8 +3134,9 @@ type
   // - cpuHaswell identifies Intel/AMD AVX2+BMI support at Haswell level
   // as expected e.g. by IsValidUtf8Avx2/Base64EncodeAvx2 dedicated asm
   // - won't include ERMSB flag because it is not propagated within some VMs
+  // - cpuAVX512 identifies x86-64-v4 AVX-512 support, also enabled by the OS
   TX64CpuFeatures = set of (
-    cpuAVX, cpuAVX2, cpuHaswell);
+    cpuAVX, cpuAVX2, cpuHaswell, cpuAVX512);
 
 var
   /// internal flags used by FillCharFast - easier from asm that CpuFeatures
@@ -10974,6 +10993,12 @@ begin
      not IsXmmYmmOSEnabled then
     // AVX is available on the CPU, but not supported at OS context switch
     CpuFeatures := CpuFeatures - [cfAVX, cfAVX2, cfAVX10, cfFMA];
+  IntelAvx512 := CpuFeatures * CPUAVX512FEATURES;
+  if (IntelAvx512 <> []) and
+     not ((cfOSXS in CpuFeatures) and
+          IsZmmOSEnabled) then // XGETBV is only valid with OSXSAVE
+    // AVX-512 is available on the CPU, but opmask/ZMM are not saved by the OS
+    IntelAvx512 := [];
   if cfSSE42 in CpuFeatures then
     try
       if crc32cby4sse42(0, 1) <> 3712330424 then
@@ -10999,6 +11024,8 @@ begin
       include(X64CpuFeatures, cpuAVX2);
     if CpuFeatures * CPUAVX2HASWELL = CPUAVX2HASWELL then
       include(X64CpuFeatures, cpuHaswell);
+    if IntelAvx512 * CPUAVX512X64V4 = CPUAVX512X64V4 then
+      include(X64CpuFeatures, cpuAVX512);
   end;
   {$endif ASMX64NOTPIC}
   // redirect some CPU-aware functions

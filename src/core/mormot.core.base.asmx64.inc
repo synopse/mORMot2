@@ -4386,6 +4386,16 @@ function IsXmmYmmOSEnabled: boolean;
         sete    al        // true if OS enabled both XMM and YMM
 end;
 
+function IsZmmOSEnabled: boolean;
+{$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
+// AVX-512 requires the OS to save opmask and ZMM registers at context switch
+        xor     ecx, ecx  // specify control register XCR0=XFEATURE_ENABLED_MASK
+        db $0f, $01, $d0  // XGETBV opcode reads XCR0 into EDX:EAX
+        and     eax, $e6
+        cmp     al, $e6   // XMM+YMM (bits 1-2) + opmask/ZMM_Hi256/Hi16_ZMM (5-7)
+        sete    al        // true if OS enabled the whole AVX-512 state
+end;
+
 procedure _GetCpuid(cpueax, cpuecx: cardinal; var regs: TIntelRegisters);
 {$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
         mov     eax, cpueax
