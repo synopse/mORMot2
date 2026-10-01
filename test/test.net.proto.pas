@@ -336,8 +336,8 @@ var
     finally
       ResetSystemEnv(CHILD_ENV);
     end;
-    CheckEqual(exitcode, 0, RawUtf8(output));
-    CheckUtf8(PosEx('All tests passed successfully', RawUtf8(output)) <> 0,
+    CheckEqual(exitcode, 0, output);
+    CheckUtf8(PosEx('All tests passed successfully', output) <> 0,
       ChildMode + ' WebSocket API test did not complete');
   end;
 
@@ -6426,7 +6426,7 @@ begin
     mptext := RandomIdentifier(20000);  // 20000 bytes of content
     CheckEqual(length(mptext), 20000);
     Check(MultiPartFormDataAddField('field', mptext, mpa), 'mp add');
-    Check(MultiPartFormDataEncode(mpa, mpct, RawUtf8(mp)), 'mp encode');
+    Check(MultiPartFormDataEncode(mpa, mpct, mp), 'mp encode');
     for fam := 0 to 1 do
     begin
       // validate both socket server families with the very same steps
@@ -7032,7 +7032,7 @@ type
 
   TSChannelTestFlags = set of (
    stfExpected, stfCallbacks, stfRejectEach, stfDisableTls13, stfOneWayTls,
-   stfOpenSslServer, stfEachInvalid);
+   stfOpenSslServer, stfEachInvalid, stfHugeContent, stfKeyUpdate);
 
   TRunCase = class
   public
@@ -7046,15 +7046,20 @@ type
     fEachInvalid: integer;
     fAfterCount: integer;
     fAfterUseful: integer;
+    fHugeHash: cardinal;
+    fHugeLength: integer;
     fClientError: RawUtf8;
+    Body: RawByteString;
+    ExpectedHash: cardinal;
     class procedure DoRunCase(Sender: TObject);
     procedure Execute;
     function OnEachCertificate(Socket: TNetSocket;
       Context: PNetTlsContext; WasOk: boolean; TLS, Peer: pointer): boolean;
     procedure OnAfterCertificate(Socket: TNetSocket;
       Context: PNetTlsContext; TLS, Peer: pointer);
+    function DoHugeRequest(Ctxt: THttpServerRequestAbstract): cardinal;
     function OpenSslClient(const Port: RawUtf8;
-      const Certificate: ICryptCert; DisableTls13: boolean): boolean;
+      const Certificate: ICryptCert): boolean;
   end;
 
 function TRunCase.OnEachCertificate(Socket: TNetSocket;
@@ -7091,17 +7096,28 @@ begin
     LockedInc32(@fAfterUseful);
 end;
 
+function TRunCase.DoHugeRequest(Ctxt: THttpServerRequestAbstract): cardinal;
+begin
+  result := HTTP_SUCCESS;
+  if Ctxt.Url <> '/huge' then
+  begin
+    Ctxt.OutContent := 'ok';
+    exit;
+  end;
+  fHugeLength := length(Ctxt.InContent);
+  fHugeHash := crc32cHash(Ctxt.InContent);
+  Ctxt.OutContent := Make(['ok ', fHugeLength, ' ', CardinalToHexShort(fHugeHash)]);
+end;
+
 function TRunCase.OpenSslClient(const Port: RawUtf8;
-  const Certificate: ICryptCert; DisableTls13: boolean): boolean;
-const
-  REQUEST: RawUtf8 = 'GET / HTTP/1.0'#13#10'Host: localhost'#13#10#13#10;
+  const Certificate: ICryptCert): boolean;
 var
   socket: TNetSocket;
   secure: INetTls;
   tls: TNetTlsContext;
   keyfile: TFileName;
-  reply: RawByteString;
-  len: integer;
+  request, reply: RawByteString;
+  len, pos, todo: integer;
   net: TNetResult;
 begin
   result := false;
@@ -7113,7 +7129,7 @@ begin
       raise Exception.Create('unable to connect the focused mTLS client');
     InitNetTlsContext(tls);
     tls.IgnoreCertificateErrors := true; // the test server identity is private
-    tls.DisableTls13 := DisableTls13;
+    tls.DisableTls13 := stfDisableTls13 in Flags;
     if Certificate <> nil then
     begin
       tls.CertificateBin := Certificate.Save(cccCertOnly, '', ccfPem);
@@ -7125,20 +7141,57 @@ begin
     end;
     secure := NewOpenSslNetTls;
     secure.AfterConnection(socket, tls, 'localhost');
-    len := length(REQUEST);
-    net := secure.Send(pointer(REQUEST), len);
+    if stfHugeContent in Flags then
+      request := Make([
+        'POST /huge HTTP/1.1'#13#10 +
+        'Host: localhost'#13#10 +
+        'Content-Type: application/octet-stream'#13#10 +
+        'Content-Length: ', length(Body), #13#10 +
+        'Connection: close'#13#10#13#10])
+    else
+      request := 'GET / HTTP/1.0'#13#10'Host: localhost'#13#10#13#10;
+    len := length(request);
+    net := secure.Send(pointer(request), len);
     if (net <> nrOK) or
-       (len <> length(REQUEST)) then
-      raise Exception.Create('mTLS client could not send its HTTP request');
+       (len <> length(request)) then
+      raise Exception.Create(
+        'mTLS client could not send HTTP headers');
+    if stfHugeContent in Flags then
+    begin
+      pos := 1;
+      while pos <= length(Body) do
+      begin
+        todo := length(Body) - pos + 1;
+        // feliberately don't send huge chunks
+        if todo > 32749 then
+          todo := 32749;
+        len := todo;
+        net := secure.Send(@PByteArray(Body)[pos - 1], len);
+        if net = nrRetry then
+          continue;
+        if net <> nrOK then
+          raise Exception.CreateFmt(
+            'huge TLS send failed at %d', [pos]);
+        if len <= 0 then
+          raise Exception.Create(
+            'huge TLS send made no progress');
+        inc(pos, len);
+      end;
+    end;
     SetLength(reply, 4096);
     len := length(reply);
     net := secure.Receive(pointer(reply), len);
     SetLength(reply, len);
     result := (net = nrOK) and
-              (PosEx('HTTP/', RawUtf8(reply)) = 1);
+              (PosEx('HTTP/', reply) = 1);
     if not result then
       fClientError := FormatUtf8('mTLS server closed the connection (% %)',
-        [ToText(net)^, tls.LastError]);
+        [ToText(net)^, tls.LastError])
+    else if stfHugeContent in Flags then
+    begin
+      Test.CheckEqual(fHugeLength, length(Body), 'SChannel huge length');
+      Test.CheckEqual(fHugeHash, ExpectedHash, 'SChannel huge hash');
+    end;
   except
     on E: Exception do
       Make([E, ': ', E.Message], fClientError);
@@ -7246,6 +7299,12 @@ begin
       Test.Check(tls.CASystemStores = [],
         'unexpected CASystemStores');
     end;
+    if stfHugeContent in Flags then
+     begin
+       http.OnRequest := DoHugeRequest;
+       // otherwise the default maximum body size may interfere
+       http.MaximumAllowedContentLength := length(Body) * 2;
+     end;
     http.WaitStarted(10, @tls);
     // AfterBind owns independent references/copies of all custom trust input.
     if raw <> nil then
@@ -7257,7 +7316,7 @@ begin
       DeleteFile(cafile);
     if keyfile <> '' then
       DeleteFile(keyfile);
-    connected := OpenSslClient(Port, Client, stfDisableTls13 in Flags);
+    connected := OpenSslClient(Port, Client);
     Test.CheckUtf8(connected = (stfExpected in Flags), 'connected=% expected=% [%]',
       [ord(connected), ord(stfExpected in Flags), fClientError]);
     if (stfCallbacks in Flags) and
@@ -7287,6 +7346,9 @@ begin
 end;
 
 procedure TNetworkProtocols._SChannel;
+var
+  body: RawByteString; // reuse the same 16MB random content
+  expectedHash: cardinal;
 
   procedure RunCase(const Port: RawUtf8; Trust: TSChannelTestTrust;
     const Server, Authority, Client: ICryptCert; Flags: TSChannelTestFlags = []);
@@ -7301,6 +7363,8 @@ procedure TNetworkProtocols._SChannel;
     c.Authority := Authority;
     c.Client := Client;
     c.Flags := Flags;
+    c.Body := body;
+    c.ExpectedHash := expectedHash;
     Run(TRunCase.DoRunCase, c, Port);
   end;
 
@@ -7343,6 +7407,9 @@ begin
   Check(unknown <> nil, 'unknown');
   Check(expired <> nil, 'expired');
   Check(wrongusage <> nil, 'wrongusage');
+  body := RandomWinAnsi(16 shl 20); // 16 MB seems fair enough
+  expectedHash := crc32cHash(body);
+  // -------- first pass using SChannel on server side
   previous := NewNetTls;
   NewNetTls := NewSChannelNetTls; // server under test; client is explicit OpenSSL
   try
@@ -7377,35 +7444,45 @@ begin
     // existing one-way SChannel HTTPS behavior must remain unchanged
     RunCase('19002', sttFile, server, ca, nil,
       [stfExpected, stfOneWayTls]);
+    // validate many TLS records in each direction over TLS 1.2
+    RunCase('19003', sttFile, server, ca, valid,
+      [stfExpected, stfHugeContent, stfDisableTls13]);
+    // same with TLS 1.3 where supported
+    if OSVersion >= wEleven then
+      RunCase('19004', sttFile, server, ca, valid,
+        [stfExpected, stfHugeContent]);
     RunWait;
-    // the same callbacks and context fields should work with OpenSSL server
+    // -------- second pass using OpenSSL on server side
     NewNetTls := NewOpenSslNetTls;
     // accept a valid client certificate from the configured CA
-    RunCase('19003', sttFile, server, ca, valid,
+    RunCase('19010', sttFile, server, ca, valid,
       [stfExpected, stfCallbacks, stfOpenSslServer]);
     // CASystemStores integration test with OpenSSL
     store := TWinCertStore.Create(scsRoot);
     try
       if store.Next then
-        RunCase('19004', sttSystem, server, ca, valid,
+        RunCase('19011', sttSystem, server, ca, valid,
           [stfOpenSslServer])
       else
-        AddConsole('empty current-user ROOT store: skip 19004');
+        AddConsole('empty current-user ROOT store: skip 19011');
     finally
       store.Free;
     end;
     // missing client certificate must be rejected by OpenSSL
-    RunCase('19005', sttFile, server, ca, nil,
+    RunCase('19012', sttFile, server, ca, nil,
       [stfOpenSslServer]);
     // an OpenSSL callback must be able to reject an otherwise valid certificate
-    RunCase('19006', sttFile, server, ca, valid,
+    RunCase('19013', sttFile, server, ca, valid,
       [stfCallbacks, stfRejectEach, stfOpenSslServer]);
     // an OpenSSL callback may override an expired-certificate error
-    RunCase('19007', sttFile, server, ca, expired,
+    RunCase('19014', sttFile, server, ca, expired,
       [stfExpected, stfCallbacks, stfOpenSslServer, stfEachInvalid]);
     // existing one-way OpenSSL HTTPS behavior must remain unchanged
-    RunCase('19008', sttFile, server, ca, nil,
+    RunCase('19015', sttFile, server, ca, nil,
       [stfExpected, stfOneWayTls, stfOpenSslServer]);
+    // validate many TLS records in each direction over OpenSSL
+    RunCase('19016', sttFile, server, ca, valid,
+      [stfExpected, stfHugeContent]);
     RunWait;
   finally
     NewNetTls := previous;
