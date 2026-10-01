@@ -2218,7 +2218,8 @@ type
     procedure WaitRawRetry(const ctx: ShortString; events: TNetEvents;
       var endtix: Int64; timeout: integer);
     function SendOutput: TNetResult;
-    procedure SendRawAll(const ctx: ShortString; buf: PByte; len, timeout: integer);
+    function SendRawAll(const ctx: ShortString; buf: PByte;
+      len, timeout: integer): TNetResult;
     function RecvRaw(const ctx: ShortString; buf: PByte; len: integer): integer;
     function HandshakeStep(buf: PByteArray; var len: integer): cardinal;
     procedure HandshakeLoop(NeedRecv: boolean = true);
@@ -2714,12 +2715,13 @@ begin
   fOutputPos := 0;
 end;
 
-procedure TSChannelNetTls.SendRawAll(const ctx: ShortString;
-  buf: PByte; len, timeout: integer);
+function TSChannelNetTls.SendRawAll(const ctx: ShortString;
+  buf: PByte; len, timeout: integer): TNetResult;
 var
   sent, err: integer;
   endtix: Int64;
 begin
+  result := nrInvalidParameter;
   if buf = nil then
     exit;
   endtix := 0;
@@ -2734,16 +2736,23 @@ begin
     end;
     if sent = 0 then
       raise ESChannel.CreateFmt('%s: connection closed', [ctx]);
-    if NetLastError(NO_ERROR, @err) <> nrRetry then
-      raise ESChannel.CreateFmt('%s: Socket Error %s',
-        [ctx, WinErrorShort(err)]);
-    WaitRawRetry(ctx, [neWrite, neError], endtix, timeout); // asynch socket
+    result := NetLastError(NO_ERROR, @err);
+    case result of
+      nrRetry:
+        WaitRawRetry(ctx, [neWrite, neError], endtix, timeout); // asynch socket
+      nrClosed:
+        exit;
+    else
+      raise ESChannel.CreateFmt('%s: %s %s', [ctx, _NR[result], WinErrorShort(err)]);
+    end;
   end;
+  result := nrOk;
 end;
 
 function TSChannelNetTls.RecvRaw(const ctx: ShortString;
   buf: PByte; len: integer): integer;
 var
+  res: TNetResult;
   err: integer;
   endtix: Int64;
 begin
@@ -2754,9 +2763,9 @@ begin
       exit;
     if result = 0 then
       raise ESChannel.CreateFmt('%s: connection closed', [ctx]);
-    if NetLastError(NO_ERROR, @err) <> nrRetry then
-      raise ESChannel.CreateFmt('%s: Socket Error %s',
-        [ctx, WinErrorShort(err)]);
+    res := NetLastError(NO_ERROR, @err);
+    if res <> nrRetry then
+      raise ESChannel.CreateFmt('%s: %s %s', [ctx, _NR[res], WinErrorShort(err)]);
     WaitRawRetry(ctx, [neRead, neError], endtix, 5000); // asynchronous socket
   until false;
 end;
@@ -2854,7 +2863,7 @@ procedure TSChannelNetTls.AfterConnection(Socket: TNetSocket;
   var Context: TNetTlsContext; const ServerAddress: RawUtf8);
 var
   cred: TSChannelCred;
-  buf: THandshakeBuf;
+  b: THandshakeBuf;
   res, f: cardinal;
 begin
   // reset output information
@@ -2876,22 +2885,24 @@ begin
       nil, @cred, nil, nil, @fCred, nil));
   fFlags := ISC_REQ_FLAGS;
   // initiate a ClientHello TLS message and a new fCtxt
-  HandshakeBufInit(buf);
+  HandshakeBufInit(b);
   try
     res := InitializeSecurityContextW(
       @fCred, nil, pointer(fServerAddressW), fFlags, 0, 0,
-      nil, 0, @fCtxt, @buf.output, f, nil);
+      nil, 0, @fCtxt, @b.output, f, nil);
     res := CompleteHandshakeToken(
-      'AfterConnection CompleteAuthToken', res, @buf.output);
+      'AfterConnection CompleteAuthToken', res, @b.output);
     if res <> SEC_I_CONTINUE_NEEDED then
       ESChannelRaiseError('InitializeSecurityContextW', res);
-    if (buf.buf[2].cbBuffer = 0) or // SECBUFFER_TOKEN
-       (buf.buf[2].pvBuffer = nil) then
-      raise ESChannel.CreateFmt('Void Hello answer to %s', [ServerAddress]);
-    SendRawAll('AfterConnection send',
-      buf.buf[2].pvBuffer, buf.buf[2].cbBuffer, {timeoutms=}5000);
+    if (b.buf[2].cbBuffer = 0) or // SECBUFFER_TOKEN
+       (b.buf[2].pvBuffer = nil) then
+      raise ESChannel.CreateFmt(
+        'AfterConnection: void Hello answer for %s', [ServerAddress]);
+    if SendRawAll('AfterConnection send',
+         b.buf[2].pvBuffer, b.buf[2].cbBuffer, {timeoutms=}5000) <> nrOk then
+      raise ESChannel.Create('AfterConnection: connection closed');
   finally
-    HandshakeBufFree(buf);
+    HandshakeBufFree(b);
   end;
   // make initial TLS handshake and prepare for process
   HandshakeLoop;
@@ -3022,8 +3033,9 @@ begin
     // An output token may be generated even together with SEC_E_OK
     if (b.buf[2].pvBuffer <> nil) and
        (b.buf[2].cbBuffer <> 0) then
-      SendRawAll('HandshakeStep send',
-        b.buf[2].pvBuffer, b.buf[2].cbBuffer, {timeoutms=}5000);
+      if SendRawAll('HandshakeStep send',
+           b.buf[2].pvBuffer, b.buf[2].cbBuffer, {timeoutms=}5000) <> nrOk then
+        raise ESChannel.Create('HandshakeStep: connection closed');
   finally
     HandshakeBufFree(b);
   end;

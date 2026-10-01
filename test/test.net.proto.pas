@@ -7465,14 +7465,16 @@ begin
     // existing one-way SChannel HTTPS behavior must remain unchanged
     RunCase('19002', sttFile, server, ca, nil,
       [stfExpected, stfOneWayTls]);
-    // validate many TLS records in each direction over TLS 1.2
+    // validate many TLS records (huge POST) over TLS 1.2
     RunCase('19003', sttFile, server, ca, valid,
       [stfExpected, stfHugeContent, stfDisableTls13]);
     // same with TLS 1.3 where supported
     if OSVersion >= wEleven then
     begin
+      // validate huge POST over SChannel TLS 1.3
       RunCase('19004', sttFile, server, ca, valid,
         [stfExpected, stfHugeContent]);
+      // trigger TLS 1.3 renegotiation from client side
       RunCase('19005', sttFile, server, ca, valid,
         [stfExpected, stfHugeContent, stfKeyUpdate]);
     end;
@@ -7505,9 +7507,12 @@ begin
     // existing one-way OpenSSL HTTPS behavior must remain unchanged
     RunCase('19015', sttFile, server, ca, nil,
       [stfExpected, stfOneWayTls, stfOpenSslServer]);
-    // validate many TLS records in each direction over OpenSSL
+    // validate huge POST over OpenSSL
     RunCase('19016', sttFile, server, ca, valid,
       [stfExpected, stfHugeContent]);
+    // trigger TLS 1.3 renegotiation from client side
+    RunCase('19017', sttFile, server, ca, valid,
+      [stfExpected, stfHugeContent, stfKeyUpdate]);
     RunWait;
   finally
     NewNetTls := previous;

@@ -2603,6 +2603,9 @@ begin
       result := nrRefused;
     {$ifdef OSPOSIX}
     ESysEPIPE,
+    {$else}
+    WSAENOTCONN,
+    WSAESHUTDOWN,
     {$endif OSPOSIX}
     WSAECONNRESET,
     WSAECONNABORTED:
