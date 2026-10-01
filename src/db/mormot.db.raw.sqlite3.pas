@@ -5581,6 +5581,11 @@ var
 
 implementation
 
+{$ifdef ISDELPHI}
+{$ifdef ANDROID}
+uses AndroidAPI.IOUtils;
+{$endif ANDROID}
+{$endif ISDELPHI}
 
 { ************ Raw SQLite3 API Constants and Functions }
 
@@ -6226,9 +6231,17 @@ var
   vers: PUtf8Char;
 begin
   fLoader := TSynLibrary.Create;
+  l1 := LibraryName;
   if LibraryName = SQLITE_LIBRARY_DEFAULT_NAME then
+  begin
+    {$if defined(ANDROID) and defined(ISDELPHI)}
+    // Android native libraries are not stored in the writable files folder.
+    l1 := IncludeTrailingPathDelimiter(GetLibraryPath) + LibraryName;
+    {$else}
     // first search for the standard library in the executable folder
     l1 := Executable.ProgramFilePath + LibraryName;
+    {$ifend}
+  end;
   try
     // try to load the SQLite3 library, raising ESqlite3Exception if missing
     fLoader.TryLoadLibrary([{%H-}l1, LibraryName], ESqlite3Exception);
@@ -6267,6 +6280,11 @@ begin
       '%.Create: TOO OLD % % - need 3.7 at least', [self, LibraryName, vers]);
   end;
   BeforeInitialization;
+  {$ifdef OSANDROID}
+  // Initialize the Android C runtime backend before any allocation or DB use.
+  if initialize() <> SQLITE_OK then
+    ESqlite3Exception.RaiseUtf8('%.Create: sqlite3_initialize failed', [self]);
+  {$endif OSANDROID}
   inherited Create; // set fVersionNumber/fVersionText
   SQLite3Log.Add.Log(sllInfo,
     'Loaded external % version %', [LibraryName, Version]);
