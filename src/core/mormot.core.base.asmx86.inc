@@ -2587,6 +2587,16 @@ asm // see https://software.intel.com/en-us/blogs/2011/04/14/is-avx-enabled
         sete    al
 end;
 
+function IsZmmOSEnabled: boolean;
+{$ifdef FPC}nostackframe; assembler;{$endif}
+asm // AVX-512 requires the OS to save opmask and ZMM registers
+        xor     ecx, ecx  // get control register XCR0 = XFEATURE_ENABLED_MASK
+        db  $0f, $01, $d0 // XGETBV reads XCR0 into EDX:EAX
+        and     eax, $e6  // XMM+YMM (bits 1-2) + opmask/ZMM_Hi256/Hi16_ZMM (5-7)
+        cmp     al, $e6
+        sete    al
+end;
+
 procedure _GetCpuid(cpueax, cpuecx: cardinal; var Registers: TIntelRegisters);
 {$ifdef FPC}nostackframe; assembler;{$endif}
 asm

@@ -2855,7 +2855,10 @@ begin
   SetLength(buf, 16 shl 20); // 16MB
   {$ifdef ASMX64NOTPIC} // activate and validate SSE2 + AVX branches
   bak := X64CpuFeatures;
-  cpu := bak - [cpuHaswell, cpuAvx2];
+  Check(IntelAvx512 - CpuFeatures * CPUAVX512FEATURES = [], 'avx512');
+  Check(not (cpuAVX512 in bak) or
+        (CPUAVX512X64V4 - IntelAvx512 = []), 'x86-64-v4');
+  cpu := bak - [cpuHaswell, cpuAvx2, cpuAVX512];
   X64CpuFeatures := []; // default SSE2 128-bit process
   Validate({rtl=}false);
   {$ifdef ASMX64AVX1} // oldest Delphi doesn't support AVX asm
