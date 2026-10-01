@@ -804,16 +804,19 @@ const
   SSL_TLSEXT_ERR_ALERT_FATAL = 2;
   SSL_TLSEXT_ERR_NOACK = 3;
 
-  SSL_MODE_ENABLE_PARTIAL_WRITE = $00000001;
+  SSL_MODE_ENABLE_PARTIAL_WRITE       = $00000001;
   SSL_MODE_ACCEPT_MOVING_WRITE_BUFFER = $00000002;
-  SSL_MODE_AUTO_RETRY = $00000004;
-  SSL_MODE_NO_AUTO_CHAIN = $00000008;
-  SSL_MODE_RELEASE_BUFFERS = $00000010;
-  SSL_MODE_SEND_CLIENTHELLO_TIME = $00000020;
-  SSL_MODE_SEND_SERVERHELLO_TIME = $00000040;
-  SSL_MODE_SEND_FALLBACK_SCSV = $00000080;
-  SSL_MODE_ASYNC = $00000100;
+  SSL_MODE_AUTO_RETRY                 = $00000004;
+  SSL_MODE_NO_AUTO_CHAIN              = $00000008;
+  SSL_MODE_RELEASE_BUFFERS            = $00000010;
+  SSL_MODE_SEND_CLIENTHELLO_TIME      = $00000020;
+  SSL_MODE_SEND_SERVERHELLO_TIME      = $00000040;
+  SSL_MODE_SEND_FALLBACK_SCSV         = $00000080;
+  SSL_MODE_ASYNC                      = $00000100;
   SSL_MODE_DTLS_SCTP_LABEL_LENGTH_BUG = $00000400;
+
+  SSL_KEY_UPDATE_NOT_REQUESTED = 0;
+  SSL_KEY_UPDATE_REQUESTED     = 1;
 
   X509_FILETYPE_PEM = 1;
   X509_FILETYPE_ASN1 = 2;
@@ -2208,6 +2211,7 @@ procedure SSL_set_hostflags(s: PSSL; flags: cardinal); cdecl;
 function SSL_load_client_CA_file(_file: PUtf8Char): Pstack_st_X509_NAME; cdecl;
 procedure SSL_CTX_set_client_CA_list(ctx: PSSL_CTX; list: Pstack_st_X509_NAME); cdecl;
 function SSL_CTX_add_client_CA(ctx: PSSL_CTX; cacert: PX509): integer; cdecl;
+function SSL_key_update(s: PSSL; updatetype: integer): integer; cdecl;
 function SSL_set1_host(s: PSSL; hostname: PUtf8Char): integer; cdecl;
 function SSL_add1_host(s: PSSL; hostname: PUtf8Char): integer; cdecl;
 
@@ -3074,13 +3078,14 @@ type
     SSL_load_client_CA_file: function(_file: PUtf8Char): Pstack_st_X509_NAME; cdecl;
     SSL_CTX_set_client_CA_list: procedure(ctx: PSSL_CTX; list: Pstack_st_X509_NAME); cdecl;
     SSL_CTX_add_client_CA: function(ctx: PSSL_CTX; cacert: PX509): integer; cdecl;
+    SSL_key_update: function(s: PSSL; updatetype: integer): integer; cdecl;
     SSL_set1_host: function(s: PSSL; hostname: PUtf8Char): integer; cdecl;
     // expected to be the last entry in OpenSslInitialize() below
     SSL_add1_host: function(s: PSSL; hostname: PUtf8Char): integer; cdecl;
   end;
 
 const
-  LIBSSL_ENTRIES: array[0..61] of PAnsiChar = (
+  LIBSSL_ENTRIES: array[0..62] of PAnsiChar = (
     'SSL_CTX_new',
     'SSL_CTX_free',
     'SSL_CTX_set_timeout',
@@ -3140,6 +3145,7 @@ const
     'SSL_load_client_CA_file',
     'SSL_CTX_set_client_CA_list',
     'SSL_CTX_add_client_CA',
+    '?SSL_key_update',
     'SSL_set1_host',
     'SSL_add1_host',
     nil);
@@ -3458,6 +3464,11 @@ end;
 function SSL_CTX_add_client_CA(ctx: PSSL_CTX; cacert: PX509): integer;
 begin
   result := libssl.SSL_CTX_add_client_CA(ctx, cacert);
+end;
+
+function SSL_key_update(s: PSSL; updatetype: integer): integer;
+begin
+  result := libssl.SSL_key_update(s, updatetype);
 end;
 
 function SSL_set1_host(s: PSSL; hostname: PUtf8Char): integer;
@@ -6408,7 +6419,7 @@ begin
   end;
 end;
 
-{$else}
+{$else} // OPENSSLSTATIC
 
 { ******************** Statically linked OpenSSL Library Functions }
 
@@ -6581,8 +6592,11 @@ function SSL_CTX_set_ciphersuites(ctx: PSSL_CTX; str: PUtf8Char): integer;
 begin
   result := OPENSSLSUCCESS; // OpenSSL 1.1.0 has no TLS 1.3 anyway
 end;
-//function SSL_CTX_set_ciphersuites(ctx: PSSL_CTX; str: PUtf8Char): integer; cdecl;
-//  external LIB_SSL name _PU + 'SSL_CTX_set_ciphersuites';
+
+function SSL_key_update(s: PSSL; updatetype: integer): integer; cdecl;
+begin
+  result := OPENSSLSUCCESS; // OpenSSL 1.1.0 has no TLS 1.3 anyway
+end;
 
 function SSL_set_fd(s: PSSL; fd: integer): integer; cdecl;
   external LIB_SSL name _PU + 'SSL_set_fd';
