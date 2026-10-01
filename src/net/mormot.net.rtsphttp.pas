@@ -174,14 +174,13 @@ begin
   if decoded = '' then
     exit; // maybe some pending command chars - retry later
   fRd.Reset;
-  rtsp := fOwner.ConnectionFindAndLock(fRtspTag, cReadOnly);
+  // no ConnectionLock here: a failing WriteString() calls ConnectionDelete()
+  rtsp := fOwner.ConnectionFind(fRtspTag);
   if rtsp <> nil then
-  try
+  begin
     fOwner.WriteString(rtsp, decoded); // async sending to RTSP server
     fOwner.LogClass.Add.Log(sllDebug, 'OnRead % POST forwarded RTSP command [%]',
       [Handle, decoded], self);
-  finally
-    fOwner.ConnectionLock.ReadOnlyUnLock;
   end
   else
   begin

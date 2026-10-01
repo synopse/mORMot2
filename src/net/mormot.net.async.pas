@@ -684,6 +684,7 @@ type
     // - returns nil if the handle was not found
     // - returns the maching instance, and caller should release the main lock as:
     // ! try ... finally UnLock(aLock); end;
+    // - never Write() within a cReadOnly lock: it may need ConnectionDelete()
     function ConnectionFindAndLock(aHandle: TConnectionAsyncHandle;
       aLock: TRWLockContext; aIndex: PInteger = nil): TAsyncConnection;
     /// high-level access to a connection instance, from its handle
@@ -758,6 +759,7 @@ type
     // ConnectionFindAndLock() high-level function, ot via manual
     // ! ConnectionLock.ReadOnlyLock;
     // ! try ... finally ConnectionLock.ReadOnlyUnLock; end;
+    // - never Write() within ReadOnlyLock: it may need ConnectionDelete()
     property Connection: TAsyncConnectionDynArray
       read fConnection;
     /// access to the R/W lock protecting the Connection[] array

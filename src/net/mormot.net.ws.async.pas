@@ -102,6 +102,7 @@ type
     // called every 10 seconds to check against HeartbeatDelay and send ping
     function OnLastOperationIdle(nowsec: TAsyncConnectionSec): boolean; override;
     // used e.g. by TWebSocketAsyncServer.WebSocketBroadcast
+    // - never called within ConnectionLock: Write() may call ConnectionDelete()
     function SendDirect(const tmp: TSynTempBuffer;
       opcode: TWebSocketFrameOpCode; timeout: integer): boolean;
   public
@@ -378,7 +379,6 @@ begin
     result := false
   else
   begin
-    // use timeout=0 since WebSocketBroadcast() has a connection lock
     result := fOwner.Write(self, tmp.buf, tmp.len, timeout);
     if result and
        (opcode = focConnectionClose) then
@@ -699,31 +699,39 @@ function TWebSocketAsyncServer.WebSocketBroadcast(const aFrame: TWebSocketFrame;
   const aClientsConnectionID: THttpServerConnectionIDDynArray;
   aTimeOut: integer): integer;
 var
-  i: PtrInt;
+  i, n: PtrInt;
   tmp: TSynTempBuffer;
+  ids: THttpServerConnectionIDDynArray;
 begin
   result := 0;
   if Terminated or
      (fAsync = nil) or
      not (aFrame.opcode in [focText, focBinary, focConnectionClose]) then
     exit;
+  ids := aClientsConnectionID;
+  if ids = nil then
+  begin
+    // broadcast to all connected clients: get their handles within the lock
+    fAsync.ConnectionLock.ReadOnlyLock;
+    try
+      n := fAsync.ConnectionCount;
+      SetLength(ids, n);
+      for i := 0 to n - 1 do
+        ids[i] := fAsync.Connection[i].Handle;
+    finally
+      fAsync.ConnectionLock.ReadOnlyUnLock;
+    end;
+  end;
+  if ids = nil then
+    exit; // no connection
+  // send outside the lock: a failing Write() calls ConnectionDelete() -> WriteLock
   FrameSendEncode(aFrame, {mask=}0, tmp);
-  fAsync.ConnectionLock.ReadOnlyLock;
   try
     // use TWebSocketAsyncConnection.SendDirect for non-blocking socket sending
-    if aClientsConnectionID = nil then
-      // broadcast to all connected clients
-      for i := 0 to fAsync.ConnectionCount - 1 do
-        inc(result, ord(TWebSocketAsyncConnection(fAsync.Connection[i]).
-           SendDirect(tmp, aFrame.opcode, aTimeOut)))
-    else
-      // broadcast to some specified connected clients, using O(log(n)) search
-      for i := 0 to length(aClientsConnectionID) - 1 do
-        inc(result, ord(TWebSocketAsyncConnection(
-          fAsync.LockedConnectionSearch(aClientsConnectionID[i])).
-            SendDirect(tmp, aFrame.opcode, aTimeOut)));
+    for i := 0 to length(ids) - 1 do
+      inc(result, ord(TWebSocketAsyncConnection(fAsync.ConnectionFind(ids[i])).
+        SendDirect(tmp, aFrame.opcode, aTimeOut))); // O(log(n)) search
   finally
-    fAsync.ConnectionLock.ReadOnlyUnLock;
     tmp.Done;
   end;
 end;

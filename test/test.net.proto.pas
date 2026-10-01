@@ -57,6 +57,7 @@ uses
   mormot.net.server,
   mormot.net.async,
   mormot.net.ws.core,
+  mormot.net.ws.async,
   mormot.net.openapi,
   mormot.net.ldap,
   mormot.net.dns,
@@ -183,6 +184,8 @@ type
     procedure RTSPOverHTTP;
     /// RTSP over HTTP, with always temporary buffering
     procedure RTSPOverHTTPBufferedWrite;
+    /// validate TWebSocketAsyncServer.WebSocketBroadcast with closing peers
+    procedure _TWebSocketAsyncServer;
     /// validate IP processing functions
     procedure IPAddresses;
     /// validate mormot.net.openapi unit
@@ -1009,6 +1012,86 @@ end;
 procedure TNetworkProtocols.RTSPOverHTTPBufferedWrite;
 begin
   DoRtspOverHttp(ASYNC_OPTION + [acoWritePollOnly]);
+end;
+
+type
+  // broadcast frames to all connections, from a background thread
+  TWebSocketBroadcastThread = class(TThread)
+  protected
+    fServer: TWebSocketAsyncServer;
+    fSent: integer;
+    procedure Execute; override;
+  end;
+
+procedure TWebSocketBroadcastThread.Execute;
+var
+  frame: TWebSocketFrame;
+begin
+  frame.opcode := focText;
+  frame.content := [];
+  frame.tix := 0;
+  frame.payload := '{"ping":1}';
+  while not Terminated do
+    inc(fSent, fServer.WebSocketBroadcast(frame, nil, 50));
+end;
+
+procedure TNetworkProtocols._TWebSocketAsyncServer;
+var
+  server: TWebSocketAsyncServerRest;
+  bcast: TWebSocketBroadcastThread;
+  client: TCrtSocket;
+  i: PtrInt;
+  wedged: boolean;
+  status: RawUtf8;
+begin
+  // WebSocketBroadcast() used to deadlock when Write() failed on a reset peer
+  server := TWebSocketAsyncServerRest.Create('8897', nil, nil, 'wsbroadcast',
+    2, '', '', {ajax=}true, [], TSynLog);
+  bcast := TWebSocketBroadcastThread.Create({suspended=}true);
+  bcast.fServer := server;
+  wedged := false;
+  try
+    server.WaitStarted(10);
+    bcast.Start;
+    for i := 1 to 50 do
+    begin
+      client := TCrtSocket.Open('127.0.0.1', '8897', nlTcp, 5000);
+      try
+        client.SockSend([ // SockSend() appends the final CRLF
+          'GET / HTTP/1.1'#13#10'Host: 127.0.0.1'#13#10,
+          'Upgrade: websocket'#13#10'Connection: Upgrade'#13#10,
+          'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ=='#13#10,
+          'Sec-WebSocket-Version: 13'#13#10,
+          'Sec-WebSocket-Protocol: synopsejson'#13#10]);
+        client.SockSendFlush;
+        // a deadlocked server would not answer any new connection
+        try
+          client.SockRecvLn(status); // ENetSock after 5 seconds if wedged
+        except
+          on E: ENetSock do
+          begin
+            wedged := E.LastError = nrTimeout; // can't release a wedged server
+            StringToUtf8(E.Message, status);
+          end;
+        end;
+        if not CheckUtf8(IdemPChar(pointer(status), 'HTTP/1.1 101'),
+                 'upgrade %', [status]) then
+          break;
+        // close with unread frames: RST so that the next server Write() fails
+        client.SockReceivePending(1000); // wait for a broadcasted frame
+        client.Sock.SetLinger(0);
+      finally
+        client.Free;
+      end;
+    end;
+    Check(bcast.fSent > 0, 'sent');
+  finally
+    if not wedged then
+    begin
+      bcast.Free; // Terminate + WaitFor
+      server.Free;
+    end;
+  end;
 end;
 
 function TNetworkProtocols.DoRequest_(Ctxt: THttpServerRequestAbstract): cardinal;
