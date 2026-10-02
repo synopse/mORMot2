@@ -1483,6 +1483,9 @@ var
     daAesGcmAvx,
     daKeccakAvx2);
 
+function HasKeccakAvx2: boolean;
+function HasAesGcmAvx: boolean;
+
 function ToText(algo: TAesMode): PShortString; overload;
 
 /// OpenSSL-like Cipher name encoding of mormot.crypt.core AES engines
@@ -4780,13 +4783,21 @@ begin
     inc(BufOut, onepass);
   until false;
 end;
+
+function HasAesGcmAvx: boolean;
+begin
+  result := (cpuAESGCM in X64CpuFeatures) and
+            not (daAesGcmAvx in DisabledAsm);
+end;
+
+{$else}
+function HasAesGcmAvx: boolean;
+begin
+  result := false;
+end;
 {$endif USEGCMAVX}
 
 function TAesGcmEngine.Init(const Key; KeyBits: PtrInt; AllowAvx: boolean): boolean;
-{$ifdef USEGCMAVX}
-var
-  cf: ^TIntelCpuFeatures;
-{$endif USEGCMAVX}
 begin
   FillCharFast(state, SizeOf(state), 0);
   result := aes.EncryptInit(Key, KeyBits);
@@ -4794,12 +4805,8 @@ begin
     exit;
   aes.Encrypt(state.ghash_h, state.ghash_h);
   {$ifdef USEGCMAVX}
-  cf := @CpuFeatures;
   if AllowAvx and
-     (cfCLMUL in cf^) and
-     (cfSSE41 in cf^) and
-     (cfAESNI in cf^) and
-     not (daAesGcmAvx in DisabledAsm) then
+     HasAesGcmAvx then
   begin
     // 8x interleaved aesni + pclmulqdq x86_64 asm - using 256 bytes in gf_t4k[]
     state.flags := [flagAVX, flagCLMUL];
@@ -8535,6 +8542,16 @@ const
     QWord($8000000000008003), QWord($8000000000008002), QWord($8000000000000080),
     QWord($000000000000800A), QWord($800000008000000A), QWord($8000000080008081),
     QWord($8000000000008080), QWord($0000000080000001), QWord($8000000080008008));
+
+function HasKeccakAvx2: boolean;
+begin
+  {$ifdef ASMX64AVX1}
+  result := (cpuAVX2 in X64CpuFeatures) and
+            not (daKeccakAvx2 in DisabledAsm);
+  {$else}
+  result := false;
+  {$endif ASMX64AVX1}
+end;
 
 {$ifdef ASMINTELNOTPIC}
 

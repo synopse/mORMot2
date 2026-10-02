@@ -3135,8 +3135,9 @@ type
   // as expected e.g. by IsValidUtf8Avx2/Base64EncodeAvx2 dedicated asm
   // - won't include ERMSB flag because it is not propagated within some VMs
   // - cpuAVX512 identifies x86-64-v4 AVX-512 support, also enabled by the OS
+  // - cpuAESGCM identifies cfCLMUL, cfSSE41 and cfAESNI flags
   TX64CpuFeatures = set of (
-    cpuAVX, cpuAVX2, cpuHaswell, cpuAVX512);
+    cpuAVX, cpuAVX2, cpuHaswell, cpuAVX512, cpuAESGCM);
 
 var
   /// internal flags used by FillCharFast - easier from asm that CpuFeatures
@@ -11029,6 +11030,10 @@ begin
     if IntelAvx512 * CPUAVX512X64V4 = CPUAVX512X64V4 then
       include(X64CpuFeatures, cpuAVX512);
   end;
+  if (cfCLMUL in CpuFeatures) and
+     (cfSSE41  in CpuFeatures) and
+     (cfAESNI  in CpuFeatures) then
+    include(X64CpuFeatures, cpuAESGCM);
   {$endif ASMX64NOTPIC}
   // redirect some CPU-aware functions
   if cfSSE42 in CpuFeatures then // for both i386 and x86_64
