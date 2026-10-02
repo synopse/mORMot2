@@ -11389,6 +11389,97 @@ var
     end;
   end;
 
+  procedure DataDescriptorLastEntry;
+  // some tools (e.g. LibreOffice for .xlsx) set FLAG_DATADESCRIPTOR on all
+  // entries: retrieving the last one from a memory buffer should not need fSource
+  const
+    DATA: array[0..1] of RawUtf8 = ('first content', 'second stored content');
+  var
+    z: TRawByteStringStream;
+    crc, offs: array[0..1] of cardinal;
+    cdoffs, v: cardinal;
+    s: RawByteString;
+    i: PtrInt;
+
+    procedure W(value: cardinal; bytes: integer);
+    begin
+      z.Write(value, bytes); // little-endian, as the .zip format
+    end;
+
+    procedure WS(const text: RawUtf8);
+    begin
+      z.Write(pointer(text)^, length(text));
+    end;
+
+  begin
+    z := TRawByteStringStream.Create;
+    try
+      for i := 0 to 1 do
+      begin
+        offs[i] := z.Position;
+        crc[i] := crc32(0, pointer(DATA[i]), length(DATA[i]));
+        W($04034b50, 4);           // local file header with no crc/sizes
+        W(20, 2);
+        W(8, 2);                   // FLAG_DATADESCRIPTOR
+        W(0, 2);                   // stored
+        W(0, 4);                   // time+date
+        W(0, 4);
+        W(0, 4);
+        W(0, 4);
+        W(5, 2);                   // name length
+        W(0, 2);
+        WS(FormatUtf8('f%.tx', [i]));
+        WS(DATA[i]);
+        W($08074b50, 4);           // data descriptor
+        W(crc[i], 4);
+        W(length(DATA[i]), 4);
+        W(length(DATA[i]), 4);
+      end;
+      cdoffs := z.Position;
+      for i := 0 to 1 do
+      begin
+        W($02014b50, 4);           // central directory with crc/sizes
+        W(20, 2);
+        W(20, 2);
+        W(8, 2);                   // FLAG_DATADESCRIPTOR
+        W(0, 2);
+        W(0, 4);
+        W(crc[i], 4);
+        W(length(DATA[i]), 4);
+        W(length(DATA[i]), 4);
+        W(5, 2);
+        W(0, 4);                   // extra + comment length
+        W(0, 4);                   // disk + internal attr
+        W(0, 4);                   // external attr
+        W(offs[i], 4);
+        WS(FormatUtf8('f%.tx', [i]));
+      end;
+      v := z.Position - cdoffs;
+      W($06054b50, 4);             // last header
+      W(0, 4);
+      W(2, 2);
+      W(2, 2);
+      W(v, 4);
+      W(cdoffs, 4);
+      W(0, 2);
+      s := z.DataString;
+    finally
+      z.Free;
+    end;
+    try
+      with TZipRead.Create(pointer(s), length(s)) do
+      try
+        CheckEqual(Count, 2, 'datadesc count');
+        for i := 0 to Count - 1 do
+          CheckEqual(UnZip(i), DATA[i], 'datadesc unzip');
+      finally
+        Free;
+      end;
+    except
+      on E: Exception do
+        Check(false, E.ClassName + ': ' + E.Message);
+    end;
+  end;
 var
   i, m: integer;
   mem: QWord;
@@ -11420,6 +11511,7 @@ begin
   TZipWrite.Create(FN).Free;
   CheckEqual(FileSize(FN), SizeOf(minim), 'TZipWrite void .zip');
   Check(DeleteFile(FN));
+  DataDescriptorLastEntry;
   // onprog := TStreamRedirect.ProgressInfoToConsole;
   onprog := TSynLog.ProgressInfo;
   for m := 1 to 2 do
