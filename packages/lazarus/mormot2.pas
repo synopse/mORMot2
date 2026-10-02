@@ -43,7 +43,7 @@ uses
   mormot.crypt.rsa, mormot.crypt.x509, mormot.crypt.pkcs11, mormot.net.openapi,
   mormot.core.os.security, mormot.tools.mget, mormot.core.mvc, mormot.crypt.other,
   mormot.net.dhcp, mormot.core.fmt, mormot.core.os.delphi, mormot.core.i18n,
-  mormot.lib.uniscribe;
+  mormot.lib.uniscribe, mormot.crypt.win;
 
 implementation
 
