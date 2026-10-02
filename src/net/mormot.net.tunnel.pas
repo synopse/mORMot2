@@ -131,6 +131,8 @@ type
     destructor Destroy; override;
     /// redirected from TTunnelLocal.Send
     procedure OnReceived(Frame: pointer; FrameLen: PtrInt);
+    /// shutdown both sockets and terminate the thread
+    procedure Abort;
     /// true if internal state is stProcessing, i.e. after accept() and within
     // the main redirection loop
     function Processing: boolean;
@@ -197,7 +199,7 @@ type
   TTunnelLocal = class(TInterfacedPersistent,
     ITunnelLocal, ITunnelTransmit)
   protected
-    fSafe: TMultiLightLock; // protect fHandshake and fFramesIn/Out
+    fSafe: TMultiLightLock; // protect fHandshake, fFlags and fFramesIn/Out
     fPort, fRemotePort: TNetPort;
     fSession: TTunnelSession;
     fOptions: TTunnelOptions;
@@ -221,14 +223,16 @@ type
     procedure FrameSign(var frame: RawByteString); virtual;
     function FrameVerify(frame: PAnsiChar; framelen, payloadlen: PtrInt): boolean; virtual;
     function GetElapsed: cardinal;
+    procedure DrainHandshakeQueue;
     procedure SendFrame(const Frame: RawByteString);
+    procedure RelayFrame(const aFrame: RawByteString);
     // can be overriden to customize this class process
     procedure AfterHandshake; virtual;
     procedure OnTunnelInfo(var Info: TDocVariantData); virtual;
     // helper method implementing Open/OpenSocket high level methods
     function OpenInternal(Sess: TTunnelSession; const Transmit: ITunnelTransmit;
       TransmitOptions: TTunnelOptions; TimeOutMS: integer; const AppSecret: RawUtf8;
-      Sock: TNetSocket; LocalPort: TNetPort; SocketBound: boolean;
+      var Sock: TNetSocket; LocalPort: TNetPort; SocketBound: boolean;
       const InfoNameValue: array of const;
       const SignCert, VerifyCert: ICryptCert): TNetPort;
   public
@@ -289,7 +293,8 @@ type
       const InfoNameValue: array of const; const SignCert: ICryptCert = nil;
       const VerifyCert: ICryptCert = nil): TNetPort;
     /// called e.g. by CallbackReleased() or by Destroy
-    procedure ClosePort;
+    // - you could trigger it from your own UI if needed to abort the process
+    procedure ClosePort(FromNotify: boolean = false);
   public
     /// ITunnelTransmit method: when a Frame is received from the relay server
     procedure TunnelSend(const aFrame: RawByteString);
@@ -726,19 +731,19 @@ end;
 
 destructor TTunnelLocalThread.Destroy;
 begin
-  Terminate;
-  fSafe.Lock;
-  try
-    fServerSock.ShutdownAndClose({rdwr=}true);
-    fClientSock.ShutdownAndClose({rdwr=}true);
-  finally
-    fSafe.UnLock;
-  end;
+  Abort; // Terminate + raw sockets shutdown
   inherited Destroy; // joins the thread
   fOwner := nil;
   FreeAndNil(fAes[true]);
   FreeAndNil(fAes[false]);
   fSafe.Done; // mandatory for TOSLightLock
+end;
+
+procedure TTunnelLocalThread.Abort;
+begin
+  Terminate;
+  fServerSock.RawShutdown; // no fSafe.Lock needed for this raw socket API
+  fClientSock.RawShutdown;
 end;
 
 function TTunnelLocalThread.Processing: boolean;
@@ -806,7 +811,7 @@ var
   tmp: RawByteString;
   res: TNetResult;
   err: integer;
-  start: cardinal;
+  endtix: cardinal;
 begin
   fStarted := true;
   try
@@ -819,8 +824,10 @@ begin
         'DoExecute: waiting for accept on port %', [fPort], self);
       fSafe.Lock; // protect early fClientSock access in OnReceived()
       try
-        start := GetTickSec; // socket timeout is 500ms: use a loop
+        endtix := GetTickSec + fTimeoutAcceptSecs; // socket timeout is 500ms
         repeat
+          if Terminated then
+            break;
           res := fServerSock.Accept(fClientSock, fClientAddr, {async=}false, @err);
           if (res = nrOk) and
              not Terminated then
@@ -837,7 +844,7 @@ begin
               (fState = stProcessing) or
               (fOwner = nil) or
               (res <> nrRetry) or
-              (GetTickSec - start > fTimeoutAcceptSecs);
+              (GetTickSec > endtix);
       finally
         fSafe.UnLock;
       end;
@@ -940,7 +947,7 @@ begin
   FreeAndNil(fHandshake); // if Open() was not called
 end;
 
-procedure TTunnelLocal.ClosePort;
+procedure TTunnelLocal.ClosePort(FromNotify: boolean);
 var
   frame: RawByteString; // notification frame to unregister to the other side
   callback: TNetSocket; // touch-and-go to the server to release main Accept()
@@ -948,38 +955,40 @@ var
 begin
   if self = nil then
     exit;
-  fLogClass.EnterLocal(log, 'ClosePort %', [fPort], self);
-  fSafe.Lock; // protect fHandshake
+  fLogClass.EnterLocal(log, 'ClosePort % FromNotify=%',
+    [fPort, BOOL_STR[FromNotify]], self);
+  fSafe.Lock; // protect fHandshake and fFlags
   try
-    if not (fClosePortNotified in fFlags) then
+    if (not FromNotify) and
+       (not (fClosePortNotified in fFlags)) then
     begin
       // send frame with only session (and no payload) to notify as closed
-      include(fFlags, fClosePortNotified);
       if Assigned(log) then
         log.Log(sllTrace, 'ClosePort: notify other end', self);
       PTunnelSession(FastNewRawByteString(frame, TRAIL_SIZE))^ := fSession;
       inc(fFramesOut);
     end;
+    include(fFlags, fClosePortNotified);
     if fThread <> nil then
-      try
-        fThread.Terminate;
-        if fThread.fState = stAccepting then
-        begin
-          if Assigned(log) then
-            log.Log(sllDebug, 'ClosePort: release accept', self);
-          if NewTcpClientSocket(IP4local, UInt32ToUtf8(fPort), 10, callback) = nrOK then
-            // Windows socket may not release Accept() until connected
-            callback.ShutdownAndClose({rdwr=}false);
-        end;
-      except
+    try
+      fThread.Abort; // Terminate + both sockets forced shutdown
+      if fThread.fState = stAccepting then
+      begin
+        if Assigned(log) then
+          log.Log(sllDebug, 'ClosePort: release accept', self);
+        if NewTcpClientSocket(IP4local, UInt32ToUtf8(fPort), 10, callback) = nrOK then
+          // Windows socket may not release Accept() until connected
+          callback.ShutdownAndClose({rdwr=}false);
       end;
+    except
+    end;
     include(fFlags, fClosed); // before UnLock and SetEvent
   finally
     fSafe.UnLock;
   end;
   if frame <> '' then // outside of the lock, just like SendFrame()
     try
-      fTransmit.TunnelSend(frame);
+      fTransmit.TunnelSend(frame); // notify the other end of closure
     except
     end;
   if Assigned(log) then
@@ -992,43 +1001,50 @@ end;
 procedure TTunnelLocal.TunnelSend(const aFrame: RawByteString);
 var
   l: PtrInt;
-  p: PAnsiChar;
 begin
   // ITunnelTransmit method: when a Frame is received from the relay server
   l := length(aFrame);
   if fVerboseLog then
     fLogClass.Add.Log(sllTrace, 'TunnelSend=%', [l]);
-  dec(l, TRAIL_SIZE);
-  if l < 0 then
-    ETunnel.RaiseUtf8('%.Send: unexpected size=%', [self, l]);
-  fSafe.Lock; // protect fHandshake
+  fSafe.Lock; // protect fHandshake and fFlags
   try
     inc(fFramesIn);
-    if l = 0 then
-      include(fFlags, fClosePortNotified); // change flags inside lock
     if fHandshake <> nil then
     begin
       // handle special rendez-vous initial phase
       fLogClass.Add.Log(sllTrace, 'TunnelSend: Handshake phase', self);
-      if l = 0 then
-        include(fFlags, fClosed) // received no payload frame to notify as closed
+      if l <= TRAIL_SIZE then     // received closure notification
+        fFlags := fFlags + [fClosed, fClosePortNotified]
       else
-        fHandshake.Push(aFrame); // during handshake phase - maybe before Open
+        fHandshake.Push(aFrame);  // during handshake phase - maybe before Open
       if fHandshakeEvent <> nil then
-        fHandshakeEvent.SetEvent;
+        fHandshakeEvent.SetEvent; // eventually wake the waiting thread
       exit;
     end;
   finally
     fSafe.UnLock;
   end;
   // if we reached here we are in the main forwarding phase
+  RelayFrame(aFrame);
+end;
+
+procedure TTunnelLocal.RelayFrame(const aFrame: RawByteString);
+var
+  l: PtrInt;
+  p: PAnsiChar;
+begin
+  l := length(aFrame) - TRAIL_SIZE;
+  if l < 0 then
+    ETunnel.RaiseUtf8('%.Send: unexpected size=%', [self, l]);
   p := pointer(aFrame);
-  if PTunnelSession(p + l)^ <> fSession then // fSession not set during handshake
+  if PTunnelSession(p + l)^ <> fSession then // no fSession yet during handshake
     ETunnel.RaiseUtf8('%.Send: session mismatch', [self]);
   if l = 0 then
-    ClosePort // received no payload frame to notify as closed
+    // received closure notification
+    ClosePort({FromNotify=}true)
   else
-    fThread.OnReceived(p, l); // regular tunelling process
+    // regular tunelling process
+    fThread.OnReceived(p, l);
 end;
 
 function TTunnelLocal.WaitForHandshake(
@@ -1042,7 +1058,7 @@ begin
     exit;
   // first inspect the queue while protected by the same lock as TunnelSend():
   // supports a handshake which arrived before WaitForHandshake() was called
-  fSafe.Lock;
+  fSafe.Lock; // protect fHandshake and fFlags
   try
     if (fClosed in fFlags) or
        (fThread <> nil) or
@@ -1085,15 +1101,9 @@ end;
 procedure TTunnelLocal.CallbackReleased(const callback: IInvokable;
   const interfaceName: RawUtf8);
 begin
-  if not IdemPChar(pointer(interfaceName), 'ITUNNEL') then
-    exit; // should be ITunnelLocal or ITunnelTransmit
-  fSafe.Lock;
-  try
-    include(fFlags, fClosePortNotified); // no need to notify the remote end
-  finally
-    fSafe.UnLock;
-  end;
-  ClosePort;
+  if IdemPChar(pointer(interfaceName), 'ITUNNEL') then
+    // should be ITunnelLocal or ITunnelTransmit
+    ClosePort({FromNotify=}true);
 end;
 
 procedure TTunnelLocal.FrameSign(var frame: RawByteString);
@@ -1196,7 +1206,7 @@ begin
     result := OpenInternal(Sess, Transmit, TransmitOptions, TimeOutMS, AppSecret,
       sock, port, bound, InfoNameValue, SignCert, VerifyCert);
   except
-    sock.ShutdownAndClose(true); // only needed for failures before OpenInternal
+    sock.RawShutdown; // only needed for failures before OpenInternal
     raise;
   end;
 end;
@@ -1226,14 +1236,14 @@ begin
     result := OpenInternal(Sess, Transmit, TransmitOptions, TimeOutMS, AppSecret,
       sock, LocalPort, {SocketBound=}false, InfoNameValue, SignCert, VerifyCert);
   except
-    sock.ShutdownAndClose(true); // caller no longer owns Socket
+    sock.RawShutdown; // caller no longer owns Socket
     raise;
   end;
 end;
 
 function TTunnelLocal.OpenInternal(Sess: TTunnelSession;
   const Transmit: ITunnelTransmit; TransmitOptions: TTunnelOptions;
-  TimeOutMS: integer; const AppSecret: RawUtf8; Sock: TNetSocket;
+  TimeOutMS: integer; const AppSecret: RawUtf8; var Sock: TNetSocket;
   LocalPort: TNetPort; SocketBound: boolean;
   const InfoNameValue: array of const;
   const SignCert, VerifyCert: ICryptCert): TNetPort;
@@ -1245,7 +1255,6 @@ var
   loc: TTunnelLocalHandshake;
   key, iv: THash256Rec;
   hmac, hmac2: THmacSha256;
-  hqueue: TSynQueue;
   log: ISynLog;
 const // port is asymmetrical so not included to the KDF - nor the crc
   KDF_SIZE = SizeOf(loc.Info) - (SizeOf(loc.Info.port) + SizeOf(loc.Info.crc));
@@ -1263,9 +1272,16 @@ begin
     fLogClass.EnterLocal(log, 'Open(%,[%])', [Int64(Sess), ToText(fOptions)], self);
   fTransmit := Transmit;
   fPort := 0;
-  fFlags := [];
-  if SocketBound then
-    include(fFlags, fSocketBound);
+  fSafe.Lock;
+  try
+    if fClosed in fFlags then
+      ETunnel.RaiseUtf8('%.Open: already closed', [self]);
+    fFlags := [];
+    if SocketBound then
+      include(fFlags, fSocketBound);
+  finally
+    fSafe.UnLock;
+  end;
   result := LocalPort;
   // initial single round trip handshake
   infoaes := nil;
@@ -1372,32 +1388,22 @@ begin
     TimeOutMS := (TimeOutMS shr 10) + 5; // minimal coherent accept time
     fSafe.Lock;
     try
+      if fClosed in fFlags then
+        ETunnel.RaiseUtf8('%.Open: closed during handshake', [self]);
       if fThread <> nil then // already checked by Open/OpenSocket
         ETunnel.RaiseUtf8('%.Open: existing %', [self, fThread]);
       fThread := TTunnelLocalThread.Create(self, key.Lo, iv.Lo, Sock, TimeOutMS);
-      fThread.Start; // ensure fThread is set
+      Sock := nil;   // ownership transfered
+      fThread.Start; // ensure fThread is set when DoExecute starts
     finally
       fSafe.UnLock;
     end;
     SleepHiRes(100, fThread.fStarted);
+    fStartTicks := GetUptimeSec; // wall clock
     if Assigned(log) then
       log.Log(LOG_TRACEERROR[not fThread.fStarted], 'Open: started=% %',
         [BOOL_STR[fThread.fStarted], fThread], self);
-    fStartTicks := GetUptimeSec; // wall clock
-    hqueue := fHandshake;
-    fSafe.Lock; // protect handshake phase - re-entrant for TunnelSend()
-    try
-      fHandshake := nil;   // ends the handshaking phase
-      while hqueue.Pop(frame) do
-      begin
-        if Assigned(log) then
-          log.Log(sllDebug, 'Open: delayed frame len=%', [length(frame)], self);
-        TunnelSend(frame); // paranoid: redirect to this instance
-      end;
-    finally
-      fSafe.UnLock;
-      hqueue.Free;
-    end;
+    DrainHandshakeQueue;
     // now everything is running and we can prepare the fixed info
     fInfo.AddNameValuesToObject([
       'remotePort', fRemotePort,
@@ -1414,13 +1420,36 @@ begin
     begin
       fLogClass.Add.Log(sllWarning, 'OpenInternal % [%] for thread=% sock=%',
         [PClass(E)^, E.Message, fThread, pointer(Sock)], self);
-      sock.ShutdownAndClose(true); // any error would abort and return 0
+      Sock.RawShutdown; // any error would abort and return 0
       result := 0;
     end;
   end;
   infoaes.Free;
   FillZero(key.b);
   FillZero(iv.b);
+end;
+
+procedure TTunnelLocal.DrainHandshakeQueue;
+var
+  frame: RawByteString;
+begin
+  repeat
+    fSafe.Lock; // protect handshake phase
+    try
+      if (fClosed in fFlags) or
+         (fHandshake = nil) or
+         not fHandshake.Pop(frame) then
+      begin
+        FreeAndNilSafe(fHandshake); // eventually ends the handshaking phase
+        exit;
+      end;
+    finally
+      fSafe.UnLock;
+    end;
+    // process any frame received during the handshake outside of the lock
+    fLogClass.Add.Log(sllDebug, 'Open: delayed frame len=%', [length(frame)], self);
+    RelayFrame(frame);
+  until false;
 end;
 
 procedure TTunnelLocal.AfterHandshake;

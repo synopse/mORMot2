@@ -1136,7 +1136,7 @@ type
   // use its own separated thread
   TSynBackgroundTimer = class(TSynBackgroundThreadProcess)
   protected
-    fSafe: TLightLock;  // seems enough - TOSLightLock is more than twice slower
+    fSafe: TLightLock;   // enough for our tight loops - TOSLightLock not needed
     fTask: TSynBackgroundTimerTasks;
     fTaskCount: integer; // not PtrInt
     fTasks: TDynArray;
