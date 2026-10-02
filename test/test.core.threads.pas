@@ -1161,337 +1161,6 @@ type
   end;
   TNotifyTaskDynArray = array of TNotifyTask;
 
-  TSynQueuePushThread = class(TLoggedThread)
-  protected
-    fQueue: TSynQueue;
-    fValue: integer;
-    fDelayMS: cardinal;
-    procedure DoExecute; override;
-  public
-    constructor Create(aQueue: TSynQueue; aValue: integer;
-      aDelayMS: cardinal); reintroduce;
-  end;
-
-  TSynQueueWaitThread = class(TLoggedThread)
-  protected
-    fQueue: TSynQueue;
-    fTimeoutMS: integer;
-    procedure DoExecute; override;
-  public
-    Value: integer;
-    Success: boolean;
-    constructor Create(aQueue: TSynQueue; aTimeoutMS: integer); reintroduce;
-  end;
-
-
-{ TSynQueuePushThread }
-
-constructor TSynQueuePushThread.Create(aQueue: TSynQueue;
-  aValue: integer; aDelayMS: cardinal);
-begin
-  fQueue := aQueue;
-  fValue := aValue;
-  fDelayMS := aDelayMS;
-  inherited Create(false, nil, nil, TSynLog, 'push');
-end;
-
-procedure TSynQueuePushThread.DoExecute;
-begin
-  if fDelayMS <> 0 then
-    SleepHiRes(fDelayMS);
-  fQueue.Push(fValue);
-end;
-
-
-{ TSynQueueWaitThread }
-
-constructor TSynQueueWaitThread.Create(aQueue: TSynQueue;
-  aTimeoutMS: integer);
-begin
-  fQueue := aQueue;
-  fTimeoutMS := aTimeoutMS;
-  inherited Create(false, nil, nil, TSynLog, 'wait');
-end;
-
-procedure TSynQueueWaitThread.DoExecute;
-begin
-  Value := 0;
-  Success := fQueue.WaitPop(fTimeoutMS, nil, Value);
-end;
-
-procedure TTestCoreThreads.TSynQueueSlow2(Sender: TObject);
-const
-  WAITERS = 8;
-var
-  i: PtrInt;
-  j, v, expected, mask: integer;
-  p: pointer;
-  q: TSynQueue;
-  push: TSynQueuePushThread;
-  wait: array[0..WAITERS - 1] of TSynQueueWaitThread;
-  ev: TSynEvent;
-
-  procedure WaitForRegisteredWaiters(ExpectedCount: integer);
-  var
-    timeout: Int64;
-  begin
-    timeout := mormot.core.os.GetTickCount64 + 2000;
-    repeat
-      if q.Waiters = ExpectedCount then
-        exit;
-      SleepHiRes(1);
-    until mormot.core.os.GetTickCount64 > timeout;
-
-    CheckEqual(q.Waiters, ExpectedCount,
-      'TSynQueue WaitPop registration');
-  end;
-
-begin
-  // WaitPop notification
-  q := TSynQueue.Create(TypeInfo(TIntegerDynArray));
-  try
-    // Push deliberately happens after WaitPop() has had enough time to
-    // enter OsWaitOnValue() on supported platforms.
-    push := TSynQueuePushThread.Create(q, 123456, 50);
-    try
-      v := 0;
-      Check(q.WaitPop(2000, nil, v), 'WaitPop notification');
-      CheckEqual(v, 123456, 'WaitPop notification value');
-      push.WaitFor;
-    finally
-      push.Free;
-    end;
-    CheckEqual(q.Count, 0);
-    // WaitPeekLocked notification
-    push := TSynQueuePushThread.Create(q, 654321, 50);
-    try
-      p := q.WaitPeekLocked(2000, nil);
-      Check(p <> nil, 'WaitPeekLocked notification');
-      if p <> nil then
-      begin
-        CheckEqual(PInteger(p)^, 654321,
-          'WaitPeekLocked notification value');
-        q.Safe.ReadWriteUnLock;
-      end;
-      push.WaitFor;
-    finally
-      push.Free;
-    end;
-    v := 0;
-    Check(q.Pop(v));
-    CheckEqual(v, 654321);
-    CheckEqual(q.Count, 0);
-    // compared WaitPop keeps its polling semantics
-    v := 11;
-    q.Push(v);
-    expected := 12;
-    v := 0;
-    Check(not q.WaitPop(20, nil, v, @expected),
-      'WaitPop compared mismatch');
-    CheckEqual(q.Count, 1);
-    expected := 11;
-    Check(q.WaitPop(20, nil, v, @expected),
-      'WaitPop compared match');
-    CheckEqual(v, 11);
-    CheckEqual(q.Count, 0);
-    // several concurrent waiters / WakeOne
-    for i := 0 to high(wait) do
-      wait[i] := nil;
-    try
-      for i := 0 to high(wait) do
-        wait[i] := TSynQueueWaitThread.Create(q, 2000);
-      WaitForRegisteredWaiters(WAITERS);
-      // Give registered consumers a chance to actually enter the OS wait.
-      // Correctness must not depend on this delay - the sequence protects
-      // that race - but it makes the WakeOne path well exercised.
-      SleepHiRes(20);
-      for i := 1 to WAITERS do
-      begin
-        j := i;
-        q.Push(j);
-      end;
-      mask := 0;
-      for i := 0 to high(wait) do
-      begin
-        wait[i].WaitFor;
-        Check(wait[i].Success, 'multiple WaitPop notification');
-        Check((wait[i].Value >= 1) and
-              (wait[i].Value <= WAITERS),
-          'multiple WaitPop value range');
-        if (wait[i].Value >= 1) and
-           (wait[i].Value <= WAITERS) then
-        begin
-          j := 1 shl (wait[i].Value - 1);
-          Check(mask and j = 0, 'duplicate WaitPop value');
-          mask := mask or j;
-        end;
-      end;
-      CheckEqual(mask, (1 shl WAITERS) - 1,
-        'all WaitPop values consumed');
-      CheckEqual(q.Count, 0);
-      CheckEqual(q.Waiters, 0);
-    finally
-      for i := 0 to high(wait) do
-      begin
-        wait[i].Free;
-        wait[i] := nil;
-      end;
-    end;
-  finally
-    q.Free;
-  end;
-  // WaitPopFinalize must wake all sleepers
-  q := TSynQueue.Create(TypeInfo(TIntegerDynArray));
-  try
-    for i := 0 to high(wait) do
-      wait[i] := nil;
-    try
-      // Long timeout: these threads should terminate because of
-      // WaitPopFinalize(), not because WaitPop naturally timed out.
-      for i := 0 to high(wait) do
-        wait[i] := TSynQueueWaitThread.Create(q, 5000);
-       WaitForRegisteredWaiters(WAITERS);
-      SleepHiRes(20);
-      q.WaitPopFinalize(1000);
-       // On futex/WaitOnAddress platforms WakeAll should make this reach
-      // zero immediately. On fallback platforms the existing SleepStep
-      // polling should still make it reach zero well inside 1 second.
-      CheckEqual(q.Waiters, 0,
-        'WaitPopFinalize should release all waiters');
-      for i := 0 to high(wait) do
-      begin
-        wait[i].WaitFor;
-        Check(not wait[i].Success,
-          'WaitPopFinalize WaitPop result');
-      end;
-      // Future WaitPop calls should return immediately and, importantly,
-      // should not increase fWaitPopCounter.
-      v := 0;
-      Check(not q.WaitPop(10, nil, v),
-        'WaitPop after WaitPopFinalize');
-      CheckEqual(q.Waiters, 0,
-        'WaitPop after finalize should not register a waiter');
-      // Should therefore also be harmless/immediate if called again.
-      q.WaitPopFinalize(10);
-      CheckEqual(q.Waiters, 0);
-    finally
-      for i := 0 to high(wait) do
-      begin
-        wait[i].Free;
-        wait[i] := nil;
-      end;
-    end;
-  finally
-    q.Free;
-  end;
-  // WaitPopFinalize / WaitPopReset with several concurrent sleepers
-  q := TSynQueue.Create(TypeInfo(TIntegerDynArray));
-  try
-    for i := 0 to high(wait) do
-      wait[i] := nil;
-    try
-      // 1. first generation: all waiters are aborted by Finalize()
-      for i := 0 to high(wait) do
-        wait[i] := TSynQueueWaitThread.Create(q, 5000);
-      WaitForRegisteredWaiters(WAITERS);
-      SleepHiRes(20);
-      q.WaitPopFinalize(1000);
-      // WakeAll should release all futex waiters immediately.
-      // The polling fallback should also finish well within 1 second.
-      CheckEqual(q.Waiters, 0,
-        'WaitPopFinalize should release all waiters');
-      for i := 0 to high(wait) do
-      begin
-        wait[i].WaitFor;
-        Check(not wait[i].Success,
-          'WaitPopFinalize WaitPop result');
-        wait[i].Free;
-        wait[i] := nil;
-      end;
-      // While finalized, new WaitPop() calls should not even register.
-      v := 0;
-      Check(not q.WaitPop(10, nil, v),
-        'WaitPop after WaitPopFinalize');
-      CheckEqual(q.Waiters, 0,
-        'WaitPop after finalize should not register a waiter');
-      // 2. reset then start a completely fresh generation of waiters
-      Check(q.WaitPopReset,
-        'WaitPopReset after all waiters terminated');
-      for i := 0 to high(wait) do
-        wait[i] := TSynQueueWaitThread.Create(q, 5000);
-      WaitForRegisteredWaiters(WAITERS);
-      SleepHiRes(20);
-      // One Push() per waiter: validates that normal WakeOne behavior
-      // is working again after WaitPopReset().
-      for i := 1 to WAITERS do
-      begin
-        v := 100 + i;
-        q.Push(v);
-      end;
-      mask := 0;
-      for i := 0 to high(wait) do
-      begin
-        wait[i].WaitFor;
-        Check(wait[i].Success,
-          'WaitPop after WaitPopReset');
-
-        Check((wait[i].Value > 100) and
-              (wait[i].Value <= 100 + WAITERS),
-          'WaitPopReset value range');
-
-        if (wait[i].Value > 100) and
-           (wait[i].Value <= 100 + WAITERS) then
-        begin
-          j := 1 shl (wait[i].Value - 101);
-          Check(mask and j = 0,
-            'WaitPopReset duplicate value');
-          mask := mask or j;
-        end;
-        wait[i].Free;
-        wait[i] := nil;
-      end;
-      CheckEqual(mask, (1 shl WAITERS) - 1,
-        'all WaitPopReset values consumed');
-      CheckEqual(q.Count, 0);
-      CheckEqual(q.Waiters, 0);
-      // 3. make sure Finalize() still works after Reset()
-      for i := 0 to high(wait) do
-        wait[i] := TSynQueueWaitThread.Create(q, 5000);
-      WaitForRegisteredWaiters(WAITERS);
-      SleepHiRes(20);
-      q.WaitPopFinalize(1000);
-      CheckEqual(q.Waiters, 0,
-        'second WaitPopFinalize should release all waiters');
-      for i := 0 to high(wait) do
-      begin
-        wait[i].WaitFor;
-        Check(not wait[i].Success,
-          'second WaitPopFinalize WaitPop result');
-        wait[i].Free;
-        wait[i] := nil;
-      end;
-      // A second reset cycle should work as well.
-      Check(q.WaitPopReset,
-        'second WaitPopReset');
-      // The queue is operational again.
-      v := 123456;
-      q.Push(v);
-      v := 0;
-      Check(q.WaitPop(1000, nil, v),
-        'WaitPop after second WaitPopReset');
-      CheckEqual(v, 123456);
-    finally
-      for i := 0 to high(wait) do
-      begin
-        wait[i].Free;
-        wait[i] := nil;
-      end;
-    end;
-  finally
-    q.Free;
-  end;
-end;
-
 procedure TTestCoreThreads.TSynQueueSlow1(Sender: TObject);
 var
   o, i, j, k, n: integer; // not PtrInt
@@ -1661,6 +1330,344 @@ begin
     checkEqual(f.Count, 0);
   finally
     f.Free;
+  end;
+end;
+
+const
+  WAITERS = 8;
+
+type
+  TSynQueuePushTask = class(TSynThreadTask)
+  public
+    Queue: TSynQueue;
+    Value: integer;
+    DelayMS: cardinal;
+    Done: PInteger;
+    procedure DoExecute(aCaller: TSynThreadPoolWorkThread); override;
+  end;
+
+  TSynQueueWaitTask = class(TSynThreadTask)
+  public
+    Queue: TSynQueue;
+    TimeoutMS: integer;
+    Success: PBoolean;
+    Value: PInteger;
+    Done: PInteger;
+    procedure DoExecute(aCaller: TSynThreadPoolWorkThread); override;
+  end;
+
+
+{ TSynQueuePushTask }
+
+procedure TSynQueuePushTask.DoExecute(aCaller: TSynThreadPoolWorkThread);
+begin
+  try
+    if DelayMS <> 0 then
+      SleepHiRes(DelayMS);
+    Queue.Push(Value);
+  finally
+    if Done <> nil then
+      LockedInc32(Done);
+  end;
+end;
+
+
+{ TSynQueueWaitTask }
+
+procedure TSynQueueWaitTask.DoExecute(aCaller: TSynThreadPoolWorkThread);
+var
+  v: integer;
+begin
+  try
+    v := 0;
+    Success^ := Queue.WaitPop(TimeoutMS, nil, v);
+    Value^ := v;
+  finally
+    if Done <> nil then
+      LockedInc32(Done);
+  end;
+end;
+
+
+procedure TTestCoreThreads.TSynQueueSlow2(Sender: TObject);
+var
+  i: PtrInt;
+  j, v, expected, mask: integer;
+  p: pointer;
+  q: TSynQueue;
+  tasks: TSynThreadTasks;
+  task: TSynThreadTask;
+  done: cardinal;
+  taskcount: integer;
+  success: array[0 .. WAITERS - 1] of boolean;
+  value: array[0 .. WAITERS - 1] of integer;
+
+  procedure WaitForRegisteredWaiters(ExpectedCount: integer);
+  var
+    timeout: Int64;
+  begin
+    timeout := mormot.core.os.GetTickCount64 + 2000;
+    repeat
+      if q.Waiters = ExpectedCount then
+        exit;
+      SleepHiRes(1);
+    until mormot.core.os.GetTickCount64 > timeout;
+    CheckEqual(q.Waiters, ExpectedCount,
+      'TSynQueue WaitPop registration');
+  end;
+
+  procedure WaitForTasks(ExpectedCount: integer; const Msg: string);
+  var
+    timeout: Int64;
+  begin
+    timeout := mormot.core.os.GetTickCount64 + 2000;
+    repeat
+      if done = cardinal(ExpectedCount) then
+      begin
+        taskcount := 0;
+        exit;
+      end;
+      SleepHiRes(1);
+    until mormot.core.os.GetTickCount64 > timeout;
+    CheckEqual(done, cardinal(ExpectedCount), Msg);
+    if done = cardinal(ExpectedCount) then
+      taskcount := 0;
+  end;
+
+  procedure PushAsync(aValue: integer; aDelayMS: cardinal);
+  var
+    push: TSynQueuePushTask;
+  begin
+    done := 0;
+    taskcount := 1;
+    push := TSynQueuePushTask.Create;
+    push.Queue := q;
+    push.Value := aValue;
+    push.DelayMS := aDelayMS;
+    push.Done := @done;
+    Check(tasks.Add(push), 'TSynQueue push task');
+  end;
+
+  procedure StartWaiters(aTimeoutMS: integer);
+  var
+    n: PtrInt;
+    wait: TSynQueueWaitTask;
+  begin
+    done := 0;
+    taskcount := WAITERS;
+    for n := 0 to WAITERS - 1 do
+    begin
+      success[n] := false;
+      value[n] := 0;
+      wait := TSynQueueWaitTask.Create;
+      wait.Queue := q;
+      wait.TimeoutMS := aTimeoutMS;
+      wait.Success := @success[n];
+      wait.Value := @value[n];
+      wait.Done := @done;
+      Check(tasks.Add(wait), 'TSynQueue WaitPop task');
+    end;
+    WaitForRegisteredWaiters(WAITERS);
+  end;
+
+  procedure CleanupQueue;
+  begin
+    q.WaitPopFinalize(1000);
+    if taskcount <> 0 then
+      WaitForTasks(taskcount, 'TSynQueue task cleanup');
+  end;
+
+begin
+  tasks := TSynThreadTasks.Create(WAITERS, 'queue');
+  try
+    taskcount := 0;
+    // WaitPop notification
+    q := TSynQueue.Create(TypeInfo(TIntegerDynArray));
+    try
+      // Push deliberately happens after WaitPop() has had enough time to
+      // enter OsWaitOnValue() on supported platforms.
+      PushAsync(123456, 50);
+      v := 0;
+      Check(q.WaitPop(2000, nil, v), 'WaitPop notification');
+      CheckEqual(v, 123456, 'WaitPop notification value');
+      WaitForTasks(1, 'WaitPop notification worker');
+      CheckEqual(q.Count, 0);
+      // WaitPeekLocked notification
+      PushAsync(654321, 50);
+      p := q.WaitPeekLocked(2000, nil);
+      Check(p <> nil, 'WaitPeekLocked notification');
+      if p <> nil then
+      begin
+        CheckEqual(PInteger(p)^, 654321,
+          'WaitPeekLocked notification value');
+        q.Safe.ReadWriteUnLock;
+      end;
+      WaitForTasks(1, 'WaitPeekLocked notification worker');
+      v := 0;
+      Check(q.Pop(v));
+      CheckEqual(v, 654321);
+      CheckEqual(q.Count, 0);
+      // compared WaitPop keeps its polling semantics
+      v := 11;
+      q.Push(v);
+      expected := 12;
+      v := 0;
+      Check(not q.WaitPop(20, nil, v, @expected),
+        'WaitPop compared mismatch');
+      CheckEqual(q.Count, 1);
+      expected := 11;
+      Check(q.WaitPop(20, nil, v, @expected),
+        'WaitPop compared match');
+      CheckEqual(v, 11);
+      CheckEqual(q.Count, 0);
+      // several concurrent waiters / WakeOne
+      StartWaiters(5000);
+      // Give registered consumers a chance to actually enter the OS wait.
+      // Correctness must not depend on this delay - the sequence protects
+      // that race - but it makes the WakeOne path well exercised.
+      SleepHiRes(20);
+      for i := 1 to WAITERS do
+      begin
+        j := i;
+        q.Push(j);
+      end;
+      WaitForTasks(WAITERS, 'multiple WaitPop workers');
+      mask := 0;
+      for i := 0 to WAITERS - 1 do
+      begin
+        Check(success[i], 'multiple WaitPop notification');
+        Check((value[i] >= 1) and
+              (value[i] <= WAITERS),
+          'multiple WaitPop value range');
+        if (value[i] >= 1) and
+           (value[i] <= WAITERS) then
+        begin
+          j := 1 shl (value[i] - 1);
+          Check(mask and j = 0, 'duplicate WaitPop value');
+          mask := mask or j;
+        end;
+      end;
+      CheckEqual(mask, (1 shl WAITERS) - 1,
+        'all WaitPop values consumed');
+      CheckEqual(q.Count, 0);
+      CheckEqual(q.Waiters, 0);
+    finally
+      CleanupQueue;
+      q.Free;
+    end;
+    // WaitPopFinalize must wake all sleepers
+    q := TSynQueue.Create(TypeInfo(TIntegerDynArray));
+    try
+      // Long timeout: these threads should terminate because of
+      // WaitPopFinalize(), not because WaitPop naturally timed out.
+      StartWaiters(5000);
+      SleepHiRes(20);
+      q.WaitPopFinalize(1000);
+      // On futex/WaitOnAddress platforms WakeAll should make this reach
+      // zero immediately. On fallback platforms the existing SleepStep
+      // polling should still make it reach zero well inside 1 second.
+      CheckEqual(q.Waiters, 0,
+        'WaitPopFinalize should release all waiters');
+      WaitForTasks(WAITERS, 'WaitPopFinalize workers');
+      for i := 0 to WAITERS - 1 do
+        Check(not success[i],
+          'WaitPopFinalize WaitPop result');
+      // Future WaitPop calls should return immediately and, importantly,
+      // should not increase fWaitPopCounter.
+      v := 0;
+      Check(not q.WaitPop(10, nil, v),
+        'WaitPop after WaitPopFinalize');
+      CheckEqual(q.Waiters, 0,
+        'WaitPop after finalize should not register a waiter');
+       // Should therefore also be harmless/immediate if called again.
+      q.WaitPopFinalize(10);
+      CheckEqual(q.Waiters, 0);
+    finally
+      CleanupQueue;
+      q.Free;
+    end;
+    // WaitPopFinalize / WaitPopReset with several concurrent sleepers
+    q := TSynQueue.Create(TypeInfo(TIntegerDynArray));
+    try
+      // 1. first generation: all waiters are aborted by Finalize()
+      StartWaiters(5000);
+      SleepHiRes(20);
+      q.WaitPopFinalize(1000);
+      // WakeAll should release all futex waiters immediately.
+      // The polling fallback should also finish well within 1 second.
+      CheckEqual(q.Waiters, 0,
+        'WaitPopFinalize should release all waiters');
+      WaitForTasks(WAITERS, 'WaitPopFinalize workers');
+      for i := 0 to WAITERS - 1 do
+        Check(not success[i],
+          'WaitPopFinalize WaitPop result');
+      // While finalized, new WaitPop() calls should not even register.
+      v := 0;
+      Check(not q.WaitPop(10, nil, v),
+        'WaitPop after WaitPopFinalize');
+      CheckEqual(q.Waiters, 0,
+        'WaitPop after finalize should not register a waiter');
+      // 2. reset then start a completely fresh generation of waiters
+      Check(q.WaitPopReset,
+        'WaitPopReset after all waiters terminated');
+      StartWaiters(5000);
+      SleepHiRes(20);
+      // One Push() per waiter: validates that normal WakeOne behavior
+      // is working again after WaitPopReset().
+      for i := 1 to WAITERS do
+      begin
+        v := 100 + i;
+        q.Push(v);
+      end;
+      WaitForTasks(WAITERS, 'WaitPopReset workers');
+      mask := 0;
+      for i := 0 to WAITERS - 1 do
+      begin
+        Check(success[i],
+          'WaitPop after WaitPopReset');
+        Check((value[i] > 100) and
+              (value[i] <= 100 + WAITERS),
+          'WaitPopReset value range');
+        if (value[i] > 100) and
+           (value[i] <= 100 + WAITERS) then
+        begin
+          j := 1 shl (value[i] - 101);
+          Check(mask and j = 0,
+            'WaitPopReset duplicate value');
+          mask := mask or j;
+        end;
+      end;
+      CheckEqual(mask, (1 shl WAITERS) - 1,
+        'all WaitPopReset values consumed');
+      CheckEqual(q.Count, 0);
+      CheckEqual(q.Waiters, 0);
+      // 3. make sure Finalize() still works after Reset()
+      StartWaiters(5000);
+      SleepHiRes(20);
+      q.WaitPopFinalize(1000);
+      CheckEqual(q.Waiters, 0,
+        'second WaitPopFinalize should release all waiters');
+      WaitForTasks(WAITERS, 'second WaitPopFinalize workers');
+      for i := 0 to WAITERS - 1 do
+        Check(not success[i],
+          'second WaitPopFinalize WaitPop result');
+
+      // A second reset cycle should work as well.
+      Check(q.WaitPopReset,
+        'second WaitPopReset');
+      // The queue is operational again.
+      v := 123456;
+      q.Push(v);
+      v := 0;
+      Check(q.WaitPop(1000, nil, v),
+        'WaitPop after second WaitPopReset');
+      CheckEqual(v, 123456);
+    finally
+      CleanupQueue;
+      q.Free;
+    end;
+  finally
+    tasks.Free;
   end;
 end;
 
