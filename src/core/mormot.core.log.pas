@@ -4235,6 +4235,18 @@ begin
     until L > R;
 end;
 
+function IsWeakSymbol(s: PDebugSymbol): boolean;
+begin
+  result := (s <> nil) and
+            (FindPropName(['LogExcept', 'SynLogException', 'ThreadProc',
+              'SynLogVectoredHandler', 'SynRaiseProc'
+              {$ifdef ISDELPHI} , 'SynRtlUnwind',  '@HandleAnyException',
+              '@HandleOnException', '@RaiseExcept', '@RaiseAgain',
+              '@RaiseAtExcept', '@InternalRaiseAtExcept', 'ThreadWrapper'
+              {$ifdef CPUX86} , 'RawStackTrace' {$endif}
+              {$endif ISDELPHI} ], s^.Name) >= 0);
+end;
+
 function TDebugFile.AddLog(W: TTextWriter; aPointer: PtrUInt; NoHex: boolean): boolean;
 var
   rva: TDebugAddress;
@@ -4260,15 +4272,8 @@ begin
   if rva = 0 then
     exit;
   s := FindSymbol(rva);
-  if s <> nil then
-    if FindPropName(['LogExcept', 'SynLogException', 'ThreadProc',
-         'SynLogVectoredHandler', 'SynRaiseProc'
-         {$ifdef ISDELPHI} , 'SynRtlUnwind',  '@HandleAnyException',
-         '@HandleOnException', '@RaiseExcept', '@RaiseAgain',
-         '@RaiseAtExcept', '@InternalRaiseAtExcept', 'ThreadWrapper'
-         {$ifdef CPUX86} , 'RawStackTrace' {$endif}
-         {$endif ISDELPHI} ], s^.Name) >= 0 then
-      exit; // only meaningful entries
+  if IsWeakSymbol(s) then
+    exit; // only meaningful entries
   result := true;
   if not NoHex then
   begin
@@ -4313,6 +4318,11 @@ begin
   if (s = nil) and
      (l = nil) then
      exit;
+  if IsWeakSymbol(s) or
+     ((l <> nil) and
+      (FindPropName(['mormot.core.log.pas', 'mormot.core.test.pas'],
+         l^.FileName) >= 0)) then
+    exit; // don't pollute the output ShortString with internal redirections
   AppendShortCharSafe(' ', aInfo); // always prepend a space
   if l <> nil then
   begin

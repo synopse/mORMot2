@@ -1000,13 +1000,10 @@ begin
 end;
 
 procedure TTunnelLocal.TunnelSend(const aFrame: RawByteString);
-var
-  l: PtrInt;
 begin
   // ITunnelTransmit method: when a Frame is received from the relay server
-  l := length(aFrame);
   if fVerboseLog then
-    fLogClass.Add.Log(sllTrace, 'TunnelSend=%', [l]);
+    fLogClass.Add.Log(sllTrace, 'TunnelSend=%', [length(aFrame)]);
   fSafe.Lock; // protect fHandshake and fFlags
   try
     inc(fFramesIn);
@@ -1014,11 +1011,11 @@ begin
     begin
       // handle special rendez-vous initial phase
       fLogClass.Add.Log(sllTrace, 'TunnelSend: Handshake phase', self);
-      if l <= TRAIL_SIZE then     // received closure notification
+      if length(aFrame) <= TRAIL_SIZE then // received closure notification
         fFlags := fFlags + [fClosed, fClosePortNotified]
       else
-        fHandshake.Push(aFrame);  // during handshake phase - maybe before Open
-      fHandshakeEvent.SetEvent; // eventually wake the waiting thread
+        fHandshake.Push(aFrame); // during handshake phase - maybe before Open
+      fHandshakeEvent.SetEvent;  // eventually wake the waiting thread
       exit;
     end;
   finally
@@ -1434,26 +1431,28 @@ end;
 procedure TTunnelLocal.DrainHandshakeQueue;
 var
   frame: RawByteString;
+  needclose: boolean;
 begin
-  try
-    repeat
-      fSafe.Lock; // protect handshake phase
-      try
-        if (fClosed in fFlags) or
-           not fHandshake.Pop(frame) then
-          break;
-      finally
-        fSafe.UnLock;
+  needclose := false;
+  repeat
+    fSafe.Lock; // protect handshake phase
+    try
+      needclose := fClosed in fFlags;
+      if needclose or
+         not fHandshake.Pop(frame) then
+      begin
+        FreeAndNil(fHandshake); // eventually ends the handshaking phase
+        break;
       end;
-      // process any frame received during the handshake outside of the lock
-      fLogClass.Add.Log(sllDebug, 'Open: delayed frame len=%', [length(frame)], self);
-      RelayFrame(frame);
-    until false;
-  finally
-    FreeAndNilSafe(fHandshake); // eventually ends the handshaking phase
-    if fClosed in fFlags then
-      ClosePort;
-  end;
+    finally
+      fSafe.UnLock;
+    end;
+    // process any frame received during the handshake outside of the lock
+    fLogClass.Add.Log(sllDebug, 'Open: delayed frame len=%', [length(frame)], self);
+    RelayFrame(frame);
+  until false;
+  if needclose then
+    ClosePort; // outside of fSafe.Lock
 end;
 
 procedure TTunnelLocal.AfterHandshake;
