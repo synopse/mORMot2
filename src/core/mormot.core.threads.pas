@@ -1706,6 +1706,7 @@ type
     fContentionAbortCount: cardinal;
     fContentionCount: cardinal;
     fName, fPoolName: RawUtf8;
+    fWaiters: integer;
     fTerminated: boolean;
     {$ifndef USE_THREADWINIOCP}
     fQueuePendingContext: boolean;
@@ -5050,23 +5051,30 @@ begin
   endtix := 0;
   if TimeOutMS <> INFINITE then
     endtix := mormot.core.os.GetTickCount64 + TimeOutMS;
-  repeat
-    pending := cardinal(fPendingTasks);
-    if pending = 0 then
-      exit;
-    if endtix <> 0 then
-    begin
-      nowtix := mormot.core.os.GetTickCount64;
-      if nowtix >= endtix then
-        break;
-      TimeOutMS := cardinal(endtix - nowtix);
-    end;
+  if Assigned(OsWaitOnValue) then
+    LockedInc32(@fWaiters);
+  try
+    repeat
+      pending := cardinal(fPendingTasks);
+      if pending = 0 then
+        exit;
+      if endtix <> 0 then
+      begin
+        nowtix := mormot.core.os.GetTickCount64;
+        if nowtix >= endtix then
+          break;
+        TimeOutMS := cardinal(endtix - nowtix);
+      end;
+      if Assigned(OsWaitOnValue) then
+        OsWaitOnValue(PCardinal(@fPendingTasks), pending, TimeOutMS)
+      else
+        SleepHiRes(1);
+    until false;
+    result := false;
+  finally
     if Assigned(OsWaitOnValue) then
-      OsWaitOnValue(PCardinal(@fPendingTasks), pending, TimeOutMS)
-    else
-      SleepHiRes(1);
-  until false;
-  result := false;
+      LockedDec32(@fWaiters);
+  end;
 end;
 
 function TSynThreadPool.NeedStopOnIOError: boolean;
@@ -5080,6 +5088,9 @@ end;
 
 procedure TSynThreadPool.TaskAllDone;
 begin
+  if fWaiters <> 0 then
+    if Assigned(OsWakeAllOnValue) then
+      OsWakeAllOnValue(PCardinal(@fPendingTasks));
 end;
 
 procedure TSynThreadPool.DoTask(aCaller: TSynThreadPoolWorkThread; aContext: pointer);
