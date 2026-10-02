@@ -684,6 +684,29 @@ type
 
 implementation
 
+{
+  Multi-threading guidelines for SOA/interface based code as implemented below:
+
+  - Use locks only to protect short-lived internal state transitions and shared
+    fields. Keep the protected region as small and deterministic as possible.
+  - Never call an interface method, callback, socket I/O, wait, or any external
+    code while holding an instance lock: such calls may block or re-enter this
+    object from another thread and easily create deadlocks.
+  - When an external call depends on protected state, capture/update that state
+    under the lock, release the lock, then perform the call.
+  - A worker thread should never own its parent through a strong interface
+    reference. The parent owns the thread, creates it suspended, publishes the
+    thread reference before Start, and remains responsible for its lifetime.
+  - Shutdown should be split in two steps: request termination / unblock any
+    pending I/O first, then join and destroy the thread from its owner.
+  - Never let a worker thread clear or free the owner's thread reference, and
+    never use FreeOnTerminate for a thread whose lifetime belongs to an object.
+  - Write highly concurrent multi-threaded regression tests to validate the
+    actual implementation. Static (even AI-based) analysis is never enough.
+  - If the code is too difficult to read and maintain it is likely you did not
+    follow those advices.
+}
+
 
 { ******************** Abstract Definitions for Port Forwarding }
 
@@ -741,6 +764,8 @@ end;
 
 procedure TTunnelLocalThread.Abort;
 begin
+  if self = nil then
+    exit;
   Terminate;
   fServerSock.RawShutdown; // no fSafe.Lock needed for this raw socket API
   fClientSock.RawShutdown;
