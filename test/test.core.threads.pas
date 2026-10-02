@@ -12,6 +12,8 @@ uses
   classes,
   mormot.core.base,
   mormot.core.os,
+  mormot.core.text,
+  mormot.core.rtti,
   mormot.core.threads,
   mormot.core.test;
 
@@ -106,7 +108,8 @@ type
     function TransitionIterations: integer;
     function WaitMS: cardinal;
     procedure ResetProbe;
-    procedure RunWorker(const Worker: TNotifyEvent; const Name: RawUtf8);
+    procedure RunWorker(const Worker: TNotifyEvent; const Name: RawUtf8;
+      NotifyTask: boolean = false);
     procedure RunWorkers(const Worker: TNotifyEvent; Count: integer;
       const Name: RawUtf8);
     // exclusive-lock dispatch
@@ -146,9 +149,11 @@ type
     procedure StressTryRW;
     // TSynEvent worker
     procedure EventWorker(Sender: TObject);
+    // TSynQueue worker
+    procedure TSynQueueSlow(Sender: TObject);
   published
-    /// validate TSynEvent state transitions and a real cross-thread handshake
-    procedure _TSynEvent;
+    /// validate TSynEvent/TSynQueue state transitions and cross-thread coverage
+    procedure CoreClasses;
     /// validate TLightLock/TMultiLightLock/TOSLightLock/TOSLock
     procedure ExclusiveLocks;
     /// validate TRWLightLock/TRWLock without embedding a fairness assumption
@@ -316,11 +321,11 @@ begin
   fMainOwns := 0;
 end;
 
-procedure TTestCoreThreads.RunWorker(
-  const Worker: TNotifyEvent; const Name: RawUtf8);
+procedure TTestCoreThreads.RunWorker(const Worker: TNotifyEvent;
+  const Name: RawUtf8; NotifyTask: boolean);
 begin
   Run(Worker, self, Name,
-    {Threaded=}true, {NotifyTask=}false, {ForcedThreaded=}true);
+    {Threaded=}true, NotifyTask, {ForcedThreaded=}true);
 end;
 
 
@@ -1111,12 +1116,12 @@ begin
     fDone.SetEvent;
 end;
 
-procedure TTestCoreThreads._TSynEvent;
+procedure TTestCoreThreads.CoreClasses;
 var
   i: integer;
 begin
-  // preserve the existing single-thread state-transition coverage from
-  // TTestCoreBase._TSynQueue, but keep TSynEvent in its own test.
+  // simple single-thread state-transition coverage
+  CheckEqual(PtrUInt(GetCurrentThreadID), PtrUInt(MainThreadID), 'mainthread');
   for i := 1 to 10 do
   begin
     fEntered.ResetEvent;
@@ -1134,14 +1139,195 @@ begin
     fEntered.SetEvent;
     Check(fEntered.WaitForSafe(INFINITE), 'WaitForSafe(INFINITE) signal');
   end;
+  // validate TSynQueue with all kind of values in a background thread
+  Run(TSynQueueSlow, self, 'TSynQueue');
   // real cross-thread handshake: one waiter per TSynEvent instance
   ResetProbe;
-  RunWorker(EventWorker, 'TSynEvent');
+  RunWorker(EventWorker, 'TSynEvent', {notifytask=}true);
   Check(fEntered.WaitFor(WaitMS), 'event worker entered');
   Check(not fDone.Notified, 'event worker should wait on gate');
   fGate.SetEvent;
   Check(fDone.WaitFor(WaitMS), 'event worker released');
-  RunWait(false, 5, false);
+end;
+
+type
+  TNotifyTask = record // a typical event for TSynQueue record validation
+    Name: string;
+    Payload: RawJson;
+    Active: boolean;
+  end;
+  TNotifyTaskDynArray = array of TNotifyTask;
+
+procedure TTestCoreThreads.TSynQueueSlow(Sender: TObject);
+var
+  o, i, j, k, n: integer; // not PtrInt
+  f: TSynQueue;
+  u, v: RawUtf8;
+  r1, r2: TNotifyTask;
+  savedint: TIntegerDynArray;
+  savedu: TRawUtf8DynArray;
+begin
+  // validate TSynQueue with integer values
+  f := TSynQueue.Create(TypeInfo(TIntegerDynArray));
+  try
+    for o := 1 to 1000 do
+    begin
+      checkEqual(f.Count, 0);
+      check(not f.Pending);
+      for i := 1 to o do
+        f.Push(i);
+      check(f.Pending);
+      checkEqual(f.Count, o);
+      check(f.Capacity >= o);
+      f.Save(savedint);
+      check(Length(savedint) = o);
+      check(f.Contains(@o), 'cont0'); // O(n) since queue is a FIFO
+      for i := 1 to o do
+      begin
+        j := -1;
+        check(f.Peek(j), 'peek');
+        checkEqual(j, i);
+        check(f.Contains(@i), 'cont1'); // O(1) since find immediately
+        checkEqual(f.PeekCompare(nil), 1);
+        checkEqual(f.PeekCompare(@j), 0);
+        j := -1;
+        checkEqual(f.PeekCompare(@j), 1);
+        check(not f.PopEquals(@j, j), 'popeq');
+        check(f.Pop(j), 'pop');
+        checkEqual(j, i);
+        if i < 10 then // is O(n) after Pop()
+          check(not f.Contains(@i), 'cont2');
+      end;
+      check(not f.Pending);
+      checkEqual(f.Count, 0);
+      checkEqual(f.PeekCompare(@j), -1);
+      check(f.Capacity > 0);
+      f.Clear; // ensure f.Pop(j) will use leading storage
+      check(not f.Pending);
+      checkEqual(f.Count, 0);
+      checkEqual(f.Capacity, 0);
+      checkEqual(Length(savedint), o);
+      for i := 1 to o do
+        checkEqual(savedint[i - 1], i);
+      n := 0;
+      for i := 1 to o do
+        if i and 7 = 0 then
+        begin
+          j := -1;
+          check(f.Pop(j));
+          check(j and 7 <> 0);
+          dec(n);
+        end
+        else
+        begin
+          f.Push(i);
+          inc(n);
+        end;
+      checkEqual(f.Count, n);
+      check(f.Pending);
+      check(f.Contains(@o) = (o and 7 <> 0), 'cont3');
+      f.Save(savedint);
+      checkEqual(Length(savedint), n);
+      for i := 1 to n do
+        check(savedint[i - 1] and 7 <> 0);
+      for i := 1 to n do
+      begin
+        j := -1;
+        check(f.Peek(j));
+        k := -1;
+        check(f.Pop(k));
+        checkEqual(j, k);
+        check(j and 7 <> 0);
+      end;
+      checkEqual(f.Count, 0);
+      check(f.Capacity > 0);
+    end;
+  finally
+    f.Free;
+  end;
+  // validate TSynQueue with string values
+  f := TSynQueue.Create(TypeInfo(TRawUtf8DynArray));
+  try
+    for o := 1 to 1000 do
+    begin
+      check(not f.Pending);
+      check(f.Count = 0);
+      f.Clear; // ensure f.Pop(j) will use leading storage
+      check(f.Count = 0);
+      check(f.Capacity = 0);
+      n := 0;
+      for i := 1 to o do
+        if i and 7 = 0 then
+        begin
+          u := '7';
+          check(f.Pop(u));
+          check(GetInteger(pointer(u)) and 7 <> 0);
+          dec(n);
+        end
+        else
+        begin
+          u := UInt32ToUtf8(i);
+          f.Push(u);
+          inc(n);
+        end;
+      check(f.Pending);
+      check(f.Count = n);
+      f.Save(savedu);
+      check(Length(savedu) = n);
+      for i := 1 to n do
+        check(GetInteger(pointer(savedu[i - 1])) and 7 <> 0);
+      for i := 1 to n do
+      begin
+        u := '';
+        check(f.Peek(u));
+        check(f.Contains(@u), 'cont4'); // O(1) since find immediately
+        checkEqual(f.PeekCompare(@u), 0);
+        v := '';
+        checkEqual(f.PeekCompare(@v), 1);
+        check(f.Pop(v));
+        check(u = v);
+        check(GetInteger(pointer(u)) and 7 <> 0);
+      end;
+      check(not f.Pending);
+      check(f.Count = 0);
+      check(f.Capacity > 0);
+    end;
+    check(Length(savedu) = length(savedint));
+  finally
+    f.Free;
+  end;
+  // validate TSynQueue with complex record type
+  f := TSynQueue.Create(TypeInfo(TNotifyTaskDynArray));
+  try
+    checkEqual(f.Count, 0);
+    check(not f.Pending);
+    for i := 1 to 100 do
+    begin
+      r1.Name := IntToStr(i);
+      r1.Active := i and 3 = 0;
+      r1.Payload := Make(['{"int":', i, '}']);
+      checkNotEqual(f.Count, i);
+      f.Push(r1);
+      checkEqual(f.Count, i);
+      check(f.Pending);
+    end;
+    for i := 1 to 100 do
+    begin
+      check(f.Pending);
+      RecordZero(@r2, TypeInfo(TNotifyTask));
+      Check(r2.Name = '');
+      Check(not r2.Active);
+      Check(r2.Payload = '');
+      Check(f.Pop(r2));
+      Check(r2.Name = IntToStr(i));
+      Check(r2.Active = (i and 3 = 0));
+    end;
+    checkEqual(f.Count, 0);
+    Check(not f.Pop(r2));
+    checkEqual(f.Count, 0);
+  finally
+    f.Free;
+  end;
 end;
 
 procedure TTestCoreThreads.ExclusiveLocks;

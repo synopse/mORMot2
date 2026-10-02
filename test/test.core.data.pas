@@ -11455,7 +11455,7 @@ var
       p := W(p, offs[i], 4);
       p := WS(p, FormatUtf8('f%.tx', [i]));
     end;
-    v := (p - PAnsiChar(@tmp)) - cdoffs;
+    v := cardinal(p - PAnsiChar(@tmp)) - cdoffs;
     p := W(p, $06054b50, 4);             // last header
     p := W(p, 0, 4);
     p := W(p, 2, 2);
