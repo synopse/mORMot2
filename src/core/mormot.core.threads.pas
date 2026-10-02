@@ -426,10 +426,17 @@ type
       const aWhenIdle: TThreadMethod): pointer;
     /// ensure any pending or future WaitPop() returns immediately as false
     // - is always called by Destroy destructor
-    // - once called, the whole TSynQueue instance is not usable any more
+    // - once called, the whole TSynQueue instance is not usable any more,
+    // until you call WaitPopReset() to reactivate the queue
     // - could be also called e.g. from an UI OnClose event to avoid any lock
     // - this method is thread-safe, but will lock the instance only when needed
     procedure WaitPopFinalize(aTimeoutMS: integer = 100);
+    /// allow WaitPop() calls again after a previous WaitPopFinalize()
+    // - returns true if the queue is ready to accept new WaitPop() calls
+    // - returns false if some previous WaitPop() calls are still terminating
+    // - should only be called after WaitPopFinalize() has returned
+    // - does not alter any pending queue items
+    function WaitPopReset: boolean;
     /// delete all items currently stored in this queue, and void its capacity
     // - this method is thread-safe, since it will lock the instance
     procedure Clear;
@@ -454,6 +461,8 @@ type
     // - this method is not thread-safe, so returned value is indicative only
     function Pending: boolean;
       {$ifdef HASINLINE}inline;{$endif}
+    /// returns how much WaitPop() threads are currently waiting
+    function Waiters: integer;
     /// raw access to the associated dynamic array storage
     // - do not use to access the values, but e.g. for ItemSize/ItemClear(),
     // or change default PopEquals() comparer via Values.SetParserType()
@@ -2195,6 +2204,16 @@ begin
             (fFirst >= 0);
 end;
 
+function TSynQueue.Waiters: integer;
+begin
+  fSafe.ReadOnlyLock;
+  try
+    result := fWaitPopCounter;
+  finally
+    fSafe.ReadOnlyUnLock;
+  end;
+end;
+
 procedure TSynQueue.Push(const aValue);
 var
   wake: boolean;
@@ -2573,6 +2592,19 @@ begin
     SleepStep(starttix); // ensure WaitPos() is actually finished
   until (fWaitPopCounter = 0) or
         (mormot.core.os.GetTickCount64 > endtix);
+end;
+
+function TSynQueue.WaitPopReset: boolean;
+begin
+  fSafe.WriteLock;
+  try
+    result := (wpfDestroying in fWaitPopFlags) and
+              (fWaitPopCounter = 0);
+    if result then
+      exclude(fWaitPopFlags, wpfDestroying);
+  finally
+    fSafe.WriteUnLock;
+  end;
 end;
 
 procedure TSynQueue.Save(out aDynArrayValues; aDynArray: PDynArray);
