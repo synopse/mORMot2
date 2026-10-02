@@ -982,7 +982,7 @@ begin
     end;
   except
     on E: Exception do
-      test.Check(false, E.ClassName);
+      test.FailedRaised(E);
   end;
 end;
 
@@ -1464,7 +1464,7 @@ begin
     end;
   except
     on E: Exception do
-      Check(false, E.Message);
+      FailedRaised(E);
   end;
   // retry reverse lookup DNS after some time
   if synopsednsip <> '' then
@@ -2208,7 +2208,7 @@ begin
             //writeln(one.SearchResult.Dump);
           except
             on E: Exception do
-              Check(false, E.Message);
+              FailedRaised(E);
           end;
         finally
           one.Free;
@@ -3613,7 +3613,6 @@ var
   nr: TNetResult;
   clientsock, serversock: TNetSocket;
   local, remote: TNetPort;
-  closed: PBoolean;
   sent, sent2: RawUtf8;
   received, received2: RawByteString;
   nfo: variant;

@@ -370,7 +370,7 @@ begin
         end;
       except
         on E: Exception do
-          fTest.Check(False, E.Message);
+          fTest.FailedRaised(E);
       end;
     end;
   finally

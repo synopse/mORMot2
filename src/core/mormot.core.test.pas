@@ -309,6 +309,8 @@ type
     /// this method can be triggered directly - e.g. after CheckFailed() = true
     procedure TestFailed(const msg: RawUtf8; const args: array of const;
       notify: boolean = true); overload;
+    /// would fail a test on an unexpected Exception
+    procedure FailedRaised(E: Exception; const ctxt: RawUtf8 = '');
     /// will add to the console a message with a speed estimation
     // - speed is computed from the method start or supplied local Timer
     // - returns the number of microsec of the (may be specified) timer
@@ -1199,6 +1201,11 @@ procedure TSynTestCase.TestFailed(const msg: RawUtf8; const args: array of const
   notify: boolean);
 begin
   TestFailed(FormatString(msg, args), notify);
+end;
+
+procedure TSynTestCase.FailedRaised(E: Exception; const ctxt: RawUtf8 = '');
+begin
+  TestFailed('%%', [ctxt, ObjectToJsonDebug(E)]);
 end;
 
 procedure TSynTestCase.AddConsole(const msg: string; OnlyLog: boolean);

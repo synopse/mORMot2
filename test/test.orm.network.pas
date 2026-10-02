@@ -200,7 +200,7 @@ begin
     Database.NoAjaxJson := true; // expect not expanded JSON from now on
   except
     on E: Exception do
-      Check(false, E.Message);
+      FailedRaised(E);
   end;
 end;
 

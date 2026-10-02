@@ -11297,6 +11297,19 @@ begin
   end;
 end;
 
+function W(p: PAnsiChar; value, bytes: PtrUInt): PAnsiChar;
+  {$ifdef HASINLINE} inline; {$endif}
+begin
+  PCardinal(p)^ := value; // little-endian, as the .zip format
+  result := @p[bytes];
+end;
+
+function WS(p: PAnsiChar; const text: RawUtf8): PAnsiChar;
+begin
+  MoveFast(pointer(text)^, p^, length(text));
+  result := @p[length(text)];
+end;
+
 procedure TTestCoreCompression.ZipFormat;
 var
   FN, FN2: TFileName;
@@ -11395,79 +11408,64 @@ var
   const
     DATA: array[0..1] of RawUtf8 = ('first content', 'second stored content');
   var
-    z: TRawByteStringStream;
     crc, offs: array[0..1] of cardinal;
     cdoffs, v: cardinal;
-    s: RawByteString;
     i: PtrInt;
-
-    procedure W(value: cardinal; bytes: integer);
-    begin
-      z.Write(value, bytes); // little-endian, as the .zip format
-    end;
-
-    procedure WS(const text: RawUtf8);
-    begin
-      z.Write(pointer(text)^, length(text));
-    end;
-
+    p: PAnsiChar;
+    tmp: TTemp512;
   begin
-    z := TRawByteStringStream.Create;
-    try
-      for i := 0 to 1 do
-      begin
-        offs[i] := z.Position;
-        crc[i] := crc32(0, pointer(DATA[i]), length(DATA[i]));
-        W($04034b50, 4);           // local file header with no crc/sizes
-        W(20, 2);
-        W(8, 2);                   // FLAG_DATADESCRIPTOR
-        W(0, 2);                   // stored
-        W(0, 4);                   // time+date
-        W(0, 4);
-        W(0, 4);
-        W(0, 4);
-        W(5, 2);                   // name length
-        W(0, 2);
-        WS(FormatUtf8('f%.tx', [i]));
-        WS(DATA[i]);
-        W($08074b50, 4);           // data descriptor
-        W(crc[i], 4);
-        W(length(DATA[i]), 4);
-        W(length(DATA[i]), 4);
-      end;
-      cdoffs := z.Position;
-      for i := 0 to 1 do
-      begin
-        W($02014b50, 4);           // central directory with crc/sizes
-        W(20, 2);
-        W(20, 2);
-        W(8, 2);                   // FLAG_DATADESCRIPTOR
-        W(0, 2);
-        W(0, 4);
-        W(crc[i], 4);
-        W(length(DATA[i]), 4);
-        W(length(DATA[i]), 4);
-        W(5, 2);
-        W(0, 4);                   // extra + comment length
-        W(0, 4);                   // disk + internal attr
-        W(0, 4);                   // external attr
-        W(offs[i], 4);
-        WS(FormatUtf8('f%.tx', [i]));
-      end;
-      v := z.Position - cdoffs;
-      W($06054b50, 4);             // last header
-      W(0, 4);
-      W(2, 2);
-      W(2, 2);
-      W(v, 4);
-      W(cdoffs, 4);
-      W(0, 2);
-      s := z.DataString;
-    finally
-      z.Free;
+    p := @tmp;
+    for i := 0 to 1 do
+    begin
+      offs[i] := p - PAnsiChar(@tmp);
+      crc[i] := crc32(0, pointer(DATA[i]), length(DATA[i]));
+      p := W(p, $04034b50, 4);           // local file header with no crc/sizes
+      p := W(p, 20, 2);
+      p := W(p, 8, 2);                   // FLAG_DATADESCRIPTOR
+      p := W(p, 0, 2);                   // stored
+      p := W(p, 0, 4);                   // time+date
+      p := W(p, 0, 4);
+      p := W(p, 0, 4);
+      p := W(p, 0, 4);
+      p := W(p, 5, 2);                   // name length
+      p := W(p, 0, 2);
+      p := WS(p, FormatUtf8('f%.tx', [i]));
+      p := WS(p, DATA[i]);
+      p := W(p, $08074b50, 4);           // data descriptor
+      p := W(p, crc[i], 4);
+      p := W(p, length(DATA[i]), 4);
+      p := W(p, length(DATA[i]), 4);
     end;
+    cdoffs := p - PAnsiChar(@tmp);
+    for i := 0 to 1 do
+    begin
+      p := W(p, $02014b50, 4);           // central directory with crc/sizes
+      p := W(p, 20, 2);
+      p := W(p, 20, 2);
+      p := W(p, 8, 2);                   // FLAG_DATADESCRIPTOR
+      p := W(p, 0, 2);
+      p := W(p, 0, 4);
+      p := W(p, crc[i], 4);
+      p := W(p, length(DATA[i]), 4);
+      p := W(p, length(DATA[i]), 4);
+      p := W(p, 5, 2);
+      p := W(p, 0, 4);                   // extra + comment length
+      p := W(p, 0, 4);                   // disk + internal attr
+      p := W(p, 0, 4);                   // external attr
+      p := W(p, offs[i], 4);
+      p := WS(p, FormatUtf8('f%.tx', [i]));
+    end;
+    v := (p - PAnsiChar(@tmp)) - cdoffs;
+    p := W(p, $06054b50, 4);             // last header
+    p := W(p, 0, 4);
+    p := W(p, 2, 2);
+    p := W(p, 2, 2);
+    p := W(p, v, 4);
+    p := W(p, cdoffs, 4);
+    p := W(p, 0, 2);
+    CheckHash(@tmp, p - PAnsiChar(@tmp), $032B1637);
     try
-      with TZipRead.Create(pointer(s), length(s)) do
+      with TZipRead.Create(@tmp, p - PAnsiChar(@tmp)) do
       try
         CheckEqual(Count, 2, 'datadesc count');
         for i := 0 to Count - 1 do
@@ -11477,9 +11475,10 @@ var
       end;
     except
       on E: Exception do
-        Check(false, E.ClassName + ': ' + E.Message);
+        FailedRaised(E);
     end;
   end;
+
 var
   i, m: integer;
   mem: QWord;
@@ -11505,7 +11504,7 @@ begin
       end;
   except
     on E: Exception do
-      Check(false, E.Message);
+      FailedRaised(E);
   end;
   Check(DeleteFile(FN));
   TZipWrite.Create(FN).Free;
