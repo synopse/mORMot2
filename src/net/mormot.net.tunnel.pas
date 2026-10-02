@@ -113,7 +113,6 @@ type
     fState: (stCreated, stAccepting, stProcessing, stTerminated);
     fStarted: boolean;
     fOwner: TTunnelLocal;
-    fTransmit: ITunnelTransmit;
     fSession: TTunnelSession;
     fAes: array[{sending:}boolean] of TAesAbstract;
     fServerSock, fClientSock: TNetSocket;
@@ -126,8 +125,8 @@ type
     procedure DoExecute; override;
   public
     /// initialize the thread - called from Open()
-    constructor Create(owner: TTunnelLocal; const transmit: ITunnelTransmit;
-      const key, iv: THash128; sock: TNetSocket; acceptSecs: cardinal); reintroduce;
+    constructor Create(owner: TTunnelLocal; const key, iv: THash128;
+      sock: TNetSocket; acceptSecs: cardinal); reintroduce;
     /// release all sockets and encryption state
     destructor Destroy; override;
     /// redirected from TTunnelLocal.Send
@@ -229,6 +228,8 @@ type
     // tunnelling thread
     constructor Create(Logger: TSynLogClass = nil;
       SpecificKey: PEccKeyPair = nil); reintroduce;
+    /// finalize this instance, and its local TCP server
+    destructor Destroy; override;
     /// wait until the peer has actually started its tunnel handshake
     // - this is an event-driven synchronization helper for demand-driven
     // forwarding, and does not consume nor reorder the first handshake frame
@@ -277,8 +278,6 @@ type
       TransmitOptions: TTunnelOptions; TimeOutMS: integer; const AppSecret, Address: RawUtf8;
       const InfoNameValue: array of const; const SignCert: ICryptCert = nil;
       const VerifyCert: ICryptCert = nil): TNetPort;
-    /// finalize this instance, and its local TCP server
-    destructor Destroy; override;
     /// called e.g. by CallbackReleased() or by Destroy
     procedure ClosePort;
   public
@@ -697,14 +696,12 @@ end;
 { TTunnelLocalThread }
 
 constructor TTunnelLocalThread.Create(owner: TTunnelLocal;
-  const transmit: ITunnelTransmit; const key, iv: THash128; sock: TNetSocket;
-  acceptSecs: cardinal);
+  const key, iv: THash128; sock: TNetSocket; acceptSecs: cardinal);
 begin
   fSafe.Init; // mandatory for TOSLightLock
   fOwner := owner;
   fPort := owner.Port;
   fSession := owner.Session;
-  fTransmit := transmit;
   fTimeoutAcceptSecs := acceptSecs;
   if not IsZero(key) then
   begin
@@ -714,8 +711,7 @@ begin
     // won't include an IV with each frame, but update it after each frame
   end;
   fServerSock := sock;
-  FreeOnTerminate := true;
-  inherited Create({susp=}false, nil, nil, fOwner.fLogClass, Make(['tun', fPort]));
+  inherited Create({susp=}true, nil, nil, fOwner.fLogClass, Make(['tun', fPort]));
 end;
 
 destructor TTunnelLocalThread.Destroy;
@@ -723,17 +719,13 @@ begin
   Terminate;
   fSafe.Lock;
   try
-    if fOwner <> nil then
-    try
-      fOwner.fThread := nil;
-    except
-    end;
     fServerSock.ShutdownAndClose({rdwr=}true);
     fClientSock.ShutdownAndClose({rdwr=}true);
   finally
     fSafe.UnLock;
   end;
-  inherited Destroy;
+  inherited Destroy; // joins the thread
+  fOwner := nil;
   FreeAndNil(fAes[true]);
   FreeAndNil(fAes[false]);
   fSafe.Done; // mandatory for TOSLightLock
@@ -870,12 +862,12 @@ begin
               else
                 SetLength(tmp, length(tmp) + TRAIL_SIZE);
               PTunnelSession(@PByteArray(tmp)[length(tmp) - TRAIL_SIZE])^ := fSession;
-              if (fTransmit <> nil) and
+              if (fOwner.fTransmit <> nil) and
                  not Terminated then
               begin
                 if fOwner <> nil then
                   inc(fOwner.fFramesOut);
-                fTransmit.TunnelSend(tmp);
+                fOwner.fTransmit.TunnelSend(tmp);
               end;
             end;
         else
@@ -923,9 +915,17 @@ begin
 end;
 
 destructor TTunnelLocal.Destroy;
+var
+  log: ISynLog;
 begin
+  fLogClass.EnterLocal(log, 'Destroy %', [fPort], self);
   if fThread <> nil then
+  begin
+    if Assigned(log) then
+      log.Log(sllTrace, 'Destroy: ClosePort + Thread.Free', self);
     ClosePort; // calls Terminate
+    FreeAndNilSafe(fThread); // terminate + join + destroy
+  end;
   fHandshakeEvent.Free;
   inherited Destroy;
   FillCharFast(fEcdhe, SizeOf(fEcdhe), 0);
@@ -934,7 +934,6 @@ end;
 
 procedure TTunnelLocal.ClosePort;
 var
-  thread: TTunnelLocalThread;
   frame: RawByteString; // notification frame to unregister to the other side
   callback: TNetSocket; // touch-and-go to the server to release main Accept()
   log: ISynLog;
@@ -958,12 +957,10 @@ begin
         end;
       except
       end;
-    thread := fThread;
-    if thread <> nil then
+    if fThread <> nil then
       try
-        fThread := nil;
-        thread.Terminate;
-        if thread.fState = stAccepting then
+        fThread.Terminate;
+        if fThread.fState = stAccepting then
         begin
           if Assigned(log) then
             log.Log(sllDebug, 'ClosePort: release accept', self);
@@ -1091,7 +1088,12 @@ procedure TTunnelLocal.CallbackReleased(const callback: IInvokable;
 begin
   if not IdemPChar(pointer(interfaceName), 'ITUNNEL') then
     exit; // should be ITunnelLocal or ITunnelTransmit
-  include(fFlags, fClosePortNotified); // no need to notify the remote end
+  fSendSafe.Lock;
+  try
+    include(fFlags, fClosePortNotified); // no need to notify the remote end
+  finally
+    fSendSafe.UnLock;
+  end;
   ClosePort;
 end;
 
@@ -1229,7 +1231,6 @@ var
   key, iv: THash256Rec;
   hmac, hmac2: THmacSha256;
   hqueue: TSynQueue;
-  thread: TTunnelLocalThread;
   log: ISynLog;
 const // port is asymmetrical so not included to the KDF - nor the crc
   KDF_SIZE = SizeOf(loc.Info) - (SizeOf(loc.Info.port) + SizeOf(loc.Info.crc));
@@ -1252,7 +1253,6 @@ begin
     include(fFlags, fSocketBound);
   result := LocalPort;
   // initial single round trip handshake
-  thread := nil;
   infoaes := nil;
   try
     // header with optional ECDHE
@@ -1356,17 +1356,24 @@ begin
     // launch the background processing thread
     fPort := result;
     TimeOutMS := (TimeOutMS shr 10) + 5; // minimal coherent accept time
-    thread := TTunnelLocalThread.Create(
-      self, fTransmit, key.Lo, iv.Lo, Sock, TimeOutMS);
-    SleepHiRes(100, thread.fStarted);
+    fSendSafe.Lock;
+    try
+      if fThread <> nil then
+        ETunnel.RaiseUtf8('%.Open: existing %', [self, fThread]);
+      fThread := TTunnelLocalThread.Create(
+        self, key.Lo, iv.Lo, Sock, TimeOutMS);
+    finally
+      fSendSafe.UnLock;
+    end;
+    fThread.Start; // was created with Suspended=true
+    SleepHiRes(100, fThread.fStarted);
     if Assigned(log) then
       log.Log(sllTrace, 'Open: started=% %',
-        [BOOL_STR[thread.fStarted], thread], self);
+        [BOOL_STR[fThread.fStarted], fThread], self);
     fStartTicks := GetUptimeSec; // wall clock
     hqueue := fHandshake;
     fSendSafe.Lock; // re-entrant for TunnelSend()
     try
-      fThread := thread;   // starts the normal tunnelling phase
       fHandshake := nil;   // ends the handshaking phase
       while hqueue.Pop(frame) do
       begin
@@ -1393,7 +1400,7 @@ begin
     on E: Exception do
     begin
       fLogClass.Add.Log(sllWarning, 'OpenInternal % [%] for thread=% sock=%',
-        [PClass(E)^, E.Message, thread, pointer(Sock)], self);
+        [PClass(E)^, E.Message, fThread, pointer(Sock)], self);
       sock.ShutdownAndClose(true); // any error would abort and return 0
       result := 0;
     end;
