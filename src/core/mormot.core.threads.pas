@@ -1753,6 +1753,8 @@ type
     /// may be called after Push() returned false to see if queue was actually full
     // - returns false if QueuePendingContext is false
     function QueueIsFull: boolean;
+    /// wait for PendingTasks to reach 0, i.e. all Push() be executed and done
+    function WaitFor(TimeOutMS: cardinal): boolean;
     /// if the pool should maintain an internal queue when all threads are busy
     // - supplied as Create constructor parameter
     property QueuePendingContext: boolean
@@ -5036,6 +5038,36 @@ begin
 end;
 
 {$endif USE_THREADWINIOCP}
+
+function TSynThreadPool.WaitFor(TimeOutMS: cardinal): boolean;
+var
+  pending: cardinal;
+  endtix, nowtix: Int64;
+begin
+  result := true;
+  if fPendingTasks = 0 then
+    exit;
+  endtix := 0;
+  if TimeOutMS <> INFINITE then
+    endtix := mormot.core.os.GetTickCount64 + TimeOutMS;
+  repeat
+    pending := cardinal(fPendingTasks);
+    if pending = 0 then
+      exit;
+    if endtix <> 0 then
+    begin
+      nowtix := mormot.core.os.GetTickCount64;
+      if nowtix >= endtix then
+        break;
+      TimeOutMS := cardinal(endtix - nowtix);
+    end;
+    if Assigned(OsWaitOnValue) then
+      OsWaitOnValue(PCardinal(@fPendingTasks), pending, TimeOutMS)
+    else
+      SleepHiRes(1);
+  until false;
+  result := false;
+end;
 
 function TSynThreadPool.NeedStopOnIOError: boolean;
 begin
