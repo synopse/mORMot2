@@ -1667,7 +1667,6 @@ type
     fEvent: TSynEvent;
     {$endif USE_THREADWINIOCP}
     procedure NotifyThreadStart(Sender: TSynThread);
-    procedure DoTask(Context: pointer); // exception-safe call of fOwner.Task()
   public
     /// initialize the thread
     constructor Create(Owner: TSynThreadPool); reintroduce;
@@ -1688,6 +1687,7 @@ type
   TSynThreadPool = class
   protected
     fPendingContextCount: integer;
+    fPendingTasks: integer;
     {$ifdef USE_THREADWINIOCP}
     fRequestQueue: THandle; // IOCP has its own internal queue
     {$else}
@@ -1720,6 +1720,8 @@ type
       aContext: pointer); virtual; abstract;
     /// finalize a queue item on Terminate - e.g. call Free/Dispose on aContext
     procedure TaskAbort(aContext: pointer); virtual;
+    procedure TaskAllDone; virtual;
+    procedure DoTask(aCaller: TSynThreadPoolWorkThread; aContext: pointer);
     procedure DoTaskAbort(aContext: pointer);
   public
     /// initialize a thread pool with the supplied number of threads
@@ -1797,6 +1799,9 @@ type
     property PendingContextCount: integer
       {$ifdef USE_THREADWINIOCP} read fPendingContextCount;
       {$else} read GetPendingContextCount; {$endif}
+    /// how many input tasks are currently pending or executing in threads
+    property PendingTasks: integer
+      read fPendingTasks;
   end;
 
 type
@@ -4880,8 +4885,10 @@ function TSynThreadPool.Push(aContext: pointer; aWaitOnContention: boolean): boo
   begin
     // IOCP has its own queue
     result := IocpPostQueuedStatus(fRequestQueue, 0, nil, aContext);
-    if result then
-      LockedInc32(@fPendingContextCount);
+    if not result then
+      exit;
+    LockedInc32(@fPendingContextCount);
+    LockedInc32(@fPendingTasks);
   end;
 
 {$else}
@@ -4903,6 +4910,7 @@ function TSynThreadPool.Push(aContext: pointer; aWaitOnContention: boolean): boo
     for n := 1 to fWorkThreadCount do
       if thread^.fProcessingContext = nil then
       begin
+        inc(fPendingTasks);
         found := thread^;
         found.fProcessingContext := aContext;
         fPendingSafe.UnLock;
@@ -4923,6 +4931,7 @@ function TSynThreadPool.Push(aContext: pointer; aWaitOnContention: boolean): boo
       if fPendingLast = length(fPendingContext) then
         fPendingLast := 0;
       inc(fPendingContextCount);
+      inc(fPendingTasks);
       result := true; // added in pending queue
     end;
     fPendingSafe.UnLock;
@@ -5037,15 +5046,43 @@ procedure TSynThreadPool.TaskAbort(aContext: pointer);
 begin
 end;
 
-procedure TSynThreadPool.DoTaskAbort(aContext: pointer);
+procedure TSynThreadPool.TaskAllDone;
 begin
-  if (self <> nil) and
-     (aContext <> nil) then
+end;
+
+procedure TSynThreadPool.DoTask(aCaller: TSynThreadPoolWorkThread; aContext: pointer);
+begin
+  if self = nil then
+    exit;
+  try
+    Task(aCaller, aContext);
+  except
+    on Exception do  // intercept any exception and let the thread continue
+      inc(fExceptionsCount);
+  end;
+  if InterlockedDecrement(fPendingTasks) = 0 then
     try
-      TaskAbort(aContext);
+      TaskAllDone; // e.g. call OsWakeAllOnValue()
     except
     end;
 end;
+
+procedure TSynThreadPool.DoTaskAbort(aContext: pointer);
+begin
+  if self = nil then
+    exit;
+  try
+    if aContext <> nil then
+      TaskAbort(aContext);
+  except
+  end;
+  if InterlockedDecrement(fPendingTasks) = 0 then
+    try
+      TaskAllDone; // e.g. call OsWakeAllOnValue()
+    except
+    end;
+end;
+
 
 { TSynThreadPoolWorkThread }
 
@@ -5065,16 +5102,6 @@ begin
   {$ifndef USE_THREADWINIOCP}
   fEvent.Free;
   {$endif USE_THREADWINIOCP}
-end;
-
-procedure TSynThreadPoolWorkThread.DoTask(Context: pointer);
-begin
-  try
-    fOwner.Task(Self, Context);
-  except
-    on Exception do  // intercept any exception and let the thread continue
-      inc(fOwner.fExceptionsCount);
-  end;
 end;
 
 procedure TSynThreadPoolWorkThread.Execute;
@@ -5114,7 +5141,7 @@ begin
       {$ifdef THREADPOOL_DEBUGLOG}
       TSynLog.Add.Log(sllTrace, 'Thread #% before DoTask(%)', [fThreadNumber, ctxt]);
       {$endif THREADPOOL_DEBUGLOG}
-      DoTask(ctxt);
+      fOwner.DoTask(self, ctxt);
       {$ifdef THREADPOOL_DEBUGLOG}
       TSynLog.Add.Log(sllTrace, 'Thread #% after DoTask(%)', [fThreadNumber, ctxt]);
       {$endif THREADPOOL_DEBUGLOG}
@@ -5153,7 +5180,7 @@ begin
         if ctxt <> nil then
         begin
           repeat
-            DoTask(ctxt);
+            fOwner.DoTask(self, ctxt);
             ctxt := fOwner.PopPendingContext; // unqueue any pending context
           until ctxt = nil;
           fOwner.fPendingSafe.Lock;
