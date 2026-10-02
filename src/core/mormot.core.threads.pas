@@ -1799,6 +1799,34 @@ type
       {$else} read GetPendingContextCount; {$endif}
   end;
 
+type
+  /// abstract executable task for TSynThreadTasks
+  // - inherit from this class and define any input/output parameters as fields
+  // - instances passed to TSynThreadTasks.Add() become owned by the thread pool
+  TSynThreadTask = class(TSynPersistent)
+  public
+    /// execute this task in one TSynThreadTasks worker thread
+    procedure DoExecute(aCaller: TSynThreadPoolWorkThread); virtual; abstract;
+  end;
+
+  /// execute TSynThreadTask instances in a persistent thread pool
+  // - Add() takes ownership of the supplied task instance
+  // - tasks are executed by the persistent TSynThreadPool worker threads
+  TSynThreadTasks = class(TSynThreadPool)
+  protected
+    procedure Task(aCaller: TSynThreadPoolWorkThread;
+      aContext: pointer); override;
+    procedure TaskAbort(aContext: pointer); override;
+  public
+    /// create a persistent pool able to execute TSynThreadTask instances
+    constructor Create(NumberOfThreads: integer = 32;
+      const aName: RawUtf8 = ''); reintroduce;
+    /// add one owned task to the execution queue
+    // - always takes ownership of aTask, even when returning false
+    function Add(aTask: TSynThreadTask;
+      aWaitOnContention: boolean = true): boolean;
+  end;
+
   {$M-}
 
 
@@ -5153,6 +5181,48 @@ begin
   end;
   if CurrentThreadNameShort^[0] = #0 then
     SetCurrentThreadName('%%-%', [fOwner.fPoolName, fThreadNumber, fOwner.fName]);
+end;
+
+
+{ TSynThreadTasks }
+
+constructor TSynThreadTasks.Create(NumberOfThreads: integer;
+  const aName: RawUtf8);
+begin
+  {$ifdef USE_THREADWINIOCP}
+  inherited Create(NumberOfThreads, INVALID_HANDLE_VALUE, aName);
+  {$else}
+  inherited Create(NumberOfThreads, {queuependingcontext=}true, aName);
+  {$endif USE_THREADWINIOCP}
+end;
+
+procedure TSynThreadTasks.Task(aCaller: TSynThreadPoolWorkThread;
+  aContext: pointer);
+var
+  task: TSynThreadTask;
+begin
+  task := aContext;
+  try
+    task.DoExecute(aCaller);
+  finally
+    task.Free;
+  end;
+end;
+
+procedure TSynThreadTasks.TaskAbort(aContext: pointer);
+begin
+  TObject(aContext).Free;
+end;
+
+function TSynThreadTasks.Add(aTask: TSynThreadTask;
+  aWaitOnContention: boolean): boolean;
+begin
+  result := false;
+  if aTask = nil then
+    exit;
+  result := inherited Push(aTask, aWaitOnContention);
+  if not result then
+    aTask.Free;
 end;
 
 

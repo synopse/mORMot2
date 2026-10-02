@@ -5798,9 +5798,11 @@ begin
   fBigBodySize := THREADPOOL_BIGBODYSIZE;
   fMaxBodyThreadCount := THREADPOOL_MAXWORKTHREADS;
   fPoolName := 'http';
-  inherited Create(NumberOfThreads,
-    {$ifdef USE_THREADWINIOCP} INVALID_HANDLE_VALUE {$else} {queuepending=}true{$endif},
-    Server.ProcessName);
+  {$ifdef USE_THREADWINIOCP}
+  inherited Create(NumberOfThreads, INVALID_HANDLE_VALUE, Server.ProcessName);
+  {$else}
+  inherited Create(NumberOfThreads, {queuependingctx=}true, Server.ProcessName);
+  {$endif USE_THREADWINIOCP}
 end;
 
 {$ifndef USE_THREADWINIOCP}
