@@ -3617,6 +3617,7 @@ var
   sent, sent2: RawUtf8;
   received, received2: RawByteString;
   nfo: variant;
+  endtix: cardinal;
   rnd: PLecuyer;
 begin
   rnd := ThreadRandom; // use the TLecuyer of this thread
@@ -3695,8 +3696,10 @@ begin
     serversock.ShutdownAndClose(true);
   end;
   clientinstance.ClosePort;
-  closed := @serverinstance.Closed; // trick to access this propery by value
-  SleepHiRes(1000, closed^);
+  endtix := GetTickSec + 2;
+  while (GetTickSec < endtix) and
+        not (fClosed in serverinstance.Flags) do
+    Sleep(1);
 end;
 
 procedure TNetworkProtocols.TunnelTest(const clientcert, servercert: ICryptCert;
