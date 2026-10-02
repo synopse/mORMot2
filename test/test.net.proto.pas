@@ -237,19 +237,19 @@ type
 
 procedure TSlowTftpConnection.DoExecute;
 begin
-  InterlockedIncrement(TftpConnectionStarted);
+  LockedInc32(@TftpConnectionStarted);
   while not Terminated do
     SleepHiRes(1);
   // remain alive past the deliberately short server timeout, then access owner
   SleepHiRes(100);
   if fOwner.MaxRetry >= 0 then
-    InterlockedIncrement(TftpOwnerAccessed);
+    LockedInc32(@TftpOwnerAccessed);
 end;
 
 destructor TSlowTftpConnection.Destroy;
 begin
   inherited Destroy;
-  InterlockedIncrement(TftpConnectionDestroyed);
+  LockedInc32(@TftpConnectionDestroyed);
 end;
 
 procedure TTestTftpServer.AddTestConnection(

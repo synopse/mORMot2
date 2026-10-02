@@ -4823,7 +4823,7 @@ begin
      (_FromKeySetCA <> nil) then
   begin
     fPKI := _FromKeySetCA;
-    InterlockedIncrement(_FromKeySetCARefCount);
+    LockedInc32(@_FromKeySetCARefCount);
   end
   else
     fPKI := aPKI;
@@ -4917,7 +4917,7 @@ begin
      (_FromKeySetCA <> nil) then
   begin
     ca := _FromKeySetCA;
-    InterlockedIncrement(_FromKeySetCARefCount);
+    LockedInc32(@_FromKeySetCARefCount);
   end;
   // compute priv: TEccCertificateSecret
   priv := nil;

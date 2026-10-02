@@ -11516,7 +11516,7 @@ begin
   {$else}
   with PInt64Rec(int64)^ do
     if InterlockedIncrement(Lo) = 0 then
-      InterlockedIncrement(Hi); // collission is highly unprobable
+      LockedInc32(@Hi); // collission is highly unprobable
   {$endif FPC_64}
 end;
 

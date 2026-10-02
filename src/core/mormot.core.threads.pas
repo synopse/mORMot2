@@ -4853,7 +4853,7 @@ function TSynThreadPool.Push(aContext: pointer; aWaitOnContention: boolean): boo
     // IOCP has its own queue
     result := IocpPostQueuedStatus(fRequestQueue, 0, nil, aContext);
     if result then
-      InterlockedIncrement(fPendingContextCount);
+      LockedInc32(@fPendingContextCount);
   end;
 
 {$else}
