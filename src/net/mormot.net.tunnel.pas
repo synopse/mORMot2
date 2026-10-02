@@ -815,6 +815,7 @@ var
 begin
   fStarted := true;
   try
+    res := nrOk;
     if (fOwner <> nil) and
        (fSocketBound in fOwner.fFlags) then
     begin
@@ -829,8 +830,9 @@ begin
           if Terminated then
             break;
           res := fServerSock.Accept(fClientSock, fClientAddr, {async=}false, @err);
-          if (res = nrOk) and
-             not Terminated then
+          if Terminated then
+            break;
+          if res = nrOk then
           begin
             fLog.Log(sllTrace,
               'DoExecute: accepted %', [fClientAddr.IPShort({port=}true)], self);
@@ -850,11 +852,8 @@ begin
       end;
     end
     else
-    begin
       // newsocket() with connect() was done in the main thread
-      res := nrOk;
       fState := stProcessing;
-    end;
     if fState = stProcessing then
       while not Terminated do
       begin
@@ -1433,7 +1432,6 @@ var
   frame: RawByteString;
   needclose: boolean;
 begin
-  needclose := false;
   repeat
     fSafe.Lock; // protect handshake phase
     try
@@ -1496,7 +1494,7 @@ begin
   dv.InitFast(fInfo.Count + 7, dvObject);
   dv.AddFrom(fInfo);         // fixed values
   dv.AddNameValuesToObject([ // evolving values
-    'elapsed',   GetElapsed,
+    'elapsed',   Int64(GetElapsed),
     'bytesIn',   fBytesIn,
     'bytesOut',  fBytesOut,
     'framesIn',  fFramesIn,

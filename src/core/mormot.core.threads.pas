@@ -346,6 +346,7 @@ type
     fCount, fFirst, fLast: integer;
     fWaitPopFlags: set of (wpfDestroying);
     fWaitPopCounter: integer;
+    fWaitPopSequence: cardinal; // <> 0 for OsWaitOnValue/OsWakeOnValue futex
     function ReadOnlyLockedCount: integer;
       {$ifdef HASINLINE} inline; {$endif}
     function LockedNextPtr: pointer;
@@ -353,7 +354,6 @@ type
     procedure InternalGrow;
     procedure InternalPop(aValue: pointer);
     function InternalDestroying(incPopCounter: integer): boolean;
-    function InternalWaitDone(starttix, endtix: Int64; const OnIdle: TThreadMethod): boolean;
     /// low-level TObjectStore methods implementing the persistence
     procedure LoadFromReader; override;
     procedure SaveToWriter(aWriter: TBufferWriter); override;
@@ -2116,6 +2116,10 @@ begin
     aKind := fValues.Info.ArrayFirstFieldSort; // compare by first field
   if aKind <> ptNone then
     fValues.Compare := DynArraySortOne(aKind, aCaseInsensitive); // may be nil
+  if Assigned(OsWaitOnValue) and
+     Assigned(OsWakeAllOnValue) and
+     Assigned(OsWakeOnValue) then
+    fWaitPopSequence := 1; // trigger OS futex
 end;
 
 {$ifdef HASGENERICS}
@@ -2189,7 +2193,10 @@ begin
 end;
 
 procedure TSynQueue.Push(const aValue);
+var
+  wake: boolean;
 begin
+  wake := false;
   fSafe.WriteLock;
   try
     if fFirst < 0 then
@@ -2218,9 +2225,17 @@ begin
       end;
     end;
     fValues.ItemCopyFrom(@aValue, fLast);
+    if (fWaitPopSequence <> 0) and // OS futex available
+       (fWaitPopCounter <> 0) then
+    begin
+      inc(fWaitPopSequence);
+      wake := true;
+    end;
   finally
     fSafe.WriteUnLock;
   end;
+  if wake then
+    OsWakeOnValue(@fWaitPopSequence); // outside of WriteLock
 end;
 
 procedure TSynQueue.InternalGrow;
@@ -2431,43 +2446,63 @@ begin
   fSafe.WriteLock;
   try
     result := wpfDestroying in fWaitPopFlags;
-    inc(fWaitPopCounter, incPopCounter);
+    if (incPopCounter < 0) or // always unregister
+       not result then        // but not register if destroying
+      inc(fWaitPopCounter, incPopCounter);
   finally
     fSafe.WriteUnLock;
   end;
 end;
 
-function TSynQueue.InternalWaitDone(starttix, endtix: Int64;
-  const OnIdle: TThreadMethod): boolean;
+type
+  TSynQueueWaitState = record
+    queue: TSynQueue;
+    onidle: TThreadMethod;
+    starttix, endtix, nowtix: Int64;
+    seq: cardinal;
+  end;
+
+function InternalWaitDone(var state: TSynQueueWaitState): boolean;
 begin
-  if Assigned(OnIdle) then
+  result := true;
+  state.nowtix := mormot.core.os.GetTickCount64;
+  if (wpfDestroying in state.queue.fWaitPopFlags) or
+     (state.nowtix > state.endtix) then
+    exit;
+  if Assigned(state.onidle) then
   begin
     SleepHiRes(1); // SleepStep() may wait up to 250 ms which is not responsive
-    OnIdle; // e.g. Application.ProcessMessages
+    state.onidle;  // e.g. Application.ProcessMessages
   end
+  else if state.seq <> 0 then  // we can use the fast OS futex
+    OsWaitOnValue(@state.queue.fWaitPopSequence, state.seq,
+      cardinal(state.endtix - state.nowtix))
   else
-    SleepStep(starttix);
-  result := (wpfDestroying in fWaitPopFlags) or // no need to lock/unlock
-            (mormot.core.os.GetTickCount64 > endtix);
+    SleepStep(state.starttix); // regular cross-platform spinning
+  result := (wpfDestroying in state.queue.fWaitPopFlags) or // no need to lock
+            (mormot.core.os.GetTickCount64 > state.endtix); // always timeout
 end;
 
 function TSynQueue.WaitPop(aTimeoutMS: integer; const aWhenIdle: TThreadMethod;
   out aValue; aCompared: pointer; aCompare: TDynArraySortCompare): boolean;
 var
-  starttix, endtix: Int64;
+  state: TSynQueueWaitState;
 begin
   result := false;
   if not InternalDestroying(+1) then
   try
-    starttix := mormot.core.os.GetTickCount64;
-    endtix := starttix + aTimeoutMS;
+    state.queue := self;
+    state.onidle := aWhenIdle;
+    state.starttix := mormot.core.os.GetTickCount64;
+    state.endtix := state.starttix + aTimeoutMS;
     repeat
+      state.seq := fWaitPopSequence; // should be captured before the Pop()
       if Assigned(aCompared) then
         result := PopEquals(aCompared, aValue, aCompare)
       else
         result := Pop(aValue);
     until result or
-          InternalWaitDone(starttix, endtix, aWhenIdle);
+          InternalWaitDone(state);
   finally
     InternalDestroying(-1);
   end;
@@ -2476,14 +2511,17 @@ end;
 function TSynQueue.WaitPeekLocked(aTimeoutMS: integer;
   const aWhenIdle: TThreadMethod): pointer;
 var
-  starttix, endtix: Int64;
+  state: TSynQueueWaitState;
 begin
   result := nil;
   if not InternalDestroying(+1) then
   try
-    starttix := mormot.core.os.GetTickCount64;
-    endtix := starttix + aTimeoutMS;
+    state.queue := self;
+    state.onidle := aWhenIdle;
+    state.starttix := mormot.core.os.GetTickCount64;
+    state.endtix := state.starttix + aTimeoutMS;
     repeat
+      state.seq := fWaitPopSequence; // should be captured before the Pop()
       if fFirst >= 0 then
       begin
         fSafe.ReadWriteLock;
@@ -2495,8 +2533,8 @@ begin
             fSafe.ReadWriteUnLock;
         end;
       end;
-    until (result <> nil) or
-          InternalWaitDone(starttix, endtix, aWhenIdle);
+    until (result <> nil) or // keep ReadWriteLock if found
+          InternalWaitDone(state);
   finally
     InternalDestroying(-1);
   end;
@@ -2511,9 +2549,13 @@ begin
     include(fWaitPopFlags, wpfDestroying);
     if fWaitPopCounter = 0 then
       exit;
+    if fWaitPopSequence <> 0 then
+      inc(fWaitPopSequence); // force trigger all waiters
   finally
     fSafe.WriteUnLock;
   end;
+  if fWaitPopSequence <> 0 then
+    OsWakeAllOnValue(@fWaitPopSequence);
   starttix := mormot.core.os.GetTickCount64;
   endtix := starttix + aTimeoutMS;
   repeat
@@ -2563,9 +2605,13 @@ begin
     siz := fValues.Info.Cache.ItemSize * n;
     BinaryLoadSeveral(fValues.Value^, fReader^,
       fValues.Info.Cache.ItemInfoManaged, n, siz);
+    if fWaitPopSequence <> 0 then
+      inc(fWaitPopSequence); // force trigger all waiters
   finally
     fSafe.WriteUnLock;
   end;
+  if fWaitPopSequence <> 0 then
+    OsWakeAllOnValue(@fWaitPopSequence);
 end;
 
 procedure TSynQueue.SaveToWriter(aWriter: TBufferWriter);
