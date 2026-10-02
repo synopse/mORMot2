@@ -536,10 +536,10 @@ type
     fCurrentID: integer; // thread-safe TRestClientCallbackID sequence generator
     function UnRegisterByIndex(index: integer): boolean;
   public
-    /// the associated REST instance
-    Owner: TRestClientUri;
     /// how many callbacks are registered
     Count: integer;
+    /// the associated REST instance
+    Owner: TRestClientUri;
     /// list of registered interface callbacks
     List: array of TRestClientCallbackItem;
     /// initialize the storage list
@@ -2390,6 +2390,7 @@ var
     try
       InternalClose; // e.g. websockets calls OnWebSocketsClosed to unregister
     finally
+      FreeAndNilSafe(fFakeCallbacks);
       inherited Destroy; // fModel.Free if owned by this TRest instance
       FreeAndNilSafe(fBackgroundThread); // should be done after fServices.Free
       fOnIdle := nil;
@@ -2403,7 +2404,6 @@ begin
   {$ifdef OSWINDOWS}
   fServiceNotificationMethodViaMessages.Wnd := 0; // disable notification
   {$endif OSWINDOWS}
-  FreeAndNilSafe(fFakeCallbacks);
   try
     // unlock all records still locked by this client
     if fModel <> nil then
