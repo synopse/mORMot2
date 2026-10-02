@@ -889,7 +889,7 @@ procedure TTestCoreCrypto._SHA3;
 begin
   DoTest;
   {$ifdef ASMX64AVX1}
-  if cpuAVX2 in X64CpuFeatures then // validate without KeccakPermutationAvx2()
+  if HasKeccakAvx2 then // validate without KeccakPermutationAvx2()
   begin
     Exclude(X64CpuFeatures, cpuAVX2);
     DoTest;
@@ -3459,7 +3459,7 @@ const
     avx: boolean;
     pt, ct: array[0..511] of byte;
   begin
-    for avx := false to true do
+    for avx := false to HasAesGcmAvx do
     begin
       FillCharFast(pt, SizeOf(pt), 0);
       CheckUtf8(ctxt.FullDecryptAndVerify(key, kbits, pIV, pAAD, ctp, @pt, ptag,
@@ -3470,9 +3470,6 @@ const
         IV_Len, aLen, cLen, tag, avx), 'FullEncryptAndAuthenticate #%', [tn]);
       CheckUtf8(CompareMem(@tag, ptag, tlen), 'Tag #%', [tn]);
       CheckUtf8(CompareMem(@ct, ctp, cLen), 'Encoded #%', [tn]);
-      {$ifndef ASMX64AVX0}
-      break;
-      {$endif ASMX64AVX0}
     end;
   end;
 
@@ -3480,16 +3477,17 @@ var
   ctxt: TAesGcmEngine;
   key, tag: TAesBlock;
   buf, cipher, plain: THash512;
+  aad: THash256;
   n: integer;
   avx: boolean;
 begin
-  for avx := false to true do
+  for avx := false to HasAesGcmAvx do
   begin
     key := PAesBlock(@hex32)^;
     FillZero(buf);
     FillZero(tag);
-    check(ctxt.FullEncryptAndAuthenticate(key, 128,
-      @hex32, nil, @buf, @buf, 12, 0, SizeOf(buf), tag, avx));
+    check(ctxt.FullEncryptAndAuthenticate(key, 128, @hex32, nil,
+      @buf, @buf, 12, 0, SizeOf(buf), tag, avx));
     CheckEqual(CardinalToHex(crc32c(0, @buf, SizeOf(buf))), 'AC3DDD17');
     CheckEqual(Md5DigestToString(tag), '0332c40f9926bd3cdadf33148912c672');
   end;
@@ -3524,28 +3522,48 @@ begin
        @C10, SizeOf(C10), @P10, 10);
   test(@T11, 16, K11, 8 * SizeOf(K11), @I11, SizeOf(I11), @H11, SizeOf(H11),
        @C11, SizeOf(C11), @P11, 11);
-  for n := 1 to SizeOf(buf) do // AVX is used only if n mod 16 = 0
-    for avx := false to true do
+  for n := 1 to SizeOf(buf) do // 64 bytes - AVX is used only if n mod 16 = 0
+    for avx := false to HasAesGcmAvx do
     begin
-      Check(ctxt.FullEncryptAndAuthenticate(key, 128,
-        @hex32, @hex32, @buf, @cipher, 12, 16, n, tag, avx));
+      FillZero(cipher);
+      Check(ctxt.FullEncryptAndAuthenticate(key, 128, @hex32, @hex32,
+        @buf, @cipher, 12, 16, n, tag, avx));
       FillZero(plain);
-      CheckUtf8(ctxt.FullDecryptAndVerify(key, 128, @hex32, @hex32, @cipher,
-        @plain, @tag, 12, 16, n, 16, avx), 'verify n=% avx=%', [n, avx]);
+      CheckUtf8(ctxt.FullDecryptAndVerify(key, 128, @hex32, @hex32,
+        @cipher, @plain, @tag, 12, 16, n, 16, avx),
+        'verify n=% avx=%', [n, avx]);
       Check(CompareMem(@buf, @plain, n));
       inc(cipher[0]); // should detect a forged ciphertext, tag or AAD
-      CheckUtf8(not ctxt.FullDecryptAndVerify(key, 128, @hex32, @hex32, @cipher,
-        @plain, @tag, 12, 16, n, 16, avx), 'forged ctp n=% avx=%', [n, avx]);
+      CheckUtf8(not ctxt.FullDecryptAndVerify(key, 128, @hex32, @hex32,
+        @cipher, @plain, @tag, 12, 16, n, 16, avx),
+        'forged ctp n=% avx=%', [n, avx]);
       dec(cipher[0]);
       inc(tag[15]);
-      CheckUtf8(not ctxt.FullDecryptAndVerify(key, 128, @hex32, @hex32, @cipher,
-        @plain, @tag, 12, 16, n, 16, avx), 'forged tag n=% avx=%', [n, avx]);
+      CheckUtf8(not ctxt.FullDecryptAndVerify(key, 128, @hex32, @hex32,
+        @cipher, @plain, @tag, 12, 16, n, 16, avx),
+        'forged tag n=% avx=%', [n, avx]);
       dec(tag[15]);
-      CheckUtf8(not ctxt.FullDecryptAndVerify(key, 128, @hex32, @hex32, @cipher,
-        @plain, @tag, 12, 15, n, 16, avx), 'forged aad n=% avx=%', [n, avx]);
-      {$ifndef ASMX64AVX0}
-      break; // avx=true would be the same as avx=false
-      {$endif ASMX64AVX0}
+      CheckUtf8(not ctxt.FullDecryptAndVerify(key, 128, @hex32, @hex32,
+        @cipher, @plain, @tag, 12, 15, n, 16, avx),
+        'truncated aad n=% avx=%', [n, avx]);
+      FillZero(plain);
+      aad := hex32;
+      CheckUtf8(ctxt.FullDecryptAndVerify(key, 128, @hex32, @aad,
+        @cipher, @plain, @tag, 12, 16, n, 16, avx),
+        'verify again n=% avx=%', [n, avx]);
+      Check(CompareMem(@buf, @plain, n));
+      inc(aad[15]);
+      CheckUtf8(not ctxt.FullDecryptAndVerify(key, 128, @hex32, @aad,
+        @cipher, @plain, @tag, 12, 16, n, 16, avx),
+        'forged aad n=% avx=%', [n, avx]);
+      FillZero(cipher);
+      Check(ctxt.FullEncryptAndAuthenticate(key, 128, @hex32, @hex32,
+        @buf, @cipher, 12, 10, n, tag, avx));
+      FillZero(plain);
+      CheckUtf8(ctxt.FullDecryptAndVerify(key, 128, @hex32, @hex32,
+        @cipher, @plain, @tag, 12, 10, n, 16, avx),
+        'trunc aad n=% avx=%', [n, avx]);
+      Check(CompareMem(@buf, @plain, n));
     end;
 end;
 
