@@ -341,12 +341,12 @@ type
   // - this structure is also thread-safe by design
   TSynQueue = class(TObjectStore)
   protected
-    fValues: TDynArray;
     fValueVar: PAnsiChar;
     fCount, fFirst, fLast: integer;
     fWaitPopFlags: set of (wpfDestroying);
     fWaitPopCounter: integer;
     fWaitPopSequence: cardinal; // <> 0 for OsWaitOnValue/OsWakeOnValue futex
+    fValues: TDynArray;
     function ReadOnlyLockedCount: integer;
       {$ifdef HASINLINE} inline; {$endif}
     function LockedNextPtr: pointer;
@@ -407,11 +407,13 @@ type
     // - returns true if aValue has been filled with a pending item within the
     // specified aTimeoutMS time
     // - returns false if nothing was pushed into the queue in time, or if
-    // WaitPopFinalize has been called
-    // - aWhenIdle could be assigned e.g. to VCL/LCL Application.ProcessMessages
+    // WaitPopFinalize has been called (e.g. from Destroy)
+    // - use light and efficient OsWaitOnValue() futex on Win8+ and Linux
     // - you can optionally compare the pending item before returning it (could
-    // be used e.g. when several threads are putting items into the queue)
-    // - this method is thread-safe, but will lock the instance only if needed
+    // be used e.g. when several threads are putting items into the queue, but
+    // be aware this use a spinning less optimized loop)
+    // - aWhenIdle could be assigned e.g. to VCL/LCL Application.ProcessMessages
+    // - this method is thread-safe, but will lock the instance only when needed
     function WaitPop(aTimeoutMS: integer; const aWhenIdle: TThreadMethod;
       out aValue; aCompared: pointer = nil; aCompare: TDynArraySortCompare = nil): boolean;
     /// waiting lookup of one item from the queue, as FIFO (First-In-First-Out)
@@ -419,13 +421,14 @@ type
     // - Safe.ReadWriteLock is kept, so caller could check its content, then
     // call Pop() if it is the expected one, and eventually Safe.ReadWriteUnlock
     // - returns nil if nothing was pushed into the queue in time
-    // - this method is thread-safe, but will lock the instance only if needed
+    // - this method is thread-safe, but will lock the instance only when needed
     function WaitPeekLocked(aTimeoutMS: integer;
       const aWhenIdle: TThreadMethod): pointer;
     /// ensure any pending or future WaitPop() returns immediately as false
     // - is always called by Destroy destructor
+    // - once called, the whole TSynQueue instance is not usable any more
     // - could be also called e.g. from an UI OnClose event to avoid any lock
-    // - this method is thread-safe, but will lock the instance only if needed
+    // - this method is thread-safe, but will lock the instance only when needed
     procedure WaitPopFinalize(aTimeoutMS: integer = 100);
     /// delete all items currently stored in this queue, and void its capacity
     // - this method is thread-safe, since it will lock the instance
@@ -2119,7 +2122,7 @@ begin
   if Assigned(OsWaitOnValue) and
      Assigned(OsWakeAllOnValue) and
      Assigned(OsWakeOnValue) then
-    fWaitPopSequence := 1; // trigger OS futex
+    fWaitPopSequence := 1; // <> 0 to trigger OS futex usage
 end;
 
 {$ifdef HASGENERICS}
@@ -2225,10 +2228,12 @@ begin
       end;
     end;
     fValues.ItemCopyFrom(@aValue, fLast);
-    if (fWaitPopSequence <> 0) and // OS futex available
-       (fWaitPopCounter <> 0) then
+    if (fWaitPopCounter <> 0) and   // some waiters to wake
+       (fWaitPopSequence <> 0) then // OS futex available
     begin
       inc(fWaitPopSequence);
+      if fWaitPopSequence = 0 then
+        inc(fWaitPopSequence); // paranoid 32-bit overflow
       wake := true;
     end;
   finally
@@ -2495,14 +2500,20 @@ begin
     state.onidle := aWhenIdle;
     state.starttix := mormot.core.os.GetTickCount64;
     state.endtix := state.starttix + aTimeoutMS;
-    repeat
-      state.seq := fWaitPopSequence; // should be captured before the Pop()
-      if Assigned(aCompared) then
-        result := PopEquals(aCompared, aValue, aCompare)
-      else
+    if Assigned(aCompared) then
+    begin
+      state.seq := 0; // no futex
+      repeat
+        result := PopEquals(aCompared, aValue, aCompare);
+      until result or
+            InternalWaitDone(state)
+    end
+    else
+      repeat
+        state.seq := fWaitPopSequence; // should be captured before the Pop()
         result := Pop(aValue);
-    until result or
-          InternalWaitDone(state);
+      until result or
+            InternalWaitDone(state);
   finally
     InternalDestroying(-1);
   end;
@@ -2520,8 +2531,8 @@ begin
     state.onidle := aWhenIdle;
     state.starttix := mormot.core.os.GetTickCount64;
     state.endtix := state.starttix + aTimeoutMS;
+    state.seq := 0; // Peek() is not true waiter -> no futex
     repeat
-      state.seq := fWaitPopSequence; // should be captured before the Pop()
       if fFirst >= 0 then
       begin
         fSafe.ReadWriteLock;
@@ -2606,7 +2617,7 @@ begin
     BinaryLoadSeveral(fValues.Value^, fReader^,
       fValues.Info.Cache.ItemInfoManaged, n, siz);
     if fWaitPopSequence <> 0 then
-      inc(fWaitPopSequence); // force trigger all waiters
+      fWaitPopSequence := 1; // reset to force trigger all waiters
   finally
     fSafe.WriteUnLock;
   end;
