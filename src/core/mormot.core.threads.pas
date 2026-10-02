@@ -1749,12 +1749,12 @@ type
     // queue is full; set aWaitOnContention=true to wait up to
     // ContentionAbortDelay ms and retry to queue the task
     function Push(aContext: pointer; aWaitOnContention: boolean = false): boolean;
+    /// wait for PendingTasks to reach 0, i.e. all Push() be executed and done
+    function WaitFor(TimeOutMS: cardinal): boolean;
     {$ifndef USE_THREADWINIOCP}
     /// may be called after Push() returned false to see if queue was actually full
     // - returns false if QueuePendingContext is false
     function QueueIsFull: boolean;
-    /// wait for PendingTasks to reach 0, i.e. all Push() be executed and done
-    function WaitFor(TimeOutMS: cardinal): boolean;
     /// if the pool should maintain an internal queue when all threads are busy
     // - supplied as Create constructor parameter
     property QueuePendingContext: boolean

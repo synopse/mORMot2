@@ -1396,7 +1396,6 @@ var
   p: pointer;
   q: TSynQueue;
   tasks: TSynThreadTasks;
-  task: TSynThreadTask;
   done: cardinal;
   taskcount: integer;
   success: array[0 .. WAITERS - 1] of boolean;
@@ -1416,7 +1415,7 @@ var
       'TSynQueue WaitPop registration');
   end;
 
-  procedure WaitForTasks(ExpectedCount: integer; const Msg: string);
+  procedure WaitForTasks(ExpectedCount: integer; const Msg: RawUtf8);
   var
     timeout: Int64;
   begin
