@@ -124,7 +124,7 @@ type
     /// accept/connect the connection, then crypt/redirect to fTransmit
     procedure DoExecute; override;
   public
-    /// initialize the thread - called from Open()
+    /// initialize and start the thread - called from Open()
     constructor Create(owner: TTunnelLocal; const key, iv: THash128;
       sock: TNetSocket; acceptSecs: cardinal); reintroduce;
     /// release all sockets and encryption state
@@ -189,7 +189,7 @@ type
     ITunnelLocal, ITunnelTransmit)
   protected
     fSession: TTunnelSession;
-    fSendSafe: TMultiLightLock; // protect fHandshake+fThread
+    fStateSafe: TMultiLightLock; // protect fHandshake+fThread
     fPort, fRemotePort: TNetPort;
     fOptions: TTunnelOptions;
     fFlags: set of (fSocketBound, fClosePortNotified);
@@ -212,13 +212,14 @@ type
     procedure FrameSign(var frame: RawByteString); virtual;
     function FrameVerify(frame: PAnsiChar; framelen, payloadlen: PtrInt): boolean; virtual;
     function GetElapsed: cardinal;
+    procedure SendFrame(const Frame: RawByteString);
     // can be overriden to customize this class process
     procedure AfterHandshake; virtual;
     procedure OnTunnelInfo(var Info: TDocVariantData); virtual;
-    function OpenInternal(Sess: TTunnelSession;
-      const Transmit: ITunnelTransmit; TransmitOptions: TTunnelOptions;
-      TimeOutMS: integer; const AppSecret: RawUtf8; Sock: TNetSocket;
-      LocalPort: TNetPort; SocketBound: boolean;
+    // helper method implementing Open/OpenSocket high level methods
+    function OpenInternal(Sess: TTunnelSession; const Transmit: ITunnelTransmit;
+      TransmitOptions: TTunnelOptions; TimeOutMS: integer; const AppSecret: RawUtf8;
+      Sock: TNetSocket; LocalPort: TNetPort; SocketBound: boolean;
       const InfoNameValue: array of const;
       const SignCert, VerifyCert: ICryptCert): TNetPort;
   public
@@ -711,7 +712,7 @@ begin
     // won't include an IV with each frame, but update it after each frame
   end;
   fServerSock := sock;
-  inherited Create({susp=}true, nil, nil, fOwner.fLogClass, Make(['tun', fPort]));
+  inherited Create({susp=}false, nil, nil, fOwner.fLogClass, Make(['tun', fPort]));
 end;
 
 destructor TTunnelLocalThread.Destroy;
@@ -862,13 +863,9 @@ begin
               else
                 SetLength(tmp, length(tmp) + TRAIL_SIZE);
               PTunnelSession(@PByteArray(tmp)[length(tmp) - TRAIL_SIZE])^ := fSession;
-              if (fOwner.fTransmit <> nil) and
+              if (fOwner <> nil) and
                  not Terminated then
-              begin
-                if fOwner <> nil then
-                  inc(fOwner.fFramesOut);
-                fOwner.fTransmit.TunnelSend(tmp);
-              end;
+                fOwner.SendFrame(tmp);
             end;
         else
           ETunnel.RaiseUtf8('%.Execute(%): error % receiving',
@@ -936,27 +933,23 @@ procedure TTunnelLocal.ClosePort;
 var
   frame: RawByteString; // notification frame to unregister to the other side
   callback: TNetSocket; // touch-and-go to the server to release main Accept()
+  transmit: ITunnelTransmit;
   log: ISynLog;
 begin
   if self = nil then
     exit;
   fLogClass.EnterLocal(log, 'ClosePort %', [fPort], self);
-  fSendSafe.Lock; // protect fHandshake+fThread
+  fStateSafe.Lock; // protect fHandshake+fThread
   try
     if not (fClosePortNotified in fFlags) then
-      try
-        // send frame with only session (and no payload) to notify as closed
-        include(fFlags, fClosePortNotified);
-        if Assigned(log) then
-          log.Log(sllTrace, 'ClosePort: notify other end', self);
-        PTunnelSession(FastNewRawByteString(frame, TRAIL_SIZE))^ := fSession;
-        if Assigned(fTransmit) then
-        begin
-          inc(fFramesOut);
-          fTransmit.TunnelSend(frame);
-        end;
-      except
-      end;
+    begin
+      // send frame with only session (and no payload) to notify as closed
+      include(fFlags, fClosePortNotified);
+      if Assigned(log) then
+        log.Log(sllTrace, 'ClosePort: notify other end', self);
+      PTunnelSession(FastNewRawByteString(frame, TRAIL_SIZE))^ := fSession;
+      transmit := fTransmit; // outside of the lock - inlined SendFrame()
+    end;
     if fThread <> nil then
       try
         fThread.Terminate;
@@ -972,7 +965,13 @@ begin
       end;
     fClosed := true; // before UnLock and SetEvent
   finally
-    fSendSafe.UnLock;
+    fStateSafe.UnLock;
+  end;
+  if assigned(transmit) then
+  try
+    inc(fFramesOut);
+    fTransmit.TunnelSend(frame); // see SendFrame()
+  except
   end;
   if Assigned(log) then
     log.Log(sllTrace, 'ClosePort: %', [self]); // final statistics
@@ -993,7 +992,7 @@ begin
   dec(l, TRAIL_SIZE);
   if l < 0 then
     ETunnel.RaiseUtf8('%.Send: unexpected size=%', [self, l]);
-  fSendSafe.Lock; // protect fHandshake+fThread
+  fStateSafe.Lock; // protect fHandshake+fThread
   try
     inc(fFramesIn);
     if fHandshake <> nil then
@@ -1028,7 +1027,7 @@ begin
     else
       fLogClass.Add.Log(sllWarning, 'TunnelSend: Thread=nil', self); // unlikely
   finally
-    fSendSafe.UnLock;
+    fStateSafe.UnLock;
   end;
 end;
 
@@ -1043,7 +1042,7 @@ begin
     exit;
   // first inspect the queue while protected by the same lock as TunnelSend():
   // supports a handshake which arrived before WaitForHandshake() was called
-  fSendSafe.Lock;
+  fStateSafe.Lock;
   try
     if fClosed or
        (fThread <> nil) or
@@ -1061,14 +1060,14 @@ begin
       exit;
     end;
   finally
-    fSendSafe.UnLock;
+    fStateSafe.UnLock;
   end;
   // TSynEvent preserves an early SetEvent(), so there is no lost wakeup between
   // the queue check above and this wait - no frame is consumed here
   if (fHandshakeEvent = nil) or
      not fHandshakeEvent.WaitFor(TimeOutMS) then
     exit;
-  fSendSafe.Lock;
+  fStateSafe.Lock;
   try
     if fClosed or
        (fThread <> nil) or
@@ -1079,7 +1078,7 @@ begin
       ETunnel.RaiseUtf8('%.WaitForHandshake: wrong session trailer', [self]);
     result := true;
   finally
-    fSendSafe.UnLock;
+    fStateSafe.UnLock;
   end;
 end;
 
@@ -1088,11 +1087,11 @@ procedure TTunnelLocal.CallbackReleased(const callback: IInvokable;
 begin
   if not IdemPChar(pointer(interfaceName), 'ITUNNEL') then
     exit; // should be ITunnelLocal or ITunnelTransmit
-  fSendSafe.Lock;
+  fStateSafe.Lock;
   try
     include(fFlags, fClosePortNotified); // no need to notify the remote end
   finally
-    fSendSafe.UnLock;
+    fStateSafe.UnLock;
   end;
   ClosePort;
 end;
@@ -1119,6 +1118,26 @@ begin
     result := 0
   else
     result := GetUptimeSec - fStartTicks; // in seconds
+end;
+
+procedure TTunnelLocal.SendFrame(const Frame: RawByteString);
+var
+  transmit: ITunnelTransmit; // TunnelSend() call outside of the lock
+begin
+  if self = nil then
+    exit;
+  fStateSafe.Lock;
+  try
+    if fClosed then
+      exit;
+    transmit := fTransmit;
+    if Assigned(transmit) then
+      inc(fFramesOut);
+  finally
+    fStateSafe.UnLock;
+  end;
+  if Assigned(transmit) then
+    transmit.TunnelSend(Frame);
 end;
 
 procedure TunnelHandshakeCrc(const Handshake: TTunnelLocalHandshake;
@@ -1300,8 +1319,7 @@ begin
     l := length(frame);
     PWord(@PByteArray(frame)^[l - SUFFIX_SIZE])^ := li;
     PTunnelSession(@PByteArray(frame)^[l - TRAIL_SIZE])^ := fSession;
-    inc(fFramesOut);
-    fTransmit.TunnelSend(frame);
+    SendFrame(frame);
     if Assigned(log) then
       log.Log(sllTrace, 'Open: sent % - wait for answer', [length(frame)], self);
     // this method will wait until both sides sent a valid signed header
@@ -1356,23 +1374,22 @@ begin
     // launch the background processing thread
     fPort := result;
     TimeOutMS := (TimeOutMS shr 10) + 5; // minimal coherent accept time
-    fSendSafe.Lock;
+    fStateSafe.Lock;
     try
       if fThread <> nil then
         ETunnel.RaiseUtf8('%.Open: existing %', [self, fThread]);
       fThread := TTunnelLocalThread.Create(
         self, key.Lo, iv.Lo, Sock, TimeOutMS);
     finally
-      fSendSafe.UnLock;
+      fStateSafe.UnLock;
     end;
-    fThread.Start; // was created with Suspended=true
     SleepHiRes(100, fThread.fStarted);
     if Assigned(log) then
       log.Log(sllTrace, 'Open: started=% %',
         [BOOL_STR[fThread.fStarted], fThread], self);
     fStartTicks := GetUptimeSec; // wall clock
     hqueue := fHandshake;
-    fSendSafe.Lock; // re-entrant for TunnelSend()
+    fStateSafe.Lock; // re-entrant for TunnelSend()
     try
       fHandshake := nil;   // ends the handshaking phase
       while hqueue.Pop(frame) do
@@ -1382,7 +1399,7 @@ begin
         TunnelSend(frame); // paranoid: redirect to this instance
       end;
     finally
-      fSendSafe.UnLock;
+      fStateSafe.UnLock;
       hqueue.Free;
     end;
     // now everything is running and we can prepare the fixed info
