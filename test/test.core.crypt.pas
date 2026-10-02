@@ -3479,7 +3479,7 @@ const
 var
   ctxt: TAesGcmEngine;
   key, tag: TAesBlock;
-  buf: THash512;
+  buf, cipher, plain: THash512;
   n: integer;
   avx: boolean;
 begin
@@ -3524,6 +3524,29 @@ begin
        @C10, SizeOf(C10), @P10, 10);
   test(@T11, 16, K11, 8 * SizeOf(K11), @I11, SizeOf(I11), @H11, SizeOf(H11),
        @C11, SizeOf(C11), @P11, 11);
+  for n := 1 to SizeOf(buf) do // AVX is used only if n mod 16 = 0
+    for avx := false to true do
+    begin
+      Check(ctxt.FullEncryptAndAuthenticate(key, 128,
+        @hex32, @hex32, @buf, @cipher, 12, 16, n, tag, avx));
+      FillZero(plain);
+      CheckUtf8(ctxt.FullDecryptAndVerify(key, 128, @hex32, @hex32, @cipher,
+        @plain, @tag, 12, 16, n, 16, avx), 'verify n=% avx=%', [n, avx]);
+      Check(CompareMem(@buf, @plain, n));
+      inc(cipher[0]); // should detect a forged ciphertext, tag or AAD
+      CheckUtf8(not ctxt.FullDecryptAndVerify(key, 128, @hex32, @hex32, @cipher,
+        @plain, @tag, 12, 16, n, 16, avx), 'forged ctp n=% avx=%', [n, avx]);
+      dec(cipher[0]);
+      inc(tag[15]);
+      CheckUtf8(not ctxt.FullDecryptAndVerify(key, 128, @hex32, @hex32, @cipher,
+        @plain, @tag, 12, 16, n, 16, avx), 'forged tag n=% avx=%', [n, avx]);
+      dec(tag[15]);
+      CheckUtf8(not ctxt.FullDecryptAndVerify(key, 128, @hex32, @hex32, @cipher,
+        @plain, @tag, 12, 15, n, 16, avx), 'forged aad n=% avx=%', [n, avx]);
+      {$ifndef ASMX64AVX0}
+      break; // avx=true would be the same as avx=false
+      {$endif ASMX64AVX0}
+    end;
 end;
 
 {$ifndef PUREMORMOT2}

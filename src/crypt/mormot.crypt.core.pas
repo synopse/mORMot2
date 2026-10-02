@@ -497,8 +497,9 @@ type
     /// encrypt a buffer with AES-GCM, updating the associated authentication data
     function Encrypt(ptp, ctp: pointer; ILen: PtrInt): boolean;
     /// decrypt a buffer with AES-GCM, updating the associated authentication data
-    // - also validate the GMAC with the supplied ptag/tlen if ptag<>nil,
-    // and skip the AES-CTR phase if the authentication doesn't match
+    // - also validate the GMAC with the supplied ptag/tlen if ptag<>nil, and
+    // return false if the authentication doesn't match - the AES-CTR phase is
+    // skipped by the dual pass process only, not by the single pass branches
     function Decrypt(ctp, ptp: pointer; ILen: PtrInt;
       ptag: pointer = nil; tlen: PtrInt = 0): boolean;
     /// append some data to be authenticated, but not encrypted
@@ -4951,7 +4952,7 @@ begin
   {$ifdef USEGCMAVX}
   if (flagAVX in state.flags) and
      (ILen <> 0) then
-    AvxProcess(ctp, ptp, ILen, {encrypt=}false)
+    AvxProcess(ctp, ptp, ILen, {encrypt=}false) // single pass GMAC + AES-CTR
   else
   {$endif USEGCMAVX}
   if (ILen <> 0) and
@@ -4974,14 +4975,6 @@ begin
       inc(PAesBlock(ctp));
       dec(ILen);
     until ILen = 0;
-    if (ptag <> nil) and
-       (tlen > 0) then
-    begin
-      Final(tag, {anddone=}false);
-      if not IsEqual(tag, ptag^, tlen) then
-        // check authentication after single pass encryption + auth
-        exit;
-    end;
   end
   else
   begin
@@ -4994,8 +4987,17 @@ begin
       if not IsEqual(tag, ptag^, tlen) then
         // check authentication before decryption
         exit;
+      tlen := 0; // already verified
     end;
     internal_crypt(ctp, ptp, iLen);
+  end;
+  if (ptag <> nil) and
+     (tlen > 0) then
+  begin
+    Final(tag, {anddone=}false);
+    if not IsEqual(tag, ptag^, tlen) then
+      // check authentication after single pass decryption
+      exit;
   end;
   result := true;
 end;
