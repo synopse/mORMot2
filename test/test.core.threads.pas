@@ -1342,7 +1342,6 @@ type
     Queue: TSynQueue;
     Value: integer;
     DelayMS: cardinal;
-    Done: PInteger;
     procedure DoExecute(aCaller: TSynThreadPoolWorkThread); override;
   end;
 
@@ -1352,7 +1351,6 @@ type
     TimeoutMS: integer;
     Success: PBoolean;
     Value: PInteger;
-    Done: PInteger;
     procedure DoExecute(aCaller: TSynThreadPoolWorkThread); override;
   end;
 
@@ -1361,14 +1359,10 @@ type
 
 procedure TSynQueuePushTask.DoExecute(aCaller: TSynThreadPoolWorkThread);
 begin
-  try
-    if DelayMS <> 0 then
-      SleepHiRes(DelayMS);
-    Queue.Push(Value);
-  finally
-    if Done <> nil then
-      LockedInc32(Done);
-  end;
+  TSynLog.Add.Log(sllTrace, 'Queue.Push(%)', [Value], self);
+  if DelayMS <> 0 then
+    SleepHiRes(DelayMS);
+  Queue.Push(Value);
 end;
 
 
@@ -1378,14 +1372,11 @@ procedure TSynQueueWaitTask.DoExecute(aCaller: TSynThreadPoolWorkThread);
 var
   v: integer;
 begin
-  try
-    v := 0;
-    Success^ := Queue.WaitPop(TimeoutMS, nil, v);
-    Value^ := v;
-  finally
-    if Done <> nil then
-      LockedInc32(Done);
-  end;
+  TSynLog.Add.Log(sllTrace, 'Queue.WaitPop(%)', [TimeoutMS], self);
+  v := 0;
+  Success^ := Queue.WaitPop(TimeoutMS, nil, v);
+  Value^ := v;
+  TSynLog.Add.Log(sllTrace, 'Queue.WaitPop=%', [Success^], self);
 end;
 
 
@@ -1396,8 +1387,6 @@ var
   p: pointer;
   q: TSynQueue;
   tasks: TSynThreadTasks;
-  done: cardinal;
-  taskcount: integer;
   success: array[0 .. WAITERS - 1] of boolean;
   value: array[0 .. WAITERS - 1] of integer;
 
@@ -1413,58 +1402,46 @@ var
     until mormot.core.os.GetTickCount64 > timeout;
     CheckEqual(q.Waiters, ExpectedCount,
       'TSynQueue WaitPop registration');
+    TSynLog.Add.Log(sllTrace, 'TSynQueueSlow2: WaitForRegisteredWaiters %=%',
+      [q.Waiters, ExpectedCount], self);
   end;
 
-  procedure WaitForTasks(ExpectedCount: integer; const Msg: RawUtf8);
-  var
-    timeout: Int64;
+  procedure WaitForTasks(const Msg: RawUtf8);
   begin
-    timeout := mormot.core.os.GetTickCount64 + 2000;
-    repeat
-      if done = cardinal(ExpectedCount) then
-      begin
-        taskcount := 0;
-        exit;
-      end;
-      SleepHiRes(1);
-    until mormot.core.os.GetTickCount64 > timeout;
-    CheckEqual(done, cardinal(ExpectedCount), Msg);
-    if done = cardinal(ExpectedCount) then
-      taskcount := 0;
+    TSynLog.Add.Log(sllTrace, 'TSynQueueSlow2: WaitForTasks %', [Msg], self);
+    Check(tasks.WaitFor(5000), Msg);
   end;
 
   procedure PushAsync(aValue: integer; aDelayMS: cardinal);
   var
-    push: TSynQueuePushTask;
+    task: TSynQueuePushTask;
   begin
-    done := 0;
-    taskcount := 1;
-    push := TSynQueuePushTask.Create;
-    push.Queue := q;
-    push.Value := aValue;
-    push.DelayMS := aDelayMS;
-    push.Done := @done;
-    Check(tasks.Add(push), 'TSynQueue push task');
+    task := TSynQueuePushTask.Create;
+    task.Queue := q;
+    task.Value := aValue;
+    task.DelayMS := aDelayMS;
+    Check(tasks.Add(task), 'TSynQueue push task');
+    TSynLog.Add.Log(sllTrace, 'TSynQueueSlow2: added Push(%,%)',
+      [aValue, aDelayMS], self);
   end;
 
   procedure StartWaiters(aTimeoutMS: integer);
   var
     n: PtrInt;
-    wait: TSynQueueWaitTask;
+    task: TSynQueueWaitTask;
   begin
-    done := 0;
-    taskcount := WAITERS;
     for n := 0 to WAITERS - 1 do
     begin
       success[n] := false;
       value[n] := 0;
-      wait := TSynQueueWaitTask.Create;
-      wait.Queue := q;
-      wait.TimeoutMS := aTimeoutMS;
-      wait.Success := @success[n];
-      wait.Value := @value[n];
-      wait.Done := @done;
-      Check(tasks.Add(wait), 'TSynQueue WaitPop task');
+      task := TSynQueueWaitTask.Create;
+      task.Queue := q;
+      task.TimeoutMS := aTimeoutMS;
+      task.Success := @success[n];
+      task.Value := @value[n];
+      Check(tasks.Add(task), 'TSynQueue WaitPop task');
+      TSynLog.Add.Log(sllTrace, 'TSynQueueSlow2: added Wait(%)',
+        [aTimeoutMS], self);
     end;
     WaitForRegisteredWaiters(WAITERS);
   end;
@@ -1472,14 +1449,12 @@ var
   procedure CleanupQueue;
   begin
     q.WaitPopFinalize(1000);
-    if taskcount <> 0 then
-      WaitForTasks(taskcount, 'TSynQueue task cleanup');
+    WaitForTasks('TSynQueue task cleanup');
   end;
 
 begin
   tasks := TSynThreadTasks.Create(WAITERS, 'queue');
   try
-    taskcount := 0;
     // WaitPop notification
     q := TSynQueue.Create(TypeInfo(TIntegerDynArray));
     try
@@ -1489,7 +1464,7 @@ begin
       v := 0;
       Check(q.WaitPop(2000, nil, v), 'WaitPop notification');
       CheckEqual(v, 123456, 'WaitPop notification value');
-      WaitForTasks(1, 'WaitPop notification worker');
+      WaitForTasks('WaitPop notification worker');
       CheckEqual(q.Count, 0);
       // WaitPeekLocked notification
       PushAsync(654321, 50);
@@ -1501,7 +1476,7 @@ begin
           'WaitPeekLocked notification value');
         q.Safe.ReadWriteUnLock;
       end;
-      WaitForTasks(1, 'WaitPeekLocked notification worker');
+      WaitForTasks('WaitPeekLocked notification worker');
       v := 0;
       Check(q.Pop(v));
       CheckEqual(v, 654321);
@@ -1530,7 +1505,7 @@ begin
         j := i;
         q.Push(j);
       end;
-      WaitForTasks(WAITERS, 'multiple WaitPop workers');
+      WaitForTasks('multiple WaitPop workers');
       mask := 0;
       for i := 0 to WAITERS - 1 do
       begin
@@ -1567,7 +1542,7 @@ begin
       // polling should still make it reach zero well inside 1 second.
       CheckEqual(q.Waiters, 0,
         'WaitPopFinalize should release all waiters');
-      WaitForTasks(WAITERS, 'WaitPopFinalize workers');
+      WaitForTasks('WaitPopFinalize workers');
       for i := 0 to WAITERS - 1 do
         Check(not success[i],
           'WaitPopFinalize WaitPop result');
@@ -1578,7 +1553,7 @@ begin
         'WaitPop after WaitPopFinalize');
       CheckEqual(q.Waiters, 0,
         'WaitPop after finalize should not register a waiter');
-       // Should therefore also be harmless/immediate if called again.
+      // Should therefore also be harmless/immediate if called again.
       q.WaitPopFinalize(10);
       CheckEqual(q.Waiters, 0);
     finally
@@ -1596,7 +1571,7 @@ begin
       // The polling fallback should also finish well within 1 second.
       CheckEqual(q.Waiters, 0,
         'WaitPopFinalize should release all waiters');
-      WaitForTasks(WAITERS, 'WaitPopFinalize workers');
+      WaitForTasks('WaitPopFinalize workers');
       for i := 0 to WAITERS - 1 do
         Check(not success[i],
           'WaitPopFinalize WaitPop result');
@@ -1618,7 +1593,7 @@ begin
         v := 100 + i;
         q.Push(v);
       end;
-      WaitForTasks(WAITERS, 'WaitPopReset workers');
+      WaitForTasks('WaitPopReset workers');
       mask := 0;
       for i := 0 to WAITERS - 1 do
       begin
@@ -1646,11 +1621,10 @@ begin
       q.WaitPopFinalize(1000);
       CheckEqual(q.Waiters, 0,
         'second WaitPopFinalize should release all waiters');
-      WaitForTasks(WAITERS, 'second WaitPopFinalize workers');
+      WaitForTasks('second WaitPopFinalize workers');
       for i := 0 to WAITERS - 1 do
         Check(not success[i],
           'second WaitPopFinalize WaitPop result');
-
       // A second reset cycle should work as well.
       Check(q.WaitPopReset,
         'second WaitPopReset');
