@@ -1374,7 +1374,8 @@ begin
     fSafe.UnLock;
   end;
   result := fTasks;
-  DoLog(sllDebug, 'Tasks: initialized %', [result]);
+  DoLog(sllDebug, 'Tasks: initialized shared % with % threads',
+    [result.ClassType, result.WorkThreadCount]);
 end;
 
 procedure TSynTests.EndSaveToFileExternal;

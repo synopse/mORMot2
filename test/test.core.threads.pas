@@ -1301,9 +1301,6 @@ begin
   end;
 end;
 
-const
-  WAITERS = 8;
-
 type
   TSynQueuePushTask = class(TSynThreadTask)
   public
@@ -1351,11 +1348,11 @@ end;
 procedure TTestCoreThreads.TSynQueueSlow2(Sender: TObject);
 var
   i: PtrInt;
-  j, v, expected, mask: integer;
+  j, v, expected, mask, waiters: integer;
   p: pointer;
   q: TSynQueue;
-  success: array[0 .. WAITERS - 1] of boolean;
-  value: array[0 .. WAITERS - 1] of integer;
+  success: array[0 .. 7] of boolean;
+  value: array[0 .. 7] of integer;
 
   procedure WaitForRegisteredWaiters(ExpectedCount: integer);
   var
@@ -1391,7 +1388,7 @@ var
     n: PtrInt;
     task: TSynQueueWaitTask;
   begin
-    for n := 0 to WAITERS - 1 do
+    for n := 0 to waiters - 1 do
     begin
       success[n] := false;
       value[n] := 0;
@@ -1404,7 +1401,7 @@ var
       TSynLog.Add.Log(sllTrace, 'TSynQueueSlow2: added Wait(%)',
         [aTimeoutMS], self);
     end;
-    WaitForRegisteredWaiters(WAITERS);
+    WaitForRegisteredWaiters(waiters);
   end;
 
   procedure CleanupQueue;
@@ -1414,6 +1411,10 @@ var
   end;
 
 begin
+  waiters := Owner.Tasks.WorkThreadCount; // may equal 4 on PRISM
+  if waiters > length(success) then
+    waiters := length(success);
+  TSynLog.Add.Log(sllTrace, 'TSynQueueSlow2: waiters=%', [waiters], self);
   // WaitPop notification
   q := TSynQueue.Create(TypeInfo(TIntegerDynArray));
   try
@@ -1459,28 +1460,28 @@ begin
     // Correctness must not depend on this delay - the sequence protects
     // that race - but it makes the WakeOne path well exercised.
     SleepHiRes(20);
-    for i := 1 to WAITERS do
+    for i := 1 to waiters do
     begin
       j := i;
       q.Push(j);
     end;
     WaitTasks('multiple WaitPop workers');
     mask := 0;
-    for i := 0 to WAITERS - 1 do
+    for i := 0 to waiters - 1 do
     begin
       Check(success[i], 'multiple WaitPop notification');
       Check((value[i] >= 1) and
-            (value[i] <= WAITERS),
+            (value[i] <= waiters),
         'multiple WaitPop value range');
       if (value[i] >= 1) and
-         (value[i] <= WAITERS) then
+         (value[i] <= waiters) then
       begin
         j := 1 shl (value[i] - 1);
         Check(mask and j = 0, 'duplicate WaitPop value');
         mask := mask or j;
       end;
     end;
-    CheckEqual(mask, (1 shl WAITERS) - 1,
+    CheckEqual(mask, (1 shl waiters) - 1,
       'all WaitPop values consumed');
     CheckEqual(q.Count, 0);
     CheckEqual(q.Waiters, 0);
@@ -1502,7 +1503,7 @@ begin
     CheckEqual(q.Waiters, 0,
       'WaitPopFinalize should release all waiters');
     WaitTasks('WaitPopFinalize workers');
-    for i := 0 to WAITERS - 1 do
+    for i := 0 to waiters - 1 do
       Check(not success[i],
         'WaitPopFinalize WaitPop result');
     // Future WaitPop calls should return immediately and, importantly,
@@ -1531,7 +1532,7 @@ begin
     CheckEqual(q.Waiters, 0,
       'WaitPopFinalize should release all waiters');
     WaitTasks('WaitPopFinalize workers');
-    for i := 0 to WAITERS - 1 do
+    for i := 0 to waiters - 1 do
       Check(not success[i],
         'WaitPopFinalize WaitPop result');
     // While finalized, new WaitPop() calls should not even register.
@@ -1547,22 +1548,22 @@ begin
     SleepHiRes(20);
     // One Push() per waiter: validates that normal WakeOne behavior
     // is working again after WaitPopReset().
-    for i := 1 to WAITERS do
+    for i := 1 to waiters do
     begin
       v := 100 + i;
       q.Push(v);
     end;
     WaitTasks('WaitPopReset workers');
     mask := 0;
-    for i := 0 to WAITERS - 1 do
+    for i := 0 to waiters - 1 do
     begin
       Check(success[i],
         'WaitPop after WaitPopReset');
       Check((value[i] > 100) and
-            (value[i] <= 100 + WAITERS),
+            (value[i] <= 100 + waiters),
         'WaitPopReset value range');
       if (value[i] > 100) and
-         (value[i] <= 100 + WAITERS) then
+         (value[i] <= 100 + waiters) then
       begin
         j := 1 shl (value[i] - 101);
         Check(mask and j = 0,
@@ -1570,7 +1571,7 @@ begin
         mask := mask or j;
       end;
     end;
-    CheckEqual(mask, (1 shl WAITERS) - 1,
+    CheckEqual(mask, (1 shl waiters) - 1,
       'all WaitPopReset values consumed');
     CheckEqual(q.Count, 0);
     CheckEqual(q.Waiters, 0);
@@ -1581,7 +1582,7 @@ begin
     CheckEqual(q.Waiters, 0,
       'second WaitPopFinalize should release all waiters');
     WaitTasks('second WaitPopFinalize workers');
-    for i := 0 to WAITERS - 1 do
+    for i := 0 to waiters - 1 do
       Check(not success[i],
         'second WaitPopFinalize WaitPop result');
     // A second reset cycle should work as well.
