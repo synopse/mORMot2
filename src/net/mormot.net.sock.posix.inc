@@ -506,7 +506,7 @@ begin
     err := 0;
     result := poll(fds, nfds, timeout);
     if result >= 0 then
-      exit;             // some events(s)
+      exit;             // some event(s)
     err := cerrno;
     if (err <> ESysEINTR) and
        (err <> ESysEAGAIN) then

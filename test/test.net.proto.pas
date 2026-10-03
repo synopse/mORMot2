@@ -4566,6 +4566,7 @@ begin
     peercachedirect := hpc;
     Check(hpc.State = [], 'hpcState1');
     localserver.OnRequest := OnPeerCacheRequest; // return the URL
+    localserver.WaitStarted; // ensure :8889 is bound
     hpc.OnDirectOptions := OnPeerCacheDirect;
     try
       // validate all resources
@@ -7340,11 +7341,11 @@ begin
         'unexpected CASystemStores');
     end;
     if stfHugeContent in Flags then
-     begin
-       http.OnRequest := DoHugeRequest;
-       // otherwise the default maximum body size may interfere
-       http.MaximumAllowedContentLength := length(Body) * 2;
-     end;
+    begin
+      http.OnRequest := DoHugeRequest;
+      // otherwise the default maximum body size may interfere
+      http.MaximumAllowedContentLength := length(Body) * 2;
+    end;
     http.WaitStarted(10, @tls);
     // AfterBind owns independent references/copies of all custom trust input.
     if raw <> nil then
