@@ -1752,6 +1752,7 @@ type
     // ContentionAbortDelay ms and retry to queue the task
     function Push(aContext: pointer; aWaitOnContention: boolean = false): boolean;
     /// wait for PendingTasks to reach 0, i.e. all Push() be executed and done
+    // - by design, this class accept multiple concurrent WaitFor() threads
     function WaitFor(TimeOutMS: cardinal): boolean;
     {$ifndef USE_THREADWINIOCP}
     /// may be called after Push() returned false to see if queue was actually full

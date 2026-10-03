@@ -310,7 +310,7 @@ type
     procedure RunTasks(const Worker: TNotifyEvent; Count: integer;
       const Name: RawUtf8);
     /// wait for background tasks started by RunTask/RunTasks() to finish
-    procedure WaitTasks(const Name: RawUtf8; TimeOutMS: cardinal);
+    procedure WaitTasks(const Name: RawUtf8; TimeOutMS: cardinal = 5000);
     /// this method is triggered internally - e.g. by Check() - when a test failed
     procedure TestFailed(const msg: string; notify: boolean = true); overload;
     /// this method can be triggered directly - e.g. after CheckFailed() = true
@@ -1157,7 +1157,7 @@ begin
       (not Threaded)) and
      not ForcedThreaded then
   begin
-    fOwner.DoLog(sllDebug, 'Run(%)', [TaskName]);
+    fOwner.DoLog(sllDebug, 'Run [%]', [TaskName]);
     OnTask(Sender); // run in main thread
   end
   else
@@ -1167,7 +1167,7 @@ begin
       fBackgroundRun := TLoggedWorker.Create(TSynLogTestLog);
       fBackgroundRun.OnBeforeEachTask := OnBeforeEachBackgroundTask;
     end;
-    fOwner.DoLog(sllDebug, 'Run(%,%) using %',
+    fOwner.DoLog(sllDebug, 'Run [%,%] using %',
       [TaskName, ForcedThreaded, fBackgroundRun]);
     fBackgroundRun.Run(OnTask, Sender, TaskName, ForcedThreaded);
   end;
@@ -1196,14 +1196,14 @@ end;
 procedure TSynTestCase.RunTask(const Worker: TNotifyEvent;
   const Name: RawUtf8);
 begin
-  fOwner.DoLog(sllTrace, 'RunTask %', [Name]);
+  fOwner.DoLog(sllTrace, 'RunTask [%]', [Name]);
   CheckEqual(fOwner.Tasks.Add(self, Worker), 1, Name);
 end;
 
 procedure TSynTestCase.RunTasks(const Worker: TNotifyEvent;
   Count: integer; const Name: RawUtf8);
 begin
-  fOwner.DoLog(sllTrace, 'RunTasks(%) %', [Count, Name]);
+  fOwner.DoLog(sllTrace, 'RunTasks count=% [%]', [Count, Name]);
   CheckEqual(fOwner.Tasks.Add(self, Worker, Count), Count, Name);
 end;
 
@@ -1213,7 +1213,7 @@ var
 begin
   QueryPerformanceMicroSeconds(start);
   CheckUtf8(fOwner.Tasks.WaitFor(TimeOutMS), Name);
-  fOwner.DoLog(sllTrace, 'WaitTasks % in %', [Name, MicroSecFrom(start)]);
+  fOwner.DoLog(sllTrace, 'WaitTasks [%] in %', [Name, MicroSecFrom(start)]);
 end;
 
 procedure TSynTestCase.TestFailed(const msg: string; notify: boolean);
@@ -1356,6 +1356,8 @@ begin
 end;
 
 function TSynTests.Tasks: TSynThreadTasks;
+var
+  n: integer;
 begin
   result := fTasks;
   if result <> nil then
@@ -1363,7 +1365,11 @@ begin
   fSafe.Lock;
   try
     if fTasks = nil then
-      fTasks := TSynThreadTasks.Create(16, 'testtask');
+    begin
+      n := 16;
+      ThreadCountAdjust(n); // adapt to PRISM requirements
+      fTasks := TSynThreadTasks.Create(n, 'testtask');
+    end;
   finally
     fSafe.UnLock;
   end;
