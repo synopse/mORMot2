@@ -362,10 +362,18 @@ begin
     // create the main POST connection and its associated RTSP connection
     postconn := TPostConnection.Create(self, aRemoteIp);
     rtspconn := TRtspConnection.Create(self, aRemoteIp);
-    if not inherited ConnectionNew(aSocket, postconn) or
+    if not inherited ConnectionNew(aSocket, postconn) then
+      FreeAndNil(postconn); // e.g. at shutdown: was not registered
+    if (postconn = nil) or
        not inherited ConnectionNew(rtsp, rtspconn) then
+    begin
+      rtspconn.Free; // was not registered either, and did not own rtsp yet
+      rtsp.ShutdownAndClose({rdwr=}false);
+      if postconn <> nil then
+        postconn.fSocket := nil; // aSocket will be released by the caller
       ERtspOverHttp.RaiseUtf8('inherited %.ConnectionNew(%) % failed',
         [self, aSocket, cookie]);
+    end;
     aConnection := postconn;
     postconn.fRtspTag := rtspconn.Handle;
     rtspconn.fGetBlocking := get;
@@ -378,6 +386,7 @@ begin
     if log <> nil then
       log.Log(sllWarning,
         'ConnectionCreate Sockets.Start failed for %', [rtspconn], self);
+      postconn.fSocket := nil; // aSocket will be released by the caller
       exit;
     end;
     get := nil;
