@@ -77,7 +77,7 @@ type
   // - fClosed is set by OnClose virtual method
   // - fFirstRead is set once TPollAsyncSockets.OnFirstRead is called
   // - fSubRead/fSubWrite flags are set when Subscribe() has been called
-  // - fInList indicates that ConnectionAdd() did register the connection
+  // - fInList indicates that ConnectionNew() did register the connection
   // - fReadPending states that there is a pending event for this connection
   // - fMemClean is set after TPollAsyncConnection.ReleaseMemoryOnIdle success
   // - note: better keep it to 8 items to fit in a byte (faster access)
@@ -295,7 +295,6 @@ type
     function OnError(connection: TPollAsyncConnection;
       events: TPollSocketEvents): boolean; virtual; abstract;
     procedure OnClosed(connection: TPollAsyncConnection); virtual; abstract;
-    procedure RegisterConnection(connection: TPollAsyncConnection); virtual; abstract;
     function SubscribeConnection(const caller: ShortString;
       connection: TPollAsyncConnection; sub: TPollSocketEvent): boolean;
     procedure CloseConnection(var connection: TPollAsyncConnection;
@@ -466,7 +465,6 @@ type
     fOwner: TAsyncConnections;
     function GetTotal: integer;
       {$ifdef HASINLINE} inline; {$endif}
-    procedure RegisterConnection(connection: TPollAsyncConnection); override;
     // just log the error, and close connection if acoOnErrorContinue is not set
     function OnError(connection: TPollAsyncConnection;
       events: TPollSocketEvents): boolean; override;
@@ -595,7 +593,7 @@ type
     fSockets: TAsyncConnectionsSockets;
     fThreads: TAsyncConnectionsThreads;
     fConnectionLock: TRWLock;  // write lock/block only on connection add/remove
-    fConnectionCount: integer; // only subscribed - not just after accept()
+    fConnectionCount: integer; // all registered - even just after accept()
     fConnectionHigh: integer;
     fWakeupSafe: TLightLock;   // protect ThreadPollingWakeupLocked
     fWakeupOne, fWakeupEvents: cardinal; // CAS counters to wakeup threads
@@ -631,13 +629,14 @@ type
       Address, Port: RawUtf8;
     end;
     function AllThreadsStarted: boolean; virtual;
-    procedure AddGC(aConnection: TPollAsyncConnection; const aContext: ShortString);
+    function AddGC(aConnection: TPollAsyncConnection;
+      const aContext: ShortString): boolean;
     procedure DoGC;
     procedure FreeGC(var conn: TPollAsyncConnections);
     function ConnectionCreate(aSocket: TNetSocket; const aRemoteIp: TNetAddr;
       out aConnection: TAsyncConnection): boolean; virtual;
-    function ConnectionNew(aSocket: TNetSocket; aConnection: TAsyncConnection;
-      aAddAndSubscribe: boolean = true): boolean; virtual;
+    function ConnectionNew(aSocket: TNetSocket;
+      aConnection: TAsyncConnection): boolean; virtual;
     function ConnectionDelete(
       aConnection: TPollAsyncConnection): boolean; overload; virtual;
     function LockedConnectionDelete(
@@ -1613,6 +1612,8 @@ begin
 end;
 
 destructor TPollAsyncConnection.Destroy;
+var
+  sock: TNetSocket;
 begin
   // note: our light locks do not need any specific release
   try
@@ -1622,6 +1623,20 @@ begin
       except
       end;
     BeforeDestroy;
+    // release the socket if Stop() did not, e.g. at shutdown
+    // (TWinIocp.Destroy did already close its subscribed sockets)
+    sock := fSocket;
+    if (sock <> nil) {$ifdef USE_WINIOCP} and (fIocpSub = nil) {$endif} then
+    begin
+      fSocket := nil;
+      try
+        fSecure := nil; // perform TLS shutdown
+      except
+        pointer(fSecure) := nil; // leak better than propagated GPF
+      end;
+      sock.SetLinger(-1); // don't wait for each peer
+      sock.ShutdownAndClose({rdwr=}false);
+    end;
     // finalize the instance
     fHandle := 0; // to detect any dangling pointer
   except
@@ -2175,8 +2190,6 @@ function TPollAsyncSockets.SubscribeConnection(const caller: ShortString;
 var
   tag: TPollSocketTag absolute connection;
 begin
-  if not (fInList in connection.fFlags) then // not already registered
-    RegisterConnection(connection);
   result := false;
   if not (sub in [pseRead, pseWrite]) then
     exit;
@@ -2669,11 +2682,6 @@ begin
   result := fOwner.fLastHandle; // handles are a plain integer sequence
 end;
 
-procedure TAsyncConnectionsSockets.RegisterConnection(connection: TPollAsyncConnection);
-begin
-  fOwner.ConnectionAdd(TAsyncConnection(connection));
-end;
-
 
 { TAsyncConnectionsThread }
 
@@ -3011,11 +3019,15 @@ end;
 
 {.$define GCVERBOSE} // help debugging
 
-procedure TAsyncConnections.AddGC(aConnection: TPollAsyncConnection; const aContext: ShortString);
+function TAsyncConnections.AddGC(aConnection: TPollAsyncConnection;
+  const aContext: ShortString): boolean;
 begin
+  result := false; // caller keeps the ownership, e.g. at shutdown
   if Terminated or
-     (aConnection = nil) or
-     (ifInGC in aConnection.fInternalFlags) then
+     (aConnection = nil) then
+    exit;
+  result := true; // now owned by the GC
+  if ifInGC in aConnection.fInternalFlags then
     exit;
   include(aConnection.fInternalFlags, ifInGC); // ensure AddGC() done once
   {$ifdef GCVERBOSE}
@@ -3271,7 +3283,8 @@ begin
   if not ConnectionCreate(client, addr, result) then
     client.ShutdownAndClose({rdwr=}false)
   else if not fSockets.Start(result) then
-    FreeAndNil(result);
+    // was registered by ConnectionNew: no Free
+    fSockets.CloseConnection(TPollAsyncConnection(result), 'ClientsConnect');
 end;
 
 procedure TAsyncConnections.DoLog(Level: TSynLogLevel; TextFmt: PUtf8Char;
@@ -3311,14 +3324,16 @@ begin
     else
       // reuse the existing instance of a closed connection
       aConnection.Recycle(aRemoteIP);
-    result := ConnectionNew(aSocket, aConnection, {add=}false);
+    result := ConnectionNew(aSocket, aConnection);
+    if not result then
+      FreeAndNil(aConnection); // was not registered
   end;
 end;
 
 function TAsyncConnections.ConnectionNew(aSocket: TNetSocket;
-  aConnection: TAsyncConnection; aAddAndSubscribe: boolean): boolean;
+  aConnection: TAsyncConnection): boolean;
 begin
-  result := false; // caller should release aSocket
+  result := false; // caller should release aSocket and aConnection
   if Terminated then
     exit;
   aConnection.fSocket := aSocket;
@@ -3334,9 +3349,8 @@ begin
     include(aConnection.fFlags, fInList);
     LockedInc32(@fConnectionCount);
   end
-  else if {$ifndef USE_WINIOCP} (fThreadReadPoll = nil) or {$endif}
-          aAddAndSubscribe then
-    // ProcessClientStart() won't delay SuscribeConnection + RegisterConnection
+  else
+    // ProcessClientStart() may delay SubscribeConnection, but not registration
     ConnectionAdd(aConnection);
   aConnection.AfterCreate; // Handle has been computed
   if acoVerboseLog in fOptions then
@@ -3351,9 +3365,22 @@ function TAsyncConnections.LockedConnectionDelete(aConnection: TAsyncConnection;
 var
   n: PtrInt;
   start: Int64;
+  sock: TNetSocket;
 begin
   // caller should have done fConnectionLock.WriteLock
+  result := false;
   try
+    // finalize first: once in the GC, the instance may be recycled
+    sock := aConnection.fSocket;
+    aConnection.fSocket := nil;   // ensure is known as disabled
+    exclude(aConnection.fFlags, fInList);
+    if not AddGC(aConnection, 'LockedConnectionDelete') then // delayed released
+    begin
+      // at shutdown: fConnection[] remains the owner
+      aConnection.fSocket := sock;
+      include(aConnection.fFlags, fInList);
+      exit;
+    end;
     if acoVerboseLog in fOptions then
       QueryPerformanceMicroSeconds(start);
     PtrArrayDelete(fConnection, aIndex, @fConnectionCount);
@@ -3363,9 +3390,7 @@ begin
       SetLength(fConnection, n + n shr 3); // reduce 50% free into 12.5%
     if acoVerboseLog in fOptions then
       DoLog(sllTrace, 'ConnectionDelete % ndx=% count=% %',
-        [aConnection, aIndex, n, MicroSecFrom(start)], self);
-    aConnection.fSocket := nil;   // ensure is known as disabled
-    AddGC(aConnection, 'LockedConnectionDelete'); // delayed released
+        [pointer(aConnection), aIndex, n, MicroSecFrom(start)], self);
     result := true;
   except
     result := false;
@@ -3419,14 +3444,11 @@ begin
     exit;
   if not (fInList in aConnection.fFlags) then
   begin
-    // this connection was not part of fConnection[] list nor subscribed
-    // e.g. HTTP/1.0 short request
+    // this connection was already removed from fConnection[] list
     // -> explicit GC - Free is unstable here
-    AddGC(aConnection, 'ConnectionDelete');
-    result := true;
+    result := AddGC(aConnection, 'ConnectionDelete');
     exit;
   end;
-  exclude(aConnection.fFlags, fInList);
   conn := ConnectionFindAndLock(aConnection.Handle, cWrite, @i);
   if conn <> nil then
     try
@@ -3434,7 +3456,8 @@ begin
     finally
       fConnectionLock.WriteUnLock;
     end;
-  if not result then
+  if not result and
+     not Terminated then // may be kept at shutdown
     DoLog(sllWarning, 'ConnectionDelete(%)=false count=%',
       [aConnection.Handle, fConnectionCount], self); // should never happen
 end;
@@ -4075,7 +4098,6 @@ end;
 procedure TAsyncServer.Shutdown;
 var
   i: PtrInt;
-  len: integer; // should be integer
   ev: TNetEvents;
   nl: TNetLayer;
   touchandgo: TNetSocket; // paranoid ensure Accept() is released
@@ -4108,8 +4130,8 @@ begin
     begin
       if fSocketsEpoll then
       begin
-        len := 1;
-        touchandgo.Send(@len, len);    // release epoll_wait() in R0 thread
+        // subscribe this writable socket to release epoll_wait() in R0 thread
+        fSockets.fRead.Subscribe(touchandgo, [pseWrite], {tag=}0);
         ev := touchandgo.WaitFor(100, [neRead, neError]);
         DoLog(sllTrace, 'Shutdown epoll WaitFor=%', [byte(ev)], self);
         SleepHiRes(1);
@@ -4294,18 +4316,8 @@ begin
         // first check if the server was shut down
         if Terminated then
         begin
-          {$ifndef USE_WINIOCP}
-          // specific behavior from Shutdown method
-          if fSocketsEpoll and
-             (res = nrOK) then
-          begin
-            DoLog(sllDebug, 'Execute: Accept(%) release', [fServer.Port], self);
-            // background subscribe to release epoll_wait() in R0 thread
-            fSockets.fRead.Subscribe(client, [pseRead], {tag=}0);
-            len := 1;
-            client.Send(@len, len); // release touchandgo.WaitFor
-          end;
-          {$endif USE_WINIOCP}
+          if res = nrOk then
+            client.ShutdownAndClose({rdwr=}false); // was accepted too late
           break;
         end;
         // check if fServer.Sock.Accept() did return with a socket, or a timeout
@@ -4338,7 +4350,11 @@ begin
         end;
         // handle any socket error in fServer.Sock.Accept()
         if Terminated then
+        begin
+          if res = nrOk then
+            client.ShutdownAndClose({rdwr=}false); // was accepted too late
           break;
+        end;
         if res <> nrOK then
         begin
           // failure (too many clients?) -> wait and retry
@@ -4703,7 +4719,7 @@ begin
       exit;
     sock.MakeAsync;
     result := nrRefused;
-    if not fOwner.ConnectionNew(sock, c, {add=}true) then
+    if not fOwner.ConnectionNew(sock, c) then
       exit;
     if aDestFileName <> '' then
     begin
