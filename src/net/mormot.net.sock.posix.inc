@@ -894,7 +894,7 @@ begin
     include(result, neRead);
   if p.revents and POLLOUT <> 0 then
     include(result, neWrite);
-  if p.revents and POLLERR <> 0 then
+  if p.revents and (POLLERR or POLLNVAL) <> 0 then
     include(result, neError);
   if p.revents and POLLHUP <> 0 then
     include(result, neClosed); // may return neClosed + neRead e.g. on HTTP/1.0
@@ -1755,7 +1755,7 @@ begin
       include(result, pseRead);
     if r and POLLOUT <> 0 then
       include(result, pseWrite);
-    if r and POLLERR <> 0 then
+    if r and (POLLERR or POLLNVAL) <> 0 then
       include(result, pseError);
     if r and POLLHUP <> 0 then
       include(result, pseClosed);
