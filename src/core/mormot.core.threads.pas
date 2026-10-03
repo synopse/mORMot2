@@ -5469,6 +5469,10 @@ begin
         result := DoClose(false);
         exit;
       end;
+      if (fPending = 0) and
+         (fSize >= 0) and
+         (fPosition >= fSize) then
+        break; // return with result = 0 if reached expected size
       fCanRead.ResetEvent;
       if fPending > 0 then
       begin
