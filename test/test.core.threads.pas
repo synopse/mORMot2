@@ -81,6 +81,8 @@ type
   TTestCoreThreads = class(TSynTestCase)
   protected
     fProfile: TThreadTestProfile;
+    // persistent task pool shared by the cross-thread tests
+    fTasks: TSynThreadTasks;
     // concrete lock storage - the active kind is selected by the enumerates
     fExclusiveKind: TExclusiveLockKind;
     fLight: TLightLock;
@@ -109,10 +111,10 @@ type
     function TransitionIterations: integer;
     function WaitMS: cardinal;
     procedure ResetProbe;
-    procedure RunWorker(const Worker: TNotifyEvent; const Name: RawUtf8;
-      NotifyTask: boolean = false);
-    procedure RunWorkers(const Worker: TNotifyEvent; Count: integer;
+    procedure RunTask(const Worker: TNotifyEvent; const Name: RawUtf8);
+    procedure RunTasks(const Worker: TNotifyEvent; Count: integer;
       const Name: RawUtf8);
+    procedure WaitTasks(const Name: RawUtf8; TimeOutMS: cardinal);
     // exclusive-lock dispatch
     procedure ExclusiveInit;
     procedure ExclusiveDone;
@@ -272,6 +274,7 @@ begin
     fProfile := ttpFull
   else
     fProfile := ttpFast;
+  fTasks := TSynThreadTasks.Create(WorkerCount, 'test');
   fEntered := TSynEvent.Create;
   fAcquired := TSynEvent.Create;
   fGate := TSynEvent.Create;
@@ -280,6 +283,8 @@ end;
 
 procedure TTestCoreThreads.CleanUp;
 begin
+  // tasks reference this test case and its events, so release the pool first
+  FreeAndNil(fTasks);
   FreeAndNil(fDone);
   FreeAndNil(fGate);
   FreeAndNil(fAcquired);
@@ -289,13 +294,12 @@ end;
 
 function TTestCoreThreads.WorkerCount: integer;
 begin
-  // TLoggedWorker itself limits simultaneous execution to CpuThreads and queues
-  // forced jobs, so asking for more than CpuThreads also validates queue reuse.
   result := CpuThreads * 2;
   if result < 2 then
     result := 2;
   if result > PROFILE_WORKER_CAP[fProfile] then
     result := PROFILE_WORKER_CAP[fProfile];
+  ThreadCountAdjust(result); // e.g. WinARM PRISM
 end;
 
 function TTestCoreThreads.StressIterations: integer;
@@ -323,22 +327,22 @@ begin
   fMainOwns := 0;
 end;
 
-procedure TTestCoreThreads.RunWorker(const Worker: TNotifyEvent;
-  const Name: RawUtf8; NotifyTask: boolean);
+procedure TTestCoreThreads.RunTask(const Worker: TNotifyEvent;
+  const Name: RawUtf8);
 begin
-  Run(Worker, self, Name,
-    {Threaded=}true, NotifyTask, {ForcedThreaded=}true);
+  CheckEqual(fTasks.Add(self, Worker), 1, Name);
 end;
 
-
-procedure TTestCoreThreads.RunWorkers(const Worker: TNotifyEvent;
+procedure TTestCoreThreads.RunTasks(const Worker: TNotifyEvent;
   Count: integer; const Name: RawUtf8);
 begin
-  while Count > 0 do
-  begin
-    RunWorker(Worker, Name);
-    dec(Count);
-  end;
+  CheckEqual(fTasks.Add(self, Worker, Count), Count, Name);
+end;
+
+procedure TTestCoreThreads.WaitTasks(const Name: RawUtf8;
+  TimeOutMS: cardinal);
+begin
+  CheckUtf8(fTasks.WaitFor(TimeOutMS), Name);
 end;
 
 
@@ -441,7 +445,6 @@ begin
   end
   else
     fProbeResult := 0;
-  fDone.SetEvent;
 end;
 
 procedure TTestCoreThreads.ExclusiveBlockingProbe(Sender: TObject);
@@ -459,7 +462,6 @@ begin
     TestLockedDec(fExclusiveStats.Active);
     ExclusiveUnLock;
   end;
-  fDone.SetEvent;
 end;
 
 procedure TTestCoreThreads.ExclusiveBlockingWorker(Sender: TObject);
@@ -549,21 +551,20 @@ begin
     ResetProbe;
     ExclusiveLock;
     try
-      RunWorker(ExclusiveTryProbe, EXCLUSIVE_LOCK_NAME[Kind]);
+      RunTask(ExclusiveTryProbe, EXCLUSIVE_LOCK_NAME[Kind]);
       Check(fEntered.WaitFor(WaitMS), 'TryLock probe entered');
-      Check(fDone.WaitFor(WaitMS), 'TryLock probe done');
+      WaitTasks('TryLock probe done', WaitMS);
       CheckEqual(fProbeResult, 0, EXCLUSIVE_LOCK_NAME[Kind]);
     finally
       ExclusiveUnLock;
     end;
-    RunWait(false, 5, false);
     // real blocking hand-off without Sleep()/polling
     ResetProbe;
     FillCharFast(fExclusiveStats, SizeOf(fExclusiveStats), 0);
     ExclusiveLock;
     try
       fMainOwns := 1;
-      RunWorker(ExclusiveBlockingProbe, EXCLUSIVE_LOCK_NAME[Kind]);
+      RunTask(ExclusiveBlockingProbe, EXCLUSIVE_LOCK_NAME[Kind]);
       Check(fEntered.WaitFor(WaitMS), 'blocking probe entered');
       Check(not fAcquired.Notified, 'must not acquire while main owns lock');
     finally
@@ -571,8 +572,7 @@ begin
       ExclusiveUnLock;
     end;
     Check(fAcquired.WaitFor(WaitMS), 'blocking probe acquired');
-    Check(fDone.WaitFor(WaitMS), 'blocking probe done');
-    RunWait(false, 5, false);
+    WaitTasks('blocking probe done', WaitMS);
     CheckEqual(fExclusiveStats.Errors, 0, EXCLUSIVE_LOCK_NAME[Kind]);
     // rapid uncontended state transitions
     for i := 1 to TransitionIterations do
@@ -582,17 +582,16 @@ begin
       ExclusiveLock;
       ExclusiveUnLock;
     end;
-    // mixed blocking/TryLock contention; ForcedThreaded=true lets TLoggedWorker
-    // queue surplus jobs and reuse worker threads within this batch
+    // mixed blocking/TryLock contention on the persistent task pool
     FillCharFast(fExclusiveStats, SizeOf(fExclusiveStats), 0);
     fIterations := StressIterations;
     workers := WorkerCount;
     blocking := workers div 2;
     if blocking < 1 then
       blocking := 1;
-    RunWorkers(ExclusiveBlockingWorker, blocking, EXCLUSIVE_LOCK_NAME[Kind]);
-    RunWorkers(ExclusiveTryWorker, workers - blocking, EXCLUSIVE_LOCK_NAME[Kind]);
-    RunWait(false, 120, false);
+    RunTasks(ExclusiveBlockingWorker, blocking, EXCLUSIVE_LOCK_NAME[Kind]);
+    RunTasks(ExclusiveTryWorker, workers - blocking, EXCLUSIVE_LOCK_NAME[Kind]);
+    WaitTasks(EXCLUSIVE_LOCK_NAME[Kind], 120 * 1000);
     if false then
       AddConsole('% block=%/% try=%/% acquired=% failed=% active=% errors=%',
         [EXCLUSIVE_LOCK_NAME[Kind],
@@ -643,11 +642,10 @@ begin
     Check(fMultiLight.IsLocked, 'TMultiLightLock.ForceLock');
     // the forced owner is still exclusive to this thread
     ResetProbe;
-    RunWorker(ExclusiveTryProbe, 'TMultiLightLock.ForceLock');
+    RunTask(ExclusiveTryProbe, 'TMultiLightLock.ForceLock');
     Check(fEntered.WaitFor(WaitMS), 'ForceLock probe entered');
-    Check(fDone.WaitFor(WaitMS), 'ForceLock probe done');
+    WaitTasks('ForceLock probe done', WaitMS);
     CheckEqual(fProbeResult, 0, 'TMultiLightLock.ForceLock ownership');
-    RunWait(false, 5, false);
   finally
     // don't balance ForceLock with a single UnLock: ForceLock uses a sentinel
     fMultiLight.Done;
@@ -767,7 +765,6 @@ begin
   end;
 end;
 
-
 function TTestCoreThreads.RWIsLocked: boolean;
 begin
   case fRWKind of
@@ -794,7 +791,6 @@ begin
   finally
     RWReadUnLock;
   end;
-  fDone.SetEvent;
 end;
 
 procedure TTestCoreThreads.RWWriterProbe(Sender: TObject);
@@ -806,7 +802,6 @@ begin
   finally
     RWWriteUnLock;
   end;
-  fDone.SetEvent;
 end;
 
 procedure TTestCoreThreads.RWReaderWorker(Sender: TObject);
@@ -903,7 +898,6 @@ begin
           TestLockedInc(fRWStats.Errors);
         if fRWStats.Readers <> 0 then
           TestLockedInc(fRWStats.Errors);
-
         inc(fRWStats.Version);
         fRWStats.Value1 := fRWStats.Version;
         if i and 127 = 0 then
@@ -934,9 +928,9 @@ begin
   writers := WorkerCount - readers;
   if writers < 1 then
     writers := 1;
-  RunWorkers(RWReaderWorker, readers, RW_LOCK_NAME[fRWKind]);
-  RunWorkers(RWWriterWorker, writers, RW_LOCK_NAME[fRWKind]);
-  RunWait(false, 120, false);
+  RunTasks(RWReaderWorker, readers, RW_LOCK_NAME[fRWKind]);
+  RunTasks(RWWriterWorker, writers, RW_LOCK_NAME[fRWKind]);
+  WaitTasks(RW_LOCK_NAME[fRWKind], 120 * 1000);
   CheckEqual(fRWStats.Readers, 0, RW_LOCK_NAME[fRWKind]);
   CheckEqual(fRWStats.Writers, 0, RW_LOCK_NAME[fRWKind]);
   CheckEqual(fRWStats.Errors, 0, RW_LOCK_NAME[fRWKind]);
@@ -944,9 +938,9 @@ begin
     RW_LOCK_NAME[fRWKind]);
   CheckEqual(fRWStats.Value1, fRWStats.Version, RW_LOCK_NAME[fRWKind]);
   CheckEqual(fRWStats.Value2, fRWStats.Version * 2, RW_LOCK_NAME[fRWKind]);
-  // MaxReaders > 1 is not asserted here: TLoggedWorker may have a one-thread
-  // runtime on a single-core target. Concurrent readers are proven separately
-  // with a deterministic main-thread + background-worker handshake.
+  // MaxReaders > 1 is not asserted here: a single-core or serialized scheduler
+  // may still run one worker at a time. The deterministic probe below proves
+  // that concurrent readers are accepted by the lock itself.
 end;
 
 procedure TTestCoreThreads.StressTryRW;
@@ -963,9 +957,9 @@ begin
   writers := WorkerCount - readers;
   if writers < 1 then
     writers := 1;
-  RunWorkers(RWTryReaderWorker, readers, RW_LOCK_NAME[fRWKind]);
-  RunWorkers(RWTryWriterWorker, writers, RW_LOCK_NAME[fRWKind]);
-  RunWait(false, 120, false);
+  RunTasks(RWTryReaderWorker, readers, RW_LOCK_NAME[fRWKind]);
+  RunTasks(RWTryWriterWorker, writers, RW_LOCK_NAME[fRWKind]);
+  WaitTasks(RW_LOCK_NAME[fRWKind], 120 * 1000);
   CheckEqual(fRWStats.Readers, 0, RW_LOCK_NAME[fRWKind]);
   CheckEqual(fRWStats.Writers, 0, RW_LOCK_NAME[fRWKind]);
   CheckEqual(fRWStats.Errors, 0, RW_LOCK_NAME[fRWKind]);
@@ -1008,14 +1002,13 @@ begin
     ResetProbe;
     RWReadLock;
     try
-      RunWorker(RWReaderProbe, RW_LOCK_NAME[Kind]);
+      RunTask(RWReaderProbe, RW_LOCK_NAME[Kind]);
       Check(fEntered.WaitFor(WaitMS), 'reader probe entered');
       Check(fAcquired.WaitFor(WaitMS), 'concurrent reader acquired');
-      Check(fDone.WaitFor(WaitMS), 'concurrent reader done');
+      WaitTasks('concurrent reader done', WaitMS);
     finally
       RWReadUnLock;
     end;
-    RunWait(false, 5, false);
     // basic write semantics
     RWWriteLock;
     try
@@ -1046,7 +1039,7 @@ begin
     ResetProbe;
     RWReadLock;
     try
-      RunWorker(RWWriterProbe, RW_LOCK_NAME[Kind]);
+      RunTask(RWWriterProbe, RW_LOCK_NAME[Kind]);
       CheckUtf8(fEntered.WaitFor(WaitMS),
         'writer probe entered %', [RW_LOCK_NAME[Kind]]);
       CheckUtf8(not fAcquired.Notified,
@@ -1055,21 +1048,19 @@ begin
       RWReadUnLock;
     end;
     Check(fAcquired.WaitFor(WaitMS), 'writer acquired after reader drain');
-    Check(fDone.WaitFor(WaitMS), 'writer probe done');
-    RunWait(false, 5, false);
+    WaitTasks('writer probe done', WaitMS);
     // reader waits until an existing writer releases
     ResetProbe;
     RWWriteLock;
     try
-      RunWorker(RWReaderProbe, RW_LOCK_NAME[Kind]);
+      RunTask(RWReaderProbe, RW_LOCK_NAME[Kind]);
       Check(fEntered.WaitFor(WaitMS), 'reader probe entered behind writer');
       Check(not fAcquired.Notified, 'reader must wait for writer');
     finally
       RWWriteUnLock;
     end;
     Check(fAcquired.WaitFor(WaitMS), 'reader acquired after writer release');
-    Check(fDone.WaitFor(WaitMS), 'reader probe done behind writer');
-    RunWait(false, 5, false);
+    WaitTasks('reader probe done behind writer', WaitMS);
     // TRWLock-only reentrant/upgradable path
     if RW_LOCK_UPGRADABLE[Kind] then
     begin
@@ -1146,11 +1137,14 @@ begin
   Run(TSynQueueSlow2, self, 'TSynQueue2');
   // real cross-thread handshake: one waiter per TSynEvent instance
   ResetProbe;
-  RunWorker(EventWorker, 'TSynEvent', {notifytask=}true);
+  RunTask(EventWorker, 'TSynEvent');
   Check(fEntered.WaitFor(WaitMS), 'event worker entered');
   Check(not fDone.Notified, 'event worker should wait on gate');
   fGate.SetEvent;
   Check(fDone.WaitFor(WaitMS), 'event worker released');
+  WaitTasks('TSynEvent task done', WaitMS);
+  // TSynQueueSlow1/2 above still use the test framework background worker
+  RunWait(false, 5, false);
 end;
 
 type
@@ -1409,7 +1403,7 @@ var
   procedure WaitForTasks(const Msg: RawUtf8);
   begin
     TSynLog.Add.Log(sllTrace, 'TSynQueueSlow2: WaitForTasks %', [Msg], self);
-    Check(tasks.WaitFor(5000), Msg);
+    CheckUtf8(tasks.WaitFor(5000), Msg);
   end;
 
   procedure PushAsync(aValue: integer; aDelayMS: cardinal);
