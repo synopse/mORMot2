@@ -81,8 +81,6 @@ type
   TTestCoreThreads = class(TSynTestCase)
   protected
     fProfile: TThreadTestProfile;
-    // persistent task pool shared by the cross-thread tests
-    fTasks: TSynThreadTasks;
     // concrete lock storage - the active kind is selected by the enumerates
     fExclusiveKind: TExclusiveLockKind;
     fLight: TLightLock;
@@ -111,10 +109,6 @@ type
     function TransitionIterations: integer;
     function WaitMS: cardinal;
     procedure ResetProbe;
-    procedure RunTask(const Worker: TNotifyEvent; const Name: RawUtf8);
-    procedure RunTasks(const Worker: TNotifyEvent; Count: integer;
-      const Name: RawUtf8);
-    procedure WaitTasks(const Name: RawUtf8; TimeOutMS: cardinal);
     // exclusive-lock dispatch
     procedure ExclusiveInit;
     procedure ExclusiveDone;
@@ -274,7 +268,6 @@ begin
     fProfile := ttpFull
   else
     fProfile := ttpFast;
-  fTasks := TSynThreadTasks.Create(WorkerCount, 'test');
   fEntered := TSynEvent.Create;
   fAcquired := TSynEvent.Create;
   fGate := TSynEvent.Create;
@@ -284,7 +277,6 @@ end;
 procedure TTestCoreThreads.CleanUp;
 begin
   // tasks reference this test case and its events, so release the pool first
-  FreeAndNil(fTasks);
   FreeAndNil(fDone);
   FreeAndNil(fGate);
   FreeAndNil(fAcquired);
@@ -325,24 +317,6 @@ begin
   fDone.ResetEvent;
   fProbeResult := 0;
   fMainOwns := 0;
-end;
-
-procedure TTestCoreThreads.RunTask(const Worker: TNotifyEvent;
-  const Name: RawUtf8);
-begin
-  CheckEqual(fTasks.Add(self, Worker), 1, Name);
-end;
-
-procedure TTestCoreThreads.RunTasks(const Worker: TNotifyEvent;
-  Count: integer; const Name: RawUtf8);
-begin
-  CheckEqual(fTasks.Add(self, Worker, Count), Count, Name);
-end;
-
-procedure TTestCoreThreads.WaitTasks(const Name: RawUtf8;
-  TimeOutMS: cardinal);
-begin
-  CheckUtf8(fTasks.WaitFor(TimeOutMS), Name);
 end;
 
 
