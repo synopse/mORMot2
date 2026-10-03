@@ -876,8 +876,16 @@ begin
           fPGParamLengths[i] := length(p^.VData);
         end
         else
+        begin
           // p^.VData was not already set by BindArrayJson() -> convert now
+          // - p^.VArray may have been over-allocated by the caller (e.g.
+          // TRestStorageExternal.InternalBatchStop allocates the whole remaining
+          // batch) and only the first p^.VInt64 = ValuesCount items are bound:
+          // the trailing '' items would be serialized as ,,,, = invalid literal
+          if length(p^.VArray) > p^.VInt64 then
+            SetLength(p^.VArray, p^.VInt64); // local copy - caller untouched
           BoundArrayToJsonArray(p^.VArray, RawUtf8(p^.VData)); // e.g. '{1,2,3}'
+        end;
     end
     else
       // single value parameter

@@ -3273,8 +3273,6 @@ var
   s, d: PUtf8Char;
   L, vl, n: PtrInt;
   c: AnsiChar;
-label
-  _dq;
 begin
   // fist compute the resulting length
   n := length(Values);
@@ -3297,10 +3295,13 @@ begin
           repeat
             inc(s);
             c := s^;
-            if c = '''' then
+            if (c = '''') and
+               (vl > 1) and // s[1] = closing quote if vl = 1
+               (s[1] = '''') then
             begin
-              if s[1] = '''' then
-                dec(L); // double ' into single '
+              dec(L); // double ' into single '
+              inc(s);
+              dec(vl);
             end
             else if (c = '"') or
                     (c = '\') then
@@ -3333,10 +3334,12 @@ begin
           repeat
             inc(s);
             c := s^;
-            if c = '''' then
+            if (c = '''') and
+               (vl > 1) and // s[1] = closing quote if vl = 1
+               (s[1] = '''') then
             begin
-              if s[1] = '''' then
-                goto _dq; // double ' into single '
+              inc(s); // double ' into single '
+              dec(vl);
             end
             else if (c = '"') or
                     (c = '\') then
@@ -3346,7 +3349,7 @@ begin
             end;
             d^ := c;
             inc(d);
-_dq:        dec(vl);
+            dec(vl);
           until vl = 0;
         d^ := '"';
         inc(d);
