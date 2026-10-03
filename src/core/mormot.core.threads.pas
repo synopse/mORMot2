@@ -1813,9 +1813,22 @@ type
   // - inherit from this class and define any input/output parameters as fields
   // - instances passed to TSynThreadTasks.Add() become owned by the thread pool
   TSynThreadTask = class(TSynPersistent)
-  public
+  protected
     /// execute this task in one TSynThreadTasks worker thread
     procedure DoExecute(aCaller: TSynThreadPoolWorkThread); virtual; abstract;
+  end;
+
+  /// TSynThreadTasks.Add() task instance redirecting to a TNotifyEvent
+  TSynThreadEventTask = class(TSynThreadTask)
+  protected
+    procedure DoExecute(aCaller: TSynThreadPoolWorkThread); override;
+  public
+    Sender: TObject;
+    Worker: TNotifyEvent;
+    Tag: PtrUInt;
+    /// prepare this TNotifyEvent execution instanc in TSynThreadTasks queue
+    constructor Create(aSender: TObject; const aWorker: TNotifyEvent;
+      aTag: PtrUInt = 0); reintroduce;
   end;
 
   /// execute TSynThreadTask instances in a persistent thread pool
@@ -1833,7 +1846,10 @@ type
     /// add one owned task to the execution queue
     // - always takes ownership of aTask, even when returning false
     function Add(aTask: TSynThreadTask;
-      aWaitOnContention: boolean = true): boolean;
+      aWaitOnContention: boolean = true): boolean; overload;
+    /// add one or severl owned TNotifyEvent task(s) to the execution queue
+    function Add(Sender: TObject; const Worker: TNotifyEvent;
+      Count: integer = 1; Tag: PtrUInt = 0): integer; overload;
   end;
 
   {$M-}
@@ -5258,6 +5274,24 @@ begin
 end;
 
 
+{ TSynThreadEventTask }
+
+procedure TSynThreadEventTask.DoExecute(aCaller: TSynThreadPoolWorkThread);
+begin
+  if Assigned(Worker) then
+    Worker(Sender);
+end;
+
+constructor TSynThreadEventTask.Create(aSender: TObject;
+  const aWorker: TNotifyEvent; aTag: PtrUInt);
+begin
+  inherited Create;
+  Sender := aSender;
+  Worker := aWorker;
+  Tag := aTag;
+end;
+
+
 { TSynThreadTasks }
 
 constructor TSynThreadTasks.Create(NumberOfThreads: integer;
@@ -5299,6 +5333,18 @@ begin
     aTask.Free;
 end;
 
+function TSynThreadTasks.Add(Sender: TObject; const Worker: TNotifyEvent;
+  Count: integer; Tag: PtrUInt): integer;
+begin
+  result := 0;
+  while Count > 0 do
+  begin
+    if not Add(TSynThreadEventTask.Create(Sender, Worker, Tag)) then
+      exit;
+    inc(result);
+    dec(Count);
+  end;
+end;
 
 procedure ThreadCountAdjust(var aThreadPoolCount: integer);
 begin
