@@ -3771,40 +3771,24 @@ function TNetSocketWrap.RecvWait(ms: integer;
 var
   read: integer;
   tmp: TBuffer64K; // use stack buffer to avoid RecvPending() syscall
-  {$ifdef OSPOSIX}
-  endtix: Int64;
-  {$endif OSPOSIX}
 begin
-  {$ifdef OSPOSIX} // on Windows, Select() is not expected to return earlier
-  endtix := 0;
-  if ms > 10 then
-    endtix := mormot.core.os.GetTickCount64 + ms;
-  repeat
-  {$endif OSPOSIX}
-    result := NetEventsToNetResult(WaitFor(ms, [neRead, neError]));
+  result := NetEventsToNetResult(WaitFor(ms, [neRead, neError]));
+  if Assigned(terminated) and
+     terminated^ then
+    result := nrClosed
+  else if result = nrOk then
+  begin
+    read := SizeOf(tmp);
+    result := Recv(@tmp, read);
     if Assigned(terminated) and
        terminated^ then
-      result := nrClosed
-    else if result = nrOk then
-    begin
-      read := SizeOf(tmp);
-      result := Recv(@tmp, read);
-      if Assigned(terminated) and
-         terminated^ then
-        result := nrClosed;
-      if result = nrOK then
-        if read <= 0 then
-          result := nrUnknownError
-        else
-          FastSetRawByteString(data, @tmp, read);
-    end;
-  {$ifdef OSPOSIX}
-    if (result <> nrRetry) or
-       (endtix = 0) then
-      break;
-    ms := endtix - mormot.core.os.GetTickCount64;
-  until ms <= 0;
-  {$endif OSPOSIX}
+      result := nrClosed;
+    if result = nrOK then
+      if read <= 0 then
+        result := nrUnknownError
+      else
+        FastSetRawByteString(data, @tmp, read);
+  end;
 end;
 
 function TNetSocketWrap.SendAll(Buf: PByte; len: integer;

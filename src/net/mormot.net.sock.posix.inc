@@ -493,25 +493,36 @@ begin
         (cerrno <> ESysEINTR);
 end;
 
-function PollNoEintr(fds: PPollFD; nfds, timeout: integer): integer;
+function PollNoEintr(fds: PPollFD; nfds, timeout: integer; var err: integer): integer;
 var
   endtix: Int64;
 begin
-  // preserve the requested timeout across EINTR: restarting poll() with the
-  // original timeout could otherwise extend the effective wait indefinitely
+  // preserve the requested timeout across EINTR/EAGAIN: restarting poll() with
+  // the original timeout could otherwise extend the effective wait indefinitely
   endtix := 0;
-  if timeout > 0 then
-    endtix := GetTickCount64 + timeout;
+  if timeout > 0 then // integer(INFINITE) = -1
+    endtix := mormot.core.os.GetTickCount64 + timeout;
   repeat
+    err := 0;
     result := poll(fds, nfds, timeout);
-    if (result >= 0) or
-       (cerrno <> ESysEINTR) then
-      exit;
-    if endtix = 0 then
-      continue; // wait INFINITE
-    result := 0;
-    timeout := endtix - GetTickCount64;
-  until timeout <= 0; // timeout eventually elapsed while being interrupted
+    if result >= 0 then
+      exit;             // some events(s)
+    err := cerrno;
+    if (err <> ESysEINTR) and
+       (err <> ESysEAGAIN) then
+      exit;             // fatal error
+    if timeout = 0 then
+      break;            // non-blocking poll: no retry budget
+    if err = ESysEAGAIN then
+      SleepHiRes(1);    // avoid burning a core on temporary resource exhaustion
+    if timeout < 0 then
+      continue;         // INFINITE
+    timeout := endtix - mormot.core.os.GetTickCount64;
+    if timeout <= 0 then
+      break;            // timeout eventually elapsed while being interrupted
+  until false;
+  result := 0;          // notify timeout
+  err := 0;
 end;
 
 
@@ -859,7 +870,7 @@ end;
 function TNetSocketWrap.WaitFor(ms: integer; scope: TNetEvents;
   loerr: PNetErrorInt): TNetEvents;
 var
-  res: integer;
+  res, err: integer;
   p: TPollFD; // select() limits p.fd<FD_SETSIZE=1024 on POSIX -> use poll()
   // https://moythreads.com/wordpress/2009/12/22/select-system-call-limitation
 begin
@@ -876,15 +887,11 @@ begin
     p.events := p.events or POLLOUT;
   // POLLERR and POLLHUP are ignored in p.events: implicit [neError]
   p.revents := 0;
-  res := PollNoEintr(@p, 1, ms); // would indentify ESysEINTR within poll()
+  res := PollNoEintr(@p, 1, ms, err); // would indentify ESysEINTR within poll()
   if res < 0 then
   begin
-    res := cerrno;
     if loerr <> nil then
-      loerr^ := res;
-    if res = ESysEAGAIN then
-      // timeout, not a true error
-      result := [];
+      loerr^ := err;
     exit;
   end;
   result := [];
@@ -1785,13 +1792,14 @@ function TPollSocketPoll.WaitForModified(var results: TPollSocketResults;
   timeoutMS: integer): boolean;
 var
   n: PtrInt;
+  err: integer;
 begin
   result := false; // error
   if (self = nil) or
      (fCount = 0) then
     exit;
   // here fCount=0 would not permit next async subscription
-  n := PollNoEintr(pointer(fFD), fFDCount, timeoutMS); // ignoring EINTR signals
+  n := PollNoEintr(pointer(fFD), fFDCount, timeoutMS, err); // ignoring EINTR
   results.Count := n;
   if n <= 0 then
     exit;
@@ -1814,7 +1822,7 @@ end;
 function WaitForSeveral(const Sockets: TPollSocketsSubscribeDynArray;
   var results: TPollSocketResults; timeoutMS: integer): boolean;
 var
-  n, res: integer;
+  n, res, err: integer;
   fd: array of TPollFD;
   s: PPollSocketsSubscribe;
   p: PPollFD;
@@ -1842,7 +1850,7 @@ begin
   until n = 0;
   if res = 0 then
     exit; // no pseRead to check
-  n := PollNoEintr(pointer(fd), res, timeoutMS); // ignoring EINTR signals
+  n := PollNoEintr(pointer(fd), res, timeoutMS, err); // ignoring EINTR
   if n <= 0 then
     exit;
   results.Count := n;
