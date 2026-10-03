@@ -8177,10 +8177,9 @@ var
 begin
   aLog.EnterLocal(log, 'Create(%) processname=% threads=%',
     [QueueName, ProcessName, ServerThreadPoolCount], self);
-  // initialize this thread in suspended mode
-  inherited Create(OnStart, OnStop, ProcessName,
-    ProcessOptions + [hsoCreateSuspended] - [hsoThreadCpuAffinity,
-      hsoThreadSocketAffinity, hsoReusePort, hsoThreadSmooting], aLog);
+  ProcessOptions := ProcessOptions - [hsoThreadCpuAffinity,
+    hsoThreadSocketAffinity, hsoReusePort, hsoThreadSmooting];
+  inherited Create(OnStart, OnStop, ProcessName, ProcessOptions, aLog);
   // create the Request Queue
   HttpApiInitialize; // will raise an exception in case of failure
   if Assigned(log) then
