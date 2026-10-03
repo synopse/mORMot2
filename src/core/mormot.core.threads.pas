@@ -1688,8 +1688,9 @@ type
   protected
     fPendingContextCount: integer;
     fPendingTasks: integer;
+    fWaiters: integer;
     {$ifdef USE_THREADWINIOCP}
-    fRequestQueue: THandle; // IOCP has its own internal queue
+    fRequestQueue: THandle;   // IOCP has its own internal queue
     {$else}
     fPendingSafe: TLightLock; // single 32-bit field is enough
     fPendingFirst, fPendingLast: integer; // O(1) FIFO in fPendingContext[]
@@ -1706,7 +1707,6 @@ type
     fContentionAbortCount: cardinal;
     fContentionCount: cardinal;
     fName, fPoolName: RawUtf8;
-    fWaiters: integer;
     fTerminated: boolean;
     {$ifndef USE_THREADWINIOCP}
     fQueuePendingContext: boolean;
@@ -5048,12 +5048,12 @@ begin
   result := true;
   if fPendingTasks = 0 then
     exit;
-  endtix := 0;
-  if TimeOutMS <> INFINITE then
-    endtix := mormot.core.os.GetTickCount64 + TimeOutMS;
   if Assigned(OsWaitOnValue) then
     LockedInc32(@fWaiters);
   try
+    endtix := 0;
+    if TimeOutMS <> INFINITE then
+      endtix := mormot.core.os.GetTickCount64 + TimeOutMS;
     repeat
       pending := cardinal(fPendingTasks);
       if pending = 0 then
@@ -5065,7 +5065,7 @@ begin
           break;
         TimeOutMS := cardinal(endtix - nowtix);
       end;
-      if Assigned(OsWaitOnValue) then
+      if Assigned(OsWaitOnValue) then // use blocking futex
         OsWaitOnValue(PCardinal(@fPendingTasks), pending, TimeOutMS)
       else
         SleepHiRes(1);
