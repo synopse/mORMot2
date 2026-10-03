@@ -77,7 +77,8 @@ type
   // - fClosed is set by OnClose virtual method
   // - fFirstRead is set once TPollAsyncSockets.OnFirstRead is called
   // - fSubRead/fSubWrite flags are set when Subscribe() has been called
-  // - fInList indicates that ConnectionAdd() did register the connection
+  // - fInList indicates that ConnectionNew() did register the connection, and
+  // is reset once its ownership has been transferred to the GC
   // - fReadPending states that there is a pending event for this connection
   // - fMemClean is set after TPollAsyncConnection.ReleaseMemoryOnIdle success
   // - note: better keep it to 8 items to fit in a byte (faster access)
@@ -295,7 +296,6 @@ type
     function OnError(connection: TPollAsyncConnection;
       events: TPollSocketEvents): boolean; virtual; abstract;
     procedure OnClosed(connection: TPollAsyncConnection); virtual; abstract;
-    procedure RegisterConnection(connection: TPollAsyncConnection); virtual; abstract;
     function SubscribeConnection(const caller: ShortString;
       connection: TPollAsyncConnection; sub: TPollSocketEvent): boolean;
     procedure CloseConnection(var connection: TPollAsyncConnection;
@@ -466,7 +466,6 @@ type
     fOwner: TAsyncConnections;
     function GetTotal: integer;
       {$ifdef HASINLINE} inline; {$endif}
-    procedure RegisterConnection(connection: TPollAsyncConnection); override;
     // just log the error, and close connection if acoOnErrorContinue is not set
     function OnError(connection: TPollAsyncConnection;
       events: TPollSocketEvents): boolean; override;
@@ -595,7 +594,7 @@ type
     fSockets: TAsyncConnectionsSockets;
     fThreads: TAsyncConnectionsThreads;
     fConnectionLock: TRWLock;  // write lock/block only on connection add/remove
-    fConnectionCount: integer; // only subscribed - not just after accept()
+    fConnectionCount: integer; // registered by ConnectionNew, i.e. at accept()
     fConnectionHigh: integer;
     fWakeupSafe: TLightLock;   // protect ThreadPollingWakeupLocked
     fWakeupOne, fWakeupEvents: cardinal; // CAS counters to wakeup threads
@@ -631,13 +630,14 @@ type
       Address, Port: RawUtf8;
     end;
     function AllThreadsStarted: boolean; virtual;
-    procedure AddGC(aConnection: TPollAsyncConnection; const aContext: ShortString);
+    function AddGC(aConnection: TPollAsyncConnection;
+      const aContext: ShortString): boolean;
     procedure DoGC;
     procedure FreeGC(var conn: TPollAsyncConnections);
     function ConnectionCreate(aSocket: TNetSocket; const aRemoteIp: TNetAddr;
       out aConnection: TAsyncConnection): boolean; virtual;
-    function ConnectionNew(aSocket: TNetSocket; aConnection: TAsyncConnection;
-      aAddAndSubscribe: boolean = true): boolean; virtual;
+    function ConnectionNew(aSocket: TNetSocket;
+      aConnection: TAsyncConnection): boolean; virtual;
     function ConnectionDelete(
       aConnection: TPollAsyncConnection): boolean; overload; virtual;
     function LockedConnectionDelete(
@@ -846,9 +846,8 @@ type
     property Server: TCrtSocket
       read fServer;
     /// how many connections have been accepted since server startup
-    // - ConnectionCount is the number of long-living connections, this
-    // counter is the absolute number of successful accept() calls,
-    // including short-living (e.g. HTTP/1.0) connections
+    // - ConnectionCount is the number of connections currently registered,
+    // this counter is the absolute number of successful accept() calls
     property Accepted: Int64
       read fAccepted;
     /// above how many active connections accept() would reject
@@ -1613,6 +1612,8 @@ begin
 end;
 
 destructor TPollAsyncConnection.Destroy;
+var
+  sock: TNetSocket;
 begin
   // note: our light locks do not need any specific release
   try
@@ -1622,6 +1623,21 @@ begin
       except
       end;
     BeforeDestroy;
+    // this instance owns its socket until TPollAsyncSockets.Stop(): release
+    // it if still there, e.g. at shutdown when Stop() does nothing any more
+    // (TWinIocp.Destroy did already close any socket it was subscribed to)
+    sock := fSocket;
+    if (sock <> nil) {$ifdef USE_WINIOCP} and (fIocpSub = nil) {$endif} then
+    begin
+      fSocket := nil;
+      try
+        fSecure := nil; // perform TLS shutdown before closing the socket
+      except
+        pointer(fSecure) := nil; // leak better than propagated GPF
+      end;
+      sock.SetLinger(-1); // don't wait for each peer: may be many of them
+      sock.ShutdownAndClose({rdwr=}false);
+    end;
     // finalize the instance
     fHandle := 0; // to detect any dangling pointer
   except
@@ -2175,8 +2191,7 @@ function TPollAsyncSockets.SubscribeConnection(const caller: ShortString;
 var
   tag: TPollSocketTag absolute connection;
 begin
-  if not (fInList in connection.fFlags) then // not already registered
-    RegisterConnection(connection);
+  // note: TAsyncConnections.ConnectionNew did already register this connection
   result := false;
   if not (sub in [pseRead, pseWrite]) then
     exit;
@@ -2669,11 +2684,6 @@ begin
   result := fOwner.fLastHandle; // handles are a plain integer sequence
 end;
 
-procedure TAsyncConnectionsSockets.RegisterConnection(connection: TPollAsyncConnection);
-begin
-  fOwner.ConnectionAdd(TAsyncConnection(connection));
-end;
-
 
 { TAsyncConnectionsThread }
 
@@ -3011,11 +3021,15 @@ end;
 
 {.$define GCVERBOSE} // help debugging
 
-procedure TAsyncConnections.AddGC(aConnection: TPollAsyncConnection; const aContext: ShortString);
+function TAsyncConnections.AddGC(aConnection: TPollAsyncConnection;
+  const aContext: ShortString): boolean;
 begin
+  result := false; // e.g. at shutdown: the caller keeps the ownership
   if Terminated or
-     (aConnection = nil) or
-     (ifInGC in aConnection.fInternalFlags) then
+     (aConnection = nil) then
+    exit;
+  result := true; // this instance is now owned by the GC
+  if ifInGC in aConnection.fInternalFlags then
     exit;
   include(aConnection.fInternalFlags, ifInGC); // ensure AddGC() done once
   {$ifdef GCVERBOSE}
@@ -3271,7 +3285,8 @@ begin
   if not ConnectionCreate(client, addr, result) then
     client.ShutdownAndClose({rdwr=}false)
   else if not fSockets.Start(result) then
-    FreeAndNil(result);
+    // registered by ConnectionNew: unregister (no Free) and set result := nil
+    fSockets.CloseConnection(TPollAsyncConnection(result), 'ClientsConnect');
 end;
 
 procedure TAsyncConnections.DoLog(Level: TSynLogLevel; TextFmt: PUtf8Char;
@@ -3311,14 +3326,16 @@ begin
     else
       // reuse the existing instance of a closed connection
       aConnection.Recycle(aRemoteIP);
-    result := ConnectionNew(aSocket, aConnection, {add=}false);
+    result := ConnectionNew(aSocket, aConnection);
+    if not result then
+      FreeAndNil(aConnection); // was not registered: still owned here
   end;
 end;
 
 function TAsyncConnections.ConnectionNew(aSocket: TNetSocket;
-  aConnection: TAsyncConnection; aAddAndSubscribe: boolean): boolean;
+  aConnection: TAsyncConnection): boolean;
 begin
-  result := false; // caller should release aSocket
+  result := false; // caller should release aSocket and aConnection
   if Terminated then
     exit;
   aConnection.fSocket := aSocket;
@@ -3334,9 +3351,9 @@ begin
     include(aConnection.fFlags, fInList);
     LockedInc32(@fConnectionCount);
   end
-  else if {$ifndef USE_WINIOCP} (fThreadReadPoll = nil) or {$endif}
-          aAddAndSubscribe then
-    // ProcessClientStart() won't delay SuscribeConnection + RegisterConnection
+  else
+    // fConnection[] owns this instance and its socket from now on, even if
+    // ProcessClientStart() delays its SubscribeConnection() to the first read
     ConnectionAdd(aConnection);
   aConnection.AfterCreate; // Handle has been computed
   if acoVerboseLog in fOptions then
@@ -3354,6 +3371,12 @@ var
 begin
   // caller should have done fConnectionLock.WriteLock
   try
+    // transfer the ownership to the GC for a delayed release - at shutdown,
+    // the GC refuses it and this instance remains owned by fConnection[]
+    result := AddGC(aConnection, 'LockedConnectionDelete');
+    if not result then
+      exit;
+    exclude(aConnection.fFlags, fInList);
     if acoVerboseLog in fOptions then
       QueryPerformanceMicroSeconds(start);
     PtrArrayDelete(fConnection, aIndex, @fConnectionCount);
@@ -3365,8 +3388,6 @@ begin
       DoLog(sllTrace, 'ConnectionDelete % ndx=% count=% %',
         [aConnection, aIndex, n, MicroSecFrom(start)], self);
     aConnection.fSocket := nil;   // ensure is known as disabled
-    AddGC(aConnection, 'LockedConnectionDelete'); // delayed released
-    result := true;
   except
     result := false;
   end;
@@ -3419,22 +3440,21 @@ begin
     exit;
   if not (fInList in aConnection.fFlags) then
   begin
-    // this connection was not part of fConnection[] list nor subscribed
-    // e.g. HTTP/1.0 short request
+    // this connection is not part of fConnection[] list any more, i.e. it
+    // was already transferred to the GC by a previous call
     // -> explicit GC - Free is unstable here
-    AddGC(aConnection, 'ConnectionDelete');
-    result := true;
+    result := AddGC(aConnection, 'ConnectionDelete');
     exit;
   end;
-  exclude(aConnection.fFlags, fInList);
   conn := ConnectionFindAndLock(aConnection.Handle, cWrite, @i);
   if conn <> nil then
     try
-      result := LockedConnectionDelete(conn, i);
+      result := LockedConnectionDelete(conn, i); // exclude fInList on success
     finally
       fConnectionLock.WriteUnLock;
     end;
-  if not result then
+  if not result and
+     not Terminated then // at shutdown, fConnection[] remains the owner
     DoLog(sllWarning, 'ConnectionDelete(%)=false count=%',
       [aConnection.Handle, fConnectionCount], self); // should never happen
 end;
@@ -4075,7 +4095,6 @@ end;
 procedure TAsyncServer.Shutdown;
 var
   i: PtrInt;
-  len: integer; // should be integer
   ev: TNetEvents;
   nl: TNetLayer;
   touchandgo: TNetSocket; // paranoid ensure Accept() is released
@@ -4108,8 +4127,10 @@ begin
     begin
       if fSocketsEpoll then
       begin
-        len := 1;
-        touchandgo.Send(@len, len);    // release epoll_wait() in R0 thread
+        // release epoll_wait() in R0 thread: this connected socket is writable,
+        // and is closed below, so no accepted connection is involved any more
+        fSockets.fRead.Subscribe(touchandgo, [pseWrite], {tag=}0);
+        // wait for the AW thread to accept, then close, its server side
         ev := touchandgo.WaitFor(100, [neRead, neError]);
         DoLog(sllTrace, 'Shutdown epoll WaitFor=%', [byte(ev)], self);
         SleepHiRes(1);
@@ -4294,18 +4315,9 @@ begin
         // first check if the server was shut down
         if Terminated then
         begin
-          {$ifndef USE_WINIOCP}
-          // specific behavior from Shutdown method
-          if fSocketsEpoll and
-             (res = nrOK) then
-          begin
-            DoLog(sllDebug, 'Execute: Accept(%) release', [fServer.Port], self);
-            // background subscribe to release epoll_wait() in R0 thread
-            fSockets.fRead.Subscribe(client, [pseRead], {tag=}0);
-            len := 1;
-            client.Send(@len, len); // release touchandgo.WaitFor
-          end;
-          {$endif USE_WINIOCP}
+          // was accepted too late, e.g. the touchandgo socket of Shutdown
+          if res = nrOk then
+            client.ShutdownAndClose({rdwr=}false);
           break;
         end;
         // check if fServer.Sock.Accept() did return with a socket, or a timeout
@@ -4338,7 +4350,11 @@ begin
         end;
         // handle any socket error in fServer.Sock.Accept()
         if Terminated then
+        begin
+          if res = nrOk then
+            client.ShutdownAndClose({rdwr=}false); // was accepted too late
           break;
+        end;
         if res <> nrOK then
         begin
           // failure (too many clients?) -> wait and retry
@@ -4703,7 +4719,7 @@ begin
       exit;
     sock.MakeAsync;
     result := nrRefused;
-    if not fOwner.ConnectionNew(sock, c, {add=}true) then
+    if not fOwner.ConnectionNew(sock, c) then
       exit;
     if aDestFileName <> '' then
     begin
