@@ -1722,6 +1722,7 @@ type
     /// finalize a queue item on Terminate - e.g. call Free/Dispose on aContext
     procedure TaskAbort(aContext: pointer); virtual;
     procedure TaskAllDone; virtual;
+    procedure TaskDone;
     procedure DoTask(aCaller: TSynThreadPoolWorkThread; aContext: pointer);
     procedure DoTaskAbort(aContext: pointer);
   public
@@ -4887,11 +4888,13 @@ function TSynThreadPool.Push(aContext: pointer; aWaitOnContention: boolean): boo
   function Enqueue: boolean;
   begin
     // IOCP has its own queue
-    result := IocpPostQueuedStatus(fRequestQueue, 0, nil, aContext);
-    if not result then
-      exit;
     LockedInc32(@fPendingContextCount);
     LockedInc32(@fPendingTasks);
+    result := IocpPostQueuedStatus(fRequestQueue, 0, nil, aContext);
+    if result then
+      exit;
+    LockedDec32(@fPendingContextCount);
+    TaskDone;
   end;
 
 {$else}
@@ -4902,23 +4905,23 @@ function TSynThreadPool.Push(aContext: pointer; aWaitOnContention: boolean): boo
     found: TSynThreadPoolWorkThread;
     thread: ^TSynThreadPoolWorkThread;
   begin
-    result := false; // queue is full
+    result := false;                 // queue is full
     fPendingSafe.Lock;
     if fTerminated then
     begin
-      fPendingSafe.UnLock; // avoid any race at shutdown
+      fPendingSafe.UnLock;           // avoid any race at shutdown
       exit;
     end;
     thread := pointer(fWorkThread);
     for n := 1 to fWorkThreadCount do
       if thread^.fProcessingContext = nil then
       begin
-        inc(fPendingTasks);
+        LockedInc32(@fPendingTasks); // atomic with DoTask/DoTaskAbort
         found := thread^;
         found.fProcessingContext := aContext;
         fPendingSafe.UnLock;
-        found.fEvent.SetEvent; // notify outside of the fSafe lock
-        result := true;        // found one available thread
+        found.fEvent.SetEvent;       // notify outside of the fSafe lock
+        result := true;              // found one available thread
         exit;
       end
       else
@@ -4934,8 +4937,8 @@ function TSynThreadPool.Push(aContext: pointer; aWaitOnContention: boolean): boo
       if fPendingLast = length(fPendingContext) then
         fPendingLast := 0;
       inc(fPendingContextCount);
-      inc(fPendingTasks);
-      result := true; // added in pending queue
+      LockedInc32(@fPendingTasks);   // atomic with DoTask/DoTaskAbort
+      result := true;                // added in pending queue
     end;
     fPendingSafe.UnLock;
   end;
@@ -5088,9 +5091,18 @@ end;
 
 procedure TSynThreadPool.TaskAllDone;
 begin
-  if fWaiters <> 0 then
-    if Assigned(OsWakeAllOnValue) then
-      OsWakeAllOnValue(PCardinal(@fPendingTasks));
+end;
+
+procedure TSynThreadPool.TaskDone;
+begin
+  if InterlockedDecrement(fPendingTasks) = 0 then
+    try
+      if fWaiters <> 0 then
+        if Assigned(OsWakeAllOnValue) then
+          OsWakeAllOnValue(PCardinal(@fPendingTasks));
+      TaskAllDone; // virtual method
+    except
+    end;
 end;
 
 procedure TSynThreadPool.DoTask(aCaller: TSynThreadPoolWorkThread; aContext: pointer);
@@ -5103,11 +5115,7 @@ begin
     on Exception do  // intercept any exception and let the thread continue
       inc(fExceptionsCount);
   end;
-  if InterlockedDecrement(fPendingTasks) = 0 then
-    try
-      TaskAllDone; // e.g. call OsWakeAllOnValue()
-    except
-    end;
+  TaskDone;
 end;
 
 procedure TSynThreadPool.DoTaskAbort(aContext: pointer);
@@ -5119,11 +5127,7 @@ begin
       TaskAbort(aContext);
   except
   end;
-  if InterlockedDecrement(fPendingTasks) = 0 then
-    try
-      TaskAllDone; // e.g. call OsWakeAllOnValue()
-    except
-    end;
+  TaskDone;
 end;
 
 
