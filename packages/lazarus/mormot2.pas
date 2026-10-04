@@ -44,7 +44,7 @@ uses
   mormot.net.openapi, mormot.core.os.security, mormot.tools.mget, 
   mormot.core.mvc, mormot.crypt.other, mormot.net.dhcp, mormot.core.fmt, 
   mormot.core.os.delphi, mormot.core.i18n, mormot.lib.uniscribe, 
-  mormot.crypt.win;
+  mormot.crypt.win, mormot.lib.core;
 
 implementation
 

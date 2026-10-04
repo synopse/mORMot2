@@ -29,6 +29,15 @@ On Windows, some Operating-System high-level features like Windows HTTP and WebS
 
 ## Units Presentation
 
+### mormot.lib.core
+
+Abstract Types and Interfaces Implemented by `mormot.lib.*` Units
+- Font Types: Specification, Metrics, Glyph Widths
+- Font Interfaces: Provider, Enumerator, Shaper, Subsetter
+- Font Services Registration
+
+No external library here, and no user yet: the contracts of the font services planned for `mormot.lib.uniscribe` on Windows, and for `mormot.lib.freetype` and `mormot.lib.harfbuzz` on POSIX, as needed by the cross-platform PDF engine.
+
 ### mormot.lib.z
 
 Cross-Platform and Cross-Compiler `zlib` API
