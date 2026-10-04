@@ -142,7 +142,8 @@ type
     function DoRequest3(Ctxt: THttpServerRequestAbstract): cardinal;
     function DoRequest4(Ctxt: THttpServerRequestAbstract): cardinal;
     // this is the main method called by RtspOverHttp[BufferedWrite]
-    procedure DoRtspOverHttp(options: TAsyncConnectionsOptions);
+    procedure DoRtspOverHttp(options: TAsyncConnectionsOptions;
+      const aRtspPort, aHttpPort: RawUtf8);
     // helper invoked from OpenAPI to verify YAML dispatch
     procedure OpenApiYamlDispatch;
     /// validate mormot.net.tftp.server using libcurl (so only POSIX by now)
@@ -986,7 +987,8 @@ begin
   end;
 end;
 
-procedure TNetworkProtocols.DoRtspOverHttp(options: TAsyncConnectionsOptions);
+procedure TNetworkProtocols.DoRtspOverHttp(options: TAsyncConnectionsOptions;
+  const aRtspPort, aHttpPort: RawUtf8);
 var
   N: integer;
   proxy: TRtspOverHttpServer;
@@ -997,7 +999,7 @@ begin
   N := 100;
   {$endif OSDARWIN}
   proxy := TRtspOverHttpServer.Create(
-    '127.0.0.1', '3999', '3998', TSynLog, nil, nil, options, {threads=}1);
+    '127.0.0.1', aRtspPort, aHttpPort, TSynLog, nil, nil, options, {threads=}1);
     // threads=1 is the safest & fastest - but you may set 16 for testing
   try
     proxy.WaitStarted(10);
@@ -1013,13 +1015,13 @@ const
 
 procedure TNetworkProtocols.RTSPOverHTTP;
 begin
-  RunWait;
-  DoRtspOverHttp(ASYNC_OPTION);
+  RunWait; // let the Tunnel stuff close down
+  DoRtspOverHttp(ASYNC_OPTION, '3997', '3996');
 end;
 
 procedure TNetworkProtocols.RTSPOverHTTPBufferedWrite;
 begin
-  DoRtspOverHttp(ASYNC_OPTION + [acoWritePollOnly]);
+  DoRtspOverHttp(ASYNC_OPTION + [acoWritePollOnly], '3999', '3998');
 end;
 
 type
