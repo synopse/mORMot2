@@ -257,6 +257,9 @@ var
 begin
   aConnection := nil;
   get := nil;
+  rtsp := nil;
+  postconn := nil;
+  rtspconn := nil;
   result := false;
   fLogClass.EnterLocal(log, 'ConnectionCreate(%)', [pointer(aSocket)], self);
   try
@@ -347,6 +350,8 @@ begin
           [ToText(parse)^, sock.Http.CommandResp, sock, sock.Method, sock.URL,
            sock.Http.Headers], self);
     finally
+      if sock <> nil then
+        sock.Sock := NO_SOCKET; // rejected aSocket is closed by the accept caller
       sock.Free;
       res := aSocket.MakeAsync; // as expected by TPollAsyncSockets
       if (res <> nrOK) and
@@ -355,38 +360,50 @@ begin
     end;
     if get = nil then
       exit;
-    res := NewTcpClientSocket(fRtspServer, fRtspPort, 1000, rtsp);
-    if res <> nrOK then
-      ERtspOverHttp.RaiseUtf8('No RTSP server on %:% (%)',
-        [fRtspServer, fRtspPort, _NR[res]]);
-    // create the main POST connection and its associated RTSP connection
-    postconn := TPostConnection.Create(self, aRemoteIp);
-    rtspconn := TRtspConnection.Create(self, aRemoteIp);
-    if not inherited ConnectionNew(aSocket, postconn) or
-       not inherited ConnectionNew(rtsp, rtspconn) then
-      ERtspOverHttp.RaiseUtf8('inherited %.ConnectionNew(%) % failed',
-        [self, aSocket, cookie]);
-    aConnection := postconn;
-    postconn.fRtspTag := rtspconn.Handle;
-    rtspconn.fGetBlocking := get;
-    res := rtspconn.Socket.MakeAsync; // as expected by fClients.Start
-    if (res <> nrOK) and
-       (log <> nil) then
-      log.Log(sllTrace, 'ConnectionCreate rtspconn.MakeAsync=%', [_NR[res]], self);
-    if not Sockets.Start(rtspconn) then
-    begin
-    if log <> nil then
-      log.Log(sllWarning,
-        'ConnectionCreate Sockets.Start failed for %', [rtspconn], self);
-      exit;
+    try
+      res := NewTcpClientSocket(fRtspServer, fRtspPort, 1000, rtsp);
+      if res <> nrOK then
+        ERtspOverHttp.RaiseUtf8('No RTSP server on %:% (%)',
+          [fRtspServer, fRtspPort, _NR[res]]);
+      // create the main POST connection and its associated RTSP connection
+      postconn := TPostConnection.Create(self, aRemoteIp);
+      rtspconn := TRtspConnection.Create(self, aRemoteIp);
+      if not inherited ConnectionNew(aSocket, postconn) or
+         not inherited ConnectionNew(rtsp, rtspconn) then
+        ERtspOverHttp.RaiseUtf8('inherited %.ConnectionNew(%) % failed',
+          [self, aSocket, cookie]);
+      rtsp := nil; // ownership transferred to rtspconn
+      postconn.fRtspTag := rtspconn.Handle;
+      rtspconn.fGetBlocking := get;
+      get := nil; // ownership transferred, including a subsequent Start failure
+      res := rtspconn.Socket.MakeAsync; // as expected by fClients.Start
+      if (res <> nrOK) and
+         (log <> nil) then
+        log.Log(sllTrace, 'ConnectionCreate rtspconn.MakeAsync=%', [_NR[res]], self);
+      if log <> nil then
+        log.Log(sllTrace,
+          'ConnectionCreate prepared get=% post=%/% and rtsp=%/% for %',
+          [pointer(rtspconn.fGetBlocking.Sock), pointer(aSocket), postconn.Handle,
+           pointer(rtspconn.Socket), rtspconn.Handle, cookie], self);
+      if not Sockets.Start(rtspconn) then
+      begin
+        if log <> nil then
+          log.Log(sllWarning,
+            'ConnectionCreate Sockets.Start failed for %', [rtspconn], self);
+        exit;
+      end;
+      // Start() may let a worker close/recycle rtspconn before it returns
+      rtspconn := nil;
+      aConnection := postconn;
+      postconn := nil;
+      result := true;
+    finally
+      // no flags, GC state or socket fields need to be inspected here
+      ConnectionAbortAndNil(TAsyncConnection(rtspconn), rtsp);
+      rtsp.ShutdownAndClose({rdwr=}false); // not transferred by ConnectionNew
+      ConnectionAbortAndNil(TAsyncConnection(postconn), aSocket);
+      FreeAndNil(get); // not transferred to rtspconn
     end;
-    get := nil;
-    result := true;
-    if log <> nil then
-      log.Log(sllTrace,
-        'ConnectionCreate added get=% post=%/% and rtsp=%/% for %',
-        [pointer(rtspconn.fGetBlocking.Sock), pointer(aSocket), aConnection.Handle,
-         pointer(rtsp), rtspconn.Handle, cookie], self);
   except
     if log <> nil then
       log.Log(sllDebug, 'ConnectionCreate(%) failed', [pointer(aSocket)], self);
