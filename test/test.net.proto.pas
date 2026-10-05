@@ -87,7 +87,6 @@ type
     peercachedirect: THttpPeerCache;
     // for _TUriTree
     reqone, reqtwo: RawUtf8;
-    request: integer;
     reqthree: boolean;
     reqfour: Int64;
     // for FileRange
@@ -104,7 +103,7 @@ type
     bodyconsumer: TThread; // is a TPipeConsumerThread (declared below)
     // for AsyncShutdown
     shutdownsrv: THttpAsyncServer;
-    shutdownslow: integer;
+    shutdownslow, shutdownrequests: integer;
     // for _TTunnelLocal
     tunnelappsec: RawUtf8;
     tunneloptions: TTunnelOptions;
@@ -139,13 +138,8 @@ type
     function DoBodyRequest(Ctxt: THttpServerRequestAbstract): cardinal;
     // event used by AsyncShutdown
     function DoShutdownRequest(Ctxt: THttpServerRequestAbstract): cardinal;
-    // several methods used by _TUriTree
+    // callback used by _TUriTree
     function DoRequest_(Ctxt: THttpServerRequestAbstract): cardinal;
-    function DoRequest0(Ctxt: THttpServerRequestAbstract): cardinal;
-    function DoRequest1(Ctxt: THttpServerRequestAbstract): cardinal;
-    function DoRequest2(Ctxt: THttpServerRequestAbstract): cardinal;
-    function DoRequest3(Ctxt: THttpServerRequestAbstract): cardinal;
-    function DoRequest4(Ctxt: THttpServerRequestAbstract): cardinal;
     // this is the main method called by RtspOverHttp[BufferedWrite]
     procedure DoRtspOverHttp(options: TAsyncConnectionsOptions;
       const aRtspPort, aHttpPort: RawUtf8);
@@ -1136,7 +1130,10 @@ end;
 function TNetworkProtocols.DoShutdownRequest(
   Ctxt: THttpServerRequestAbstract): cardinal;
 begin
-  if Ctxt.Url = '/slow' then
+  LockedInc32(@shutdownrequests);
+  if Ctxt.Url = '/large' then
+    Ctxt.OutContent := RawUtf8(StringOfChar('x', 16 shl 20))
+  else if Ctxt.Url = '/slow' then
   begin
     // keep the only processing thread busy until the server is shut down
     LockedInc32(@shutdownslow);
@@ -1149,114 +1146,173 @@ end;
 
 procedure TNetworkProtocols.DoHttpAsyncShutdown(Sender: TObject);
 const
-  URI: array[0..2] of RawUtf8 = (
-    '/idle', '/slow', '/pending');
+  URI: array[0..7] of RawUtf8 = (
+    '/idle', '/headers', '/body', '/large', '/slow',
+    '/pending', '/pending2', '/pending3');
 var
   srv: THttpAsyncServer;
-  i: PtrInt;
+  i, mode, round, first, threads: PtrInt;
   endtix: Int64;
+  fast: TCrtSocket;
   client: array[0 .. high(URI)] of TCrtSocket;
 
   function ClosedByServer(sock: TNetSocket): boolean;
   var
-    tmp: TByteToByte;
+    tmp: TBuffer8K;
     len: integer;
+    deadline: Int64;
   begin
-    result := false; // nothing within 2 seconds: this socket was left open
+    result := false;
+    sock.MakeAsync;
+    deadline := GetTickCount64 + 2000; // total deadline, also for large responses
     repeat
-      if sock.WaitFor(2000, [neRead, neError]) = [] then
-        exit;
-      len := SizeOf(tmp); // an eventual response is just ignored
-    until not (sock.Recv(@tmp, len) in [nrOk, nrRetry]);
-    result := true;
+      if sock.WaitFor(10, [neRead, neError]) <> [] then
+      begin
+        len := SizeOf(tmp); // ignore any response still buffered before shutdown
+        if not (sock.Recv(@tmp, len) in [nrOk, nrRetry]) then
+        begin
+          result := true;
+          exit;
+        end;
+      end;
+    until GetTickCount64 >= deadline;
   end;
 
 begin
-  // any connection still open at shutdown used to be never closed on epoll:
-  // its socket was leaked, and its client did wait up to its own timeout
-  FillCharFast(client, SizeOf(client), 0);
-  try
-    shutdownslow := 0;
-    srv := THttpAsyncServer.Create('8898', nil, nil, 'shutdown', 2);
-    try
-      shutdownsrv := srv;
-      srv.OnRequest := DoShutdownRequest;
-      srv.WaitStarted(10);
-      endtix := GetTickCount64 + 5000; // never wait forever
-      for i := 0 to high(client) do
-      begin
-        client[i] := TCrtSocket.Open('127.0.0.1', srv.SockPort, nlTcp, 5000);
-        client[i].SockSend(['GET ', URI[i], ' HTTP/1.1'#13#10,
-          'Host: 127.0.0.1'#13#10]); // SockSend() appends the final CRLF
-        client[i].SockSendFlush;
-        case i of
-          0: // a regular kept alive connection, idle after its response
-            Check(neRead in client[i].Sock.WaitFor(5000, [neRead, neError]),
-              'idle');
-          1: // a connection which request is still processed at shutdown
-            while (shutdownslow = 0) and
-                  (GetTickCount64 < endtix) do
-              SleepHiRes(1);
-          2: // a connection accepted, but with no thread to read its request
-            begin
-              while (srv.Async.Accepted <= i) and
-                    (GetTickCount64 < endtix) do
-                SleepHiRes(1);
-              SleepHiRes(10); // let the accept thread queue this connection
-            end;
+  // repeat on the same port, exercising both single-reader and queued workers
+  for mode := 0 to 2 do
+    for round := 1 to 2 do
+    begin
+      FillCharFast(client, SizeOf(client), 0);
+      shutdownslow := 0;
+      shutdownrequests := 0;
+      // keep exactly one request worker so /slow blocks further requests
+      threads := 1;
+      {$ifndef USE_WINIOCP}
+      if mode <> 0 then
+        threads := 2; // one polling thread and one request worker
+      {$endif USE_WINIOCP}
+      first := 0;
+      if mode = 2 then
+        // no-track: test initial queued/processing requests, not idle subscribers
+        first := 4;
+      srv := THttpAsyncServer.Create('8898', nil, nil, 'shutdown', threads);
+      try
+        shutdownsrv := srv;
+        if mode = 2 then
+          srv.Async.Options := srv.Async.Options + [acoNoConnectionTrack];
+        srv.OnRequest := DoShutdownRequest;
+        srv.WaitStarted(10);
+        // HTTP/1.0 responses completed without needing asynchronous writes
+        for i := 1 to 16 do
+        begin
+          fast := TCrtSocket.Open('127.0.0.1', srv.SockPort, nlTcp, 5000);
+          try
+            fast.SockSend(['GET /fast HTTP/1.0'#13#10'Host: localhost'#13#10]);
+            fast.SockSendFlush;
+            Check(ClosedByServer(fast.Sock), 'fast closed');
+          finally
+            fast.Free;
+          end;
         end;
+        CheckEqual(shutdownrequests, 16, 'fast requests');
+        {$ifndef USE_WINIOCP}
+        if mode = 1 then
+          CheckEqual(srv.Async.ConnectionHigh, 0, 'fast requests not registered');
+        {$endif USE_WINIOCP}
+        for i := first to high(client) do
+        begin
+          client[i] := TCrtSocket.Open('127.0.0.1', srv.SockPort, nlTcp, 5000);
+          case i of
+            1: client[i].SndLow('GET /headers HTTP/1.1'#13#10'Host:');
+            2: client[i].SndLow('POST /body HTTP/1.1'#13#10 +
+                 'Host: localhost'#13#10'Content-Length: 100'#13#10#13#10'x');
+          else
+            begin
+              client[i].SockSend(['GET ', URI[i], ' HTTP/1.1'#13#10,
+                'Host: 127.0.0.1'#13#10]);
+              client[i].SockSendFlush;
+            end;
+          end;
+          endtix := GetTickCount64 + 5000; // a fresh deadline for each state
+          case i of
+            0: Check(neRead in client[i].Sock.WaitFor(5000, [neRead, neError]),
+                 'idle response');
+            {$ifndef USE_WINIOCP}
+            1, 2:
+              begin
+                while (srv.Async.Sockets.PollRead.Count < i + 1) and
+                      (GetTickCount64 < endtix) do
+                  SleepHiRes(1);
+                Check(srv.Async.Sockets.PollRead.Count >= i + 1,
+                  'partial request subscribed');
+              end;
+            3:
+              begin
+                while (srv.Async.Sockets.PollWrite.Count = 0) and
+                      (GetTickCount64 < endtix) do
+                  SleepHiRes(1);
+                Check(srv.Async.Sockets.PollWrite.Count > 0,
+                  'large response subscribed');
+              end;
+            {$else}
+            3: Check(neRead in client[i].Sock.WaitFor(5000, [neRead, neError]),
+                 'large response started');
+            {$endif USE_WINIOCP}
+            4:
+              begin
+                while (shutdownslow = 0) and
+                      (GetTickCount64 < endtix) do
+                  SleepHiRes(1);
+                CheckEqual(shutdownslow, 1, 'slow request entered');
+              end;
+          end;
+        end;
+        endtix := GetTickCount64 + 5000;
+        while (srv.Async.Accepted < 16 + length(client) - first) and
+              (GetTickCount64 < endtix) do
+          SleepHiRes(1);
+        CheckEqual(srv.Async.Accepted, 16 + length(client) - first, 'accepted');
+        {$ifndef USE_WINIOCP}
+        if threads = 2 then
+        begin
+          while (srv.Async.Sockets.PollRead.Pending < 3) and
+                (GetTickCount64 < endtix) do
+            SleepHiRes(1);
+          Check(srv.Async.Sockets.PollRead.Pending >= 3, 'queued');
+        end;
+        {$endif USE_WINIOCP}
+        if first = 0 then
+          CheckEqual(shutdownrequests, 19, 'idle large slow only')
+        else
+          CheckEqual(shutdownrequests, 17, 'slow only');
+        // explicitly exercise repeated Shutdown as well as the destructor
+        srv.Shutdown; // stop HTTP keep-alive before terminating its workers
+        srv.Async.Shutdown;
+        srv.Async.Shutdown;
+        FreeAndNil(srv);
+        for i := first to high(client) do
+          CheckUtf8(ClosedByServer(client[i].Sock), 'closed % mode=% round=%',
+            [URI[i], mode, round]);
+      finally
+        srv.Free;
+        shutdownsrv := nil;
+        for i := 0 to high(client) do
+          client[i].Free;
       end;
-      CheckEqual(shutdownslow, 1, 'slow');
-      Check(srv.Async.Accepted > high(client), 'accepted');
-    finally
-      srv.Free;
     end;
-    for i := 0 to high(client) do
-      CheckUtf8(ClosedByServer(client[i].Sock), 'closed %', [URI[i]]);
-  finally
-    for i := 0 to high(client) do
-      client[i].Free;
-  end;
 end;
 
 function TNetworkProtocols.DoRequest_(Ctxt: THttpServerRequestAbstract): cardinal;
 begin
+  // echo the route-specific opaque value, including nil for /plaintext
+  Ctxt.OutContent := Int32ToUtf8(PtrInt(Ctxt.RouteOpaque));
   reqone := Ctxt['one'];
   Ctxt.RouteUtf8('two', reqtwo);
   reqthree := Ctxt.RouteEquals('three', '3');
   if not Ctxt.RouteInt64('four', reqfour) then
     reqfour := -1;
   result := HTTP_SUCCESS;
-end;
-
-function TNetworkProtocols.DoRequest0(Ctxt: THttpServerRequestAbstract): cardinal;
-begin
-  result := DoRequest_(Ctxt);
-  request := 0;
-end;
-
-function TNetworkProtocols.DoRequest1(Ctxt: THttpServerRequestAbstract): cardinal;
-begin
-  result := DoRequest_(Ctxt);
-  request := 1;
-end;
-
-function TNetworkProtocols.DoRequest2(Ctxt: THttpServerRequestAbstract): cardinal;
-begin
-  result := DoRequest_(Ctxt);
-  request := 2;
-end;
-
-function TNetworkProtocols.DoRequest3(Ctxt: THttpServerRequestAbstract): cardinal;
-begin
-  result := DoRequest_(Ctxt);
-  request := 3;
-end;
-
-function TNetworkProtocols.DoRequest4(Ctxt: THttpServerRequestAbstract): cardinal;
-begin
-  result := DoRequest_(Ctxt);
-  request := 4;
 end;
 
 const
@@ -1278,7 +1334,7 @@ var
     exp4: Int64 = -1; expstatus: integer = HTTP_SUCCESS;
     const met: RawUtf8 = 'GET');
   begin
-    request := -1;
+    ctxt.OutContent := ''; // distinguish no callback from a nil opaque value
     reqone := '';
     reqtwo := '';
     reqthree := false;
@@ -1385,39 +1441,39 @@ begin
     Call('/', '', '', false, -1, 0);
     router.Get('/plaintext', DoRequest_);
     router.Get('/plaintext', DoRequest_);
-    CheckEqual(request, -1);
+    CheckEqual(ctxt.OutContent, '');
     Call('/plaintext', '', '');
     Call('/', '', '', false, -1, 0);
     //writeln(router.Tree[urmGet].ToText);
-    router.Get('/', DoRequest0);
+    router.Get('/', DoRequest_, pointer(1));
     Call('/plaintext', '', '');
-    CheckEqual(request, -1);
+    CheckEqual(ctxt.OutContent, '0');
     Call('/', '', '', false);
-    CheckEqual(request, 0);
-    router.Get('/do/<one>/pic/<two>', DoRequest0);
-    router.Get('/do/<one>', DoRequest1);
-    router.Get('/do/<one>/pic', DoRequest2);
-    router.Get('/do/<one>/pic/<two>/', DoRequest3);
-    router.Get('/da/<one>/<two>/<three>/<four>/', DoRequest4);
+    CheckEqual(ctxt.OutContent, '1');
+    router.Get('/do/<one>/pic/<two>', DoRequest_, pointer(1));
+    router.Get('/do/<one>', DoRequest_, pointer(2));
+    router.Get('/do/<one>/pic', DoRequest_, pointer(3));
+    router.Get('/do/<one>/pic/<two>/', DoRequest_, pointer(4));
+    router.Get('/da/<one>/<two>/<three>/<four>/', DoRequest_, pointer(5));
     //writeln(router.Tree[urmGet].ToText);
     Call('/do/a', 'a', '');
-    CheckEqual(request, 1);
+    CheckEqual(ctxt.OutContent, '2');
     Call('/do/123', '123', '');
-    CheckEqual(request, 1);
+    CheckEqual(ctxt.OutContent, '2');
     Call('/do/toto/pic', 'toto', '');
-    CheckEqual(request, 2);
+    CheckEqual(ctxt.OutContent, '3');
     Call('/do/toto/pic/titi/', 'toto', 'titi');
-    CheckEqual(request, 3);
+    CheckEqual(ctxt.OutContent, '4');
     Call('/do/toto/pic/titi', 'toto', 'titi');
-    CheckEqual(request, 0);
+    CheckEqual(ctxt.OutContent, '1');
     Call('/do/toto/pic/titi/', 'toto', 'titi');
-    CheckEqual(request, 3);
+    CheckEqual(ctxt.OutContent, '4');
     Call('/da/1/2/3/4', '', '', false, -1, 0);
-    CheckEqual(request, -1);
+    CheckEqual(ctxt.OutContent, '');
     Call('/da/1/2/3/4/', '1', '2', true, 4);
-    CheckEqual(request, 4);
+    CheckEqual(ctxt.OutContent, '5');
     Call('/da/a1/b2/3/47456/', 'a1', 'b2', true, 47456);
-    CheckEqual(request, 4);
+    CheckEqual(ctxt.OutContent, '5');
     Compute('/static', '/static');
     Compute('/static2', '/static2');
     Compute('/', '/');

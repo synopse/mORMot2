@@ -1556,6 +1556,8 @@ type
     /// disable any pending notification associated with several connection tags
     // - note that aTag array will be sorted during the process
     function DeleteSeveralPending(aTag: PPollSocketTag; aTagCount: integer): integer;
+    /// returns PendingCount - PendingIndex in a thread-safe way
+    function Pending: PtrInt;
     /// notify any GetOne waiting method to stop its polling loop
     procedure Terminate; override;
     /// indicates that Unsubscribe() should also call ShutdownAndClose(socket)
@@ -5708,6 +5710,16 @@ begin
         inc(p);
         dec(n)
       until n = 0;
+  finally
+    fPendingSafe.UnLock;
+  end;
+end;
+
+function TPollSockets.Pending: PtrInt;
+begin
+  fPendingSafe.Lock;
+  try
+    result := fPending.Count - fPendingIndex;
   finally
     fPendingSafe.UnLock;
   end;

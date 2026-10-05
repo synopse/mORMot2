@@ -404,7 +404,7 @@ type
       read fRead;
     /// low-level access to the polling class used for send() data
     property PollWrite: TPollWriteSockets
-      write fWrite;
+      read fWrite;
     {$endif USE_WINIOCP}
   end;
 
