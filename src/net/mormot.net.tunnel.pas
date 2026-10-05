@@ -756,6 +756,12 @@ destructor TTunnelLocalThread.Destroy;
 begin
   Abort; // Terminate + raw sockets shutdown
   inherited Destroy; // joins the thread
+  // eventual raw sockets FD closure
+  fServerSock.Close;
+  fServerSock := nil;
+  fClientSock.Close;
+  fClientSock := nil;
+  // release internal resources
   fOwner := nil;
   FreeAndNil(fAes[true]);
   FreeAndNil(fAes[false]);
@@ -767,6 +773,7 @@ begin
   if self = nil then
     exit;
   Terminate;
+  // abort the connections but does not close them yet
   fServerSock.RawShutdown; // no fSafe.Lock needed for this raw socket API
   fClientSock.RawShutdown;
 end;
@@ -1226,7 +1233,8 @@ begin
     result := OpenInternal(Sess, Transmit, TransmitOptions, TimeOutMS, AppSecret,
       sock, port, bound, InfoNameValue, SignCert, VerifyCert);
   except
-    sock.RawShutdown; // only needed for failures before OpenInternal
+    sock.ShutdownAndClose({rdwr=}true); // manual cleanup of the socket FD
+    sock := nil;
     raise;
   end;
 end;
@@ -1256,7 +1264,8 @@ begin
     result := OpenInternal(Sess, Transmit, TransmitOptions, TimeOutMS, AppSecret,
       sock, LocalPort, {SocketBound=}false, InfoNameValue, SignCert, VerifyCert);
   except
-    sock.RawShutdown; // caller no longer owns Socket
+    sock.ShutdownAndClose({rdwr=}true); // manual cleanup of the socket FD
+    sock := nil;
     raise;
   end;
 end;
@@ -1443,7 +1452,10 @@ begin
       if fThread <> nil then
         ClosePort
       else
-        Sock.RawShutdown; // any error would abort and return 0
+      begin
+        Sock.ShutdownAndClose({rdwr=}true); // manual cleanup of the socket FD
+        Sock := nil; // any error would abort and return 0
+      end;
       result := 0;
     end;
   end;
