@@ -102,6 +102,9 @@ type
     bodyseq: integer;
     bodyeventlen: Int64;
     bodyconsumer: TThread; // is a TPipeConsumerThread (declared below)
+    // for AsyncShutdown
+    shutdownsrv: THttpAsyncServer;
+    shutdownslow: integer;
     // for _TTunnelLocal
     tunnelappsec: RawUtf8;
     tunneloptions: TTunnelOptions;
@@ -134,6 +137,8 @@ type
     function DoBodyDownload(const aUrl, aMethod, aInHeaders, aInContentType,
       aRemoteIP: RawUtf8; aContentLength: Int64): TStream;
     function DoBodyRequest(Ctxt: THttpServerRequestAbstract): cardinal;
+    // event used by AsyncShutdown
+    function DoShutdownRequest(Ctxt: THttpServerRequestAbstract): cardinal;
     // several methods used by _TUriTree
     function DoRequest_(Ctxt: THttpServerRequestAbstract): cardinal;
     function DoRequest0(Ctxt: THttpServerRequestAbstract): cardinal;
@@ -162,6 +167,8 @@ type
     procedure DoHttpOutStream(Sender: TObject);
     /// validate TWebSocketAsyncServer.WebSocketBroadcast with closing peers
     procedure DoTWebSocketAsyncServer(Sender: TObject);
+    /// validate that THttpAsyncServer shutdown does close all its connections
+    procedure DoHttpAsyncShutdown(Sender: TObject);
   published
     {$ifdef USEWININET}
     /// validate lazy initialization of the http.sys WebSocket API
@@ -489,6 +496,7 @@ begin
   Run(DoHttpOutStream, self, 'HttpOutStream', true, false);
   Run(DoTFTPServer, self, 'TFTPServer', true, false);
   Run(DoTWebSocketAsyncServer, self, 'WSBroadcast', true, false);
+  Run(DoHttpAsyncShutdown, self, 'HttpAsyncShutdown', true, false);
   {$ifdef OSPOSIX}
   Run(DoUnixDomainSocket, self, 'UnixDomainSocket', true, false);
   {$endif OSPOSIX}
@@ -1123,6 +1131,92 @@ begin
     end;
   end;
   Check(sent > 0, 'sent');
+end;
+
+function TNetworkProtocols.DoShutdownRequest(
+  Ctxt: THttpServerRequestAbstract): cardinal;
+begin
+  if Ctxt.Url = '/slow' then
+  begin
+    // keep the only processing thread busy until the server is shut down
+    LockedInc32(@shutdownslow);
+    repeat
+      SleepHiRes(1);
+    until shutdownsrv.Async.Terminated;
+  end;
+  result := HTTP_SUCCESS;
+end;
+
+procedure TNetworkProtocols.DoHttpAsyncShutdown(Sender: TObject);
+const
+  URI: array[0..2] of RawUtf8 = (
+    '/idle', '/slow', '/pending');
+var
+  srv: THttpAsyncServer;
+  i: PtrInt;
+  endtix: Int64;
+  client: array[0 .. high(URI)] of TCrtSocket;
+
+  function ClosedByServer(sock: TNetSocket): boolean;
+  var
+    tmp: TByteToByte;
+    len: integer;
+  begin
+    result := false; // nothing within 2 seconds: this socket was left open
+    repeat
+      if sock.WaitFor(2000, [neRead, neError]) = [] then
+        exit;
+      len := SizeOf(tmp); // an eventual response is just ignored
+    until not (sock.Recv(@tmp, len) in [nrOk, nrRetry]);
+    result := true;
+  end;
+
+begin
+  // any connection still open at shutdown used to be never closed on epoll:
+  // its socket was leaked, and its client did wait up to its own timeout
+  FillCharFast(client, SizeOf(client), 0);
+  try
+    shutdownslow := 0;
+    srv := THttpAsyncServer.Create('8898', nil, nil, 'shutdown', 2);
+    try
+      shutdownsrv := srv;
+      srv.OnRequest := DoShutdownRequest;
+      srv.WaitStarted(10);
+      endtix := GetTickCount64 + 5000; // never wait forever
+      for i := 0 to high(client) do
+      begin
+        client[i] := TCrtSocket.Open('127.0.0.1', srv.SockPort, nlTcp, 5000);
+        client[i].SockSend(['GET ', URI[i], ' HTTP/1.1'#13#10,
+          'Host: 127.0.0.1'#13#10]); // SockSend() appends the final CRLF
+        client[i].SockSendFlush;
+        case i of
+          0: // a regular kept alive connection, idle after its response
+            Check(neRead in client[i].Sock.WaitFor(5000, [neRead, neError]),
+              'idle');
+          1: // a connection which request is still processed at shutdown
+            while (shutdownslow = 0) and
+                  (GetTickCount64 < endtix) do
+              SleepHiRes(1);
+          2: // a connection accepted, but with no thread to read its request
+            begin
+              while (srv.Async.Accepted <= i) and
+                    (GetTickCount64 < endtix) do
+                SleepHiRes(1);
+              SleepHiRes(10); // let the accept thread queue this connection
+            end;
+        end;
+      end;
+      CheckEqual(shutdownslow, 1, 'slow');
+      Check(srv.Async.Accepted > high(client), 'accepted');
+    finally
+      srv.Free;
+    end;
+    for i := 0 to high(client) do
+      CheckUtf8(ClosedByServer(client[i].Sock), 'closed %', [URI[i]]);
+  finally
+    for i := 0 to high(client) do
+      client[i].Free;
+  end;
 end;
 
 function TNetworkProtocols.DoRequest_(Ctxt: THttpServerRequestAbstract): cardinal;
