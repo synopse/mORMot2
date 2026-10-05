@@ -1711,7 +1711,7 @@ type
     {$ifndef USE_THREADWINIOCP}
     fQueuePendingContext: boolean;
     function GetPendingContextCount: integer;
-    function PopPendingContext: pointer;
+    function PopPendingContext(aCaller: TSynThreadPoolWorkThread): pointer;
     function QueueLength: integer; virtual; // assumed stable while running
     {$endif USE_THREADWINIOCP}
     /// end thread on IO error
@@ -5019,13 +5019,10 @@ begin
             (GetPendingContextCount + fWorkThreadCount > QueueLength);
 end;
 
-function TSynThreadPool.PopPendingContext: pointer;
+function TSynThreadPool.PopPendingContext(aCaller: TSynThreadPoolWorkThread): pointer;
 begin
   result := nil;
-  if (self = nil) or
-     fTerminated or
-     (fPendingContext = nil) or
-     (fPendingContextCount = 0) then
+  if self = nil then
     exit;
   fPendingSafe.Lock;
   {$ifdef HASFASTTRYFINALLY}
@@ -5033,9 +5030,11 @@ begin
   {$else}
   begin
   {$endif HASFASTTRYFINALLY}
-    if fPendingContextCount > 0 then
+    if (fPendingContextCount > 0) and
+       not fTerminated then
     begin
-      result := fPendingContext[fPendingFirst]; // FIFO queue
+      // O(1) retrieve the next task from the FIFO queue
+      result := fPendingContext[fPendingFirst];
       inc(fPendingFirst);
       if fPendingFirst = length(fPendingContext) then
         fPendingFirst := 0;
@@ -5045,7 +5044,10 @@ begin
         fPendingFirst := 0;
         fPendingLast := 0;
       end;
-    end;
+    end
+    else
+      // clear the calling thread status within fPendingSafe
+      aCaller.fProcessingContext := nil;
   {$ifdef HASFASTTRYFINALLY}
   finally
   {$endif HASFASTTRYFINALLY}
@@ -5241,15 +5243,10 @@ begin
       if stop then
         fOwner.DoTaskAbort(ctxt)
       else
-        if ctxt <> nil then
+        while ctxt <> nil do
         begin
-          repeat
-            fOwner.DoTask(self, ctxt);
-            ctxt := fOwner.PopPendingContext; // unqueue any pending context
-          until ctxt = nil;
-          fOwner.fPendingSafe.Lock;
-          fProcessingContext := nil; // eventually mark this thread as available
-          fOwner.fPendingSafe.UnLock;
+          fOwner.DoTask(self, ctxt);
+          ctxt := fOwner.PopPendingContext(self); // unqueue any pending context
         end;
     until fOwner.fTerminated or
           Terminated;
