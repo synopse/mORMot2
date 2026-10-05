@@ -399,7 +399,9 @@ type
     // - otherwise, will use this value as explicit proxy server name
     // - used only during initial connection
     Proxy: RawUtf8;
-    /// the timeout to be used for the whole connection, as supplied to Create()
+    /// legacy common timeout in milliseconds, as supplied to Create()
+    // - fallback for unspecified ConnectTimeoutMS/SendTimeoutMS/ReceiveTimeoutMS
+    // - 0 keeps the backend defaults; this is not a total request deadline
     CreateTimeoutMS: integer;
     /// allow HTTP/HTTPS authentication to take place at server request
     Auth: THttpRequestAuthOptions;
@@ -416,6 +418,21 @@ type
     /// allow to customize the User-Agent header
     // - for TWinHttp, should be set at constructor level
     UserAgent: RawUtf8;
+    /// connection setup timeout in milliseconds, used when creating the client
+    // - a positive value overrides CreateTimeoutMS for this phase
+    // - 0 (or a negative value) uses CreateTimeoutMS, then the backend default
+    // - changing these options does not change an already open connection:
+    // use the live socket properties, or create a new client from these options
+    ConnectTimeoutMS: integer;
+    /// send timeout in milliseconds, with the same fallback as ConnectTimeoutMS
+    SendTimeoutMS: integer;
+    /// receive timeout in milliseconds, with the same fallback as ConnectTimeoutMS
+    ReceiveTimeoutMS: integer;
+    /// resolve positive phase overrides over CreateTimeoutMS
+    // - if CreateTimeoutMS is 0, use aDefaultTimeout (0 leaves backend defaults)
+    // - socket clients pass their common default; native clients leave 0
+    procedure GetTimeouts(out aConnectTimeout, aSendTimeout, aReceiveTimeout: integer;
+      aDefaultTimeout: integer = 0);
     /// may be used to initialize this record on stack with zeroed values
     procedure Init;
     /// may be used to initialize this record on stack with HTTP client values
@@ -438,11 +455,12 @@ type
     procedure AuthorizeBearer(const Value: SpiUtf8);
     /// compare the Auth fields, depending on their scheme
     function SameAuth(Another: PHttpRequestExtendedOptions): boolean;
-    /// persist all fields of this record as a TDocVariant
+    /// persist TLS, proxy, authentication and timeout settings as a TDocVariant
+    // - timeout keys are tm (legacy), tc (connect), ts (send), tr (receive)
     // - returns e.g. {"ti":1,"as":3} for TLS.IgnoreCertificateErrors = true
     // and Auth.Scheme = wraNegotiate
     function ToDocVariant(const Secret: RawByteString = ''): variant;
-    /// persist all fields of this record as a URI-encoded TDocVariant
+    /// persist ToDocVariant() settings as a URI-encoded TDocVariant
     // - returns e.g. '/root?ti=1&as=3' for TLS.IgnoreCertificateErrors = true
     // and Auth.Scheme = wraNegotiate and UriRoot = '/root'
     function ToUrlEncode(const UriRoot: RawUtf8;
@@ -840,6 +858,8 @@ type
   protected
     fExtendedOptions: THttpRequestExtendedOptions;
     fLastRequestTix: cardinal; // GetTickSec for RecreateConnectionAfterSecs
+    fAuthDigestAlgo: TDigestAlgo;
+    fAuthPurge: set of (apReferer, apAuthorization);
     fReferer: RawUtf8;
     fAccept: RawUtf8;
     fProcessName: RawUtf8;
@@ -847,8 +867,6 @@ type
     fProxyAuthHeader: RawUtf8;
     fRequestContext: RawUtf8;
     fRangeStart, fRangeEnd: Int64;
-    fAuthDigestAlgo: TDigestAlgo;
-    fAuthPurge: set of (apReferer, apAuthorization);
     fOnAuthorize, fOnProxyAuthorize: TOnHttpClientSocketAuthorize;
     fOnBeforeRequest: TOnHttpClientSocketRequest;
     fOnProtocolRequest: TOnHttpClientRequest;
@@ -3839,12 +3857,20 @@ procedure THttpClientSocket.DoOpenOptions(const aUri: TUri;
 var
   temp: TUri;
   pu: PUri;
+  connect, send, receive: integer;
 begin
   // setup the proper options before any connection
   fExtendedOptions := aOptions;
   Create(fExtendedOptions.CreateTimeoutMS);
   if aClient <> nil then
-    SetTimeouts(aClient.ConnectTimeout, aClient.SendTimeout, aClient.ReceiveTimeout);
+    SetTimeouts(aClient.ConnectTimeout, aClient.SendTimeout, aClient.ReceiveTimeout)
+  else if (fExtendedOptions.ConnectTimeoutMS > 0) or
+          (fExtendedOptions.SendTimeoutMS > 0) or
+          (fExtendedOptions.ReceiveTimeoutMS > 0) then
+  begin
+    fExtendedOptions.GetTimeouts(connect, send, receive, TimeOut);
+    SetTimeouts(connect, send, receive); // before proxy/TLS connection setup
+  end;
   if Assigned(aOnLog) then
     OnLog := aOnLog; // allow to debug ASAP
   if fExtendedOptions.Auth.Scheme = wraDigest then
@@ -3885,11 +3911,16 @@ function THttpClientSocket.SameOpenOptions(const aUri: TUri;
   const aOptions: THttpRequestExtendedOptions): boolean;
 var
   tun: TUri;
+  connect, send, receive: integer;
 begin
+  aOptions.GetTimeouts(connect, send, receive, HTTP_DEFAULT_RECEIVETIMEOUT);
   result := (aUri.UriScheme in HTTP_SCHEME) and
             aUri.Same(Server, Port, ServerTls) and
             SameNetTlsContext(TLS, aOptions.TLS) and
-            fExtendedOptions.SameAuth(@aOptions.Auth);
+            fExtendedOptions.SameAuth(@aOptions.Auth) and
+            (ConnectTimeout = connect) and
+            (SendTimeout = send) and
+            (ReceiveTimeout = receive);
   if result then
     if tun.From(aOptions.Proxy) then
       result := tun.Same(Tunnel.Server, Tunnel.Port, Tunnel.Https)
@@ -5091,6 +5122,23 @@ end;
 
 { THttpRequestExtendedOptions }
 
+procedure THttpRequestExtendedOptions.GetTimeouts(
+  out aConnectTimeout, aSendTimeout, aReceiveTimeout: integer;
+  aDefaultTimeout: integer);
+begin
+  if CreateTimeoutMS <> 0 then
+    aDefaultTimeout := CreateTimeoutMS;
+  aConnectTimeout := ConnectTimeoutMS;
+  if aConnectTimeout <= 0 then
+    aConnectTimeout := aDefaultTimeout;
+  aSendTimeout := SendTimeoutMS;
+  if aSendTimeout <= 0 then
+    aSendTimeout := aDefaultTimeout;
+  aReceiveTimeout := ReceiveTimeoutMS;
+  if aReceiveTimeout <= 0 then
+    aReceiveTimeout := aDefaultTimeout;
+end;
+
 procedure THttpRequestExtendedOptions.Init;
 begin
   RecordZero(@self, TypeInfo(THttpRequestExtendedOptions));
@@ -5179,7 +5227,11 @@ begin
     'as', ord(Auth.Scheme),
     'au', Auth.UserName,
     'ap', Auth.Password,
-    'at', Auth.Token], {dontAddDefault=}true);
+    'at', Auth.Token,
+    'tm', CreateTimeoutMS,
+    'tc', ConnectTimeoutMS,
+    'ts', SendTimeoutMS,
+    'tr', ReceiveTimeoutMS], {dontAddDefault=}true);
   if v.Count = 0 then
     v.Clear;
 end;
@@ -5209,6 +5261,10 @@ begin
   v^.GetAsRawUtf8('au', Auth.UserName);
   v^.GetAsRawUtf8('ap', RawUtf8(Auth.Password));
   v^.GetAsRawUtf8('at', RawUtf8(Auth.Token));
+  v^.GetAsInteger('tm', CreateTimeoutMS);
+  v^.GetAsInteger('tc', ConnectTimeoutMS);
+  v^.GetAsInteger('ts', SendTimeoutMS);
+  v^.GetAsInteger('tr', ReceiveTimeoutMS);
 end;
 
 function THttpRequestExtendedOptions.InitFromUrl(const UrlParams: RawUtf8;
@@ -5354,12 +5410,14 @@ end;
 
 constructor THttpRequest.Create(
   const aUri: TUri; aOptions: PHttpRequestExtendedOptions);
+var
+  connect, send, receive: integer;
 begin
   if aOptions <> nil then
     fExtendedOptions := aOptions^; // to be set before Create=InternalConnect
-  Create(aUri.Server, aUri.Port, aUri.Https, fExtendedOptions.Proxy, {bypass=}'',
-    fExtendedOptions.CreateTimeoutMS, fExtendedOptions.CreateTimeoutMS,
-    fExtendedOptions.CreateTimeoutMS, aUri.Layer);
+  fExtendedOptions.GetTimeouts(connect, send, receive);
+  Create(aUri.Server, aUri.Port, aUri.Https, fExtendedOptions.Proxy,
+    {bypass=}'', connect, send, receive, aUri.Layer);
 end;
 
 destructor THttpRequest.Destroy;
