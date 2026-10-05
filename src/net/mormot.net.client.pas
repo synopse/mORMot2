@@ -876,20 +876,14 @@ type
     fAuthorizeSspiSpn: RawUtf8;
     {$endif NOKERBEROSCLIENT}
     procedure SetAuthBearer(const Value: SpiUtf8);
-    procedure DoOpenOptions(const aUri: TUri;
-      var aOptions: THttpRequestExtendedOptions; const aOnLog: TSynLogProc;
-      aClient: TCrtSocket);
+    procedure DoCreate(aTimeOut: integer); override;
+    procedure DoOpenOptions(const aUri: TUri; var aOptions: THttpRequestExtendedOptions;
+      const aOnLog: TSynLogProc; aClient: TCrtSocket);
     procedure RequestSendHeader(const url, method: RawUtf8); virtual;
     procedure RequestClear; virtual;
     function OnAuthorizeDigest(Sender: THttpClientSocket;
       var Context: THttpClientRequest; const Authenticate: RawUtf8): boolean;
   public
-    /// common initialization of all constructors
-    // - this overridden method will set the UserAgent with some default value
-    // - you can customize the default client timeouts by setting appropriate
-    // aTimeout parameters (in ms) if you left the 0 default parameters,
-    // it would use global HTTP_DEFAULT_RECEIVETIMEOUT variable values
-    constructor Create(aTimeOut: integer = 0); override;
     /// finalize this instance
     destructor Destroy; override;
     /// constructor to create a client connection to a given URI
@@ -3813,23 +3807,23 @@ end;
 
 { THttpClientSocket }
 
-constructor THttpClientSocket.Create(aTimeOut: integer);
+destructor THttpClientSocket.Destroy;
+begin
+  fExtendedOptions.Clear;
+  inherited Destroy;
+end;
+
+procedure THttpClientSocket.DoCreate(aTimeOut: integer);
 begin
   if aTimeOut = 0 then
     aTimeOut := HTTP_DEFAULT_RECEIVETIMEOUT;
   if Assigned(OnHttpClientSocketLog) and
      not Assigned(OnLog) then
     OnLog := OnHttpClientSocketLog;
-  inherited Create(aTimeOut);
+  inherited DoCreate(aTimeOut);
   if fExtendedOptions.UserAgent = '' then
     fExtendedOptions.UserAgent := DefaultUserAgent(self);
   fAccept := '*/*';
-end;
-
-destructor THttpClientSocket.Destroy;
-begin
-  fExtendedOptions.Clear;
-  inherited Destroy;
 end;
 
 constructor THttpClientSocket.OpenUri(const aUri: TUri; const aUriFull,
@@ -3861,7 +3855,7 @@ var
 begin
   // setup the proper options before any connection
   fExtendedOptions := aOptions;
-  Create(fExtendedOptions.CreateTimeoutMS);
+  DoCreate(fExtendedOptions.CreateTimeoutMS);
   if aClient <> nil then
     SetTimeouts(aClient.ConnectTimeout, aClient.SendTimeout, aClient.ReceiveTimeout)
   else if (fExtendedOptions.ConnectTimeoutMS > 0) or

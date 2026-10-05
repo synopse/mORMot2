@@ -2113,6 +2113,7 @@ type
       error: TNetResult = nrOK; errnumber: PNetErrorInt = nil;
       exc: ENetSockClass = nil); overload;
     procedure DoRaise(const msg: string); overload;
+    procedure DoCreate(aTimeOut: integer); virtual;
     procedure DoOpenTunnel(aTls: boolean);
     procedure SetKeepAlive(aSeconds: integer); virtual;
     procedure SetLinger(aLinger: integer); virtual;
@@ -7039,10 +7040,7 @@ end;
 
 constructor TCrtSocket.Create(aTimeOut: integer);
 begin
-  fTimeOut := aTimeOut; // default fSocketConnect/Send/ReceiveTimeout 0 use this
-  if Assigned(OnCrtSocketLog) and
-     not Assigned(OnLog) then
-    OnLog := OnCrtSocketLog; // global hook for all classes
+  DoCreate(aTimeOut);
 end;
 
 constructor TCrtSocket.Open(const aServer, aPort: RawUtf8;
@@ -7061,6 +7059,14 @@ begin
   OpenBind(aServer, aPort, {dobind=}false, aTLS, aLayer);
   if aTLSContext <> nil then
     aTLSContext^ := TLS; // copy back information to the caller TNetTlsContext
+end;
+
+procedure TCrtSocket.DoCreate(aTimeOut: integer);
+begin
+  fTimeOut := aTimeOut; // default fSocketConnect/Send/ReceiveTimeout 0 use this
+  if Assigned(OnCrtSocketLog) and
+     not Assigned(OnLog) then
+    OnLog := OnCrtSocketLog; // global hook for all classes
 end;
 
 procedure TCrtSocket.DoRaise(const msg: string; const args: array of const;
