@@ -4677,44 +4677,21 @@ end;
 
 {$ifdef OSPOSIX}
 procedure THttpServerSocketGeneric.SetKeyTab(const aKeyTab: TFileName);
-var
-  res: RawUtf8;
 begin
-  if FileIsKeyTab(aKeyTab) then
-    if InitializeDomainAuth then
-    begin
-      fSafe.Lock;
-      if fSspiKeyTab = nil then
-        fSspiKeyTab := TServerSspiKeyTab.Create;
-      fSafe.UnLock;
-      if fSspiKeyTab.SetKeyTab(aKeyTab) then
-        res := 'ok'
-      else
-        res := 'SetKeyTab failed';
-    end
-    else
-      res := 'GSSAPI not available'
-  else
-    res := 'invalid file';
-  fLogClass.Add.Log(LOG_DEBUGERROR[res <> 'ok'],
-    'SetKeyTab(%): %', [aKeyTab, res], self);
+  TServerSspiKeyTab.FileSetter(fSspiKeyTab, aKeyTab, fLogClass.DoLog, self);
 end;
 
 function THttpServerSocketGeneric.GetKeyTab: TFileName;
 begin
-  result := '';
-  if fSspiKeyTab <> nil then
-    result := fSspiKeyTab.KeyTab;
+  result := fSspiKeyTab.KeyTab;
 end;
 {$endif OSPOSIX}
 
 function THttpServerSocketGeneric.Authorization(var Http: THttpRequestContext;
   Opaque: Int64): TAuthServerResult;
 var
-  auth, b64, b64end: PUtf8Char;
-  user, pass, url: RawUtf8;
-  bin, bout: RawByteString;
-  ctx: TSecContext;
+  auth: PUtf8Char;
+  user, pass, url, header: RawUtf8;
 begin
   // parse the 'Authorization: basic/digest/negotiate <magic>' header
   result := asrRejected;
@@ -4749,32 +4726,18 @@ begin
         end;
       hraNegotiate:
         // simple implementation assuming a two-way Negotiate/Kerberos handshake
-        // - see TRestServerAuthenticationSspi.Auth() for NTLM / three-way
         if IdemPChar(auth, 'NEGOTIATE ') then
         begin
-          b64 := auth + 10; // parse 'Authorization: Negotiate <base64 encoding>'
-          b64end := PosChar(b64, #13);
-          if (b64end = nil) or
-             not Base64ToBin(PAnsiChar(b64), b64end - auth, bin) or
-             ServerSspiDataNtlm(bin) then // two-way Kerberos only
-            exit;
+          // parse 'Authorization: Negotiate <base64 encoding>'
           {$ifdef OSPOSIX}
           if Assigned(fSspiKeyTab) then
             fSspiKeyTab.PrepareKeyTab; // do nothing if no KeyTab changed or set
           {$endif OSPOSIX}
-          InvalidateSecContext(ctx);
-          try
-            // code below raise ESynSspi/EGssApi on authentication error
-            if ServerSspiAuth(ctx, bin, bout) then
-              // CONTINUE flag = need more input from the client: unsupported
-              exit;
-            // now client is authenticated in a single roundtrip: identify user
-            ServerSspiAuthUser(ctx, user);
-            Http.ResponseHeaders := BinToBase64(bout,
-              SECPKGNAMEHTTPWWWAUTHENTICATE, #13#10, {magic=}false);
+          header := ServerSspiAuthHeader('', auth + 10, @user);
+          if header <> '' then
+          begin
+            Http.ResponseHeaders := header;
             result := asrMatch;
-          finally
-            FreeSecContext(ctx);
           end;
         end;
     else
