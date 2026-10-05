@@ -1200,7 +1200,7 @@ procedure KerberosChannelBinding(const Tls: INetTls; var SecContext: TSecContext
 // 'WWW-Authenticate: Negotiate ...' response header without trailing CRLF
 // - SSPI/GSSAPI processing errors may raise ESynSspi/EGssApi
 // - can optionally return the authenticated user name
-// - define in this unit to avoid a dependency to mormot.net.server.pas
+// - defined in this unit to avoid a dependency to mormot.net.server.pas
 function KerberosServerAuthHeader(const InputHeaders: RawUtf8;
   InputAuth: PUtf8Char = nil; AuthUser: PRawUtf8 = nil): RawUtf8;
 {$endif NOKERBEROSCLIENT}

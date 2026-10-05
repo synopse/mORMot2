@@ -3224,6 +3224,8 @@ begin
   fIocpAccept.Unsubscribe(fIocpAcceptSub);
   fIocpAccept.Terminate;
   {$endif USE_WINIOCP}
+  if fSockets <> nil then
+    fSockets.fTerminated := true; // shutdown ASAP
   Terminate;
   // terminate the main clients asynchronous logic
   if fSockets <> nil then
@@ -4176,6 +4178,8 @@ begin
   if fFlag2 <> 0 then // fFlag1 used by TAsyncConnections.Shutdown
     exit;             // use this counter to avoid duplicated calls
   inc(fFlag2);
+  if fSockets <> nil then
+    fSockets.fTerminated := true; // shutdown ASAP
   Terminate;
   for i := 0 to high(fThreads) do
     with fThreads[i] do
@@ -4200,8 +4204,9 @@ begin
     begin
       if fSocketsEpoll then
       begin
-        // subscribe this writable socket to release epoll_wait() in R0 thread
+        // subscribe this writable socket to release epoll_wait() in all threads
         fSockets.fRead.Subscribe(touchandgo, [pseWrite], {tag=}0);
+        fSockets.fWrite.Subscribe(touchandgo, [pseWrite], {tag=}0);
         ev := touchandgo.WaitFor(100, [neRead, neError]);
         DoLog(sllTrace, 'Shutdown epoll WaitFor=%', [byte(ev)], self);
         SleepHiRes(1);
