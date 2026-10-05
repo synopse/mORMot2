@@ -298,7 +298,7 @@ type
     procedure InternalClose; override;
   published
     /// internal HTTP/1.1 compatible client
-    // - can be used e.g. to access SendTimeout and ReceiveTimeout properties
+    // - exposes ConnectTimeout, SendTimeout and ReceiveTimeout properties
     // - call first IsOpen e.g. to initialize this Socket property before any
     // REST command like ClientSetUser(), e.g. to call Socket.AuthorizeBasic()
     property Socket: THttpClientSocket
@@ -800,16 +800,27 @@ begin
 end;
 
 procedure TRestHttpClientSocket.InternalOpen;
+var
+  sock: THttpClientSocket;
 begin
   if fSocketClass = nil then
     fSocketClass := THttpClientSocket;
-  fSocket := fSocketClass.Open(
-    fServer, fPort, nlTcp, fConnectTimeout, fHttps, @fExtendedOptions.TLS);
+  sock := fSocketClass.Create(fReceiveTimeout);
+  try
+    // configure all phases before connecting, including proxy/TLS setup
+    sock.SetTimeouts(fConnectTimeout, fSendTimeout, fReceiveTimeout);
+    sock.TLS := fExtendedOptions.TLS;
+    sock.OpenBind(fServer, fPort, {bind=}false, fHttps, nlTcp);
+    fExtendedOptions.TLS := sock.TLS; // copy back Peer information
+  except
+    sock.Free; // OpenBind() connection failure
+    raise;
+  end;
+  fSocket := sock;
   {$ifdef VERBOSECLIENTLOG}
   if LogClass <> nil then
     fSocket.OnLog := LogClass.DoLog; // verbose log
   {$endif VERBOSECLIENTLOG}
-  fSocket.SetTimeouts(fConnectTimeout, fSendTimeout, fReceiveTimeout);
   // note that first registered algo will be the preferred one
   {$ifndef PUREMORMOT2}
   if hcSynShaAes in Compression then
