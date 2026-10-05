@@ -638,6 +638,8 @@ type
       out aConnection: TAsyncConnection): boolean; virtual;
     function ConnectionNew(aSocket: TNetSocket; aConnection: TAsyncConnection;
       aAddAndSubscribe: boolean = true): boolean; virtual;
+    procedure ConnectionAbortAndNil(var aConnection: TAsyncConnection;
+      aCallerSocket: TNetSocket = nil);
     function ConnectionDelete(
       aConnection: TPollAsyncConnection): boolean; overload; virtual;
     function LockedConnectionDelete(
@@ -3288,7 +3290,7 @@ begin
   if not ConnectionCreate(client, addr, result) then
     client.ShutdownAndClose({rdwr=}false)
   else if not fSockets.Start(result) then
-    FreeAndNil(result);
+    ConnectionAbortAndNil(result);
 end;
 
 procedure TAsyncConnections.DoLog(Level: TSynLogLevel; TextFmt: PUtf8Char;
@@ -3305,31 +3307,38 @@ var
   pool: PPollAsyncConnections;
 begin
   // you can override this class then call ConnectionNew
+  result := false;
+  aConnection := nil;
   if Terminated then
-    result := false
-  else
+    exit;
+  // first try to recycle 2nd gen instances e.g. for short-living HTTP/1.0
+  pool := @fGC2;
+  if (pool^.Count > 0) and
+     pool^.Safe.TryLock then
   begin
-    aConnection := nil;
-    // first try to recycle 2nd gen instances e.g. for short-living HTTP/1.0
-    pool := @fGC2;
-    if (pool^.Count > 0) and
-       pool^.Safe.TryLock then
+    if pool^.Count > 0 then
     begin
-      if pool^.Count > 0 then
-      begin
-        dec(pool^.Count);
-        aConnection := TAsyncConnection(pool^.Items[pool^.Count]);
-      end;
-      pool^.Safe.UnLock;
+      dec(pool^.Count);
+      aConnection := TAsyncConnection(pool^.Items[pool^.Count]);
     end;
-    if aConnection = nil then
-      // need to allocate and initialize a new instance
-      aConnection := fConnectionClass.Create(self, aRemoteIp)
-    else
-      // reuse the existing instance of a closed connection
-      aConnection.Recycle(aRemoteIP);
-    result := ConnectionNew(aSocket, aConnection, {add=}false);
+    pool^.Safe.UnLock;
   end;
+  if aConnection = nil then
+    // need to allocate and initialize a new instance
+    aConnection := fConnectionClass.Create(self, aRemoteIp)
+  else
+    // reuse the existing instance of a closed connection
+    aConnection.Recycle(aRemoteIP);
+  try
+    result := ConnectionNew(aSocket, aConnection, {add=}false);
+    // with aAddAndSubscribe=false, an initial read belongs to its pending queue
+    // or worker until it closes, or SubscribeConnection registers further I/O
+  except
+    on E: Exception do
+      DoLog(sllWarning, 'ConnectionCreate failed as %', [E], self);
+  end;
+  if not result then
+    ConnectionAbortAndNil(aConnection, aSocket); //
 end;
 
 function TAsyncConnections.ConnectionNew(aSocket: TNetSocket;
@@ -3360,7 +3369,8 @@ begin
     DoLog(sllTrace, 'ConnectionNew % sock=% count=% gc=%',
       [aConnection, pointer(aSocket), fConnectionCount,
        ifFromGC in aConnection.fInternalFlags], self);
-  result := true; // indicates aSocket owned by the pool
+  result := true;
+  // aConnection owns aSocket; caller must call Start or ConnectionAbortAndNil
 end;
 
 function TAsyncConnections.LockedConnectionDelete(aConnection: TAsyncConnection;
@@ -3657,6 +3667,24 @@ begin
     end;
   if not result then
     DoLog(sllTrace, 'ConnectionRemove(%)=false', [Handle], self);
+end;
+
+procedure TAsyncConnections.ConnectionAbortAndNil(var aConnection: TAsyncConnection;
+  aCallerSocket: TNetSocket);
+var
+  c: TAsyncConnection;
+begin
+  c := aConnection;
+  aConnection := nil;
+  if (c = nil) or
+     (ifInGC in c.fInternalFlags) then
+    exit;
+  if c.fSocket = aCallerSocket then
+    c.fSocket := nil; // the accept caller will close its rejected socket
+  if fInList in c.fFlags then
+    fSockets.CloseConnection(TPollAsyncConnection(c), 'ConnectionAbortAndNil')
+  else
+    c.Free; // ConnectionNew never registered this instance
 end;
 
 procedure TAsyncConnections.EndConnection(connection: TAsyncConnection);
@@ -4385,7 +4413,7 @@ begin
             {$endif USE_WINIOCP}
           end
           else if connection <> nil then // connection=nil for custom list
-            ConnectionDelete(connection);
+            ConnectionAbortAndNil(connection);
         end
         else
           client.ShutdownAndClose({rdwr=}false);
@@ -4684,7 +4712,16 @@ var
       fOwner.DoLog(sllDebug, 'StartRequest(% %/%)=%',
         [aMethod, aUrl.Server, aUrl.Address, ToText(result)^], self);
     finally
-      FreeAndNil(c);
+      {$ifdef USE_WINIOCP}
+      // ConnectEx was prepared on the accept queue, not the recv/send queue.
+      if c.fIocpSub <> nil then
+      begin
+        fOwner.fIocpAccept.Unsubscribe(c.fIocpSub);
+        c.fIocpSub := nil; // a terminated queue keeps its entry until Destroy
+      end;
+      {$endif USE_WINIOCP}
+      fOwner.ConnectionAbortAndNil(TAsyncConnection(c), sock);
+      sock.ShutdownAndClose({rdwr=}false); // not transferred by ConnectionNew
       if (aDestFileName <> '') and
          not DeleteFile(aDestFileName) then
         fOwner.DoLog(sllLastError, 'StartRequest: DeleteFile(%) failed',
