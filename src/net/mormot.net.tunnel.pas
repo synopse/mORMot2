@@ -1019,8 +1019,8 @@ begin
   finally
     fSafe.UnLock;
   end;
-  if (fTransmit <> nil) and // happens on early closure
-     (frame <> '') then     // outside of the lock, just like SendFrame()
+  if Assigned(fTransmit) and // happens on early closure
+     (frame <> '') then      // outside of the lock, just like SendFrame()
     try
       fTransmit.TunnelSend(frame); // notify the other end of closure
     except
@@ -1161,7 +1161,8 @@ end;
 procedure TTunnelLocal.SendFrame(const Frame: RawByteString);
 begin
   // mostly called from TTunnelLocalThread.DoExecute
-  if self = nil then
+  if (self = nil) or
+     not Assigned(fTransmit) then
     exit;
   fSafe.Lock;
   try
