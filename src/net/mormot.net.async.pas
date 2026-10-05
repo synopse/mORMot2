@@ -1613,6 +1613,8 @@ begin
 end;
 
 destructor TPollAsyncConnection.Destroy;
+var
+  sock: TNetSocket;
 begin
   // note: our light locks do not need any specific release
   try
@@ -1622,6 +1624,21 @@ begin
       except
       end;
     BeforeDestroy;
+    // release the socket if Stop() did not, e.g. at shutdown
+    sock := fSocket;
+    if {$ifdef USE_WINIOCP} (fIocpSub = nil) and {$endif}
+       // TWinIocp.Destroy did already close its subscribed sockets
+       (sock <> nil) then
+    begin
+      fSocket := nil;
+      try
+        fSecure := nil;          // perform TLS shutdown
+      except
+        pointer(fSecure) := nil; // leak better than propagated GPF
+      end;
+      sock.SetLinger(-1);        // don't wait for each peer
+      sock.ShutdownAndClose({rdwr=}false);
+    end;
     // finalize the instance
     fHandle := 0; // to detect any dangling pointer
   except
