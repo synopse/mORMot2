@@ -101,6 +101,9 @@
 {.$define NOGSSAPIAUTH}
 // disable POSIX mormot.lib.gsssapi support in mormot.rest.client/server units
 
+{.$define NOKERBEROSCLIENT}
+// disable SSPI/GSSAPI support in mormot.net.client.pas
+
 {.$define NOPOINTEROFFSET}
 // disable TOrmTable offsets on 64-bit for JSON > 2GB
 

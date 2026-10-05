@@ -580,7 +580,7 @@ function ServerSspiDataNtlm(const aInData: RawByteString): boolean;
 // - will raise an EGssApi if authentication failed (e.g. invalid credentials)
 // - server must send aOutData to the client (if any), and if True was returned,
 // call this function again with any new data receive from the client
-// - consider mormot.net.server HTTP "Negotiate" ServerSspiAuthHeader() wrapper
+// - consider mormot.net.client HTTP "Negotiate" KerberosServerAuthHeader() wrapper
 function ServerSspiAuth(var aSecContext: TSecContext;
   const aInData: RawByteString; out aOutData: RawByteString): boolean;
 
@@ -589,7 +589,7 @@ function ServerSspiAuth(var aSecContext: TSecContext;
 // - aUserName contains authenticated user name, as 'NETBIOSNAME\username' pattern,
 // following ServerDomainMapRegister() mapping, or 'REALM.TLD\username' if
 // global ServerDomainMapUseRealm was forced to true
-// - consider mormot.net.server HTTP "Negotiate" ServerSspiAuthHeader() wrapper
+// - consider mormot.net.client HTTP "Negotiate" KerberosServerAuthHeader() wrapper
 procedure ServerSspiAuthUser(var aSecContext: TSecContext;
   out aUserName: RawUtf8);
 
@@ -620,7 +620,7 @@ type
     procedure _SetKeyTab(const aKeyTab: TFileName);
     function _GetKeyTab: TFileName;
   public
-    /// each thread should call this method before ServerSspiAuthHeader()
+    /// each thread should call this method before KerberosServerAuthHeader()
     // - will do nothing if the thread is already prepared for the keytab
     procedure PrepareKeyTab;
     /// propagate a keytab file to all server threads

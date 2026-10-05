@@ -980,7 +980,7 @@ function ServerSspiDataNtlm(const aInData: RawByteString): boolean;
 // - will raise an ESynSspi if authentication failed (e.g. invalid credentials)
 // - server must send aOutData to the client (if any), and if True was returned,
 // call this function again with any new data receive from the client
-// - consider mormot.net.server HTTP "Negotiate" ServerSspiAuthHeader() wrapper
+// - consider mormot.net.client HTTP "Negotiate" KerberosServerAuthHeader() wrapper
 function ServerSspiAuth(var aSecContext: TSecContext;
   const aInData: RawByteString; out aOutData: RawByteString): boolean;
 
@@ -988,7 +988,7 @@ function ServerSspiAuth(var aSecContext: TSecContext;
 // - aSecContext must be received from a previous successful call to
 // ServerSspiAuth()
 // - aUserName contains authenticated user name
-// - consider mormot.net.server HTTP "Negotiate" ServerSspiAuthHeader() wrapper
+// - consider mormot.net.client HTTP "Negotiate" KerberosServerAuthHeader() wrapper
 procedure ServerSspiAuthUser(var aSecContext: TSecContext;
   out aUserName: RawUtf8);
 

@@ -56,10 +56,10 @@ uses
   {$ifdef USELIBCURL}  // as set in mormot.defines.inc
   mormot.lib.curl,
   {$endif USELIBCURL}
-  {$ifdef DOMAINRESTAUTH}
+  {$ifndef NOKERBEROSCLIENT}
   mormot.lib.sspi,   // void unit on POSIX
   mormot.lib.gssapi, // void unit on Windows
-  {$endif DOMAINRESTAUTH}
+  {$endif NOKERBEROSCLIENT}
   mormot.crypt.core,
   mormot.crypt.secure;
 
@@ -855,9 +855,9 @@ type
     fOnAfterRequest: TOnHttpClientSocketRequest;
     fOnRedirect: TOnHttpClientSocketRequest;
     fConnectTimeout, fSendTimeout, fReceiveTimeout: integer;
-    {$ifdef DOMAINRESTAUTH}
+    {$ifndef NOKERBEROSCLIENT}
     fAuthorizeSspiSpn: RawUtf8;
-    {$endif DOMAINRESTAUTH}
+    {$endif NOKERBEROSCLIENT}
     procedure SetAuthBearer(const Value: SpiUtf8);
     procedure SetSendTimeout(aSendTimeout: integer); override;
     procedure SetReceiveTimeout(aReceiveTimeout: integer); override;
@@ -974,7 +974,7 @@ type
     /// setup web authentication using the Digest access algorithm
     procedure AuthorizeDigest(const UserName: RawUtf8; const Password: SpiUtf8;
       Algo: TDigestAlgo = daMD5_Sess);
-    {$ifdef DOMAINRESTAUTH}
+    {$ifndef NOKERBEROSCLIENT}
     /// setup web authentication using Kerberos via SSPI/GSSAPI for this instance
     // - will store the user/paswword credentials, and set OnAuthorizeSspi callback
     // - if Password is '', will search for an existing Kerberos token on UserName
@@ -1012,7 +1012,7 @@ type
     // unless you use a user@TLD or a keytab and the domain is extracted from it
     property AuthorizeSspiSpn: RawUtf8
       read fAuthorizeSspiSpn write fAuthorizeSspiSpn;
-    {$endif DOMAINRESTAUTH}
+    {$endif NOKERBEROSCLIENT}
 
     /// the optional 'Accept: ' header value
     property Accept: RawUtf8
@@ -1184,11 +1184,26 @@ function GetProxyForUri(const uri: RawUtf8;
 // - note that it returns an UTF-8 string as resource URI, not TFileName
 function ExtractResourceName(const uri: RawUtf8; sanitize: boolean = true): RawUtf8;
 
-{$ifdef DOMAINRESTAUTH}
+{$ifndef NOKERBEROSCLIENT}
 /// setup Kerberos tls-server-end-point channel binding on a given TLS connection
 procedure KerberosChannelBinding(const Tls: INetTls; var SecContext: TSecContext;
   var Temp: THash512Rec);
-{$endif DOMAINRESTAUTH}
+
+/// parse HTTP input headers and perform Negotiate/Kerberos Server authentication
+// - is a cross-platform wrapper over SSPI on Windows and GSSAPI on POSIX
+// - validate InputAuth or 'Authorization: Negotiate <base64>' in InputHeaders
+// - assumes a simple single-roundtrip Negotiate/Kerberos handshake
+// - NTLM is explicitly rejected - requires Kerberos from Negotiate on Windows
+// - on POSIX, the caller may call TServerSspiKeyTab.PrepareKeyTab beforehand to
+// select a specific keytab; otherwise the default GSSAPI credentials are used
+// - returns '' if no valid authentication could be completed, otherwise the
+// 'WWW-Authenticate: Negotiate ...' response header without trailing CRLF
+// - SSPI/GSSAPI processing errors may raise ESynSspi/EGssApi
+// - can optionally return the authenticated user name
+// - define in this unit to avoid a dependency to mormot.net.server.pas
+function KerberosServerAuthHeader(const InputHeaders: RawUtf8;
+  InputAuth: PUtf8Char = nil; AuthUser: PRawUtf8 = nil): RawUtf8;
+{$endif NOKERBEROSCLIENT}
 
 
 { ******************** Additional Client Protocols Support }
@@ -3855,12 +3870,12 @@ begin
     fAuthDigestAlgo := daMD5_Sess;
   end
   else if fExtendedOptions.Auth.Scheme in wraNegotiates then
-    {$ifdef DOMAINRESTAUTH}
-    fOnAuthorize := OnAuthorizeSspi;     // as AuthorizeSspiUser()
-    {$else}
+    {$ifdef NOKERBEROSCLIENT}
     EHttpSocket.RaiseUtf8('%.Open: unsupported AuthScheme=%',
       [self, ToText(fExtendedOptions.Auth.Scheme)^]);
-    {$endif DOMAINRESTAUTH}
+    {$else}
+    fOnAuthorize := OnAuthorizeSspi;     // as AuthorizeSspiUser()
+    {$endif NOKERBEROSCLIENT}
   TLS := fExtendedOptions.TLS;
   pu := GetSystemProxyUri(aUri.URI, fExtendedOptions.Proxy, temp);
   if pu <> nil then
@@ -4869,7 +4884,7 @@ begin
   result := true;
 end;
 
-{$ifdef DOMAINRESTAUTH}
+{$ifndef NOKERBEROSCLIENT}
 
 procedure KerberosChannelBinding(const Tls: INetTls; var SecContext: TSecContext;
   var Temp: THash512Rec);
@@ -4885,6 +4900,45 @@ begin
   SecContext.ChannelBindingsHashLen := HashForChannelBinding(cert, hasher, Temp);
   if SecContext.ChannelBindingsHashLen <> 0 then
       SecContext.ChannelBindingsHash := @Temp;
+end;
+
+function KerberosServerAuthHeader(const InputHeaders: RawUtf8;
+  InputAuth: PUtf8Char; AuthUser: PRawUtf8): RawUtf8;
+var
+  authend: PUtf8Char;
+  bin, bout: RawByteString;
+  ctx: TSecContext;
+begin
+  FastAssignNew(result);
+  if AuthUser <> nil then
+    AuthUser^ := '';
+  // locate and parse 'Authorization: Negotiate <base64>'
+  if InputAuth = nil then
+    InputAuth := FindNameValue(pointer(InputHeaders), 'AUTHORIZATION: NEGOTIATE ');
+  if (InputAuth = nil) or
+     not InitializeDomainAuth then
+    exit;
+  authend := PosChar(InputAuth, #13);
+  if (authend = nil) or
+     not Base64ToBin(PAnsiChar(InputAuth), authend - InputAuth, bin) or
+     ServerSspiDataNtlm(bin) then
+    exit;
+  // make the actual authentication using SSPI or GSSAPI
+  InvalidateSecContext(ctx);
+  try
+    if ServerSspiAuth(ctx, bin, bout) then // may raise ESynSspi/EGssApi
+      exit; // only a single roundtrip is supported yet
+    {$ifdef OSWINDOWS} // explicit NTLM rejection is needed on Windows
+    if not PropNameEquals(SecPackageName(ctx), 'Kerberos') then
+      exit;
+    {$endif OSWINDOWS}
+    if AuthUser <> nil then
+      ServerSspiAuthUser(ctx, AuthUser^); // retrieve the authenticated identity
+    // return the token generated by GSSAPI/SSPI as an HTTP response header
+    result := BinToBase64(bout, SECPKGNAMEHTTPWWWAUTHENTICATE, '', false);
+  finally
+    FreeSecContext(ctx);
+  end;
 end;
 
 // see https://developer.mozilla.org/en-US/docs/Web/HTTP/Authentication
@@ -4996,7 +5050,7 @@ begin
   result := false; // final RequestInternal() was done within DoSspi()
 end;
 
-{$endif DOMAINRESTAUTH}
+{$endif NOKERBEROSCLIENT}
 
 function OpenHttp(const aServer, aPort: RawUtf8; aTLS: boolean;
   aLayer: TNetLayer; const aUrlForProxy: RawUtf8;
