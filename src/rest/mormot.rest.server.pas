@@ -1293,6 +1293,12 @@ type
   // as plain password value
   // - this class is not available on some targets (e.g. Android)
   TRestServerAuthenticationSspi = class(TRestServerAuthenticationSignedUri)
+  protected
+    {$ifdef OSPOSIX} // keytab files is a POSIX/GSSAPI specific feature
+    fSspiKeyTab: TServerSspiKeyTab;
+    procedure SetKeyTab(const aKeyTab: TFileName);
+    function GetKeyTab: TFileName;
+    {$endif OSPOSIX}
   public
     /// initialize this SSPI/GSSAPI authentication scheme
     constructor Create(aServer: TRestServer); override;
@@ -1301,6 +1307,11 @@ type
     // to a Windows SSPI API secure challenge
     function Auth(Ctxt: TRestServerUriContext;
       const aUserName: RawUtf8): boolean; override;
+    {$ifdef OSPOSIX}
+    /// the keytab file name propagated to all server threads (POSIX only)
+    property KeyTab: TFileName
+      read GetKeyTab write SetKeyTab;
+    {$endif OSPOSIX}
   end;
 
   {$endif DOMAINRESTAUTH}
@@ -5737,6 +5748,18 @@ begin
   inherited Create(aServer);
 end;
 
+{$ifdef OSPOSIX}
+procedure TRestServerAuthenticationSspi.SetKeyTab(const aKeyTab: TFileName);
+begin
+  TServerSspiKeyTab.FileSetter(fSspiKeyTab, aKeyTab, fServer.LogClass.DoLog, self);
+end;
+
+function TRestServerAuthenticationSspi.GetKeyTab: TFileName;
+begin
+  result := fSspiKeyTab.KeyTab;
+end;
+{$endif OSPOSIX}
+
 // about Browser support and SPNEGO handshake via HTTP headers, see e.g.
 // https://learn.microsoft.com/en-us/previous-versions/ms995330(v=msdn.10)
 
@@ -5803,6 +5826,11 @@ begin
   InvalidateSecContext(sec);
   try
     try
+      // optional TRestServerAuthenticationSspi.KeyTab support with GSSAPI
+      {$ifdef OSPOSIX}
+      if Assigned(fSspiKeyTab) then
+        fSspiKeyTab.PrepareKeyTab; // do nothing if no KeyTab changed or set
+      {$endif OSPOSIX}
       // code below raise ESynSspi/EGssApi on authentication error
       if ServerSspiAuth(sec, data, outdata) then
       begin
