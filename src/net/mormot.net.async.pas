@@ -296,6 +296,9 @@ type
       events: TPollSocketEvents): boolean; virtual; abstract;
     procedure OnClosed(connection: TPollAsyncConnection); virtual; abstract;
     procedure RegisterConnection(connection: TPollAsyncConnection); virtual; abstract;
+    {$ifndef USE_WINIOCP}
+    procedure ClosePendingRead;
+    {$endif USE_WINIOCP}
     function SubscribeConnection(const caller: ShortString;
       connection: TPollAsyncConnection; sub: TPollSocketEvent): boolean;
     procedure CloseConnection(var connection: TPollAsyncConnection;
@@ -2235,6 +2238,30 @@ begin
        caller, connection.Handle], self);
 end;
 
+{$ifndef USE_WINIOCP}
+procedure TPollAsyncSockets.ClosePendingRead;
+var
+  i: PtrInt;
+  res: TPollSocketResult;
+  c: TPollAsyncConnection;
+begin
+  // called by TAsyncConnections.Shutdown after all producers/consumers stopped
+  for i := fRead.fPendingIndex to fRead.fPending.Count - 1 do
+  begin
+    // release work still owned by the queue
+    res := fRead.fPending.Events[i];
+    if byte(ResToEvents(res)) = 0 then
+      continue;
+    c := TPollAsyncConnection(ResToTag(res));
+    if (c <> nil) and
+       not (ifInGC in c.fInternalFlags) then
+      CloseConnection(c, 'ClosePendingRead');
+  end;
+  fRead.fPending.Count := 0;
+  fRead.fPendingIndex := 0;
+end;
+{$endif USE_WINIOCP}
+
 procedure TPollAsyncSockets.CloseConnection(
   var connection: TPollAsyncConnection; const caller: ShortString);
 var
@@ -2283,9 +2310,13 @@ begin
   result := true; // if closed or properly read: don't retry
   connection := TPollAsyncConnection(ResToTag(notif));
   if (self = nil) or
-     fTerminated or
      connection.IsClosed then
     exit;
+  if fTerminated then // avoid paranoid leak
+  begin
+    CloseConnection(connection, 'ProcessRead terminated');
+    exit;
+  end;
   connection.fReadThread := Sender;
   LockedInc32(@fProcessingRead);
   try
@@ -2420,6 +2451,10 @@ begin
       end;
     end;
   finally
+    if fTerminated and // avoid paranoid leak
+       (connection <> nil) and
+       not (ifInGC in connection.fInternalFlags) then 
+      CloseConnection(connection, 'ProcessRead shutdown');
     LockedDec32(@fProcessingRead);
   end;
 end;
@@ -2753,19 +2788,21 @@ end;
 function TAsyncConnectionsThread.GetNextRead(
   out notif: TPollSocketResult): boolean;
 begin
-  result := fOwner.fSockets.fRead.GetOnePending(notif, fProcessName) and
-            not Terminated;
-  if result then
-    if (acoThreadSmooting in fOwner.Options) and
-       (fThreadPollingLastWakeUpTix <> fOwner.fThreadPollingLastWakeUpTix) and
-       not (wuFromSlowProcess in fWakeUp) then
-    begin
-      // ProcessRead() did take some time: wake up another thread
-      // - slow down a little bit the wrk RPS
-      // - but seems to reduce the wrk max latency
-      include(fWakeUp, wuFromSlowProcess); // do it once per Execute loop
-      fOwner.ThreadPollingWakeupOne;       // one thread is enough
-    end;
+  result := false;
+  if Terminated or
+     not fOwner.fSockets.fRead.GetOnePending(notif, fProcessName) then
+    exit;
+  result := true;
+  if (acoThreadSmooting in fOwner.Options) and
+     (fThreadPollingLastWakeUpTix <> fOwner.fThreadPollingLastWakeUpTix) and
+     not (wuFromSlowProcess in fWakeUp) then
+  begin
+    // ProcessRead() did take some time: wake up another thread
+    // - slow down a little bit the wrk RPS
+    // - but seems to reduce the wrk max latency
+    include(fWakeUp, wuFromSlowProcess); // do it once per Execute loop
+    fOwner.ThreadPollingWakeupOne;       // one thread is enough
+  end;
 end;
 
 {$endif USE_WINIOCP}
@@ -2846,8 +2883,7 @@ begin
         atpReadSingle:
           // a single thread to rule them all: polling, reading and processing
           if read.GetOne(ms, fProcessName, notif) then
-            if not Terminated then
-              fOwner.fSockets.ProcessRead(self, notif);
+            fOwner.fSockets.ProcessRead(self, notif);
         atpReadPoll:
           // main thread will just fill pending events from socket polls
           // (no process because a faulty service would delay all reading)
@@ -3032,8 +3068,7 @@ end;
 
 procedure TAsyncConnections.AddGC(aConnection: TPollAsyncConnection; const aContext: ShortString);
 begin
-  if Terminated or
-     (aConnection = nil) or
+  if (aConnection = nil) or // no Terminated check here to avoid leaks
      (ifInGC in aConnection.fInternalFlags) then
     exit;
   include(aConnection.fInternalFlags, ifInGC); // ensure AddGC() done once
@@ -3195,7 +3230,7 @@ begin
     DoLog(sllDebug,
       'Shutdown threads=% total=% reads=%/% writes=%/% now=% hi=% pending=%',
       [length(fThreads), fSockets.Total,
-       fSockets.ReadCount, KB(fSockets.ReadBytes),
+       fSockets.ReadCount,  KB(fSockets.ReadBytes),
        fSockets.WriteCount, KB(fSockets.WriteBytes),
        fConnectionCount, fConnectionHigh, fSockets.Count], self);
     fSockets.Terminate(5000);
@@ -3228,10 +3263,20 @@ begin
           end;
     until (n = 0) or
           (mormot.core.os.GetTickCount64 > endtix);
-    FreeAndNilSafe(fSockets); // FreeAndNil() sets nil before which is incorrect
-    ObjArrayClear(fThreads, {continueonexception=}true);
+    ObjArrayClear(fThreads, {continueonexception=}true); // joins the workers
   end;
+  // the accept/client-connect thread can still be rolling back ConnectionNew
+  if (GetCurrentThreadId <> ThreadID) and
+     not Suspended then
+    WaitFor;                   // eventual end of main accept/connect loop
+  {$ifndef USE_WINIOCP}
+  if fSockets <> nil then
+    fSockets.ClosePendingRead; // purge fRead.fPending[]
+  {$endif USE_WINIOCP}
+  FreeAndNilSafe(fSockets);    // release main TAsyncConnectionsSockets
   // there may be some trailing connection instances to be released
+  if not (acoNoConnectionTrack in fOptions) then // we own them
+    ObjArrayClear(fConnection, {continueonexception=}true, @fConnectionCount);
   FreeGC(fGC1);
   FreeGC(fGC2);
 end;
@@ -3391,7 +3436,7 @@ begin
     if acoVerboseLog in fOptions then
       DoLog(sllTrace, 'ConnectionDelete % ndx=% count=% %',
         [aConnection, aIndex, n, MicroSecFrom(start)], self);
-    aConnection.fSocket := nil;   // ensure is known as disabled
+    exclude(aConnection.fFlags, fInList); // only after actual registry removal
     AddGC(aConnection, 'LockedConnectionDelete'); // delayed released
     result := true;
   except
@@ -3440,8 +3485,7 @@ var
 begin
   // don't call fSockets.Stop() here - see ConnectionRemove()
   result := false;
-  if Terminated or
-     (aConnection = nil) or
+  if (aConnection = nil) or // Terminated not here to avoid leaks
      (aConnection.Handle <= 0) then
     exit;
   if not (fInList in aConnection.fFlags) then
@@ -3453,7 +3497,8 @@ begin
     result := true;
     exit;
   end;
-  exclude(aConnection.fFlags, fInList);
+  if Terminated then
+    exit; // registered entries remain owned by fConnection until shutdown
   conn := ConnectionFindAndLock(aConnection.Handle, cWrite, @i);
   if conn <> nil then
     try
@@ -3691,9 +3736,11 @@ procedure TAsyncConnections.EndConnection(connection: TAsyncConnection);
 begin
   if acoNoConnectionTrack in fOptions then
   begin
-    connection.fSocket := nil;
-    AddGC(connection, 'EndConnection'); // delayed released
-    InterlockedDecrement(fConnectionCount);
+    if ifInGC in connection.fInternalFlags then
+      exit;
+    exclude(connection.fFlags, fInList);
+    InterlockedDecrement(fConnectionCount); // before publication to GC
+    AddGC(connection, 'EndConnection'); // also accepts a close during shutdown
   end
   else
     ConnectionDelete(connection);
@@ -4120,7 +4167,6 @@ end;
 procedure TAsyncServer.Shutdown;
 var
   i: PtrInt;
-  len: integer; // should be integer
   ev: TNetEvents;
   nl: TNetLayer;
   touchandgo: TNetSocket; // paranoid ensure Accept() is released
@@ -4153,8 +4199,8 @@ begin
     begin
       if fSocketsEpoll then
       begin
-        len := 1;
-        touchandgo.Send(@len, len);    // release epoll_wait() in R0 thread
+        // subscribe this writable socket to release epoll_wait() in R0 thread
+        fSockets.fRead.Subscribe(touchandgo, [pseWrite], {tag=}0);
         ev := touchandgo.WaitFor(100, [neRead, neError]);
         DoLog(sllTrace, 'Shutdown epoll WaitFor=%', [byte(ev)], self);
         SleepHiRes(1);
@@ -4339,18 +4385,8 @@ begin
         // first check if the server was shut down
         if Terminated then
         begin
-          {$ifndef USE_WINIOCP}
-          // specific behavior from Shutdown method
-          if fSocketsEpoll and
-             (res = nrOK) then
-          begin
-            DoLog(sllDebug, 'Execute: Accept(%) release', [fServer.Port], self);
-            // background subscribe to release epoll_wait() in R0 thread
-            fSockets.fRead.Subscribe(client, [pseRead], {tag=}0);
-            len := 1;
-            client.Send(@len, len); // release touchandgo.WaitFor
-          end;
-          {$endif USE_WINIOCP}
+          if res = nrOk then
+            client.ShutdownAndClose({rdwr=}false);
           break;
         end;
         // check if fServer.Sock.Accept() did return with a socket, or a timeout
@@ -4383,7 +4419,11 @@ begin
         end;
         // handle any socket error in fServer.Sock.Accept()
         if Terminated then
+        begin
+          if res = nrOk then
+            client.ShutdownAndClose({rdwr=}false);
           break;
+        end;
         if res <> nrOK then
         begin
           // failure (too many clients?) -> wait and retry
@@ -4757,8 +4797,9 @@ begin
       exit;
     sock.MakeAsync;
     result := nrRefused;
-    if not fOwner.ConnectionNew(sock, c, {add=}true) then
+    if not fOwner.ConnectionNew(sock, c) then
       exit;
+    sock := nil; // now owned by c; failure cleanup uses ConnectionAbort
     if aDestFileName <> '' then
     begin
       fOwner.DoLog(sllTrace, 'StartRequest(% %/%) %',
@@ -4813,7 +4854,8 @@ begin
     result := addr.SocketConnect(c.fSocket, -1); // ms=-1 for non-blocking
     if result <> nrOk then
       exit;
-    if fOwner.fSockets.fWrite.Subscribe(c.fSocket, [pseWrite], tag) then
+    result := nrNoSocket;
+    if fOwner.fSockets.SubscribeConnection('client', c, pseWrite) then
       result := nrOk;
     {$endif USE_WINIOCP}
   finally

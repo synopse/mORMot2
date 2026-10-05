@@ -1233,7 +1233,7 @@ begin
     result := OpenInternal(Sess, Transmit, TransmitOptions, TimeOutMS, AppSecret,
       sock, port, bound, InfoNameValue, SignCert, VerifyCert);
   except
-    sock.ShutdownAndClose({rdwr=}true); // manual cleanup of the socket FD
+    sock.ShutdownAndClose({rdwr=}true); // manual cleanup of the socket handle
     sock := nil;
     raise;
   end;
@@ -1264,7 +1264,7 @@ begin
     result := OpenInternal(Sess, Transmit, TransmitOptions, TimeOutMS, AppSecret,
       sock, LocalPort, {SocketBound=}false, InfoNameValue, SignCert, VerifyCert);
   except
-    sock.ShutdownAndClose({rdwr=}true); // manual cleanup of the socket FD
+    sock.ShutdownAndClose({rdwr=}true); // manual cleanup of the socket handle
     sock := nil;
     raise;
   end;
@@ -1453,7 +1453,7 @@ begin
         ClosePort
       else
       begin
-        Sock.ShutdownAndClose({rdwr=}true); // manual cleanup of the socket FD
+        Sock.ShutdownAndClose({rdwr=}true); // socket handle cleanup
         Sock := nil; // any error would abort and return 0
       end;
       result := 0;
