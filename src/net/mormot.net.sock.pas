@@ -2097,7 +2097,9 @@ type
     fFlags: TCrtSocketFlags;
     fSocketLayer: TNetLayer;
     fSocketFamily: TNetFamily;
-    fTimeOut: integer;
+    fSocketConnecting: boolean; // emulate a global TimeOut
+    fTimeOut: integer; // legacy timeout, kept for existing descendants
+    fSocketConnectTimeout, fSocketSendTimeout, fSocketReceiveTimeout: integer;
     fSockIn: PTextFile;    // allocated by CreateSockIn with its own buffer
     fSndBufLen: PtrInt;    // updated by every SockSend() call
     fSndBuf: RawByteString;
@@ -2114,14 +2116,16 @@ type
     procedure DoOpenTunnel(aTls: boolean);
     procedure SetKeepAlive(aSeconds: integer); virtual;
     procedure SetLinger(aLinger: integer); virtual;
+    function GetConnectTimeout: integer; {$ifdef HASINLINE}inline;{$endif}
+    function GetSendTimeout: integer;    {$ifdef HASINLINE}inline;{$endif}
+    function GetReceiveTimeout: integer; {$ifdef HASINLINE}inline;{$endif}
     procedure SetReceiveTimeout(aReceiveTimeout: integer); virtual;
     procedure SetSendTimeout(aSendTimeout: integer); virtual;
     procedure SetTcpNoDelay(aTcpNoDelay: boolean); virtual;
     function GetAborted: boolean; virtual;
     function EnsureSockSend(Len: PtrInt): PUtf8Char;
       {$ifdef FPC}inline;{$endif}
-    function GetRawSocket: PtrInt;
-      {$ifdef HASINLINE}inline;{$endif}
+    function GetRawSocket: PtrInt;       {$ifdef HASINLINE}inline;{$endif}
   public
     /// direct access to the optional low-level HTTP proxy tunnelling information
     // - User/Password would be taken into consideration for authentication
@@ -2140,6 +2144,10 @@ type
     // (e.g. TLS, Tunnel, THttpClientWebSockets.Settings) then call ConnectUri()
     // - see also Open/OpenUri/Bind other constructors
     constructor Create(aTimeOut: integer = 10000); reintroduce; virtual;
+    /// set distinct connection, send and receive timeouts in milliseconds
+    // - negative values use the legacy TimeOut value, including its 0 behavior
+    // - can be called before opening the socket; TimeOut remains unchanged
+    procedure SetTimeouts(aConnectTimeout, aSendTimeout, aReceiveTimeout: integer);
     /// constructor to create a client connection to aServer:aPort
     // - see also SocketOpen() for a wrapper catching any connection exception
     // - aTunnel could be populated by mormot.net.client GetSystemProxyUri()
@@ -2289,12 +2297,12 @@ type
     function SockSendRemainingSize: PtrInt;
       {$ifdef HASINLINE}inline;{$endif}
     /// fill the Buffer with Length bytes
-    // - wait TimeOut milliseconds until Length bytes are actually received
+    // - wait ReceiveTimeout milliseconds until Length bytes are actually received
     // - bypass the SockIn^.Buffer
     // - raise ENetSock exception on socket error, or if Length was not reached
     procedure SockRecv(Buffer: pointer; Length: integer); overload;
     /// fill a RawByteString Buffer with Length bytes
-    // - wait TimeOut milliseconds until Length bytes are actually received
+    // - wait ReceiveTimeout milliseconds until Length bytes are actually received
     // - bypass the SockIn^.Buffer
     // - raise ENetSock exception on socket error, or if Length was not reached
     function SockRecv(Length: integer): RawByteString; overload;
@@ -2310,17 +2318,17 @@ type
     // - on TLS use rather SockReceivePending() to check also the socket state
     function SockReceiveHasData: integer;
     /// returns the socket input stream as a RawByteString
-    // - returns up to 64KB from the OS or TLS buffers within TimeOut
+    // - returns up to 64KB from the OS or TLS buffers within ReceiveTimeout
     // - returns '' on nrTimeout or nrClosed
     function SockReceiveString(NetResult: PNetResult = nil;
       RawError: PNetErrorInt = nil): RawByteString;
     /// append the socket input stream to a RawByteString Buffer
-    // - append up to 64KB from the OS or TLS buffers within TimeOut
+    // - append up to 64KB from the OS or TLS buffers within ReceiveTimeout
     // - returns false on nrTimeout or nrClosed, or true on success
     function SockReceiveStringAppend(var Buffer: RawByteString;
       NetResult: PNetResult = nil; RawError: PNetErrorInt = nil): boolean;
     /// fill the Buffer with Length bytes
-    // - use TimeOut milliseconds wait for incoming data
+    // - use ReceiveTimeout milliseconds wait for incoming data
     // - bypass the SockIn^.Buffer
     // - return true on success, or false on any fatal socket error - NetResult^
     // (if not nil) would contain the actual socket error
@@ -2336,13 +2344,13 @@ type
     // of Recv(Sock, bychar, 1) which could fail on Windows when the server closes
     // the socket and the client is broken before all bytes are read
     // - just wrap SockInReadLn() with a 16KB buffer (which is enough e.g. with HTTP)
-    // - use TimeOut milliseconds wait for incoming data
+    // - use ReceiveTimeout milliseconds wait for incoming data
     // - raise ENetSock exception on socket error
     // - will handle #10 or #13#10 as line delimiter (as normal text content)
     procedure SockRecvLn(out Line: RawUtf8); overload;
     /// faster readln(SockIn^) or simulate it with direct use of Recv(Sock, ..)
     // - just wrap SockInReadLn(Buffer=nil)
-    // - use TimeOut milliseconds wait for incoming data
+    // - use ReceiveTimeout milliseconds wait for incoming data
     // - raise ENetSock exception on socket error
     // - any remaining line content is just ignored - as with RTL readln()
     procedure SockRecvLn; overload;
@@ -2399,16 +2407,21 @@ type
     // - see http://www.unixguide.net/network/socketfaq/2.16.shtml
     property TcpNoDelay: boolean
       write SetTcpNoDelay;
-    /// set the SO_SNDTIMEO option for the connection
-    // - i.e. the timeout, in milliseconds, for blocking send calls
+    /// connection establishment timeout in milliseconds
+    // - applies to TCP connect and proxy/TLS setup I/O, not a total deadline
+    // - defaults to TimeOut; negative values restore this default
+    property ConnectTimeout: integer
+      read GetConnectTimeout write fSocketConnectTimeout;
+    /// send timeout in milliseconds for blocking calls and socket retry waits
+    // - defaults to TimeOut; negative values restore this default
     // - see http://msdn.microsoft.com/en-us/library/windows/desktop/ms740476
     property SendTimeout: integer
-      write SetSendTimeout;
-    /// set the SO_RCVTIMEO option for the connection
-    // - i.e. the timeout, in milliseconds, for blocking receive calls
+      read GetSendTimeout write SetSendTimeout;
+    /// receive timeout in milliseconds for blocking calls and socket retry waits
+    // - defaults to TimeOut; negative values restore this default
     // - see http://msdn.microsoft.com/en-us/library/windows/desktop/ms740476
     property ReceiveTimeout: integer
-      write SetReceiveTimeout;
+      read GetReceiveTimeout write SetReceiveTimeout;
     /// set the SO_KEEPALIVE TCP option as seconds before connection detection
     // - default 0 will disable TCP keep-alive packets for the connection
     // - POSIX and latest Windows will set idle=value/2 intvl=value/12 cnt=6
@@ -2461,8 +2474,9 @@ type
     // - e.g. 'http://srvproxy.ad.mycompany.com:8080/'
     property ProxyUrl: RawUtf8
       read fProxyUrl;
-    /// if higher than 0, read loop will wait for incoming data till
-    // TimeOut milliseconds (default value is 10000) - used also in SockSend()
+    /// legacy default timeout in milliseconds (default value is 10000)
+    // - initializes connection, send and receive timeouts unless overridden
+    // - remains read-only and unchanged by the explicit timeout setters
     property TimeOut: integer
       read fTimeOut;
     /// total bytes received
@@ -6965,13 +6979,56 @@ begin
   fSock.SetLinger(aLinger);
 end;
 
+function TCrtSocket.GetConnectTimeout: integer;
+begin
+  result := fSocketConnectTimeout;
+  if result < 0 then // Create set default -1 for backward compatible fTimeOut
+    result := fTimeOut;
+end;
+
+function TCrtSocket.GetSendTimeout: integer;
+begin
+  result := fSocketSendTimeout;
+  if result < 0 then
+    result := fTimeOut;
+end;
+
+function TCrtSocket.GetReceiveTimeout: integer;
+begin
+  result := fSocketReceiveTimeout;
+  if result < 0 then
+    result := fTimeOut;
+end;
+
+procedure TCrtSocket.SetTimeouts(
+  aConnectTimeout, aSendTimeout, aReceiveTimeout: integer);
+begin
+  fSocketConnectTimeout := aConnectTimeout;
+  SetSendTimeout(aSendTimeout);
+  SetReceiveTimeout(aReceiveTimeout);
+end;
+
 procedure TCrtSocket.SetReceiveTimeout(aReceiveTimeout: integer);
 begin
+  fSocketReceiveTimeout := aReceiveTimeout;
+  if not SockIsDefined then
+    exit;
+  if fSocketConnecting then
+    aReceiveTimeout := GetConnectTimeout
+  else
+    aReceiveTimeout := GetReceiveTimeout;
   fSock.SetReceiveTimeout(aReceiveTimeout);
 end;
 
 procedure TCrtSocket.SetSendTimeout(aSendTimeout: integer);
 begin
+  fSocketSendTimeout := aSendTimeout;
+  if not SockIsDefined then
+    exit;
+  if fSocketConnecting then
+    aSendTimeout := GetConnectTimeout
+  else
+    aSendTimeout := GetSendTimeout;
   fSock.SetSendTimeout(aSendTimeout);
 end;
 
@@ -6983,6 +7040,9 @@ end;
 constructor TCrtSocket.Create(aTimeOut: integer);
 begin
   fTimeOut := aTimeOut;
+  fSocketConnectTimeout := -1; // negative values use the legacy fTimeOut value
+  fSocketSendTimeout := -1;
+  fSocketReceiveTimeout := -1;
   if Assigned(OnCrtSocketLog) and
      not Assigned(OnLog) then
     OnLog := OnCrtSocketLog; // global hook for all classes
@@ -7102,7 +7162,7 @@ begin
   // another process and do not interrupt when it got a signal. So we need to
   // set a timeout to unlock accept() periodically and check for termination
   if aAddress = '' then     // external socket
-    ReceiveTimeout := 1000; // unblock accept every second
+    fSock.SetReceiveTimeout(1000); // unblock accept, not client reads
   {$endif OSLINUX}
 end;
 
@@ -7170,7 +7230,7 @@ begin
       [fServer, fPort, fProxyUrl]);
   res := nrOk;
   try
-    res := NewTcpClientSocket(Tunnel.Server, Tunnel.Port, fTimeout,
+    res := NewTcpClientSocket(Tunnel.Server, Tunnel.Port, GetConnectTimeout,
              fSock, @addr, {retry=}2);
     if res = nrOK then
     begin
@@ -7218,7 +7278,7 @@ end;
 procedure TCrtSocket.OpenBind(const aServer, aPort: RawUtf8; doBind,
   aTLS: boolean; aLayer: TNetLayer; aSock: TNetSocket; aReusePort: boolean);
 var
-  retry: integer;
+  retry, sendtimeout, recvtimeout: integer;
   res: TNetResult;
   addr: TNetAddr;
 begin
@@ -7232,64 +7292,88 @@ begin
     include(fFlags, fWasBind);
   if aTLS then
     include(fFlags, fServerTlsEnabled); // for proper reconnection
-  if aSock = NO_SOCKET then
-  begin
-    // OPEN or BIND mode -> create the socket
-    fServer := aServer;
-    if (aPort = '') and
-       (aLayer <> nlUnix) then
-      fPort := DEFAULT_PORT[aTLS] // default port is 80/443 (HTTP/S)
-    else
-      fPort := aPort;
-    if doBind then
-      // allow small number of retries (e.g. XP or BSD during aggressive tests)
-      retry := 10
-    else if (Tunnel.Server <> '') and
-            (Tunnel.Server <> fServer) and
-            (aLayer = nlTcp) then
+  fSocketConnecting := not doBind and (aSock = NO_SOCKET);
+  try
+    if aSock = NO_SOCKET then
     begin
-      // HTTP(S) tunnelling via CONNECT - see also THttpClientSocket.OpenBind
-      DoOpenTunnel(aTLS);
-      exit;
+      // OPEN or BIND mode -> create the socket
+      fServer := aServer;
+      if (aPort = '') and
+         (aLayer <> nlUnix) then
+        fPort := DEFAULT_PORT[aTLS] // default port is 80/443 (HTTP/S)
+      else
+        fPort := aPort;
+      if doBind then
+        // allow small number of retries (e.g. XP or BSD during aggressive tests)
+        retry := 10
+      else if (Tunnel.Server <> '') and
+              (Tunnel.Server <> fServer) and
+              (aLayer = nlTcp) then
+      begin
+        // HTTP(S) tunnelling via CONNECT - see also THttpClientSocket.OpenBind
+        DoOpenTunnel(aTLS);
+        exit;
+      end
+      else
+        // direct client connection
+        retry := {$ifdef OSBSD} 10 {$else} 2 {$endif};
+      //if Assigned(OnLog) then
+      //  OnLog(sllTrace, 'Before NewSocket', [], self);
+      sendtimeout := GetSendTimeout;
+      recvtimeout := GetReceiveTimeout;
+      if fSocketConnecting then
+      begin
+        sendtimeout := GetConnectTimeout;
+        recvtimeout := sendtimeout;
+      end;
+      res := NewSocket(fServer, fPort, aLayer, doBind,
+               GetConnectTimeout, sendtimeout, recvtimeout,
+               retry, fSock, @addr, aReusePort);
+      //if Assigned(OnLog) then
+      //  OnLog(sllTrace, 'After NewSocket=%', [_NR[res]], self);
+      addr.IP(fRemoteIP, true);
+      if  doBind and
+          (fPort = '0') then
+        addr.PortText(fPort); // retrieve the ephemeral port
+      if res <> nrOK then
+        DoRaise('OpenBind(%s:%s): %s [remoteip=%s]',
+          [fServer, fPort, BINDMSG[doBind], fRemoteIP], res);
+      fSocketFamily := addr.Family;
     end
     else
-      // direct client connection
-      retry := {$ifdef OSBSD} 10 {$else} 2 {$endif};
-    //if Assigned(OnLog) then
-    //  OnLog(sllTrace, 'Before NewSocket', [], self);
-    res := NewSocket(fServer, fPort, aLayer, doBind,
-             fTimeout, fTimeout, fTimeout, retry, fSock, @addr, aReusePort);
-    //if Assigned(OnLog) then
-    //  OnLog(sllTrace, 'After NewSocket=%', [_NR[res]], self);
-    addr.IP(fRemoteIP, true);
-    if  doBind and
-        (fPort = '0') then
-      addr.PortText(fPort); // retrieve the ephemeral port
-    if res <> nrOK then
-      DoRaise('OpenBind(%s:%s): %s [remoteip=%s]',
-        [fServer, fPort, BINDMSG[doBind], fRemoteIP], res);
-    fSocketFamily := addr.Family;
-  end
-  else
-  begin
-    // ACCEPT mode -> socket is already created by caller with inherited params
-    fSock := aSock;
-    if TimeOut > 0 then
     begin
-      // set timout values for both directions
-      ReceiveTimeout := TimeOut;
-      SendTimeout := TimeOut;
+      // ACCEPT mode -> socket is already created by caller with inherited params
+      fSock := aSock;
+      // preserve the configured values when initializing an accepted socket
+      if (GetReceiveTimeout > 0) or
+         (fSocketReceiveTimeout >= 0) then
+        SetReceiveTimeout(GetReceiveTimeout);
+      if (GetSendTimeout > 0) or
+         (fSocketSendTimeout >= 0) then
+        SetSendTimeout(GetSendTimeout);
+    end;
+    if (aLayer = nlTcp) and
+       aTLS then
+      if doBind then
+        DoTlsAfter(cstaBind) // never called by OpenBind(aTLS=false) in practice
+      else if aSock = NO_SOCKET then
+        DoTlsAfter(cstaConnect);
+    if Assigned(OnLog) then
+      OnLog(sllTrace, '%(%:%) sock=% %', [BINDTXT[doBind], fServer, fPort,
+        pointer(fSock.Socket), TLS.CipherName], self);
+  finally
+    if fSocketConnecting then
+    begin
+      fSocketConnecting := false;
+      if SockIsDefined then
+      begin
+        if GetSendTimeout <> GetConnectTimeout then
+          fSock.SetSendTimeout(GetSendTimeout);
+        if GetReceiveTimeout <> GetConnectTimeout then
+          fSock.SetReceiveTimeout(GetReceiveTimeout);
+      end;
     end;
   end;
-  if (aLayer = nlTcp) and
-     aTLS then
-    if doBind then
-      DoTlsAfter(cstaBind) // never called by OpenBind(aTLS=false) in practice
-    else if aSock = NO_SOCKET then
-      DoTlsAfter(cstaConnect);
-  if Assigned(OnLog) then
-    OnLog(sllTrace, '%(%:%) sock=% %', [BINDTXT[doBind], fServer, fPort,
-      pointer(fSock.Socket), TLS.CipherName], self);
 end;
 
 function TCrtSocket.ReOpen(aTimeout: cardinal): string;
@@ -7313,6 +7397,8 @@ begin
      (fWasBind in aClient.fFlags) or
      (aClient.Server = '') then
     DoRaise('OpenFrom: invalid client');
+  Create(aClient.TimeOut);
+  SetTimeouts(aClient.ConnectTimeout, aClient.SendTimeout, aClient.ReceiveTimeout);
   Tunnel := aClient.Tunnel;
   TLS := aClient.TLS;
   OnLog := aClient.OnLog;
@@ -7325,6 +7411,13 @@ begin
   // on Linux fd returned from accept() inherits all parent fd options
   // except O_NONBLOCK and O_ASYNC
   fSock := aClientSock;
+  // apply the logical timeouts, which may differ from the listener options
+  if (GetSendTimeout > 0) or
+     (fSocketSendTimeout >= 0) then
+    SetSendTimeout(GetSendTimeout);
+  if (GetReceiveTimeout > 0) or
+     (fSocketReceiveTimeout >= 0) then
+    SetReceiveTimeout(GetReceiveTimeout);
   {$else}
   // on other OS inheritance is undefined, so call OpenBind to set all fd options
   OpenBind('', '', {bind=}false, {tls=}false, fSocketLayer, aClientSock);
@@ -7725,7 +7818,7 @@ begin
         exit; // we got everything we wanted
       if not UseOnlySockIn then
         break;
-      if Timeout = 0 then
+      if GetReceiveTimeout = 0 then
         SleepHiRes(0); // don't burn 100% of CPU
       DoInputSock(r, 'SockInRead', {notvoid=}false);
     until GetAborted;
@@ -7764,8 +7857,8 @@ begin
     cspDataAvailableOnClosedSocket:
       if SockIn <> nil then
       begin
-        backup := fTimeOut;
-        fTimeOut := 0; // not blocking call to fill SockIn buffer
+        backup := fSocketReceiveTimeout;
+        fSocketReceiveTimeout := 0; // only suppress the retry wait, not SO_RCVTIMEO
         try
           // call InputSock() to actually retrieve any pending data
           if InputSock(PTextRec(SockIn)^) = NO_ERROR then
@@ -7774,7 +7867,7 @@ begin
           else
             result := -1; // indicates broken socket
         finally
-          fTimeOut := backup;
+          fSocketReceiveTimeout := backup;
         end;
       end
       else
@@ -8154,7 +8247,7 @@ end;
 function TCrtSocket.TrySockRecv(Buffer: pointer; var Length: integer;
   StopBeforeLength: boolean; NetResult: PNetResult; RawError: PNetErrorInt): boolean;
 var
-  expected, read, pending: integer;
+  expected, read, pending, timeout: integer;
   events: TNetEvents;
   res: TNetResult;
   endtix, remaining: Int64;
@@ -8169,6 +8262,9 @@ begin
   begin
     expected := Length;
     Length := 0;
+    timeout := GetReceiveTimeout;
+    if fSocketConnecting then
+      timeout := GetConnectTimeout;
     repeat
       // first check for any available data
       // - some may be available at fSecure/TLS level, but not from fSock/TCP
@@ -8280,7 +8376,7 @@ end;
 function TCrtSocket.TrySndLow(P: pointer; Len: integer; NetResult: PNetResult;
   RawError: PNetErrorInt): boolean;
 var
-  sent: integer;
+  sent, timeout: integer;
   events: TNetEvents;
   res: TNetResult;
 begin
@@ -8297,6 +8393,9 @@ begin
    res := nrInvalidParameter
   else
   begin
+    timeout := GetSendTimeout;
+    if fSocketConnecting then
+      timeout := GetConnectTimeout;
     repeat
       sent := MinPtrInt(CrtSocketSendRecvMaxBytes, Len);
       if fSecure <> nil then
@@ -8350,6 +8449,7 @@ begin
   if ResultClass = nil then
     ResultClass := TCrtSocket;
   result := ResultClass.Create(Timeout);
+  result.SetTimeouts(GetConnectTimeout, GetSendTimeout, GetReceiveTimeout);
   result.AcceptRequest(client, @addr);
   result.CreateSockIn; // use SockIn with 1KB input buffer: 2x faster
 end;
