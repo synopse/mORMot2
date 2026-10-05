@@ -1019,7 +1019,7 @@ begin
   finally
     fSafe.UnLock;
   end;
-  if frame <> '' then // outside of the lock, just like SendFrame()
+  if (fTransmit <> nil) and (frame <> '') then // outside of the lock, just like SendFrame()
     try
       fTransmit.TunnelSend(frame); // notify the other end of closure
     except
