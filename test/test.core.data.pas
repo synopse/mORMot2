@@ -11141,7 +11141,7 @@ end;
 
 const
   // regression tests use a const table instead of our runtime-computed array
-  c32t: array[byte] of cardinal = ($00000000, $77073096, $EE0E612C,
+  c32t: TByteToCardinal = ($00000000, $77073096, $EE0E612C,
     $990951BA, $076DC419, $706AF48F, $E963A535, $9E6495A3, $0EDB8832, $79DCB8A4,
     $E0D5E91E, $97D2D988, $09B64C2B, $7EB17CBD, $E7B82D07, $90BF1D91, $1DB71064,
     $6AB020F2, $F3B97148, $84BE41DE, $1ADAD47D, $6DDDE4EB, $F4D4B551, $83D385C7,

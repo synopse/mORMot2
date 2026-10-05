@@ -496,6 +496,7 @@ type
   TByteToByte = array[byte] of byte;
   TByteToAnsiChar = array[byte] of AnsiChar;
   TByteToWideChar = array[byte] of WideChar;
+  TByteToCardinal = array[byte] of cardinal;
   /// type of mormot.core.unicode TNormTable lookup table
   TAnsiCharToAnsiChar = array[AnsiChar] of AnsiChar;
   PAnsiCharToAnsiChar = ^TAnsiCharToAnsiChar;

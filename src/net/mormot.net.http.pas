@@ -2932,7 +2932,7 @@ const
 
 function PurgeHeaders(const headers: RawUtf8; trim: boolean; upIgnore: PUtf8Char): RawUtf8;
 var
-  pos, len: array[byte] of word; // delete up to 255 entries
+  pos, len: TByteToWord; // delete up to 255 entries within 0..65335 max size
   n, purged, i, l, tot: PtrInt;
   P, next, last: PUtf8Char;
   h: PUtf8Char absolute headers;
@@ -2947,7 +2947,7 @@ begin
     last := nil;
     if upIgnore = nil then
       upIgnore := TOBEPURGED;
-    if PStrLen(h - _STRLEN)^ <= high(pos[0]) then // void pos[]/len[] overflow
+    if PStrLen(P - _STRLEN)^ <= high(pos[0]) then // void pos[]/len[] overflow
       while P^ <> #0 do
       begin
         next := GotoNextLineSmall(P);

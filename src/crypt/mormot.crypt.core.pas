@@ -2877,7 +2877,7 @@ var
   AesNiHashKey: PHash512; // = AesNiHashAntiFuzzTable
   {$endif USEAESNIHASH}
   // filled by ComputeAesStaticTables if needed - don't change the order below
-  Td0, Td1, Td2, Td3, Te0, Te1, Te2, Te3: array[byte] of cardinal;
+  Td0, Td1, Td2, Td3, Te0, Te1, Te2, Te3: TByteToCardinal;
   SBox, InvSBox: TByteToByte;
 
 {$ifdef ASMX64}

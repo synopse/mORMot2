@@ -510,9 +510,9 @@ type
     fTab: PAnsiCharToByte; // = XML_KIND[] lookup table (inlined on FPC only)
     {$endif FPCX86NOTPIC}
     fBegin, fCur, fToken, fAfter: PUtf8Char;
-    fStackLen: array[byte] of byte;     // 255-byte names
-    fStackPos: array[byte] of cardinal; // 32-bit offsets from fBegin
-    fSave: array[0..31] of TQwordRec;   // for Save/Restore (len=fStackLen[255])
+    fStackLen: TByteToByte;           // 255-byte names
+    fStackPos: TByteToCardinal;       // 32-bit offsets from fBegin
+    fSave: array[0..31] of TQwordRec; // for Save/Restore (len=fStackLen[255])
   end;
 
 const

@@ -75,7 +75,7 @@ type
     Revision: byte;
     SubAuthorityCount: byte;
     IdentifierAuthority: TSidAuth;
-    SubAuthority: array[byte] of cardinal;
+    SubAuthority: TByteToCardinal;
   end;
   PSid = ^TSid;
   PSids = array of PSid;
@@ -4127,7 +4127,7 @@ var
   OsSecSafe: TLightLock; // global lock shared by this unit
   SDDL_WKS_INDEX: array[TWellKnownSid] of byte; // into 1..48
   SDDL_WKR_INDEX: array[TWellKnownRid] of byte; // into 49..66
-  SID_SDDLW: packed array[byte] of word absolute SID_SDDL;
+  SID_SDDLW: TByteToWord absolute SID_SDDL;
 
 procedure SddlInitialize;
 var

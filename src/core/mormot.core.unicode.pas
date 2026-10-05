@@ -11588,7 +11588,7 @@ var
 
 const
   // 1KB compressed buffer which renders into our 20,016 bytes UU[] array
-  UU_: array[byte] of cardinal = (
+  UU_: TByteToCardinal = (
     $040019fd, $ff5a6024, $00855a00, $ffffffe0, $5a5201f0, $02e700e8, $ffe0aa5a,
     $e0045a4b, $5a790bff, $045a0007, $a045a1ff, $db1878ba, $01a82b01, $0145a000,
     $1da45008, $041e5a80, $401da450, $5a8f185a, $fffffed4, $590b5ac3, $0c5a84a4,
