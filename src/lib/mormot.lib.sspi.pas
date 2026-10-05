@@ -1040,9 +1040,6 @@ const
   // - GSS API only supports Negotiate/Kerberos - NTLM is unsafe and deprecated
   SECPKGNAMEHTTPWWWAUTHENTICATE = 'WWW-Authenticate: Negotiate ';
 
-  /// HTTP header pattern received for authentication
-  SECPKGNAMEHTTPAUTHORIZATION = 'AUTHORIZATION: NEGOTIATE ';
-
   /// by default, no GSSAPI is to be loaded with the Windows SSPI
   GssApi_LastLoadError = '';
 
@@ -2374,7 +2371,7 @@ end;
 
 function ServerSspiDataNtlm(const aInData: RawByteString): boolean;
 begin
-  result := (aInData <> '') and
+  result := (length(aInData) >= SizeOf(cardinal)) and
             (PCardinal(aInData)^ or $20202020 = NTLM_LO);
 end;
 

@@ -618,8 +618,9 @@ type
     fKeyTabSequence: integer; // stored in a threadvar
     fLastRefresh: cardinal;
     procedure _SetKeyTab(const aKeyTab: TFileName);
+    function _GetKeyTab: TFileName;
   public
-    /// each thread should call this method before ServerSspiAuth()
+    /// each thread should call this method before ServerSspiAuthHeader()
     // - will do nothing if the thread is already prepared for the keytab
     procedure PrepareKeyTab;
     /// propagate a keytab file to all server threads
@@ -629,19 +630,13 @@ type
     // - it will allow hot reload of the keytab, only if needed
     // - returns true if the keytab was identified as changed
     function TryRefresh(Tix32: cardinal): boolean;
-    /// parse HTTP input headers and perform Negotiate/Kerberos authentication
-    // - will identify 'Authorization: Negotiate <base64 encoding>' HTTP header
-    // - returns '' on error, or the 'WWW-Authenticate:' header on success
-    // - can optionally return the authenticated user name
-    // - will automatically call TryRefresh to check the file every 2 seconds
-    // - is a cut-down version of THttpServerSocketGeneric.Authorization(),
-    // assuming a simple two-way Negotiate/Kerberos handshake
-    function ComputeServerHeader(const InputHeaders: RawUtf8;
-      AuthUser: PRawUtf8 = nil): RawUtf8;
+    /// wrapper used for a TServerSspiKeyTab-derivated property setter
+    class procedure FileSetter(var aInstance: TServerSspiKeyTab;
+      const aKeyTab: TFileName; const aDoLog: TSynLogProc; aLogSender: TObject);
   published
     /// the keytab file name propagated to all server threads
     property KeyTab: TFileName
-      read fKeyTab write _SetKeyTab;
+      read _GetKeyTab write _SetKeyTab;
     /// the current number of assigned KeyTab since the start of this instance
     property KeyTabSequence: integer
       read fKeyTabSequence;
@@ -669,9 +664,6 @@ const
   /// HTTP header to be set for authentication
   // - GSS API only supports Negotiate/Kerberos - NTLM is unsafe and deprecated
   SECPKGNAMEHTTPWWWAUTHENTICATE = 'WWW-Authenticate: Negotiate ';
-
-  /// HTTP header pattern received for authentication
-  SECPKGNAMEHTTPAUTHORIZATION = 'AUTHORIZATION: NEGOTIATE ';
 
   /// character used as marker in user name to indicates the associated domain
   SSPI_USER_CHAR = '@';
@@ -1357,7 +1349,7 @@ end;
 
 function ServerSspiDataNtlm(const aInData: RawByteString): boolean;
 begin
-  result := (aInData <> '') and
+  result := (length(aInData) >= SizeOf(cardinal)) and
             (PCardinal(aInData)^ or $20202020 = NTLM_LO);
 end;
 
@@ -1629,6 +1621,42 @@ begin
   SetKeyTab(aKeyTab); // encapsulate the function to be used as a setter method
 end;
 
+function TServerSspiKeyTab._GetKeyTab: TFileName;
+begin
+  if self = nil then
+    result := ''
+  else
+    result := fKeyTab;
+end;
+
+class procedure TServerSspiKeyTab.FileSetter(var aInstance: TServerSspiKeyTab;
+  const aKeyTab: TFileName; const aDoLog: TSynLogProc; aLogSender: TObject);
+var
+  res: RawUtf8;
+begin
+  if FileIsKeyTab(aKeyTab) then
+    if InitializeDomainAuth then
+    begin
+      if aInstance = nil then
+      begin
+        GlobalLock;
+        if aInstance = nil then
+          aInstance := TServerSspiKeyTab.Create;
+        GlobalUnLock;
+      end;
+      if aInstance.SetKeyTab(aKeyTab) then
+        res := 'ok'
+      else
+        res := 'SetKeyTab failed';
+    end
+    else
+      res := 'GSSAPI not available'
+  else
+    res := 'invalid file';
+  if Assigned(aDoLog) then
+    aDoLog(sllDebug, 'SetKeyTab(%): %', [aKeyTab, res], aLogSender);
+end;
+
 function TServerSspiKeyTab.TryRefresh(Tix32: cardinal): boolean;
 begin
   result := false;
@@ -1646,46 +1674,6 @@ begin
   fSafe.UnLock;
   if result then
     result := SetKeyTab(fKeyTab);
-end;
-
-function TServerSspiKeyTab.ComputeServerHeader(const InputHeaders: RawUtf8;
-  AuthUser: PRawUtf8): RawUtf8;
-var
-  auth, authend: PUtf8Char;
-  bin, bout: RawByteString;
-  ctx: TSecContext;
-begin
-  FastAssignNew(result);
-  if AuthUser <> nil then
-    AuthUser^ := '';
-  auth := FindNameValue(pointer(InputHeaders), SECPKGNAMEHTTPAUTHORIZATION);
-  if (auth = nil) or
-     not InitializeDomainAuth then // late initialization of the GSS library
-    exit;
-  authend := PosChar(auth, #13); // parse 'Authorization: Negotiate <base64 encoding>'
-  if (authend = nil) or
-     not Base64ToBin(PAnsiChar(auth), authend - auth, bin) or
-     ServerSspiDataNtlm(bin) then // two-way Kerberos only
-    exit;
-  if (self <> nil) and
-     (fKeyTab <> '') then
-  begin
-    TryRefresh(GetTickSec); // check the local keytab file every two seconds
-    PrepareKeyTab;          // thread specific setup for ServerSspiAuth()
-  end;
-  InvalidateSecContext(ctx);
-  try
-    // code below raise ESynSspi/EGssApi on authentication error
-    if ServerSspiAuth(ctx, bin, bout) then
-      // CONTINUE flag = need more input from the client: unsupported yet
-      exit;
-    // now client is authenticated in a single roundtrip: identify the user
-    if AuthUser <> nil then
-      ServerSspiAuthUser(ctx, AuthUser^);
-    result := BinToBase64(bout, SECPKGNAMEHTTPWWWAUTHENTICATE, '', false);
-  finally
-    FreeSecContext(ctx);
-  end;
 end;
 
 
