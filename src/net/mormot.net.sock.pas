@@ -6982,21 +6982,21 @@ end;
 function TCrtSocket.GetConnectTimeout: integer;
 begin
   result := fSocketConnectTimeout;
-  if result < 0 then // Create set default -1 for backward compatible fTimeOut
+  if result = 0 then // Create/default 0 for backward compatible fTimeOut
     result := fTimeOut;
 end;
 
 function TCrtSocket.GetSendTimeout: integer;
 begin
   result := fSocketSendTimeout;
-  if result < 0 then
+  if result = 0 then
     result := fTimeOut;
 end;
 
 function TCrtSocket.GetReceiveTimeout: integer;
 begin
   result := fSocketReceiveTimeout;
-  if result < 0 then
+  if result = 0 then
     result := fTimeOut;
 end;
 
@@ -7039,10 +7039,7 @@ end;
 
 constructor TCrtSocket.Create(aTimeOut: integer);
 begin
-  fTimeOut := aTimeOut;
-  fSocketConnectTimeout := -1; // negative values use the legacy fTimeOut value
-  fSocketSendTimeout := -1;
-  fSocketReceiveTimeout := -1;
+  fTimeOut := aTimeOut; // default fSocketConnect/Send/ReceiveTimeout 0 use this
   if Assigned(OnCrtSocketLog) and
      not Assigned(OnLog) then
     OnLog := OnCrtSocketLog; // global hook for all classes

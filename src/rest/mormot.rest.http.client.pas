@@ -115,7 +115,6 @@ type
     fServer, fPort: RawUtf8;
     fHttps: boolean;
     fProxyName, fProxyByPass: RawUtf8;
-    fSendTimeout, fReceiveTimeout, fConnectTimeout: cardinal;
     fExtendedOptions: THttpRequestExtendedOptions;
     procedure SetCompression(Value: TRestHttpCompressions);
     procedure SetKeepAliveMS(Value: cardinal);
@@ -593,17 +592,17 @@ begin
   fKeepAliveMS := 20000; // 20 seconds connection keep alive by default
   fCompression := []; // may add hcSynLZ or hcDeflate for AJAX clients
   if aConnectTimeout = 0 then
-    fConnectTimeout := HTTP_DEFAULT_CONNECTTIMEOUT
+    fExtendedOptions.ConnectTimeoutMS := HTTP_DEFAULT_CONNECTTIMEOUT
   else
-    fConnectTimeout := aConnectTimeout;
+    fExtendedOptions.ConnectTimeoutMS := aConnectTimeout;
   if aSendTimeout = 0 then
-    fSendTimeout := HTTP_DEFAULT_SENDTIMEOUT
+    fExtendedOptions.SendTimeoutMS := HTTP_DEFAULT_SENDTIMEOUT
   else
-    fSendTimeout := aSendTimeout;
+    fExtendedOptions.SendTimeoutMS := aSendTimeout;
   if aReceiveTimeout = 0 then
-    fReceiveTimeout := HTTP_DEFAULT_RECEIVETIMEOUT
+    fExtendedOptions.ReceiveTimeoutMS := HTTP_DEFAULT_RECEIVETIMEOUT
   else
-    fReceiveTimeout := aReceiveTimeout;
+    fExtendedOptions.ReceiveTimeoutMS := aReceiveTimeout;
   fProxyName := aProxyName;
   fProxyByPass := aProxyByPass;
 end;
@@ -648,9 +647,9 @@ begin
     [Definition.ServerName, fServer, fPort]);
   Definition.DatabaseName := UrlEncode([
     'IgnoreTlsCertificateErrors', ord(fExtendedOptions.TLS.IgnoreCertificateErrors),
-    'ConnectTimeout',             fConnectTimeout,
-    'SendTimeout',                fSendTimeout,
-    'ReceiveTimeout',             fReceiveTimeout,
+    'ConnectTimeout',             fExtendedOptions.ConnectTimeoutMS,
+    'SendTimeout',                fExtendedOptions.SendTimeoutMS,
+    'ReceiveTimeout',             fExtendedOptions.ReceiveTimeoutMS,
     'ProxyName',                  fProxyName,
     'ProxyByPass',                fProxyByPass], [ueTrimLeadingQuestionMark]);
 end;
@@ -669,11 +668,23 @@ begin
   while P <> nil do
   begin
     if UrlDecodeCardinal(P, 'CONNECTTIMEOUT=', V) then
-      fConnectTimeout := V
+    begin
+      if V = 0 then
+        V := HTTP_DEFAULT_CONNECTTIMEOUT;
+      fExtendedOptions.ConnectTimeoutMS := V;
+    end
     else if UrlDecodeCardinal(P, 'SENDTIMEOUT=', V) then
-      fSendTimeout := V
+    begin
+      if V = 0 then
+        V := HTTP_DEFAULT_SENDTIMEOUT;
+      fExtendedOptions.SendTimeoutMS := V;
+    end
     else if UrlDecodeCardinal(P, 'RECEIVETIMEOUT=', V) then
-      fReceiveTimeout := V
+    begin
+      if V = 0 then
+        V := HTTP_DEFAULT_RECEIVETIMEOUT;
+      fExtendedOptions.ReceiveTimeoutMS := V;
+    end
     else if UrlDecodeValue(P, 'PROXYNAME=', tmp) then
       fProxyName := CurrentAnsiConvert.Utf8ToAnsi(tmp)
     else if UrlDecodeValue(P, 'PROXYBYPASS=', tmp) then
@@ -801,22 +812,21 @@ end;
 
 procedure TRestHttpClientSocket.InternalOpen;
 var
-  sock: THttpClientSocket;
+  uri: TUri;
+  opt: THttpRequestExtendedOptions;
 begin
   if fSocketClass = nil then
     fSocketClass := THttpClientSocket;
-  sock := fSocketClass.Create(fReceiveTimeout);
-  try
-    // configure all phases before connecting, including proxy/TLS setup
-    sock.SetTimeouts(fConnectTimeout, fSendTimeout, fReceiveTimeout);
-    sock.TLS := fExtendedOptions.TLS;
-    sock.OpenBind(fServer, fPort, {bind=}false, fHttps, nlTcp);
-    fExtendedOptions.TLS := sock.TLS; // copy back Peer information
-  except
-    sock.Free; // OpenBind() connection failure
-    raise;
-  end;
-  fSocket := sock;
+  uri.Clear;
+  uri.Server := fServer;
+  uri.Port := fPort;
+  uri.Https := fHttps;
+  opt := fExtendedOptions;
+  opt.Proxy := 'none'; // REST sockets connect directly
+  if opt.CreateTimeoutMS = 0 then
+    opt.CreateTimeoutMS := opt.ReceiveTimeoutMS; // preserve legacy TimeOut
+  fSocket := fSocketClass.OpenOptions(uri, opt);
+  fExtendedOptions.TLS := opt.TLS; // copy back Peer information
   {$ifdef VERBOSECLIENTLOG}
   if LogClass <> nil then
     fSocket.OnLog := LogClass.DoLog; // verbose log
@@ -872,12 +882,15 @@ begin
 end;
 
 procedure TRestHttpClientRequest.InternalOpen;
+var
+  connect, send, receive: integer;
 begin
   InternalSetClass;
   if fRequestClass = nil then
     ERestHttpClient.RaiseUtf8('Unsupported %.InternalOpen', [self]);
+  fExtendedOptions.GetTimeouts(connect, send, receive);
   fRequest := fRequestClass.Create(fServer, fPort, fHttps, fProxyName,
-    fProxyByPass, fConnectTimeout, fSendTimeout, fReceiveTimeout);
+    fProxyByPass, connect, send, receive);
   fRequest.ExtendedOptions := fExtendedOptions;
   // note that first registered algo will be the preferred one
   {$ifndef PUREMORMOT2}
