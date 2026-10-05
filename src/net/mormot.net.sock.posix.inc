@@ -1989,30 +1989,31 @@ begin
   if not result then
     exit;
   LockedInc32(@fCount);
-  fMaxSockets := fCount;
+  fMaxSockets := fCount; // TPollSocketEpoll has no actual limitation
 end;
 
 function TPollSocketEpoll.Unsubscribe(socket: TNetSocket): boolean;
 var
   e: TEPoll_Event; // should be there even if not used (old kernel < 2.6.9)
 begin
+  result := false;
   if (self = nil) or
      (socket = nil) or
-     (fEPFD <= 0) or
      (PtrUInt(socket) = PtrUInt(fEPFD)) then
-    result := false
-  else
+    exit;
+  if fEPFD > 0 then
   begin
     result := EpollCtlNoEIntr(fEPFD, EPOLL_CTL_DEL, socket, e);
     if result then
     begin
       LockedDec32(@fCount);
-      fMaxSockets := fCount;
+      fMaxSockets := fCount; // TPollSocketEpoll has no actual limitation
     end;
-    if (fOwner <> nil) and
-       fOwner.fUnsubscribeShutdownSocket then
-      socket.ShutdownAndClose({rdwr=}false);
   end;
+  // eventually close the raw socket if marked as such
+  if (fOwner <> nil) and
+     fOwner.fUnsubscribeShutdownSocket then
+    socket.ShutdownAndClose({rdwr=}false);
 end;
 
 function EpollWaitNoEintr(epfd: integer; events: PEPoll_Event;
