@@ -77,7 +77,8 @@ type
   // - fClosed is set by OnClose virtual method
   // - fFirstRead is set once TPollAsyncSockets.OnFirstRead is called
   // - fSubRead/fSubWrite flags are set when Subscribe() has been called
-  // - fInList indicates that ConnectionAdd() did register the connection
+  // - fRegistered indicates that the connection is owned by TAsyncConnections,
+  // but does not indicate socket subscription or pending processing
   // - fReadPending states that there is a pending event for this connection
   // - fMemClean is set after TPollAsyncConnection.ReleaseMemoryOnIdle success
   // - note: better keep it to 8 items to fit in a byte (faster access)
@@ -89,7 +90,7 @@ type
     fSubRead,
     fSubWrite,
     {$endif USE_WINIOCP}
-    fInList,
+    fRegistered,
     fReadPending,
     fMemClean
   );
@@ -105,7 +106,7 @@ type
     fHandle: TConnectionAsyncHandle;
     /// low-level 8-bit flags used by the state machine about this connection
     fFlags: TPollAsyncConnectionFlags;
-    /// internal 8-bit flags e.g. for fRW[] or IOCP or to mark AddGC()
+    /// internal 8-bit flags e.g. for fRW[] or IOCP or AddGC()
     fInternalFlags: set of (
       ifWriteWait, ifFromGC, ifInGC, ifSeparateWLock, ifProcessing);
     /// the current (reusable) receiving data buffer of this connection
@@ -2197,7 +2198,7 @@ function TPollAsyncSockets.SubscribeConnection(const caller: ShortString;
 var
   tag: TPollSocketTag absolute connection;
 begin
-  if not (fInList in connection.fFlags) then // not already registered
+  if not (fRegistered in connection.fFlags) then // not already registered
     RegisterConnection(connection);
   result := false;
   if not (sub in [pseRead, pseWrite]) then
@@ -3402,7 +3403,7 @@ begin
   end;
   if acoNoConnectionTrack in fOptions then
   begin
-    include(aConnection.fFlags, fInList);
+    include(aConnection.fFlags, fRegistered); // owned by TAsyncConnections
     LockedInc32(@fConnectionCount);
   end
   else if {$ifndef USE_WINIOCP} (fThreadReadPoll = nil) or {$endif}
@@ -3436,7 +3437,7 @@ begin
     if acoVerboseLog in fOptions then
       DoLog(sllTrace, 'ConnectionDelete % ndx=% count=% %',
         [aConnection, aIndex, n, MicroSecFrom(start)], self);
-    exclude(aConnection.fFlags, fInList); // only after actual registry removal
+    exclude(aConnection.fFlags, fRegistered); // only after actual registry removal
     AddGC(aConnection, 'LockedConnectionDelete'); // delayed released
     result := true;
   except
@@ -3449,7 +3450,7 @@ var
   c: ^TPollAsyncConnection;
   i, n: PtrInt;
 begin
-  include(conn.fFlags, fInList); // mark as registered
+  include(conn.fFlags, fRegistered); // owned by TAsyncConnections from now on
   fConnectionLock.WriteLock;
   try
     n := fConnectionCount;
@@ -3488,7 +3489,7 @@ begin
   if (aConnection = nil) or // Terminated not here to avoid leaks
      (aConnection.Handle <= 0) then
     exit;
-  if not (fInList in aConnection.fFlags) then
+  if not (fRegistered in aConnection.fFlags) then // not yet owned
   begin
     // this connection was not part of fConnection[] list nor subscribed
     // e.g. HTTP/1.0 short request
@@ -3726,7 +3727,7 @@ begin
     exit;
   if c.fSocket = aCallerSocket then
     c.fSocket := nil; // the accept caller will close its rejected socket
-  if fInList in c.fFlags then
+  if fRegistered in c.fFlags then // owned connection
     fSockets.CloseConnection(TPollAsyncConnection(c), 'ConnectionAbortAndNil')
   else
     c.Free; // ConnectionNew never registered this instance
@@ -3738,9 +3739,9 @@ begin
   begin
     if ifInGC in connection.fInternalFlags then
       exit;
-    exclude(connection.fFlags, fInList);
+    exclude(connection.fFlags, fRegistered); // not owned any more
     InterlockedDecrement(fConnectionCount); // before publication to GC
-    AddGC(connection, 'EndConnection'); // also accepts a close during shutdown
+    AddGC(connection, 'EndConnection');    // also accepts close during shutdown
   end
   else
     ConnectionDelete(connection);
