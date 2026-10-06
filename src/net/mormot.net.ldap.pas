@@ -8529,13 +8529,14 @@ begin
   InvalidateSecContext(client);
   try
     try
-      if (aFullUserName = nil)
-         {$ifdef OSWINDOWS} and (fGroupSid = nil) {$endif} then
+      {$ifdef OSPOSIX} // this 'onlypass' single pass trick is GSSAPI only
+      if aFullUserName = nil then
         // simple aUser/aPassword credential check needs no server side
         // - see as reference mag_auth_basic() in NGINX's mod_auth_gssapi.c
         result := ClientSspiAuthWithPassword(client, 'onlypass',
                     aUser, aPassword, fKerberosSpn, dataout)
       else
+      {$endif OSPOSIX}
       begin
         // more user information currently requires a ServerSspiAuth() context
         InvalidateSecContext(server);

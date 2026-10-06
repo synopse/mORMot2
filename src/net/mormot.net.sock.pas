@@ -7861,7 +7861,7 @@ begin
       if SockIn <> nil then
       begin
         backup := fSocketReceiveTimeout;
-        fSocketReceiveTimeout := 0; // only suppress the retry wait, not SO_RCVTIMEO
+        fSocketReceiveTimeout := -1; // suppress the retry wait, not SO_RCVTIMEO
         try
           // call InputSock() to actually retrieve any pending data
           if InputSock(PTextRec(SockIn)^) = NO_ERROR then
@@ -8272,7 +8272,7 @@ begin
       // first check for any available data
       // - some may be available at fSecure/TLS level, but not from fSock/TCP
       // - a blocking Recv() may itself wait up to SO_RCVTIMEO = ReceiveTimeout
-      endtix := mormot.core.os.GetTickCount64 + TimeOut;
+      endtix := mormot.core.os.GetTickCount64 + timeout;
       read := MinPtrInt(CrtSocketSendRecvMaxBytes, expected - Length);
       if fSecure <> nil then
         res := fSecure.Receive(Buffer, read)
