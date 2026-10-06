@@ -180,22 +180,20 @@ procedure GetHeaderInfo(const Headers: RawUtf8; out ContentLength: Int64;
 /// remove an HTTP header entry as specified by its name (e.g. 'Authorization')
 function DeleteHeader(const Headers, Name: RawUtf8): RawUtf8;
 
-/// 'HEAD' and 'OPTIONS' methods would be detected and return true
-// - will check only the first four chars for efficiency  - requires method <> ''
-function HttpMethodWithNoBody(const method: RawUtf8): boolean;
-  {$ifdef HASINLINE} inline; {$endif}
+// deprecated ambiguous helper - DO NOT USE any more!
+// - use IsHead() when deciding whether an HTTP response can have content
+// - request content presence must be determined from message framing
+function HttpMethodWithNoBody(const method: RawUtf8): boolean; deprecated;
 
 /// encode some text into a mime header compatible value
 // - see https://tools.ietf.org/html/rfc2047
 function MimeHeaderEncode(const header: RawUtf8): RawUtf8;
 
 /// quick check for case-sensitive 'GET' HTTP method name - requires method <> ''
-// - see also HttpMethodWithNoBody()
 function IsGet(const method: RawUtf8): boolean;
   {$ifdef HASINLINE} inline; {$endif}
 
 /// quick check for case-sensitive 'HEAD' HTTP method name - requires method <> ''
-// - see also HttpMethodWithNoBody()
 function IsHead(const method: RawUtf8): boolean;
   {$ifdef HASINLINE} inline; {$endif}
 
