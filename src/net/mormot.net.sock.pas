@@ -8338,9 +8338,11 @@ end;
 function TCrtSocket.TrySndLow(P: pointer; Len: integer; NetResult: PNetResult;
   RawError: PNetErrorInt): boolean;
 var
-  sent, timeout: integer;
+  sent: integer; // not PtrInt
   events: TNetEvents;
   res: TNetResult;
+  endtix: Int64;
+  remaining: PtrInt;
 begin
   if RawError <> nil then
     RawError^ := NO_ERROR;
@@ -8355,10 +8357,10 @@ begin
    res := nrInvalidParameter
   else
   begin
-    timeout := GetSendTimeout;
-    if fSocketConnecting then
-      timeout := GetConnectTimeout;
     repeat
+      // fSendTimeout is for each Send() call, not for the whole buffer
+      endtix := mormot.core.os.GetTickCount64 + fSendTimeout;
+      // try direct sending to the OS buffers
       sent := MinPtrInt(CrtSocketSendRecvMaxBytes, Len);
       if fSecure <> nil then
         res := fSecure.Send(P, sent)
@@ -8372,13 +8374,15 @@ begin
           break; // all data successfully sent
         inc(PByte(P), sent);
         if res = nrOk then
-          continue;
+          continue; // a full chunk was sent: try another one immediately
       end;
       if GetAborted or
          not (res in [nrOk, nrRetry]) then
         break;
+      // ensure we actually wait for fSendTimeout on the socket
       inc(fRetryCount);
-      events := fSock.WaitFor(TimeOut, [neWrite, neError]); // select() or poll()
+      remaining := MaxPtrInt(0, endtix - mormot.core.os.GetTickCount64);
+      events := fSock.WaitFor(remaining, [neWrite, neError]); // select/poll
       res := nrUnknownError;
       if neError in events then
         break
