@@ -5213,6 +5213,7 @@ begin
   result := SaveNetTlsContext(TLS, Secret);
   v.AddNameValuesToObject([
     'p',  Proxy,
+    'pb', ProxyByPass,
     'as', ord(Auth.Scheme),
     'au', Auth.UserName,
     'ap', Auth.Password,
@@ -5221,6 +5222,7 @@ begin
     'tc', ConnectTimeoutMS,
     'ts', SendTimeoutMS,
     'tr', ReceiveTimeoutMS], {dontAddDefault=}true);
+  // other fields (e.g. about Retry) are request-specific not per connection
   if v.Count = 0 then
     v.Clear;
 end;
@@ -5244,6 +5246,7 @@ begin
     exit;
   LoadNetTlsContext(TLS, v^, Secret);
   v^.GetAsRawUtf8('p', Proxy);
+  v^.GetAsRawUtf8('pb', ProxyByPass);
   if v^.GetAsInteger('as', s) and
      (cardinal(s) <= cardinal(high(Auth.Scheme))) then
     Auth.Scheme := THttpRequestAuthentication(s);
