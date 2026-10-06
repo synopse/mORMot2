@@ -2144,6 +2144,8 @@ type
     // (e.g. TLS, Tunnel, THttpClientWebSockets.Settings) then call ConnectUri()
     // - see also Open/OpenUri/Bind other constructors
     constructor Create(aTimeOut: integer = 10000); reintroduce; virtual;
+    /// set all three timeout properties at once
+    procedure SetTimeouts(aConn, aSend, aRecv: integer);
     /// copy the timeouts of another TCrtSocket instance
     procedure SetTimeoutsFrom(aSock: TCrtSocket);
     /// constructor to create a client connection to aServer:aPort
@@ -6976,12 +6978,17 @@ begin
   fSock.SetLinger(aLinger);
 end;
 
+procedure TCrtSocket.SetTimeouts(aConn, aSend, aRecv: integer);
+begin
+  fConnectTimeout := aConn;
+  SetSendTimeout(aSend);    // virtual setters
+  SetReceiveTimeout(aRecv);
+  ApplySocketTimeouts;
+end;
+
 procedure TCrtSocket.SetLegacyTimeOut(Value: integer);
 begin
-  fConnectTimeout := Value;
-  fReceiveTimeout := Value;
-  fSendTimeout    := Value;
-  ApplySocketTimeouts;
+  SetTimeouts(Value, Value, Value); // one timeout to rule them all
 end;
 
 procedure TCrtSocket.ApplySocketTimeouts;
@@ -7004,9 +7011,7 @@ end;
 
 procedure TCrtSocket.SetTimeoutsFrom(aSock: TCrtSocket);
 begin
-  fConnectTimeout := aSock.fConnectTimeout;
-  fSendTimeout    := aSock.fSendTimeout;
-  fReceiveTimeout := aSock.fReceiveTimeout;
+  SetTimeouts(aSock.ConnectTimeout, aSock.SendTimeout, aSock.ReceiveTimeout);
 end;
 
 procedure TCrtSocket.SetSendTimeout(Value: integer);
@@ -7051,12 +7056,10 @@ end;
 
 procedure TCrtSocket.DoCreate(aTimeOut: integer);
 begin
-  fConnectTimeout := aTimeout; // inlined SetLegacyTimeOut() with no fSock
-  fSendTimeout    := aTimeout;
-  fReceiveTimeout := aTimeout;
+  SetLegacyTimeOut(aTimeOut); // default value for all 3 timeouts
   if Assigned(OnCrtSocketLog) and
      not Assigned(OnLog) then
-    OnLog := OnCrtSocketLog; // global hook for all classes
+    OnLog := OnCrtSocketLog;  // global hook for all classes
 end;
 
 procedure TCrtSocket.DoRaise(const msg: string; const args: array of const;

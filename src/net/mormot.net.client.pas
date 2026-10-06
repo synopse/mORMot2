@@ -3855,9 +3855,8 @@ begin
   else
   begin
     fExtendedOptions.ComputeTimeouts;
-    fConnectTimeout := fExtendedOptions.ConnectTimeoutMS;
-    fReceiveTimeout := fExtendedOptions.ReceiveTimeoutMS;
-    fSendTimeout    := fExtendedOptions.SendTimeoutMS;
+    SetTimeouts(fExtendedOptions.ConnectTimeoutMS,
+      fExtendedOptions.SendTimeoutMS, fExtendedOptions.ReceiveTimeoutMS);
   end;
   if Assigned(aOnLog) then
     OnLog := aOnLog; // allow to debug ASAP
