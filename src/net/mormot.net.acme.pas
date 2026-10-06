@@ -1612,7 +1612,8 @@ begin
   else
   begin
     // redirect GET or POST on port 80 to port 443 using 301 or 308 response
-    if IsHead(Request.Http.CommandMethod) then
+    if IsGet(Request.Http.CommandMethod) or
+       IsHead(Request.Http.CommandMethod) then
       Request.SockSend('HTTP/1.0 301 Moved Permanently')
     else
       Request.SockSend('HTTP/1.0 308 Permanent Redirect');
@@ -1633,7 +1634,7 @@ begin
       // redirect to the same URI but on HTTPS host
       Request.SockSendLine([
         'Location: https://', Request.Http.Host, Request.Http.CommandUri]);
-    // 301 and 308 responses expect no body
+    // no response body for these redirects
   end;
   // finalize the headers and send the response body
   Request.SockSend([
