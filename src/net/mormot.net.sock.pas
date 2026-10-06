@@ -2071,6 +2071,7 @@ type
     fWasBind,
     fBodyRetrieved,
     fServerTlsEnabled,
+    fSockInPending,
     fProxyConnect,
     fProxyHttp);
 
@@ -7780,8 +7781,8 @@ begin
         exit; // we got everything we wanted
       if not UseOnlySockIn then
         break;
-      if GetReceiveTimeout = 0 then
-        SleepHiRes(0); // don't burn 100% of CPU
+      if fSockInPending in fFlags then // no wait from SockInPending()
+        SleepHiRes(0);                 // don't burn 100% of CPU
       DoInputSock(r, 'SockInRead', {notvoid=}false);
     until GetAborted;
   // direct receiving of the remaining bytes from socket
@@ -7802,8 +7803,6 @@ begin
 end;
 
 function TCrtSocket.SockInPending(aTimeOutMS: integer): integer;
-var
-  backup: PtrInt;
 begin
   // first try in SockIn^.Buffer
   result := 0;
@@ -7819,8 +7818,7 @@ begin
     cspDataAvailableOnClosedSocket:
       if SockIn <> nil then
       begin
-        backup := fSocketReceiveTimeout;
-        fSocketReceiveTimeout := -1; // suppress the retry wait, not SO_RCVTIMEO
+        include(fFlags, fSockInPending); // no retry wait, but keep SO_RCVTIMEO
         try
           // call InputSock() to actually retrieve any pending data
           if InputSock(PTextRec(SockIn)^) = NO_ERROR then
@@ -7829,7 +7827,7 @@ begin
           else
             result := -1; // indicates broken socket
         finally
-          fSocketReceiveTimeout := backup;
+          exclude(fFlags, fSockInPending);
         end;
       end
       else
