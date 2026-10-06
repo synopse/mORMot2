@@ -5481,10 +5481,9 @@ begin
           exit;
         end;
       end;
-      // allow OnBodyDownload callback to supply a stream for the body
+      // OnBodyDownload callback can supply a stream for the body - even for HEAD
       if Assigned(fServer.OnBodyDownload) and
          not (hfConnectionUpgrade in Http.HeaderFlags) and
-         not IsHead(Http.CommandMethod) and // HEAD has no body
          ((Http.ContentLength > 0) or
           (hfTransferChunked in Http.HeaderFlags)) then
         if not DoOnBodyDownload then
@@ -5502,7 +5501,8 @@ begin
     if withBody and
        not (hfConnectionUpgrade in Http.HeaderFlags) then
     begin
-      if not IsHead(Http.CommandMethod) then
+      if (Http.ContentLength > 0) or
+         (hfTransferChunked in Http.HeaderFlags) then // even for HEAD
         DownloadBody;
       result := grBodyReceived;
     end
@@ -5734,7 +5734,8 @@ begin
       begin
         // call from TSynThreadPoolTHttpServer -> handle first request
         if not (fBodyRetrieved in fServerSock.fFlags) and
-           not IsHead(fServerSock.Http.CommandMethod) then // HEAD has no body
+           ((fServerSock.Http.ContentLength > 0) or
+            (hfTransferChunked in fServerSock.Http.HeaderFlags)) then
           fServerSock.DownloadBody;
         fServer.Process(fServerSock, ConnectionID, self);
         if (fServer <> nil) and

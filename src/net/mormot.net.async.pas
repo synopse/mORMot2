@@ -5307,23 +5307,17 @@ begin
   end;
   // now THttpAsyncServerConnection.OnRead can get the body
   fServer.IncStat(grHeaderReceived);
-  if not (fHttp.State in [hrsWaitProcessing, hrsWaitAsyncProcessing, hrsUpgraded]) and
-     IsHead(fHttp.CommandMethod) then // HEAD has Content-Length but no body
+  result := soContinue;
+  if fHttp.State in [hrsGetBodyChunkedHexFirst, hrsGetBodyContentLengthFirst] then
   begin
-    // implement Expect: 100-Continue Header
+    // implement Expect: 100-Continue for a framed request body
     if hfExpect100 in fHttp.HeaderFlags then
       // client waits for the server to parse the headers and return 100
       // before sending the request body
-      fServer.fAsync.fSockets.WriteString(self, 'HTTP/1.1 100 Continue'#13#10#13#10);
-    result := DoRequest;
-  end
-  else
-  begin
-    // allow OnBodyDownload callback to supply a stream for the body
-    result := soContinue;
-    if (fHttp.State in
-         [hrsGetBodyChunkedHexFirst, hrsGetBodyContentLengthFirst]) and
-       not (hfConnectionUpgrade in fHttp.HeaderFlags) and
+      fServer.fAsync.fSockets.WriteString(self,
+        'HTTP/1.1 100 Continue'#13#10#13#10);
+    // OnBodyDownload callback can supply a stream for the body - even for HEAD
+    if not (hfConnectionUpgrade in fHttp.HeaderFlags) and
        Assigned(fServer.fOnBodyDownload) then
       result := DoBodyDownload;
   end;
