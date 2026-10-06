@@ -5244,7 +5244,7 @@ begin
           begin
             // no Keep Alive = multi-connection -> process in the Thread Pool
             if not (hfConnectionUpgrade in Http.HeaderFlags) and
-               not HttpMethodWithNoBody(Method) then
+               not IsHead(Method) then // HEAD has no body
             begin
               DownloadBody; // we need to get it now
               fServer.IncStat(grBodyReceived);
@@ -5484,7 +5484,7 @@ begin
       // allow OnBodyDownload callback to supply a stream for the body
       if Assigned(fServer.OnBodyDownload) and
          not (hfConnectionUpgrade in Http.HeaderFlags) and
-         not HttpMethodWithNoBody(Http.CommandMethod) and
+         not IsHead(Http.CommandMethod) and // HEAD has no body
          ((Http.ContentLength > 0) or
           (hfTransferChunked in Http.HeaderFlags)) then
         if not DoOnBodyDownload then
@@ -5502,7 +5502,7 @@ begin
     if withBody and
        not (hfConnectionUpgrade in Http.HeaderFlags) then
     begin
-      if not HttpMethodWithNoBody(Http.CommandMethod) then
+      if not IsHead(Http.CommandMethod) then
         DownloadBody;
       result := grBodyReceived;
     end
@@ -5734,7 +5734,7 @@ begin
       begin
         // call from TSynThreadPoolTHttpServer -> handle first request
         if not (fBodyRetrieved in fServerSock.fFlags) and
-           not HttpMethodWithNoBody(fServerSock.Http.CommandMethod) then
+           not IsHead(fServerSock.Http.CommandMethod) then // HEAD has no body
           fServerSock.DownloadBody;
         fServer.Process(fServerSock, ConnectionID, self);
         if (fServer <> nil) and

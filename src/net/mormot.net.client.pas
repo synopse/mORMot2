@@ -4147,8 +4147,7 @@ begin
            (ctxt.Status <> HTTP_NOTMODIFIED)) or
           (Http.ContentLength > 0) or // server bug of 204,304 with body
           (hfTransferChunked in Http.HeaderFlags)) and
-         // HEAD/OPTIONS
-         not HttpMethodWithNoBody(ctxt.Method) then
+         not IsHead(ctxt.Method) then // HEAD has no body
       begin
         // specific TStreamRedirect expectations
         bodystream := ctxt.OutStream;
@@ -4372,8 +4371,9 @@ begin
         // https://developer.mozilla.org/en-US/docs/Web/HTTP/Redirections
         HTTP_MOVEDPERMANENTLY,
         HTTP_SEEOTHER:
-          if not HttpMethodWithNoBody(Ctxt.Method) then // keep HEAD/OPTIONS
-            ctxt.Method := 'GET';        // but force e.g. POST/PUT into GET
+          if not (IsHead(Ctxt.Method) or
+                  IsOptions(Ctxt.Method)) then // keep HEAD/OPTIONS
+            ctxt.Method := 'GET'; // force e.g. POST/PUT into GET
         // HTTP_TEMPORARYREDIRECT HTTP_PERMANENTREDIRECT should keep the method
       end;
       if (OutStream <> nil) and
@@ -6280,8 +6280,8 @@ begin
   curl.easy_setopt(fHandle, coXOAuth2Bearer, pointer(AuthToken));
   curl.easy_setopt(fHandle, coHttpAuth, integer(WRA2CAU[AuthScheme]));
   // 2. main request options
-  // the only verbs which do not expect body in answer are HEAD and OPTIONS
-  curl.easy_setopt(fHandle, coNoBody, ord(HttpMethodWithNoBody(fIn.Method)));
+  // the only verb which do not expect body in answer is HEAD - OPTIONS could
+  curl.easy_setopt(fHandle, coNoBody, ord(IsHead(fIn.Method)));
   // see http://curl.haxx.se/libcurl/c/CURLOPT_CUSTOMREQUEST.html
   curl.easy_setopt(fHandle, coCustomRequest, pointer(fIn.Method));
   if aData <> '' then
@@ -7147,7 +7147,7 @@ begin
   if InHeaders <> '' then
     AppendLine(h, [InHeaders]);
   if (InBody <> '') and
-     not HttpMethodWithNoBody(Method) then
+     not IsHead(Method) then
   begin
     b := InBody;
     t := InType;

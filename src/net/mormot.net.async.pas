@@ -4624,9 +4624,9 @@ begin
             break;
           if fHttp.State = hrsWaitProcessing then
             break;
-          if HttpMethodWithNoBody(fHttp.CommandMethod) then
+          if IsHead(fHttp.CommandMethod) then
           begin
-            // no body to wait for (e.g. HEAD request)
+            // no body to wait for HEAD request (but OPTIONS may have one)
             fHttp.State := hrsWaitProcessing;
             break;
           end;
@@ -5308,8 +5308,7 @@ begin
   // now THttpAsyncServerConnection.OnRead can get the body
   fServer.IncStat(grHeaderReceived);
   if not (fHttp.State in [hrsWaitProcessing, hrsWaitAsyncProcessing, hrsUpgraded]) and
-     // HEAD and OPTIONS are requests with Content-Length header but no body
-     HttpMethodWithNoBody(fHttp.CommandMethod) then
+     IsHead(fHttp.CommandMethod) then // HEAD has Content-Length but no body
   begin
     // implement Expect: 100-Continue Header
     if hfExpect100 in fHttp.HeaderFlags then

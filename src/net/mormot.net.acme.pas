@@ -1612,7 +1612,7 @@ begin
   else
   begin
     // redirect GET or POST on port 80 to port 443 using 301 or 308 response
-    if HttpMethodWithNoBody(Request.Http.CommandMethod) then
+    if IsHead(Request.Http.CommandMethod) then
       Request.SockSend('HTTP/1.0 301 Moved Permanently')
     else
       Request.SockSend('HTTP/1.0 308 Permanent Redirect');
@@ -1641,7 +1641,7 @@ begin
     'Content-Length: ', length(body), #13#10 +
     'Connection: Close'#13#10]);
   if (body <> '') and
-     HttpMethodWithNoBody(Request.Http.CommandMethod) then
+     IsHead(Request.Http.CommandMethod) then
     body := ''; // if the ACME server tries a HEAD (unlikely)
   Request.SockSendFlush(body);
   // no regular OnRequest() event: we have sent the response
