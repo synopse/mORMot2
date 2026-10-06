@@ -2148,7 +2148,7 @@ type
     procedure SetMaxConnections(aValue: cardinal);
     function GetApiVersion: RawUtf8; override;
     function Check(Api: THttpApiFunction; Error: integer;
-      Level: TSynLogLevel = sllWarning): integer;
+      Level: TSynLogLevel = sllWarning; ErrMsg: PRawUtf8 = nil): integer;
     procedure Ensure(Api: THttpApiFunction; Error: integer);
     procedure DoAfterResponse(Ctxt: THttpServerRequest; const Referer: RawUtf8;
       StatusCode: cardinal; Elapsed, Received, Sent: QWord); virtual;
@@ -8112,14 +8112,17 @@ begin
 end;
 
 function THttpApiServer.Check(Api: THttpApiFunction; Error: integer;
-  Level: TSynLogLevel): integer;
+  Level: TSynLogLevel; ErrMsg: PRawUtf8): integer;
 var
   msg: RawUtf8;
 begin
   result := Error;
-  if Assigned(fLogClass) and
-     not HttpApiSucceed(Api, msg, Error) then
+  if HttpApiSucceed(Api, msg, Error) then
+    exit;
+  if Assigned(fLogClass) then
     fLogClass.Add.Log(Level, msg, self);
+  if ErrMsg <> nil then
+    ErrMsg^ := msg;
 end;
 
 procedure THttpApiServer.Ensure(Api: THttpApiFunction; Error: integer);
@@ -8327,19 +8330,20 @@ procedure THttpApiServer.DoExecute;
 var // lots of local variable so that this method is thread-safe
   req: PHTTP_REQUEST;
   resp: PHTTP_RESPONSE;
-  reqbuf, respbuf, logbuf: TBytes;
+  reqbuf, respbuf, logbuf, chunkbuf: TBytes;
   reqid: HTTP_REQUEST_ID;
   i: PtrInt;
   bytesread, bytessent, flags: cardinal;
   compressset: THttpSocketCompressSet;
   comprec: PHttpSocketCompressRec;
   err: HRESULT;
-  incontlen, rangestart, rangelen: Qword;
-  incontlenchunk, incontlenread: cardinal;
-  incontenc, inaccept, host, range, referer: RawUtf8;
+  incontlen, remain, rangestart, rangelen: Qword;
+  chunk: cardinal;
+  incontlenread: PtrInt;
+  incontenc, inaccept, host, range, referer, errmsg: RawUtf8;
   outstat, outmsg: RawUtf8;
   outstatcode, afterstatcode: cardinal;
-  respsent: boolean;
+  respsent, bodyknown: boolean;
   ctxt: THttpServerRequest;
   filehandle: THandle;
   bufread, V: PUtf8Char;
@@ -8621,55 +8625,74 @@ begin
               end;
             end;
             // retrieve body
-            if HTTP_REQUEST_FLAG_MORE_ENTITY_BODY_EXISTS and req^.flags <> 0 then
+            incontlenread := 0; // actual number of entity-body bytes received
+            if (HTTP_REQUEST_FLAG_MORE_ENTITY_BODY_EXISTS and req^.flags) <> 0 then
             begin
+              errmsg := '';
               with req^.headers.KnownHeaders[reqContentEncoding] do
                 FastSetString(incontenc, pRawValue, RawValueLength);
-              if incontlen <> 0 then
+              bodyknown := (incontlen <> 0) and // transfer-encoding has precedence
+                (req^.headers.KnownHeaders[reqTransferEncoding].RawValueLength = 0);
+              if bodyknown then
               begin
-                // receive body chunks
-                SetLength(ctxt.fInContent, incontlen);
-                bufread := pointer(ctxt.InContent);
-                incontlenread := 0;
-                repeat
-                  bytesread := 0;
-                  if HasApi2 then
-                    // speed optimization for Vista+
-                    flags := HTTP_RECEIVE_REQUEST_ENTITY_BODY_FLAG_FILL_BUFFER
-                  else
-                    flags := 0;
-                  incontlenchunk := incontlen - incontlenread;
-                  if (fReceiveBufferSize >= 1024) and
-                     (incontlenchunk > fReceiveBufferSize) then
-                    incontlenchunk := fReceiveBufferSize;
-                  err := Http.ReceiveRequestEntityBody(fReqQueue,
-                    req^.RequestId, flags, bufread, incontlenchunk, bytesread);
-                  if Terminated then
-                    exit;
-                  inc(incontlenread, bytesread);
-                  if err = ERROR_HANDLE_EOF then
-                  begin
-                    if incontlenread < incontlen then
-                      SetLength(ctxt.fInContent, incontlenread);
-                    err := NO_ERROR;
-                    break; // should loop until returns ERROR_HANDLE_EOF
-                  end;
-                  if err <> NO_ERROR then
-                  begin
-                    Check(hReceiveRequestEntityBody, err);
-                    break;
-                  end;
-                  inc(bufread, bytesread);
-                until incontlenread = incontlen;
+                chunk := MaxPtrUInt(64 * 1024, fReceiveBufferSize); // 1MB default
+                if chunk > incontlen then
+                  chunk := incontlen;
+                bufread := FastNewRawByteString(ctxt.fInContent, incontlen);
+              end
+              else
+              begin
+                chunk := 128 shl 10; // chunked doesn't need fReceiveBufferSize
+                if chunkbuf = nil then
+                  SetLength(chunkbuf, chunk); // allocate once 128KB
+                bufread := pointer(chunkbuf);
+              end;
+              if HasApi2 then // speed optimization for Vista+ = whole chunk
+                flags := HTTP_RECEIVE_REQUEST_ENTITY_BODY_FLAG_FILL_BUFFER
+              else
+                flags := 0;
+              repeat
+                bytesread := 0;
+                err := Http.ReceiveRequestEntityBody(fReqQueue,
+                  req^.RequestId, flags, bufread, chunk, bytesread);
+                if Terminated then
+                  exit;
+                if err = ERROR_HANDLE_EOF then
+                begin
+                  if bodyknown and
+                     (incontlenread < length(ctxt.fInContent)) then
+                    SetLength(ctxt.fInContent, incontlenread);
+                  err := NO_ERROR;
+                  break; // we reached the end of this body
+                end;
                 if err <> NO_ERROR then
                 begin
-                  SendError(HTTP_NOTACCEPTABLE, WinApiErrorUtf8(err, Http.Module));
-                  continue;
+                  Check(hReceiveRequestEntityBody, err, sllDebug, @errmsg);
+                  err := HTTP_NOTACCEPTABLE;
+                  break;
                 end;
-                // optionally uncompress input body
-                if incontenc <> '' then
-                  fCompressList.UncompressContent(incontenc, ctxt.fInContent);
+                inc(incontlenread, bytesread);
+                if bodyknown then
+                begin
+                  remain := incontlen - QWord(incontlenread);
+                  if remain = 0 then
+                    break; // reached the end of Content-Length
+                  inc(bufread, bytesread);
+                  if remain < chunk then
+                    chunk := remain; // avoid buffer overflow
+                end
+                else if incontlenread > fMaximumAllowedContentLength then
+                  err := HTTP_PAYLOADTOOLARGE
+                else
+                  Append(ctxt.fInContent, bufread, bytesread); // good enough
+              until err <> NO_ERROR;
+              if err <> NO_ERROR then
+              begin
+                SendError(err, errmsg);
+                continue;
               end;
+              if incontenc <> '' then // optionally uncompress input body
+                fCompressList.UncompressContent(incontenc, ctxt.fInContent);
             end;
             QueryPerformanceMicroSeconds(started);
             try
@@ -8701,7 +8724,7 @@ begin
               dec(elapsed, started);
               ctxt.Host := host; // may have been reset during Request()
               DoAfterResponse(
-                ctxt, referer, outstatcode, elapsed, incontlen, bytessent);
+                ctxt, referer, outstatcode, elapsed, incontlenread, bytessent);
             except
               on E: Exception do
               begin

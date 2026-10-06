@@ -2218,7 +2218,7 @@ const
     'ETAG:|LOCATION:|PROXY-AUTHENTICATE:|RETRY-AFTER:|SERVER:|SET-COOKIE:|' +
     'VARY:|WWW-AUTHENTICATE:|';
   MULTI_HEADERS = [reqConnection, respSetCookie,
-    // need HTTP.sys API v2 HTTP_MULTIPLE_KNOWN_HEADERS for the next two:
+    // todo: need HTTP.sys API v2 HTTP_MULTIPLE_KNOWN_HEADERS for those ?
     respWwwAuthenticate, respProxyAuthenticate];
 
 function HTTP_RESPONSE.AddCustomHeader(P: PUtf8Char;
