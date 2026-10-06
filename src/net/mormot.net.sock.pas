@@ -7608,7 +7608,8 @@ begin
   // don't reset fServer/fPort/fTls/fWasBind: caller may use them to reconnect
   // (see e.g. THttpClientSocket.Request)
   {$ifdef OSPOSIX}
-  if fSocketLayer = nlUnix then
+  if (fSocketLayer = nlUnix) and
+     (fWasBind in fFlags) then // a client must not delete the server's file
     fpunlink(pointer(fServer)); // 'unix:/path/to/myapp.socket' -> delete file
   {$endif OSPOSIX}
 end;

@@ -7039,7 +7039,7 @@ procedure TNetworkProtocols.DoUnixDomainSocket(Sender: TObject);
 var
   fn: TFileName;
   un: RawUtf8;
-  sock: TCrtSocket;
+  sock, client: TCrtSocket;
 begin
   // regression test for Unix domain socket server bind and stale file cleanup
   // - on Delphi POSIX, the FpUnlink() called to remove a stale .socket file
@@ -7071,6 +7071,22 @@ begin
     sock.Free;
   end;
   Check(not FileExists(fn), 'stale file cleaned on close');
+  // 3. a client closing its connection must not delete the server .socket file
+  sock := TCrtSocket.Bind(un);
+  try
+    // a plain path with explicit nlUnix, so that Close sees the actual file
+    client := TCrtSocket.Open(StringToUtf8(fn), '', nlUnix);
+    try
+      Check(client.SockIsDefined, 'unix client');
+      Check(client.SocketLayer = nlUnix, 'client nlUnix');
+    finally
+      client.Free;
+    end;
+    Check(FileExists(fn), 'client close kept the server socket file');
+  finally
+    sock.Free;
+  end;
+  Check(not FileExists(fn), 'server close removed its socket file');
 end;
 
 procedure TNetworkProtocols.DoTFTPServer(Sender: TObject);
