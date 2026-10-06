@@ -1268,7 +1268,7 @@ type
       aIgnoreTlsCertificateErrors: boolean; timeout: integer; outHeaders: PRawUtf8;
       outStatus: PInteger; outError: PString = nil): RawByteString;
     // inherited class should override those abstract methods
-    procedure InternalConnect(ConnectionTimeOut, SendTimeout, ReceiveTimeout: cardinal); virtual; abstract;
+    procedure InternalConnect; virtual; abstract;
     procedure InternalCreateRequest(const aMethod, aUrl: RawUtf8); virtual; abstract;
     procedure InternalSendRequest(const aMethod: RawUtf8; const aData:
       RawByteString); virtual; abstract;
@@ -1572,8 +1572,7 @@ type
   protected
     // those internal methods will raise an EWinINet exception on error
     procedure RaiseFromLastError(const ctxt: ShortString);
-    procedure InternalConnect(ConnectionTimeOut, SendTimeout,
-      ReceiveTimeout: cardinal); override;
+    procedure InternalConnect; override;
     procedure InternalCreateRequest(const aMethod, aUrl: RawUtf8); override;
     procedure InternalCloseRequest; override;
     procedure InternalAddHeader(const hdr: RawUtf8); override;
@@ -1623,8 +1622,7 @@ type
     // you can override this method e.g. to disable/enable some protocols
     function InternalGetProtocols: cardinal; virtual;
     // those internal methods will raise an EWinHttp exception on error
-    procedure InternalConnect(ConnectionTimeOut, SendTimeout,
-      ReceiveTimeout: cardinal); override;
+    procedure InternalConnect; override;
     procedure InternalCreateRequest(const aMethod, aUrl: RawUtf8); override;
     procedure InternalCloseRequest; override;
     procedure InternalAddHeader(const hdr: RawUtf8); override;
@@ -1700,8 +1698,7 @@ type
     fLast: record
       dlTotal, dlNow, ulTotal, ulNow: Int64;
     end;
-    procedure InternalConnect(
-      ConnectionTimeOut, SendTimeout, ReceiveTimeout: cardinal); override;
+    procedure InternalConnect; override;
     procedure InternalCreateRequest(const aMethod, aUrl: RawUtf8); override;
     procedure InternalSendRequest(const aMethod: RawUtf8;
       const aData: RawByteString); override;
@@ -1750,8 +1747,7 @@ type
     procedure DoValidateServerCertificate(const Sender: TObject;
       const ARequest: TURLRequest; const Certificate: TCertificate;
       var Accepted: boolean);
-    procedure InternalConnect(
-      ConnectionTimeOut, SendTimeout, ReceiveTimeout: cardinal); override;
+    procedure InternalConnect; override;
     procedure InternalCreateRequest(const aMethod, aUrl: RawUtf8); override;
     procedure InternalSendRequest(const aMethod: RawUtf8;
       const aData: RawByteString); override;
@@ -5378,13 +5374,11 @@ begin
       fExtendedOptions.UserAgent := aUserAgent
     else
       fExtendedOptions.UserAgent := DefaultUserAgent(self);
-  if ConnectionTimeOut = 0 then
-    ConnectionTimeOut := HTTP_DEFAULT_CONNECTTIMEOUT;
-  if SendTimeout = 0 then
-    SendTimeout := HTTP_DEFAULT_SENDTIMEOUT;
-  if ReceiveTimeout = 0 then
-    ReceiveTimeout := HTTP_DEFAULT_RECEIVETIMEOUT;
-  InternalConnect(ConnectionTimeOut, SendTimeout, ReceiveTimeout); // raise exception on error
+  fExtendedOptions.ConnectTimeoutMS := ConnectionTimeOut;
+  fExtendedOptions.SendTimeoutMS    := SendTimeout;
+  fExtendedOptions.ReceiveTimeoutMS := ReceiveTimeout;
+  fExtendedOptions.ComputeTimeouts;
+  InternalConnect; // raise exception on error
 end;
 
 constructor THttpRequest.Create(const aUri, aProxyName, aProxyByPass: RawUtf8;
@@ -5403,12 +5397,14 @@ end;
 constructor THttpRequest.Create(
   const aUri: TUri; aOptions: PHttpRequestExtendedOptions);
 begin
+  fLayer := aUri.Layer;
+  fServer := aUri.Server;
+  fPort := aUri.PortInt;
+  fHttps := aUri.Https;
   if aOptions <> nil then
     fExtendedOptions := aOptions^; // to be set before Create=InternalConnect
   fExtendedOptions.ComputeTimeouts;
-  Create(aUri.Server, aUri.Port, aUri.Https, fExtendedOptions.Proxy, {proxybypass=}'',
-    fExtendedOptions.ConnectTimeoutMS, fExtendedOptions.SendTimeoutMS,
-    fExtendedOptions.ReceiveTimeoutMS, aUri.Layer);
+  InternalConnect; // raise exception on error
 end;
 
 destructor THttpRequest.Destroy;
@@ -5661,7 +5657,7 @@ begin
               WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_2;
 end;
 
-procedure TWinHttp.InternalConnect(ConnectionTimeOut, SendTimeout, ReceiveTimeout: cardinal);
+procedure TWinHttp.InternalConnect;
 var
   Callback: WINHTTP_STATUS_CALLBACK;
   CallbackRes: PtrInt absolute Callback; // for FPC compatibility
@@ -5701,7 +5697,8 @@ begin
     RaiseFromLastError('Open');
   // cf. http://msdn.microsoft.com/en-us/library/windows/desktop/aa384116
   if not WinHttpApi.SetTimeouts(fSession, HTTP_DEFAULT_RESOLVETIMEOUT,
-     ConnectionTimeOut, SendTimeout, ReceiveTimeout) then
+     fExtendedOptions.ConnectTimeoutMS, fExtendedOptions.SendTimeoutMS,
+     fExtendedOptions.ReceiveTimeoutMS) then
     RaiseFromLastError('SetTimeouts');
   if fHttps or
      (fExtendedOptions.RedirectMax > 0) then // may redirect from http to https
@@ -5952,8 +5949,7 @@ begin
   raise E;
 end;
 
-procedure TWinINet.InternalConnect(
-  ConnectionTimeOut, SendTimeout, ReceiveTimeout: cardinal);
+procedure TWinINet.InternalConnect;
 var
   OpenType: integer;
   ua, pn, pb: SynUnicode;
@@ -5971,11 +5967,11 @@ begin
   if fSession = nil then
     RaiseFromLastError('Open');
   InternetSetOption(fConnection, INTERNET_OPTION_CONNECT_TIMEOUT,
-    @ConnectionTimeOut, SizeOf(ConnectionTimeOut));
+    @fExtendedOptions.ConnectTimeoutMS, SizeOf(fExtendedOptions.ConnectTimeoutMS));
   InternetSetOption(fConnection, INTERNET_OPTION_SEND_TIMEOUT,
-    @SendTimeout, SizeOf(SendTimeout));
+    @fExtendedOptions.SendTimeoutMS, SizeOf(fExtendedOptions.SendTimeoutMS));
   InternetSetOption(fConnection, INTERNET_OPTION_RECEIVE_TIMEOUT,
-    @ReceiveTimeout, SizeOf(ReceiveTimeout));
+    @fExtendedOptions.ReceiveTimeoutMS, SizeOf(fExtendedOptions.ReceiveTimeoutMS));
   fConnection := InternetConnectA(fSession, pointer(fServer), fPort,
     nil, nil, INTERNET_SERVICE_HTTP, 0, 0);
   if fConnection = nil then
@@ -6136,19 +6132,20 @@ end;
 
 { TCurlHttp }
 
-procedure TCurlHttp.InternalConnect(
-  ConnectionTimeOut, SendTimeout, ReceiveTimeout: cardinal);
+procedure TCurlHttp.InternalConnect;
+var
+  ms: integer;
 begin
   if not IsAvailable then
     raise ECurlHttp.CreateFmt('No available %s', [LIBCURL_DLL]);
   fHandle := curl.easy_init;
   if curl.globalShare <> nil then
     curl.easy_setopt(fHandle, coShare, curl.globalShare);
-  curl.easy_setopt(fHandle, coConnectTimeoutMs, ConnectionTimeOut); // default=300 !
-  if SendTimeout < ReceiveTimeout then
-    SendTimeout := ReceiveTimeout;
-  if SendTimeout <> 0 then // prevent send+receive forever
-    curl.easy_setopt(fHandle, coTimeoutMs, SendTimeout);
+  curl.easy_setopt(fHandle, coConnectTimeoutMs,
+    fExtendedOptions.ConnectTimeOutMS); // default=300 !
+  ms := MinPtrInt(fExtendedOptions.ReceiveTimeoutMS, fExtendedOptions.SendTimeoutMS);
+  if ms <> 0 then // prevent send+receive forever
+    curl.easy_setopt(fHandle, coTimeoutMs, ms);
   // coTimeout=CURLOPT_TIMEOUT is global for the transfer, so shouldn't be used
   if fLayer = nlUnix then
     // see CURLOPT_UNIX_SOCKET_PATH doc
@@ -6387,18 +6384,17 @@ end;
 
 { TDelphiNetHttp }
 
-procedure TDelphiNetHttp.InternalConnect(
-  ConnectionTimeOut, SendTimeout, ReceiveTimeout: cardinal);
+procedure TDelphiNetHttp.InternalConnect;
 begin
   if fLayer <> nlTcp then
     EHttpSocket.RaiseUtf8('%: unsupported layer %', [self, ord(fLayer)]);
   fClient := THTTPClient.Create;
-  if ConnectionTimeOut > 0 then
-    fClient.ConnectionTimeout := ConnectionTimeOut;
-  if SendTimeout > 0 then
-    fClient.SendTimeout := SendTimeout;
-  if ReceiveTimeout > 0 then
-    fClient.ResponseTimeout := ReceiveTimeout;
+  if fExtendedOptions.ConnectTimeOutMS > 0 then
+    fClient.ConnectionTimeout := fExtendedOptions.ConnectTimeOutMS;
+  if fExtendedOptions.SendTimeoutMS > 0 then
+    fClient.SendTimeout := fExtendedOptions.SendTimeoutMS;
+  if fExtendedOptions.ReceiveTimeoutMS > 0 then
+    fClient.ResponseTimeout := fExtendedOptions.ReceiveTimeoutMS;
   fClient.AllowCookies := false; // as the other THttpRequest classes
   if (fProxyName <> '') and
      not IsNone(fProxyName) then
