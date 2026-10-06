@@ -5964,12 +5964,15 @@ begin
   fSession := InternetOpenW(pointer(ua), OpenType, pointer(pn), pointer(pb), 0);
   if fSession = nil then
     RaiseFromLastError('Open');
-  InternetSetOption(fConnection, INTERNET_OPTION_CONNECT_TIMEOUT,
-    @fExtendedOptions.ConnectTimeoutMS, SizeOf(fExtendedOptions.ConnectTimeoutMS));
-  InternetSetOption(fConnection, INTERNET_OPTION_SEND_TIMEOUT,
-    @fExtendedOptions.SendTimeoutMS, SizeOf(fExtendedOptions.SendTimeoutMS));
-  InternetSetOption(fConnection, INTERNET_OPTION_RECEIVE_TIMEOUT,
-    @fExtendedOptions.ReceiveTimeoutMS, SizeOf(fExtendedOptions.ReceiveTimeoutMS));
+  if not InternetSetOption(fSession, INTERNET_OPTION_CONNECT_TIMEOUT,
+     @fExtendedOptions.ConnectTimeoutMS, SizeOf(fExtendedOptions.ConnectTimeoutMS)) then
+    RaiseFromLastError('SetConnectTimeout');
+  if not InternetSetOption(fSession, INTERNET_OPTION_SEND_TIMEOUT,
+     @fExtendedOptions.SendTimeoutMS, SizeOf(fExtendedOptions.SendTimeoutMS)) then
+    RaiseFromLastError('SetSendTimeout');
+  if not InternetSetOption(fSession, INTERNET_OPTION_RECEIVE_TIMEOUT,
+     @fExtendedOptions.ReceiveTimeoutMS, SizeOf(fExtendedOptions.ReceiveTimeoutMS)) then
+    RaiseFromLastError('SetReceiveTimeout');
   fConnection := InternetConnectA(fSession, pointer(fServer), fPort,
     nil, nil, INTERNET_SERVICE_HTTP, 0, 0);
   if fConnection = nil then
