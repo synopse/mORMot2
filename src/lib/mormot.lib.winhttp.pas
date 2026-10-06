@@ -2232,8 +2232,9 @@ begin
   else
     i := IdemPCharSep(P, KNOWNHEADERS);
   if (i >= 0) and
-     // WebSockets need reqConnection / CONNECTION: as unknown header
-     (THttpApiHeader(i) <> reqConnection) then
+     // WebSockets require reqConnection / CONNECTION: as unknown header
+     // and there could be several respSetCookie / Set-Cookie: values
+     not (THttpApiHeader(i) in [respSetCookie, reqConnection]) then
   begin
     while P^ <> ':' do
       inc(P);
