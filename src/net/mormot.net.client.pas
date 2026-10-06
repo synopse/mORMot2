@@ -399,6 +399,8 @@ type
     // - otherwise, will use this value as explicit proxy server name
     // - used only during initial connection
     Proxy: RawUtf8;
+    /// optional Proxy by-pass list - as defined by Windows WinINet/WinHttp API
+    ProxyByPass: RawUtf8;
     /// legacy common timeout in milliseconds, as supplied to Create()
     // - fallback for unspecified ConnectTimeoutMS/SendTimeoutMS/ReceiveTimeoutMS
     // - 0 keeps the backend defaults; this is not a total request deadline
@@ -1248,8 +1250,6 @@ type
   THttpRequest = class
   protected
     fServer: RawUtf8;
-    fProxyName: RawUtf8;
-    fProxyByPass: RawUtf8;
     fPort: TNetPort;
     fLayer: TNetLayer;
     fKeepAlive: cardinal;
@@ -1436,11 +1436,11 @@ type
     /// the remote server optional proxy, as specified to the class constructor
     // - you may set 'none' to disable any Proxy, or keep '' to use the OS proxy
     property ProxyName: RawUtf8
-      read fProxyName;
+      read fExtendedOptions.Proxy;
     /// the remote server optional proxy by-pass list, as specified to the class
     // constructor
     property ProxyByPass: RawUtf8
-      read fProxyByPass;
+      read fExtendedOptions.ProxyByPass;
     /// called before and after Upload process
     property OnUpload: TOnHttpRequest
       read fOnUpload write fOnUpload;
@@ -5371,8 +5371,8 @@ begin
   end;
   fServer := aServer;
   fHttps := aHttps;
-  fProxyName := aProxyName;
-  fProxyByPass := aProxyByPass;
+  fExtendedOptions.Proxy := aProxyName;
+  fExtendedOptions.ProxyByPass := aProxyByPass;
   if fExtendedOptions.UserAgent = '' then
     if aUserAgent <> '' then
       fExtendedOptions.UserAgent := aUserAgent
@@ -5670,9 +5670,9 @@ var
 begin
   WinHttpApiInitialize;
   Utf8ToSynUnicode(fExtendedOptions.UserAgent, ua);
-  if IsNone(fProxyName) then
+  if IsNone(fExtendedOptions.Proxy) then
     access := WINHTTP_ACCESS_TYPE_NO_PROXY
-  else if fProxyName = '' then
+  else if fExtendedOptions.Proxy = '' then
     if (OSVersion >= wEightOne) or
        WinHttpForceProxyDetection then
       access := WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY // Windows 8.1 and newer
@@ -5682,8 +5682,8 @@ begin
     access := WINHTTP_ACCESS_TYPE_NAMED_PROXY;
   if access <> WINHTTP_ACCESS_TYPE_NO_PROXY then
   begin
-    Utf8ToSynUnicode(fProxyName, pn);
-    Utf8ToSynUnicode(fProxyByPass, pb);
+    Utf8ToSynUnicode(fExtendedOptions.Proxy, pn);
+    Utf8ToSynUnicode(fExtendedOptions.ProxyByPass, pb);
   end;
   fSession := WinHttpApi.Open(pointer(ua), access, pointer(pn), pointer(pb), 0);
   if (fSession = nil) and
@@ -5958,15 +5958,15 @@ var
   OpenType: integer;
   ua, pn, pb: SynUnicode;
 begin
-  if IsNone(fProxyName) then
+  if IsNone(fExtendedOptions.Proxy) then
     OpenType := INTERNET_OPEN_TYPE_DIRECT
-  else if fProxyName = '' then
+  else if fExtendedOptions.Proxy = '' then
     OpenType := INTERNET_OPEN_TYPE_PRECONFIG
   else
     OpenType := INTERNET_OPEN_TYPE_PROXY;
   Utf8ToSynUnicode(fExtendedOptions.UserAgent, ua);
-  Utf8ToSynUnicode(fProxyName, pn);
-  Utf8ToSynUnicode(fProxyByPass, pb);
+  Utf8ToSynUnicode(fExtendedOptions.Proxy, pn);
+  Utf8ToSynUnicode(fExtendedOptions.ProxyByPass, pb);
   fSession := InternetOpenW(pointer(ua), OpenType, pointer(pn), pointer(pb), 0);
   if fSession = nil then
     RaiseFromLastError('Open');
@@ -6194,9 +6194,9 @@ begin
   if fLayer = nlUnix then
     curl.easy_setopt(fHandle, coUnixSocketPath, pointer(fServer));
   curl.easy_setopt(fHandle, coURL, pointer(fIn.URL));
-  if (fProxyName <> '') and
-     not IsNone(fProxyName) then
-    curl.easy_setopt(fHandle, coProxy, pointer(fProxyName));
+  if (fExtendedOptions.Proxy <> '') and
+     not IsNone(fExtendedOptions.Proxy) then
+    curl.easy_setopt(fHandle, coProxy, pointer(fExtendedOptions.Proxy));
   if fHttps or
      (fExtendedOptions.RedirectMax > 0) then // may redirect from http to https
     // see https://curl.haxx.se/libcurl/c/simplessl.html
