@@ -1267,6 +1267,8 @@ type
       const data: RawByteString; const header: RawUtf8;
       aIgnoreTlsCertificateErrors: boolean; timeout: integer; outHeaders: PRawUtf8;
       outStatus: PInteger; outError: PString = nil): RawByteString;
+    procedure DoInternalConnect(const aServer, aPort: RawUtf8;
+      aHttps: boolean; aLayer: TNetLayer);
     // inherited class should override those abstract methods
     procedure InternalConnect; virtual; abstract;
     procedure InternalCreateRequest(const aMethod, aUrl: RawUtf8); virtual; abstract;
@@ -5350,35 +5352,36 @@ begin
     end;
 end;
 
+procedure THttpRequest.DoInternalConnect(const aServer, aPort: RawUtf8;
+  aHttps: boolean; aLayer: TNetLayer);
+begin
+  fLayer := aLayer;
+  fServer := aServer;
+  fPort := GetCardinal(pointer(aPort));
+  if fLayer <> nlUnix then
+    if fPort = 0 then
+      if fHttps then
+        fPort := 443
+      else
+        fPort := 80;
+  fHttps := aHttps;
+  if fExtendedOptions.UserAgent = '' then
+    fExtendedOptions.UserAgent := DefaultUserAgent(self);
+  fExtendedOptions.ComputeTimeouts;
+end;
+
 constructor THttpRequest.Create(const aServer, aPort: RawUtf8; aHttps: boolean;
   const aProxyName, aProxyByPass: RawUtf8;
   ConnectionTimeOut, SendTimeout, ReceiveTimeout: cardinal;
   aLayer: TNetLayer; const aUserAgent: RawUtf8);
 begin
-  fLayer := aLayer;
-  if fLayer <> nlUnix then
-  begin
-    fPort := GetCardinal(pointer(aPort));
-    if fPort = 0 then
-      if aHttps then
-        fPort := 443
-      else
-        fPort := 80;
-  end;
-  fServer := aServer;
-  fHttps := aHttps;
   fExtendedOptions.Proxy := aProxyName;
   fExtendedOptions.ProxyByPass := aProxyByPass;
-  if fExtendedOptions.UserAgent = '' then
-    if aUserAgent <> '' then
-      fExtendedOptions.UserAgent := aUserAgent
-    else
-      fExtendedOptions.UserAgent := DefaultUserAgent(self);
   fExtendedOptions.ConnectTimeoutMS := ConnectionTimeOut;
   fExtendedOptions.SendTimeoutMS    := SendTimeout;
   fExtendedOptions.ReceiveTimeoutMS := ReceiveTimeout;
-  fExtendedOptions.ComputeTimeouts;
-  InternalConnect; // raise exception on error
+  fExtendedOptions.UserAgent := aUserAgent;
+  DoInternalConnect(aServer, aPort, aHttps, aLayer); // raise exception on error
 end;
 
 constructor THttpRequest.Create(const aUri, aProxyName, aProxyByPass: RawUtf8;
@@ -5389,7 +5392,7 @@ var
 begin
   if not uri.From(aUri) then
     EHttpSocket.RaiseUtf8('%.Create: invalid url=%', [self, aUri]);
-  IgnoreTlsCertificateErrors := aIgnoreTlsCertificateErrors;
+  fExtendedOptions.Tls.IgnoreCertificateErrors := aIgnoreTlsCertificateErrors;
   Create(uri.Server, uri.Port, uri.Https, aProxyName, aProxyByPass,
     ConnectionTimeOut, SendTimeout, ReceiveTimeout, uri.Layer);
 end;
@@ -5397,14 +5400,9 @@ end;
 constructor THttpRequest.Create(
   const aUri: TUri; aOptions: PHttpRequestExtendedOptions);
 begin
-  fLayer := aUri.Layer;
-  fServer := aUri.Server;
-  fPort := aUri.PortInt;
-  fHttps := aUri.Https;
   if aOptions <> nil then
     fExtendedOptions := aOptions^; // to be set before Create=InternalConnect
-  fExtendedOptions.ComputeTimeouts;
-  InternalConnect; // raise exception on error
+  DoInternalConnect(aUri.Server, aUri.Port, aUri.Https, aUri.Layer);
 end;
 
 destructor THttpRequest.Destroy;
@@ -6143,7 +6141,7 @@ begin
     curl.easy_setopt(fHandle, coShare, curl.globalShare);
   curl.easy_setopt(fHandle, coConnectTimeoutMs,
     fExtendedOptions.ConnectTimeOutMS); // default=300 !
-  ms := MinPtrInt(fExtendedOptions.ReceiveTimeoutMS, fExtendedOptions.SendTimeoutMS);
+  ms := MaxPtrInt(fExtendedOptions.ReceiveTimeoutMS, fExtendedOptions.SendTimeoutMS);
   if ms <> 0 then // prevent send+receive forever
     curl.easy_setopt(fHandle, coTimeoutMs, ms);
   // coTimeout=CURLOPT_TIMEOUT is global for the transfer, so shouldn't be used
@@ -6396,9 +6394,10 @@ begin
   if fExtendedOptions.ReceiveTimeoutMS > 0 then
     fClient.ResponseTimeout := fExtendedOptions.ReceiveTimeoutMS;
   fClient.AllowCookies := false; // as the other THttpRequest classes
-  if (fProxyName <> '') and
-     not IsNone(fProxyName) then
-    fClient.ProxySettings := TProxySettings.Create(Utf8ToString(fProxyName));
+  if (fExtendedOptions.Proxy <> '') and
+     not IsNone(fExtendedOptions.Proxy) then
+    fClient.ProxySettings := TProxySettings.Create(
+      Utf8ToString(fExtendedOptions.Proxy));
   fClient.OnValidateServerCertificate := DoValidateServerCertificate;
   FormatUtf8('http%://%:%', [TLS_TEXT[fHttps], fServer, fPort], fRootUrl);
 end;
