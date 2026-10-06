@@ -8207,10 +8207,11 @@ end;
 function TCrtSocket.TrySockRecv(Buffer: pointer; var Length: integer;
   StopBeforeLength: boolean; NetResult: PNetResult; RawError: PNetErrorInt): boolean;
 var
-  expected, read, pending, timeout: integer;
+  expected, read, pending: integer; // not PtrInt
   events: TNetEvents;
   res: TNetResult;
-  endtix, remaining: Int64;
+  endtix: Int64;
+  remaining: PtrInt;
 begin
   if RawError <> nil then
     RawError^ := NO_ERROR;
@@ -8222,14 +8223,15 @@ begin
   begin
     expected := Length;
     Length := 0;
-    timeout := GetReceiveTimeout;
-    if fSocketConnecting then
-      timeout := GetConnectTimeout;
     repeat
-      // first check for any available data
+      // fReceiveTimeout is for each Recv() call, not for the whole buffer
+      if fSockInPending in fFlags then
+        endtix := 0                    // force WaitFor(0) below
+      else
+        endtix := mormot.core.os.GetTickCount64 + fReceiveTimeout;
+      // first check for any available data in the OS buffers
       // - some may be available at fSecure/TLS level, but not from fSock/TCP
       // - a blocking Recv() may itself wait up to SO_RCVTIMEO = ReceiveTimeout
-      endtix := mormot.core.os.GetTickCount64 + timeout;
       read := MinPtrInt(CrtSocketSendRecvMaxBytes, expected - Length);
       if fSecure <> nil then
         res := fSecure.Receive(Buffer, read)
@@ -8274,10 +8276,10 @@ begin
         continue; // data is already available: no need to wait
       if GetAborted then
         break;
-      remaining := endtix - mormot.core.os.GetTickCount64;
-      if remaining < 0 then
-        remaining := 0;
-      events := fSock.WaitFor(remaining, [neRead, neError], RawError); // select/poll
+      remaining := 0;
+      if endtix <> 0 then
+        remaining := endtix - mormot.core.os.GetTickCount64;
+      events := fSock.WaitFor(MaxPtrInt(0, remaining), [neRead, neError], RawError);
       if neError in events then
       begin
         res := nrUnknownError;
