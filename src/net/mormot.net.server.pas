@@ -8659,8 +8659,7 @@ begin
                   exit;
                 if err = ERROR_HANDLE_EOF then
                 begin
-                  if bodyknown and
-                     (incontlenread < length(ctxt.fInContent)) then
+                  if incontlenread < length(ctxt.fInContent) then
                     SetLength(ctxt.fInContent, incontlenread);
                   err := NO_ERROR;
                   break; // we reached the end of this body
@@ -8683,8 +8682,15 @@ begin
                 end
                 else if incontlenread > fMaximumAllowedContentLength then
                   err := HTTP_PAYLOADTOOLARGE
+                else if ctxt.fInContent = '' then // initial maybe-single chunk
+                  FastSetRawByteString(ctxt.fInContent, bufread, bytesread)
                 else
-                  Append(ctxt.fInContent, bufread, bytesread); // good enough
+                begin
+                  if length(ctxt.fInContent) < incontlenread then
+                    SetLength(ctxt.fInContent, NextGrow(incontlenread));
+                  MoveFast(bufread^, PByteArray(ctxt.fInContent)[
+                    incontlenread - PtrInt(bytesread)], bytesread);
+                end;
               until err <> NO_ERROR;
               if err <> NO_ERROR then
               begin
