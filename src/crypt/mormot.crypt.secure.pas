@@ -176,7 +176,8 @@ type
     /// the associated server name (or file, for SQLite3) to be connected to
     property ServerName: RawUtf8
       read fServerName write fServerName;
-    /// the associated database name (if any), or additional options
+    /// the associated database name (if any), or URI-encoded additional options
+    // - e.g. TRestHttpClientGeneric.DefinitionTo() URI-encoded HTTP parameters
     property DatabaseName: RawUtf8
       read fDatabaseName write fDatabaseName;
     /// the associated User Identifier (if any)

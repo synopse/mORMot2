@@ -650,29 +650,35 @@ constructor TRestHttpClientGeneric.RegisteredClassCreateFrom(aModel: TOrmModel;
   aDefinition: TSynConnectionDefinition; aServerHandleAuthentication: boolean);
 var
   URI: TUri;
-  P, next: PUtf8Char;
-  V: cardinal;
-  tmp: RawUtf8;
+  P: PUtf8Char;
+  n, v: RawUtf8;
 begin
   URI.From(aDefinition.ServerName);
   Create(URI.Server, URI.Port, aModel, URI.Https);
   P := pointer(aDefinition.DataBaseName);
   while P <> nil do
   begin
-    if UrlDecodeCardinal(P, 'CONNECTTIMEOUT=', V) then
-      fExtendedOptions.ConnectTimeoutMS := V
-    else if UrlDecodeCardinal(P, 'SENDTIMEOUT=', V) then
-      fExtendedOptions.SendTimeoutMS := V
-    else if UrlDecodeCardinal(P, 'RECEIVETIMEOUT=', V) then
-      fExtendedOptions.ReceiveTimeoutMS := V
-    else if UrlDecodeValue(P, 'PROXYNAME=', tmp) then
-      fExtendedOptions.Proxy := tmp
-    else if UrlDecodeValue(P, 'PROXYBYPASS=', tmp) then
-      fExtendedOptions.ProxyByPass := tmp
-    else if UrlDecodeCardinal(P, 'IGNORETLSCERTIFICATEERRORS=', V, @next) or
-            UrlDecodeCardinal(P, 'IGNORESSLCERTIFICATEERRORS=', V, @next) then
-      fExtendedOptions.TLS.IgnoreCertificateErrors := boolean(V);
-    P := next;
+    P := UrlDecodeNextNameValue(P, n, v);
+    case FindPropName(['IgnoreTlsCertificateErrors', // 0
+                       'IgnoreSslCertificateErrors', // 1
+                       'ConnectTimeout',             // 2
+                       'SendTimeout',                // 3
+                       'ReceiveTimeout',             // 4
+                       'ProxyName',                  // 5
+                       'ProxyByPass'], n) of         // 6
+      0, 1:
+        fExtendedOptions.TLS.IgnoreCertificateErrors := GetBoolean(v);
+      2:
+        fExtendedOptions.ConnectTimeoutMS := GetCardinal(pointer(v));
+      3:
+        fExtendedOptions.SendTimeoutMS := GetCardinal(pointer(v));
+      4:
+        fExtendedOptions.ReceiveTimeoutMS := GetCardinal(pointer(v));
+      5:
+        fExtendedOptions.Proxy := v;
+      6:
+        fExtendedOptions.ProxyByPass := v;
+    end;
   end;
   fExtendedOptions.ComputeTimeouts;
   inherited RegisteredClassCreateFrom(aModel, aDefinition, false); // call SetUser()
