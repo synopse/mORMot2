@@ -435,7 +435,7 @@ type
   protected
     fLastOperation: TAsyncConnectionSec; // as 32-bit monotonic seconds
     fRemoteIP4: cardinal; // may contain cLocalhost32 = 127.0.0.1
-    fRemoteIP: RawUtf8;   // never contains '127.0.0.1'
+    fRemoteIP: RawUtf8;   // follow RemoteIPLocalHostAsVoidInServers
     fOwner: TAsyncConnections;
     // called after TAsyncConnections.GetLastOperationIdleSeconds of no activity
     // - Sender.Write() could be used to send e.g. a hearbeat frame
@@ -2660,7 +2660,7 @@ begin
   // inherited Create; use AfterCreate instead
   fFlags := [fWasActive]; // by definition
   fRemoteIP4 := aRemoteIP.IP4;
-  aRemoteIP.IP(fRemoteIP, {localasvoid=}true);
+  aRemoteIP.IP(fRemoteIP, RemoteIPLocalHostAsVoidInServers);
 end;
 
 procedure TAsyncConnection.Recycle(const aRemoteIP: TNetAddr);
@@ -2677,7 +2677,7 @@ begin
   fIocpSub := nil;
   {$endif USE_WINIOCP}
   fRemoteIP4 := aRemoteIP.IP4;
-  aRemoteIP.IP(fRemoteIP, {localasvoid=}true);
+  aRemoteIP.IP(fRemoteIP, RemoteIPLocalHostAsVoidInServers);
 end;
 
 function TAsyncConnection.OnLastOperationIdle(nowsec: TAsyncConnectionSec): boolean;

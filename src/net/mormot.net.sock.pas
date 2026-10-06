@@ -547,7 +547,7 @@ var
   /// defines if a connection from the loopback should be reported as ''
   // - with default true, loopback connection will have no RemoteIP address ('')
   // - or it will be explicitly '127.0.0.1' - if equals false
-  // - used by both TCrtSock.AcceptRequest and THttpApiServer.Execute servers
+  // - used by TCrtSock.AcceptRequest and HTTP/async servers
   RemoteIPLocalHostAsVoidInServers: boolean = true;
 
   /// the TCP SetKeepAlive() value for a client (false) or server (true)
@@ -6981,7 +6981,7 @@ end;
 procedure TCrtSocket.SetTimeouts(aConn, aSend, aRecv: integer);
 begin
   fConnectTimeout := aConn;
-  SetSendTimeout(aSend);    // virtual setters
+  SetSendTimeout(aSend); // virtual setters with ApplySocketTimeouts
   SetReceiveTimeout(aRecv);
 end;
 
