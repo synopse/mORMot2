@@ -4368,13 +4368,15 @@ begin
       ctxt.Url := Http.HeaderGetValue('LOCATION');
       AppendLine(fRequestContext, [ctxt.Status, ' into ', ctxt.Url]);
       case ctxt.Status of
-        // https://developer.mozilla.org/en-US/docs/Web/HTTP/Redirections
-        HTTP_MOVEDPERMANENTLY,
+        HTTP_MOVEDPERMANENTLY:
+          // historically allowed POST -> GET conversion for 301
+          if IsPost(ctxt.Method) then
+            ctxt.Method := 'GET';
         HTTP_SEEOTHER:
-          if not (IsHead(Ctxt.Method) or
-                  IsOptions(Ctxt.Method)) then // keep HEAD/OPTIONS
-            ctxt.Method := 'GET'; // force e.g. POST/PUT into GET
-        // HTTP_TEMPORARYREDIRECT HTTP_PERMANENTREDIRECT should keep the method
+          // 303 redirects to a GET request, but keep HEAD
+          if not IsHead(ctxt.Method) then
+            ctxt.Method := 'GET';
+        // HTTP_TEMPORARYREDIRECT and HTTP_PERMANENTREDIRECT preserve the method
       end;
       if (OutStream <> nil) and
          // TStreamRedirect would have set bodystream := nil in RequestInternal
@@ -7146,8 +7148,7 @@ begin
   h := fInHeaders; // pre-computed from Cookies and DefaultHeaders properties
   if InHeaders <> '' then
     AppendLine(h, [InHeaders]);
-  if (InBody <> '') and
-     not IsHead(Method) then
+  if InBody <> '' then
   begin
     b := InBody;
     t := InType;

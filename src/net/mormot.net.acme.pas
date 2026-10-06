@@ -1611,7 +1611,7 @@ begin
       Request.SockSend('HTTP/1.0 404 Not Found')
   else
   begin
-    // redirect GET or POST on port 80 to port 443 using 301 or 308 response
+    // redirect HTTP to HTTPS using 301 for GET/HEAD, or preserve method with 308
     if IsGet(Request.Http.CommandMethod) or
        IsHead(Request.Http.CommandMethod) then
       Request.SockSend('HTTP/1.0 301 Moved Permanently')

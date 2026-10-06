@@ -5244,7 +5244,8 @@ begin
           begin
             // no Keep Alive = multi-connection -> process in the Thread Pool
             if not (hfConnectionUpgrade in Http.HeaderFlags) and
-               not IsHead(Method) then // HEAD has no body
+               ((Http.ContentLength > 0) or
+                (hfTransferChunked in Http.HeaderFlags)) then
             begin
               DownloadBody; // we need to get it now
               fServer.IncStat(grBodyReceived);
