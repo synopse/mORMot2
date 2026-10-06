@@ -5357,6 +5357,7 @@ procedure THttpRequest.DoInternalConnect(const aServer, aPort: RawUtf8;
 begin
   fLayer := aLayer;
   fServer := aServer;
+  fHttps := aHttps;
   fPort := GetCardinal(pointer(aPort));
   if fLayer <> nlUnix then
     if fPort = 0 then
@@ -5364,10 +5365,10 @@ begin
         fPort := 443
       else
         fPort := 80;
-  fHttps := aHttps;
   if fExtendedOptions.UserAgent = '' then
     fExtendedOptions.UserAgent := DefaultUserAgent(self);
   fExtendedOptions.ComputeTimeouts;
+  InternalConnect;
 end;
 
 constructor THttpRequest.Create(const aServer, aPort: RawUtf8; aHttps: boolean;
