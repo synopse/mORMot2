@@ -428,15 +428,12 @@ type
     SendTimeoutMS: integer;
     /// receive timeout in milliseconds, with the same fallback as ConnectTimeoutMS
     ReceiveTimeoutMS: integer;
-    /// resolve positive phase overrides over CreateTimeoutMS
-    // - if CreateTimeoutMS is 0, use aDefaultTimeout (0 leaves backend defaults)
-    // - socket clients pass their common default; native clients leave 0
-    procedure GetTimeouts(out aConnectTimeout, aSendTimeout, aReceiveTimeout: integer;
-      aDefaultTimeout: integer = 0);
     /// may be used to initialize this record on stack with zeroed values
     procedure Init;
     /// may be used to initialize this record on stack with HTTP client values
     procedure InitDefault;
+    /// use CreateTimeoutMS to compute missing Connect/Send/ReceiveTimeoutMS
+    procedure ComputeTimeouts;
     /// reset this record, calling FillZero() on Password/Token SpiUtf8 values
     procedure Clear;
     /// setup web authentication using the Basic access algorithm
@@ -3832,7 +3829,7 @@ begin
   if not (aUri.UriScheme in [usHttp .. usUdp]) and
      NetClientProtocols.FindAndCopy(aUri.Scheme, fOnProtocolRequest) then
   begin
-    Create(aTimeOut); // no socket involved - but keep Request() logic
+    DoCreate(aTimeOut); // no socket involved - but keep Request() logic
     fOpenUriFull := aUriFull;  // e.g. to call PatchCreateFromUrl() WinAPI
   end
   else
@@ -3851,19 +3848,18 @@ procedure THttpClientSocket.DoOpenOptions(const aUri: TUri;
 var
   temp: TUri;
   pu: PUri;
-  connect, send, receive: integer;
 begin
   // setup the proper options before any connection
   fExtendedOptions := aOptions;
   DoCreate(fExtendedOptions.CreateTimeoutMS);
   if aClient <> nil then
-    SetTimeouts(aClient.ConnectTimeout, aClient.SendTimeout, aClient.ReceiveTimeout)
-  else if (fExtendedOptions.ConnectTimeoutMS > 0) or
-          (fExtendedOptions.SendTimeoutMS > 0) or
-          (fExtendedOptions.ReceiveTimeoutMS > 0) then
+    SetTimeoutsFrom(aClient)
+  else
   begin
-    fExtendedOptions.GetTimeouts(connect, send, receive, TimeOut);
-    SetTimeouts(connect, send, receive); // before proxy/TLS connection setup
+    fExtendedOptions.ComputeTimeouts;
+    fConnectTimeout := fExtendedOptions.ConnectTimeoutMS;
+    fReceiveTimeout := fExtendedOptions.ReceiveTimeoutMS;
+    fSendTimeout    := fExtendedOptions.SendTimeoutMS;
   end;
   if Assigned(aOnLog) then
     OnLog := aOnLog; // allow to debug ASAP
@@ -3905,16 +3901,11 @@ function THttpClientSocket.SameOpenOptions(const aUri: TUri;
   const aOptions: THttpRequestExtendedOptions): boolean;
 var
   tun: TUri;
-  connect, send, receive: integer;
-begin
-  aOptions.GetTimeouts(connect, send, receive, HTTP_DEFAULT_RECEIVETIMEOUT);
+begin // timeouts are not checked here because they don't need a reconnection
   result := (aUri.UriScheme in HTTP_SCHEME) and
             aUri.Same(Server, Port, ServerTls) and
             SameNetTlsContext(TLS, aOptions.TLS) and
-            fExtendedOptions.SameAuth(@aOptions.Auth) and
-            (ConnectTimeout = connect) and
-            (SendTimeout = send) and
-            (ReceiveTimeout = receive);
+            fExtendedOptions.SameAuth(@aOptions.Auth);
   if result then
     if tun.From(aOptions.Proxy) then
       result := tun.Same(Tunnel.Server, Tunnel.Port, Tunnel.Https)
@@ -4457,9 +4448,11 @@ begin
          (hfConnectionClose in Http.HeaderFlags) or
          (hroForceReconnect in ctxt.RedirectOptions) then
       begin
-        Close; // relocated to another server -> reset the TCP connection
         try
+          // relocated to another server -> reset the TCP connection
+          Close;
           AppendLine(fRequestContext, ['ReOpen ', newuri.URI]);
+          // will properly use the defined timeouts
           OpenBind(newuri.Server, newuri.Port, {bind=}false, newuri.Https);
         except
           on E: Exception do
@@ -5116,23 +5109,6 @@ end;
 
 { THttpRequestExtendedOptions }
 
-procedure THttpRequestExtendedOptions.GetTimeouts(
-  out aConnectTimeout, aSendTimeout, aReceiveTimeout: integer;
-  aDefaultTimeout: integer);
-begin
-  if CreateTimeoutMS <> 0 then
-    aDefaultTimeout := CreateTimeoutMS;
-  aConnectTimeout := ConnectTimeoutMS;
-  if aConnectTimeout <= 0 then
-    aConnectTimeout := aDefaultTimeout;
-  aSendTimeout := SendTimeoutMS;
-  if aSendTimeout <= 0 then
-    aSendTimeout := aDefaultTimeout;
-  aReceiveTimeout := ReceiveTimeoutMS;
-  if aReceiveTimeout <= 0 then
-    aReceiveTimeout := aDefaultTimeout;
-end;
-
 procedure THttpRequestExtendedOptions.Init;
 begin
   RecordZero(@self, TypeInfo(THttpRequestExtendedOptions));
@@ -5150,6 +5126,28 @@ begin
   FillZero(Auth.Password);
   FillZero(Auth.Token);
   Init;
+end;
+
+procedure THttpRequestExtendedOptions.ComputeTimeouts;
+var
+  def: integer;
+begin
+  def := CreateTimeoutMS;
+  if ConnectTimeoutMS <= 0 then
+    if def = 0 then
+      ConnectTimeoutMS := HTTP_DEFAULT_CONNECTTIMEOUT
+    else
+      ConnectTimeoutMS := def;
+  if SendTimeoutMS <= 0 then
+    if def = 0 then
+      SendTimeoutMS := HTTP_DEFAULT_SENDTIMEOUT
+    else
+      SendTimeoutMS := def;
+  if ReceiveTimeoutMS <= 0 then
+    if def = 0 then
+      ReceiveTimeoutMS := HTTP_DEFAULT_RECEIVETIMEOUT
+    else
+      ReceiveTimeoutMS := def;
 end;
 
 procedure THttpRequestExtendedOptions.AuthorizeUserPassword(
@@ -5404,14 +5402,13 @@ end;
 
 constructor THttpRequest.Create(
   const aUri: TUri; aOptions: PHttpRequestExtendedOptions);
-var
-  connect, send, receive: integer;
 begin
   if aOptions <> nil then
     fExtendedOptions := aOptions^; // to be set before Create=InternalConnect
-  fExtendedOptions.GetTimeouts(connect, send, receive);
-  Create(aUri.Server, aUri.Port, aUri.Https, fExtendedOptions.Proxy,
-    {bypass=}'', connect, send, receive, aUri.Layer);
+  fExtendedOptions.ComputeTimeouts;
+  Create(aUri.Server, aUri.Port, aUri.Https, fExtendedOptions.Proxy, {proxybypass=}'',
+    fExtendedOptions.ConnectTimeoutMS, fExtendedOptions.SendTimeoutMS,
+    fExtendedOptions.ReceiveTimeoutMS, aUri.Layer);
 end;
 
 destructor THttpRequest.Destroy;
