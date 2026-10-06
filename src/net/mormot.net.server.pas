@@ -5494,7 +5494,9 @@ begin
         end;
     end;
     // implement 'Expect: 100-Continue' Header
-    if hfExpect100 in Http.HeaderFlags then
+    if (hfExpect100 in Http.HeaderFlags) and
+       ((Http.ContentLength > 0) or
+        (hfTransferChunked in Http.HeaderFlags)) then
       // client waits for the server to parse the headers and return 100
       // before sending the request body
       SockSendFlush('HTTP/1.1 100 Continue'#13#10#13#10);

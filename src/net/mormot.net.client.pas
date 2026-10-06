@@ -4050,6 +4050,7 @@ begin
         // that its Size is known when Content-Length: is computed below
         ctxt.InStream.Seek(0, soBeginning); // rewind
       if (dat <> '') or
+         (ctxt.InStream <> nil) or
          (not IsGet(ctxt.Method) and // no message body len/type for GET/HEAD
           not IsHead(ctxt.Method)) then
         CompressDataAndWriteHeaders(ctxt.DataMimeType, dat, ctxt.InStream);
@@ -4367,15 +4368,17 @@ begin
       u := ctxt.Url;
       ctxt.Url := Http.HeaderGetValue('LOCATION');
       AppendLine(fRequestContext, [ctxt.Status, ' into ', ctxt.Url]);
-      case ctxt.Status of
-        HTTP_MOVEDPERMANENTLY:
+      if ((ctxt.Status = HTTP_MOVEDPERMANENTLY) and
+          IsPost(ctxt.Method)) or
           // historically allowed POST -> GET conversion for 301
-          if IsPost(ctxt.Method) then
-            ctxt.Method := 'GET';
-        HTTP_SEEOTHER:
+         ((ctxt.Status = HTTP_SEEOTHER) and
+          not IsHead(ctxt.Method)) then
           // 303 redirects to a GET request, but keep HEAD
-          if not IsHead(ctxt.Method) then
-            ctxt.Method := 'GET';
+      begin
+        ctxt.Method := 'GET'; // with no body
+        ctxt.Data := '';
+        ctxt.DataMimeType := '';
+        ctxt.InStream := nil;
         // HTTP_TEMPORARYREDIRECT and HTTP_PERMANENTREDIRECT preserve the method
       end;
       if (OutStream <> nil) and
