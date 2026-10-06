@@ -540,7 +540,7 @@ end;
 
 constructor THttpClientWebSockets.Create(aTimeOut: integer);
 begin
-  inherited Create(aTimeOut);
+  DoCreate(aTimeOut);
   fSettings.SetDefaults;
   fSettings.CallbackAnswerTimeOutMS := aTimeOut;
 end;
@@ -662,7 +662,7 @@ end;
 procedure THttpClientWebSockets.SetReceiveTimeout(aReceiveTimeout: integer);
 begin
   inherited SetReceiveTimeout(aReceiveTimeout);
-  fSettings.CallbackAnswerTimeOutMS := aReceiveTimeout;
+  fSettings.CallbackAnswerTimeOutMS := fReceiveTimeout;
 end;
 
 function THttpClientWebSockets.Settings: PWebSocketProcessSettings;
