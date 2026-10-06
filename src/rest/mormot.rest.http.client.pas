@@ -114,7 +114,6 @@ type
     /// connection parameters as set by Create()
     fServer, fPort: RawUtf8;
     fHttps: boolean;
-    fProxyName, fProxyByPass: RawUtf8;
     fExtendedOptions: THttpRequestExtendedOptions;
     procedure SetCompression(Value: TRestHttpCompressions);
     procedure SetKeepAliveMS(Value: cardinal);
@@ -595,8 +594,8 @@ begin
   fExtendedOptions.SendTimeoutMS    := aSendTimeout;
   fExtendedOptions.ReceiveTimeoutMS := aReceiveTimeout;
   fExtendedOptions.ComputeTimeouts; // may use HTTP_DEFAULT_*TIMEOUT constants
-  fProxyName := aProxyName;
-  fProxyByPass := aProxyByPass;
+  fExtendedOptions.Proxy := aProxyName;
+  fExtendedOptions.ProxyByPass := aProxyByPass;
 end;
 
 constructor TRestHttpClientGeneric.CreateWithOwnModel(
@@ -642,8 +641,9 @@ begin
     'ConnectTimeout',             fExtendedOptions.ConnectTimeoutMS,
     'SendTimeout',                fExtendedOptions.SendTimeoutMS,
     'ReceiveTimeout',             fExtendedOptions.ReceiveTimeoutMS,
-    'ProxyName',                  fProxyName,
-    'ProxyByPass',                fProxyByPass], [ueTrimLeadingQuestionMark]);
+    'ProxyName',                  fExtendedOptions.Proxy,
+    'ProxyByPass',                fExtendedOptions.ProxyByPass],
+    [ueTrimLeadingQuestionMark]);
 end;
 
 constructor TRestHttpClientGeneric.RegisteredClassCreateFrom(aModel: TOrmModel;
@@ -666,9 +666,9 @@ begin
     else if UrlDecodeCardinal(P, 'RECEIVETIMEOUT=', V) then
       fExtendedOptions.ReceiveTimeoutMS := V
     else if UrlDecodeValue(P, 'PROXYNAME=', tmp) then
-      fProxyName := tmp
+      fExtendedOptions.Proxy := tmp
     else if UrlDecodeValue(P, 'PROXYBYPASS=', tmp) then
-      fProxyByPass := tmp
+      fExtendedOptions.ProxyByPass := tmp
     else if UrlDecodeCardinal(P, 'IGNORETLSCERTIFICATEERRORS=', V, @next) or
             UrlDecodeCardinal(P, 'IGNORESSLCERTIFICATEERRORS=', V, @next) then
       fExtendedOptions.TLS.IgnoreCertificateErrors := boolean(V);
@@ -863,15 +863,17 @@ begin
 end;
 
 procedure TRestHttpClientRequest.InternalOpen;
+var
+  t: TUri;
 begin
   InternalSetClass;
   if fRequestClass = nil then
     ERestHttpClient.RaiseUtf8('Unsupported %.InternalOpen', [self]);
-  fExtendedOptions.ComputeTimeouts;
-  fRequest := fRequestClass.Create(fServer, fPort, fHttps, fProxyName,
-    fProxyByPass, fExtendedOptions.ConnectTimeoutMS,
-    fExtendedOptions.SendTimeoutMS, fExtendedOptions.ReceiveTimeoutMS);
-  fRequest.ExtendedOptions := fExtendedOptions;
+  t.Clear;
+  t.Server := fServer;
+  t.Port := fPort;
+  t.Https := fHttps;
+  fRequest := fRequestClass.Create(t, @fExtendedOptions);
   // note that first registered algo will be the preferred one
   {$ifndef PUREMORMOT2}
   if hcSynShaAes in Compression then
