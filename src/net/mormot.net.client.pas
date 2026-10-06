@@ -3760,11 +3760,11 @@ function GetSystemProxyUri(const uri, proxy: RawUtf8; var temp: TUri): PUri;
 begin
   if IsNone(proxy) or
      (not temp.From(uri)) or
-     (temp.Address = '') or
+     (temp.Server = '') or
      (not (temp.UriScheme in [usHttp, usHttps])) or
-     IsLocalHost(pointer(temp.Address)) or // no proxy for "127.x.x.x"
+     IsLocalHost(pointer(temp.Server)) or // no proxy for "127.x.x.x"
      (DefaultHttpClientSocketProxyNotForIp4 and
-      NetIsIP4(pointer(temp.Address))) then  // plain "1.2.3.4" IP has no proxy
+      NetIsIP4(pointer(temp.Server))) then  // plain "1.2.3.4" IP has no proxy
     result := nil
   else if (proxy <> '') and
           temp.From(proxy) then

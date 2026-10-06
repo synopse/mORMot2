@@ -6983,7 +6983,6 @@ begin
   fConnectTimeout := aConn;
   SetSendTimeout(aSend);    // virtual setters
   SetReceiveTimeout(aRecv);
-  ApplySocketTimeouts;
 end;
 
 procedure TCrtSocket.SetLegacyTimeOut(Value: integer);
