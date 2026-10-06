@@ -6187,6 +6187,7 @@ end;
 procedure TCurlHttp.InternalCreateRequest(const aMethod, aUrl: RawUtf8);
 const
   CERT_PEM: RawUtf8 = 'PEM';
+  NO_PROXY: AnsiChar = #0; // non-nil pointer to an empty C string
 begin
   fIn.URL := Join([fRootURL, aUrl]);
   if fExtendedOptions.RedirectMax > 0 then // url redirection (as TWinHttp)
@@ -6195,9 +6196,11 @@ begin
   if fLayer = nlUnix then
     curl.easy_setopt(fHandle, coUnixSocketPath, pointer(fServer));
   curl.easy_setopt(fHandle, coURL, pointer(fIn.URL));
-  if (fExtendedOptions.Proxy <> '') and
-     not IsNone(fExtendedOptions.Proxy) then
-    curl.easy_setopt(fHandle, coProxy, pointer(fExtendedOptions.Proxy));
+  if fExtendedOptions.Proxy <> '' then              // '' will use default proxy
+    if IsNone(fExtendedOptions.Proxy) then
+      curl.easy_setopt(fHandle, coProxy, @NO_PROXY) // disable proxies
+    else
+      curl.easy_setopt(fHandle, coProxy, pointer(fExtendedOptions.Proxy));
   if fHttps or
      (fExtendedOptions.RedirectMax > 0) then // may redirect from http to https
     // see https://curl.haxx.se/libcurl/c/simplessl.html
