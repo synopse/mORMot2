@@ -591,18 +591,10 @@ begin
   fHttps := aHttps;
   fKeepAliveMS := 20000; // 20 seconds connection keep alive by default
   fCompression := []; // may add hcSynLZ or hcDeflate for AJAX clients
-  if aConnectTimeout = 0 then
-    fExtendedOptions.ConnectTimeoutMS := HTTP_DEFAULT_CONNECTTIMEOUT
-  else
-    fExtendedOptions.ConnectTimeoutMS := aConnectTimeout;
-  if aSendTimeout = 0 then
-    fExtendedOptions.SendTimeoutMS := HTTP_DEFAULT_SENDTIMEOUT
-  else
-    fExtendedOptions.SendTimeoutMS := aSendTimeout;
-  if aReceiveTimeout = 0 then
-    fExtendedOptions.ReceiveTimeoutMS := HTTP_DEFAULT_RECEIVETIMEOUT
-  else
-    fExtendedOptions.ReceiveTimeoutMS := aReceiveTimeout;
+  fExtendedOptions.ConnectTimeoutMS := aConnectTimeout;
+  fExtendedOptions.SendTimeoutMS    := aSendTimeout;
+  fExtendedOptions.ReceiveTimeoutMS := aReceiveTimeout;
+  fExtendedOptions.ComputeTimeouts; // may use HTTP_DEFAULT_*TIMEOUT constants
   fProxyName := aProxyName;
   fProxyByPass := aProxyByPass;
 end;
@@ -668,32 +660,21 @@ begin
   while P <> nil do
   begin
     if UrlDecodeCardinal(P, 'CONNECTTIMEOUT=', V) then
-    begin
-      if V = 0 then
-        V := HTTP_DEFAULT_CONNECTTIMEOUT;
-      fExtendedOptions.ConnectTimeoutMS := V;
-    end
+      fExtendedOptions.ConnectTimeoutMS := V
     else if UrlDecodeCardinal(P, 'SENDTIMEOUT=', V) then
-    begin
-      if V = 0 then
-        V := HTTP_DEFAULT_SENDTIMEOUT;
-      fExtendedOptions.SendTimeoutMS := V;
-    end
+      fExtendedOptions.SendTimeoutMS := V
     else if UrlDecodeCardinal(P, 'RECEIVETIMEOUT=', V) then
-    begin
-      if V = 0 then
-        V := HTTP_DEFAULT_RECEIVETIMEOUT;
-      fExtendedOptions.ReceiveTimeoutMS := V;
-    end
+      fExtendedOptions.ReceiveTimeoutMS := V
     else if UrlDecodeValue(P, 'PROXYNAME=', tmp) then
-      fProxyName := CurrentAnsiConvert.Utf8ToAnsi(tmp)
+      fProxyName := tmp
     else if UrlDecodeValue(P, 'PROXYBYPASS=', tmp) then
-      fProxyByPass := CurrentAnsiConvert.Utf8ToAnsi(tmp);
-    if UrlDecodeCardinal(P, 'IGNORETLSCERTIFICATEERRORS=', V, @next) or
-       UrlDecodeCardinal(P, 'IGNORESSLCERTIFICATEERRORS=', V, @next) then
+      fProxyByPass := tmp
+    else if UrlDecodeCardinal(P, 'IGNORETLSCERTIFICATEERRORS=', V, @next) or
+            UrlDecodeCardinal(P, 'IGNORESSLCERTIFICATEERRORS=', V, @next) then
       fExtendedOptions.TLS.IgnoreCertificateErrors := boolean(V);
     P := next;
   end;
+  fExtendedOptions.ComputeTimeouts;
   inherited RegisteredClassCreateFrom(aModel, aDefinition, false); // call SetUser()
 end;
 
@@ -882,15 +863,14 @@ begin
 end;
 
 procedure TRestHttpClientRequest.InternalOpen;
-var
-  connect, send, receive: integer;
 begin
   InternalSetClass;
   if fRequestClass = nil then
     ERestHttpClient.RaiseUtf8('Unsupported %.InternalOpen', [self]);
-  fExtendedOptions.GetTimeouts(connect, send, receive);
+  fExtendedOptions.ComputeTimeouts;
   fRequest := fRequestClass.Create(fServer, fPort, fHttps, fProxyName,
-    fProxyByPass, connect, send, receive);
+    fProxyByPass, fExtendedOptions.ConnectTimeoutMS,
+    fExtendedOptions.SendTimeoutMS, fExtendedOptions.ReceiveTimeoutMS);
   fRequest.ExtendedOptions := fExtendedOptions;
   // note that first registered algo will be the preferred one
   {$ifndef PUREMORMOT2}
