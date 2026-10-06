@@ -6190,8 +6190,7 @@ const
   NO_PROXY: AnsiChar = #0; // non-nil pointer to an empty C string
 begin
   fIn.URL := Join([fRootURL, aUrl]);
-  if fExtendedOptions.RedirectMax > 0 then // url redirection (as TWinHttp)
-    curl.easy_setopt(fHandle, coFollowLocation, 1);
+  curl.easy_setopt(fHandle, coFollowLocation, ord(fExtendedOptions.RedirectMax > 0));
   //curl.easy_setopt(fHandle,coTCPNoDelay,0); // disable Nagle
   if fLayer = nlUnix then
     curl.easy_setopt(fHandle, coUnixSocketPath, pointer(fServer));
@@ -6211,19 +6210,24 @@ begin
       //curl.easy_setopt(fHandle,coProxySSLVerifyPeer,0);
       //curl.easy_setopt(fHandle,coProxySSLVerifyHost,0);
     end
-    else if fTls.CertFile <> '' then
+    else
     begin
-      curl.easy_setopt(fHandle, coSSLCertType, pointer(CERT_PEM));
-      curl.easy_setopt(fHandle, coSSLCert, pointer(fTls.CertFile));
-      if fTls.PassPhrase <> '' then
-        curl.easy_setopt(fHandle, coSSLCertPasswd, pointer(fTls.PassPhrase));
-      curl.easy_setopt(fHandle, coSSLKeyType, nil);
-      curl.easy_setopt(fHandle, coSSLKey, pointer(fTls.KeyName));
-      curl.easy_setopt(fHandle, coCAInfo, pointer(fTls.CACertFile));
       curl.easy_setopt(fHandle, coSSLVerifyPeer, 1);
-    end
-    else if fTls.CACertFile <> '' then
-      curl.easy_setopt(fHandle, coCAInfo, pointer(fTls.CACertFile));
+      curl.easy_setopt(fHandle, coSSLVerifyHost, 2);
+      if fTls.CertFile <> '' then
+      begin
+        curl.easy_setopt(fHandle, coSSLCertType, pointer(CERT_PEM));
+        curl.easy_setopt(fHandle, coSSLCert, pointer(fTls.CertFile));
+        if fTls.PassPhrase <> '' then
+          curl.easy_setopt(fHandle, coSSLCertPasswd, pointer(fTls.PassPhrase));
+        curl.easy_setopt(fHandle, coSSLKeyType, nil);
+        curl.easy_setopt(fHandle, coSSLKey, pointer(fTls.KeyName));
+        curl.easy_setopt(fHandle, coCAInfo, pointer(fTls.CACertFile));
+        curl.easy_setopt(fHandle, coSSLVerifyPeer, 1);
+      end
+      else if fTls.CACertFile <> '' then
+        curl.easy_setopt(fHandle, coCAInfo, pointer(fTls.CACertFile));
+    end;
   curl.easy_setopt(fHandle, coUserAgent, pointer(fExtendedOptions.UserAgent));
   curl.easy_setopt(fHandle, coWriteFunction, @CurlWriteRawByteString);
   curl.easy_setopt(fHandle, coHeaderFunction, @CurlWriteRawByteString);
