@@ -3903,7 +3903,7 @@ begin // timeouts are not checked here because they don't need a reconnection
   result := (aUri.UriScheme in HTTP_SCHEME) and
             aUri.Same(Server, Port, ServerTls) and
             SameNetTlsContext(TLS, aOptions.TLS) and
-            fExtendedOptions.SameAuth(@aOptions.Auth);
+            fExtendedOptions.SameAuth(@aOptions);
   if result then
     if tun.From(aOptions.Proxy) then
       result := tun.Same(Tunnel.Server, Tunnel.Port, Tunnel.Https)
