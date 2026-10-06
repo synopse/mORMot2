@@ -2217,6 +2217,9 @@ const
     'CONTENT-MD5:|CONTENT-RANGE:|EXPIRES:|LAST-MODIFIED:|ACCEPT-RANGES:|AGE:|' +
     'ETAG:|LOCATION:|PROXY-AUTHENTICATE:|RETRY-AFTER:|SERVER:|SET-COOKIE:|' +
     'VARY:|WWW-AUTHENTICATE:|';
+  MULTI_HEADERS = [reqConnection, respSetCookie,
+    // need HTTP.sys API v2 HTTP_MULTIPLE_KNOWN_HEADERS for the next two:
+    respWwwAuthenticate, respProxyAuthenticate];
 
 function HTTP_RESPONSE.AddCustomHeader(P: PUtf8Char;
   var UnknownHeaders: HTTP_UNKNOWN_HEADERS;
@@ -2234,7 +2237,7 @@ begin
   if (i >= 0) and
      // WebSockets require reqConnection / CONNECTION: as unknown header
      // and there could be several respSetCookie / Set-Cookie: values
-     not (THttpApiHeader(i) in [respSetCookie, reqConnection]) then
+     not (THttpApiHeader(i) in MULTI_HEADERS) then
   begin
     while P^ <> ':' do
       inc(P);
