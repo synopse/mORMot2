@@ -5956,6 +5956,7 @@ procedure TWinINet.InternalConnect(
   ConnectionTimeOut, SendTimeout, ReceiveTimeout: cardinal);
 var
   OpenType: integer;
+  ua, pn, pb: SynUnicode;
 begin
   if IsNone(fProxyName) then
     OpenType := INTERNET_OPEN_TYPE_DIRECT
@@ -5963,8 +5964,10 @@ begin
     OpenType := INTERNET_OPEN_TYPE_PRECONFIG
   else
     OpenType := INTERNET_OPEN_TYPE_PROXY;
-  fSession := InternetOpenA(pointer(fExtendedOptions.UserAgent), OpenType,
-    pointer(fProxyName), pointer(fProxyByPass), 0);
+  Utf8ToSynUnicode(fExtendedOptions.UserAgent, ua);
+  Utf8ToSynUnicode(fProxyName, pn);
+  Utf8ToSynUnicode(fProxyByPass, pb);
+  fSession := InternetOpenW(pointer(ua), OpenType, pointer(pn), pointer(pb), 0);
   if fSession = nil then
     RaiseFromLastError('Open');
   InternetSetOption(fConnection, INTERNET_OPTION_CONNECT_TIMEOUT,
@@ -6398,7 +6401,7 @@ begin
     fClient.ResponseTimeout := ReceiveTimeout;
   fClient.AllowCookies := false; // as the other THttpRequest classes
   if (fProxyName <> '') and
-     not IdemPropNameU(fProxyName, 'none') then
+     not IsNone(fProxyName) then
     fClient.ProxySettings := TProxySettings.Create(Utf8ToString(fProxyName));
   fClient.OnValidateServerCertificate := DoValidateServerCertificate;
   FormatUtf8('http%://%:%', [TLS_TEXT[fHttps], fServer, fPort], fRootUrl);
