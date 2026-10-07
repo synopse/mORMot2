@@ -6629,7 +6629,7 @@ begin
   if aAddress = '' then
     exit;
   Address := aAddress;
-  if Address[1] = '/' then
+  if Address[1] = '/' then // From() trims any leading '/'
     delete(Address, 1, 1);
 end;
 
@@ -7220,7 +7220,7 @@ var
 begin
   if not u.From(aUri) then
     DoRaise('ConnectUri(%s): invalid URI', [aUri]);
-  OpenBind(u.Server, u.Port, {doBind=}false, u.Https);
+  OpenBind(u.Server, u.Port, {doBind=}false, u.Https, u.Layer);
   if aAddress <> nil then
     aAddress^ := u.Address;
 end;
@@ -7365,7 +7365,7 @@ begin
   // will properly use the defined timeouts
   try
     Close;
-    OpenBind(fServer, fPort, fWasBind in fFlags, ServerTls);
+    OpenBind(fServer, fPort, fWasBind in fFlags, ServerTls, fSocketLayer);
     if SockConnected then
       result := '' // success
     else
@@ -7387,7 +7387,8 @@ begin
   Tunnel := aClient.Tunnel;
   TLS := aClient.TLS;
   OnLog := aClient.OnLog;
-  OpenBind(aClient.Server, aClient.Port, {bind=}false, aClient.ServerTls);
+  OpenBind(aClient.Server, aClient.Port, {bind=}false, aClient.ServerTls,
+           aClient.SocketLayer);
 end;
 
 procedure TCrtSocket.AcceptRequest(aClientSock: TNetSocket; aClientAddr: PNetAddr);

@@ -4162,7 +4162,7 @@ procedure THttpClientSocket.RequestInternal(var ctxt: THttpClientRequest);
       try
         // recreate the connection and try again - like TCrtSocket.ReOpen()
         Close;
-        OpenBind(fServer, fPort, {bind=}false, ServerTls);
+        OpenBind(fServer, fPort, {bind=}false, ServerTls, fSocketLayer);
         HttpStateReset;
         include(ctxt.Retry, rMain);
         fLastRequestTix := 0;
@@ -4583,6 +4583,12 @@ begin
       // apply all RFC 3986 Location: relative/absolute changes
       if not newUri.FromLocation(u, Server, Port, ServerTls, ctxt.Url) then
         break;                              // invalid Location: header
+      if not (newUri.UriScheme in HTTP_SCHEME) then
+      begin
+        AppendLine(fRequestContext,
+          ['Reject redirect into ', newuri.Scheme]);
+        break; // preserve original 3xx status and Location:
+      end;
       if (hroRejectUserInfo in ctxt.RedirectOptions) and
          ((newuri.User <> '') or
           (newuri.Password <> '')) then
@@ -4642,6 +4648,7 @@ begin
           // will proper reuse the timeouts and the proxy of this new URI 
           SetTunnelForUri(newuri);
           OpenBind(newuri.Server, newuri.Port, {bind=}false, newuri.Https);
+          // ignore newuri.Layer(=nlTcp after HTTP_SCHEME check above)
         except
           on E: Exception do
           begin
