@@ -4167,7 +4167,7 @@ begin
           MoveFast(text^, temp, l);
           text := @temp;
           text[l] := #0;
-          break; // accept '[2001:db8::1]'  as '2001:db8::1'
+          break; // accept '[2001:db8::1]'  as '2001:db8::1' for Inet6Pton()
         end;
       '.', '0'..'9', 'a'..'f', 'A'..'F':
         begin
@@ -4204,7 +4204,7 @@ begin
       exit; // recognized '::1' .. '::9' IPv6 loopback
     end;
   end;
-  // call proper OS API for RFC 4291 parsing
+  // call proper OS API for fully compliant RFC 4291 parsing
   if value = nil then // value is optional, just like NetIsIP4()
     value := @dummy;  // but the OS API requires some destination buffer
   result := Inet6Pton(text, value);

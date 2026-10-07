@@ -3774,11 +3774,29 @@ begin
 end;
 {$endif USEWININET}
 
+function NoProxyMatchUri(const uri, noproxy: RawUtf8): boolean;
+var
+  u: TUri;
+begin
+  result := (noproxy <> '') and
+            u.From(uri) and
+            NoProxyMatch(u.Server, noproxy);
+end;
+
 function GetProxyForUri(const uri: RawUtf8; fromSystem: boolean): RawUtf8;
+var
+  noproxy: RawUtf8;
 begin
   if not IdemPChar(pointer(uri), 'HTTPS://') or
      not GetSystemEnv('HTTPS_PROXY', result{%H-}) then // from cache
     result := GetSystemEnv('HTTP_PROXY');
+  if (result <> '') and
+     GetSystemEnv('NO_PROXY', noproxy) then
+  begin
+    if NoProxyMatchUri(uri, noproxy) then
+      result := '';
+    exit;
+  end;
   {$ifdef USEWININET}
   if (result = '') and
      fromSystem then
