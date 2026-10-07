@@ -23,18 +23,20 @@ Files are spread across the `dom/ infra/ app/` layers:
 ```
 dom/<entity>/
 ├── <entity>.pas             → TOrm aggregate (domain object)
-├── <entity>_repository.pas  → I<Entity>Repository  (persistence port)
-├── <entity>_query.pas       → I<Entity>Query       (read interface)
-└── <entity>_command.pas     → I<Entity>Command     (write interface)
+└── <entity>_repository.pas  → I<Entity>Repository  (persistence port)
 
 infra/<entity>/
 └── <entity>_repository_orm.pas      → T<Entity>RepositoryOrm (IRestOrm backend), FTS5 schema, lazy migration
 
 app/<entity>/
-├── <entity>_dtos.pas         → packed-record DTO family
-├── <entity>_mappers.pas      → OrmTo* / *ToOrm / Apply* (pure)
-├── <entity>_query_impl.pas   → T<Entity>QueryService   (sicShared)
-└── <entity>_command_impl.pas → T<Entity>CommandService (sicShared)
+├── interface/                     (public contract: shared by server and clients)
+│   ├── <entity>_query.pas         → I<Entity>Query          (read interface)
+│   ├── <entity>_command.pas       → I<Entity>Command        (write interface)
+│   └── <entity>_dtos.pas          → packed-record DTO family
+└── implementation/                (server side only)
+    ├── <entity>_mappers.pas       → OrmTo* / *ToOrm / Apply* (pure)
+    ├── <entity>_query_impl.pas    → T<Entity>QueryService   (sicShared)
+    └── <entity>_command_impl.pas  → T<Entity>CommandService (sicShared)
 ```
 
 Services receive `I<Entity>Repository` via property injection — a published `Repo`
@@ -45,7 +47,7 @@ They never touch `IRestOrm` directly. The repository hides all SQL/FTS5 detail i
 
 ### ITaskQuery — Read Operations
 
-**File**: `src/dom/tasks/task_query.pas`
+**File**: `src/app/tasks/interface/task_query.pas`
 
 ```pascal
 ITaskQuery = interface(IInvokable)
@@ -62,17 +64,17 @@ end;
 | ListTasks | aStatus: RawUtf8 | TTaskListItemDTODynArray | Compact list items, filtered by status |
 | SearchTasks | aCriteria: TTaskSearchDTO | TTaskListItemDTODynArray | FTS5 full-text search with LIKE fallback |
 
-**Implementation** (`app/tasks/task_query_impl.pas`):
+**Implementation** (`app/tasks/implementation/task_query_impl.pas`):
 - Descends from `TInjectableObjectRest`; publishes `Repo: ITaskRepository`, filled by `AutoResolve` from the repo seeded into the dispatcher's resolver (`InjectInstance`). No `IRestOrm` in sight.
 - No monitoring code: per-method timing and counters come from the framework's built-in SOA statistics (`GET /taskmanager/stat?withall=1`; persisted to the `MonitorUsage` table by the composition root).
 - Reads receive aggregates **already migrated** to the current schema — the repository's `GetByID` / `List` / `Search` migrate internally, so the service never calls migration itself.
 - `SearchTasks` just normalises the status filter and calls `fRepo.Search`; the FTS5-vs-`LIKE` choice and the fallback live entirely inside the repository.
 - Lists are returned as `IList<TTask>` — interface-managed lifetime, no `try…finally Free`.
-- Read field copy delegated to `OrmToTaskViewDTO` / `OrmToTaskListItemDTO` in `app/tasks/task_mappers.pas` (pure).
+- Read field copy delegated to `OrmToTaskViewDTO` / `OrmToTaskListItemDTO` in `app/tasks/implementation/task_mappers.pas` (pure).
 
 ### ITaskCommand — Write Operations
 
-**File**: `src/dom/tasks/task_command.pas`
+**File**: `src/app/tasks/interface/task_command.pas`
 
 ```pascal
 ITaskCommand = interface(IInvokable)
@@ -101,17 +103,17 @@ end;
 | AddTag | TID, TID | Add tag reference (idempotent) |
 | RemoveTag | TID, TID | Remove tag reference |
 
-**Implementation** (`app/tasks/task_command_impl.pas`):
+**Implementation** (`app/tasks/implementation/task_command_impl.pas`):
 - Descends from `TInjectableObjectRest`; publishes `Repo: ITaskRepository`, filled by `AutoResolve`. No `IRestOrm` in sight.
 - Writes go through the **atomic** `fRepo.Add` / `fRepo.Update` / `fRepo.Delete`: each opens its own transaction and keeps the FTS5 index in sync internally. The service holds no transaction or FTS5 logic — it just translates the outcome to a `TCommandResult`.
-- Validation, defaults, and write-side field copy delegated to `CreateTaskDTOToOrm` / `ApplyUpdateTaskDTO` in `app/tasks/task_mappers.pas` (pure).
+- Validation, defaults, and write-side field copy delegated to `CreateTaskDTOToOrm` / `ApplyUpdateTaskDTO` in `app/tasks/implementation/task_mappers.pas` (pure).
 - Comment and tag mutations are **methods on the `TTask` aggregate** (`AppendComment`, `UpdateCommentContent`, `DeleteComment`, `AddTag`, `RemoveTag`, `SetCompleted`) — the aggregate owns its embedded arrays and its `UpdatedAt` stamp ([§B.3](https://github.com/synopse/mORMot2/blob/master/docs/mORMot2-SAD-Recommended-Patterns.md#b3-two-types-per-entity-not-three)); the service never touches its fields.
 
 ## Tag Context
 
 ### ITagQuery — Read Operations
 
-**File**: `src/dom/tags/tag_query.pas`
+**File**: `src/app/tags/interface/tag_query.pas`
 
 ```pascal
 ITagQuery = interface(IInvokable)
@@ -124,7 +126,7 @@ end;
 
 ### ITagCommand — Write Operations
 
-**File**: `src/dom/tags/tag_command.pas`
+**File**: `src/app/tags/interface/tag_command.pas`
 
 ```pascal
 ITagCommand = interface(IInvokable)

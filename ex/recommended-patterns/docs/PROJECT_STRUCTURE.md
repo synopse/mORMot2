@@ -3,7 +3,7 @@
 
 ## Overview
 
-The mORMot2 Task Manager is organized as **DDD + CQRS feature modules** split across the canonical `dom/ infra/ app/` layers, one subfolder per entity. This keeps the persistence boundary visible: domain abstractions in `dom/`, IRestOrm-backed implementations in `infra/`, application/use-case code in `app/`.
+The mORMot2 Task Manager is organized as **DDD + CQRS feature modules** split across the canonical `dom/ infra/ app/` layers, one subfolder per entity. This keeps the persistence boundary visible: domain abstractions in `dom/`, IRestOrm-backed implementations in `infra/`, application/use-case code in `app/` — split into `interface/` (the CQRS contract that clients compile against) and `implementation/` (the server-side services).
 
 The layout and the `§…` / `A.x` / `B.x` citations in this document follow the mORMot2 SAD [*Recommended Patterns*](https://github.com/synopse/mORMot2/blob/master/docs/mORMot2-SAD-Recommended-Patterns.md) guide.
 
@@ -21,33 +21,37 @@ The layout and the `§…` / `A.x` / `B.x` citations in this document follow the
 │   ├── <a href="../src/shared_types.pas">shared_types.pas</a>                  # TCommandResult and helpers
 │   ├── <a href="../src/app_config.pas">app_config.pas</a>                    # Logging configuration
 │   ├── <a href="../src/app_settings.pas">app_settings.pas</a>                  # TTaskManagerSettings (TSynDaemonSettings)
-│   ├── <a href="../src/dom/">dom/</a>                              # Domain: TOrm aggregates + interfaces (no infrastructure leaks)
+│   ├── <a href="../src/dom/">dom/</a>                              # Domain: TOrm aggregates + repository ports (no infrastructure leaks)
 │   │   ├── <a href="../src/dom/tasks/">tasks/</a>
 │   │   │   ├── <a href="../src/dom/tasks/task.pas">task.pas</a>                  # TTask aggregate (TOrm), TTaskComment
-│   │   │   ├── <a href="../src/dom/tasks/task_repository.pas">task_repository.pas</a>       # ITaskRepository — persistence port
-│   │   │   ├── <a href="../src/dom/tasks/task_query.pas">task_query.pas</a>            # ITaskQuery (CQRS read)
-│   │   │   └── <a href="../src/dom/tasks/task_command.pas">task_command.pas</a>          # ITaskCommand (CQRS write)
+│   │   │   └── <a href="../src/dom/tasks/task_repository.pas">task_repository.pas</a>       # ITaskRepository — persistence port
 │   │   └── <a href="../src/dom/tags/">tags/</a>
 │   │       ├── <a href="../src/dom/tags/tag.pas">tag.pas</a>                   # TTag aggregate (TOrm)
-│   │       ├── <a href="../src/dom/tags/tag_repository.pas">tag_repository.pas</a>        # ITagRepository — persistence port
-│   │       ├── <a href="../src/dom/tags/tag_query.pas">tag_query.pas</a>             # ITagQuery
-│   │       └── <a href="../src/dom/tags/tag_command.pas">tag_command.pas</a>           # ITagCommand
+│   │       └── <a href="../src/dom/tags/tag_repository.pas">tag_repository.pas</a>        # ITagRepository — persistence port
 │   ├── <a href="../src/infra/">infra/</a>                            # Infrastructure: IRestOrm / SQL / FTS5
 │   │   ├── <a href="../src/infra/tasks/">tasks/</a>
 │   │   │   └── <a href="../src/infra/tasks/task_repository_orm.pas">task_repository_orm.pas</a>   # TTaskRepositoryOrm, TTaskFts5 schema, migration
 │   │   └── <a href="../src/infra/tags/">tags/</a>
 │   │       └── <a href="../src/infra/tags/tag_repository_orm.pas">tag_repository_orm.pas</a>    # TTagRepositoryOrm, migration
-│   ├── <a href="../src/app/">app/</a>                              # Application layer: DTOs, mappers, services
+│   ├── <a href="../src/app/">app/</a>                              # Application layer: CQRS interfaces + DTOs, mappers, services
 │   │   ├── <a href="../src/app/tasks/">tasks/</a>
-│   │   │   ├── <a href="../src/app/tasks/task_dtos.pas">task_dtos.pas</a>             # Family of packed-record DTOs (view/list/create/update/…)
-│   │   │   ├── <a href="../src/app/tasks/task_mappers.pas">task_mappers.pas</a>          # OrmTo* / *ToOrm / Apply* — pure procedures
-│   │   │   ├── <a href="../src/app/tasks/task_query_impl.pas">task_query_impl.pas</a>       # TTaskQueryService (sicShared)
-│   │   │   └── <a href="../src/app/tasks/task_command_impl.pas">task_command_impl.pas</a>     # TTaskCommandService (sicShared)
+│   │   │   ├── <a href="../src/app/tasks/interface/">interface/</a>                # Public contract, shared by server and clients
+│   │   │   │   ├── <a href="../src/app/tasks/interface/task_query.pas">task_query.pas</a>        # ITaskQuery (CQRS read)
+│   │   │   │   ├── <a href="../src/app/tasks/interface/task_command.pas">task_command.pas</a>      # ITaskCommand (CQRS write)
+│   │   │   │   └── <a href="../src/app/tasks/interface/task_dtos.pas">task_dtos.pas</a>         # Family of packed-record DTOs (view/list/create/update/…)
+│   │   │   └── <a href="../src/app/tasks/implementation/">implementation/</a>           # Server side only: clients never reference it
+│   │   │       ├── <a href="../src/app/tasks/implementation/task_mappers.pas">task_mappers.pas</a>      # OrmTo* / *ToOrm / Apply* — pure procedures
+│   │   │       ├── <a href="../src/app/tasks/implementation/task_query_impl.pas">task_query_impl.pas</a>   # TTaskQueryService (sicShared)
+│   │   │       └── <a href="../src/app/tasks/implementation/task_command_impl.pas">task_command_impl.pas</a> # TTaskCommandService (sicShared)
 │   │   └── <a href="../src/app/tags/">tags/</a>
-│   │       ├── <a href="../src/app/tags/tag_dtos.pas">tag_dtos.pas</a>
-│   │       ├── <a href="../src/app/tags/tag_mappers.pas">tag_mappers.pas</a>
-│   │       ├── <a href="../src/app/tags/tag_query_impl.pas">tag_query_impl.pas</a>
-│   │       └── <a href="../src/app/tags/tag_command_impl.pas">tag_command_impl.pas</a>
+│   │       ├── <a href="../src/app/tags/interface/">interface/</a>
+│   │       │   ├── <a href="../src/app/tags/interface/tag_query.pas">tag_query.pas</a>         # ITagQuery
+│   │       │   ├── <a href="../src/app/tags/interface/tag_command.pas">tag_command.pas</a>       # ITagCommand
+│   │       │   └── <a href="../src/app/tags/interface/tag_dtos.pas">tag_dtos.pas</a>
+│   │       └── <a href="../src/app/tags/implementation/">implementation/</a>
+│   │           ├── <a href="../src/app/tags/implementation/tag_mappers.pas">tag_mappers.pas</a>
+│   │           ├── <a href="../src/app/tags/implementation/tag_query_impl.pas">tag_query_impl.pas</a>
+│   │           └── <a href="../src/app/tags/implementation/tag_command_impl.pas">tag_command_impl.pas</a>
 │   └── <a href="../src/serv/">serv/</a>                             # Daemon / composition root (the only place infra classes are named)
 │       └── <a href="../src/serv/app/">app/</a>
 │           └── <a href="../src/serv/app/ServAppTaskManager.pas">ServAppTaskManager.pas</a>    # Builds the two-server topology, wires repos, registers services
@@ -73,16 +77,16 @@ The layout and the `§…` / `A.x` / `B.x` citations in this document follow the
 
 ## Layers
 
-### `dom/` — Domain (pure interfaces)
+### `dom/` — Domain (aggregates + repository ports)
 
 The domain layer. No `IRestOrm`, no `mormot.rest.*`, no SQL — it depends only on the ORM *base type* (`mormot.orm.core`). Per entity:
 
 - **`<entity>.pas`** — the `TOrm` aggregate. Doubles as the domain object (no separate `TSynPersistent` shadow class), owning its own invariants (comment/tag mutators, completion state). Lives in `dom/` because it *is* the domain object (Recommended Patterns [B.3](https://github.com/synopse/mORMot2/blob/master/docs/mORMot2-SAD-Recommended-Patterns.md#b3-two-types-per-entity-not-three)/[B.6.1](https://github.com/synopse/mORMot2/blob/master/docs/mORMot2-SAD-Recommended-Patterns.md#b61-suggested-folder-structure)).
 - **`I<Entity>Repository`** — persistence port. Hides the storage choice from the application.
-- **`I<Entity>Query`** — CQRS read interface (IInvokable, GUID, registered on Server.Services).
-- **`I<Entity>Command`** — CQRS write interface (IInvokable, GUID).
 
 This is what the rest of the code depends on. Swapping SQLite for SQL Server / Mongo / a stub for tests is a `dom/` → new `infra/` impl change; nothing in `app/` moves.
+
+The CQRS interfaces (`I<Entity>Query` / `I<Entity>Command`) are **not** here: they take and return the `app/` DTOs, so declaring them in `dom/` would make the domain depend on the application layer. They are the application layer's public contract and live in `app/<entity>/interface/` (see below).
 
 ### `infra/` — Infrastructure (IRestOrm-backed implementations)
 
@@ -90,9 +94,18 @@ This is what the rest of the code depends on. Swapping SQLite for SQL Server / M
 
 All SQL/FTS5 knowledge lives here. If the application layer ever calls `IRestOrm` directly, that's a leak to fix.
 
-### `app/` — Application (DTOs, mappers, services)
+### `app/` — Application (contract, DTOs, mappers, services)
 
+Each `app/<entity>/` is split in two. **`interface/`** is the public contract shared by the server and its clients — the client-facing units (`AppTaskManagerClient`, `AppTaskManagerClientRemote`, `cli_client_core`) reference only this folder. **`implementation/`** holds the server-side services and mappers; clients never reference it. The exceptions run server-side code in-process: the CLI's `LOCAL_MODE` backend (`AppTaskManagerClientLocal`), which hosts the services, and the tests, which exercise the mappers directly.
+
+`interface/`:
+
+- **`<entity>_query.pas`** — `I<Entity>Query`, CQRS read interface (IInvokable, GUID, registered on Server.Services).
+- **`<entity>_command.pas`** — `I<Entity>Command`, CQRS write interface (IInvokable, GUID).
 - **`<entity>_dtos.pas`** — family of **operation-specific** `packed record` DTOs (`T<Entity>ViewDTO`, `T<Entity>ListItemDTO`, `T<Entity>CreateDTO`, `T<Entity>UpdateDTO`, …) registered via `Rtti.RegisterFromText` in the unit's `initialization` section.
+
+`implementation/`:
+
 - **`<entity>_mappers.pas`** — **pure** procedures:
   - `OrmTo<Dto>` for reads (mechanical field copy).
   - `<Dto>ToOrm` for create (fills a fresh `TOrm`, sets `CreatedAt`, defaults, validations).
@@ -106,7 +119,7 @@ One subfolder per entity. Tests use `TSynTestCase` and resolve services via `Dis
 
 ### `serv/` — Daemon / composition root
 
-The one place that names concrete `infra/` classes and wires them to the services. Keeping it in its own folder (per the Recommended Patterns [suggested layout](https://github.com/synopse/mORMot2/blob/master/docs/mORMot2-SAD-Recommended-Patterns.md#b61-suggested-folder-structure)) makes the persistence boundary visible: every other layer depends on `dom/` interfaces, and swapping a backend touches only `infra/` + this unit.
+The one place that names concrete `infra/` classes and wires them to the services. Keeping it in its own folder (per the Recommended Patterns [suggested layout](https://github.com/synopse/mORMot2/blob/master/docs/mORMot2-SAD-Recommended-Patterns.md#b61-suggested-folder-structure)) makes the persistence boundary visible: every other layer depends on `dom/` repository ports (and the `app/*/interface/` contract), never on `infra/`, and swapping a backend touches only `infra/` + this unit.
 
 ## Composition roots
 
@@ -156,23 +169,23 @@ Following the Recommended-Patterns [B.6.1](https://github.com/synopse/mORMot2/bl
 <a href="../src/task_manager.pas">task_manager.pas</a>  → <a href="../src/serv/app/ServAppTaskManager.pas">serv/app/ServAppTaskManager.pas</a>
     ├── <a href="../src/shared_types.pas">shared_types.pas</a>, <a href="../src/app_config.pas">app_config.pas</a>
     ├── tasks:
-    │   ├── <a href="../src/dom/tasks/task.pas">dom/tasks/task.pas</a>              # TOrm aggregate (depends only on mormot.orm.core)
-    │   ├── <a href="../src/app/tasks/task_dtos.pas">app/tasks/task_dtos.pas</a>         → task
-    │   ├── <a href="../src/app/tasks/task_mappers.pas">app/tasks/task_mappers.pas</a>      → task, task_dtos
-    │   ├── <a href="../src/dom/tasks/task_repository.pas">dom/tasks/task_repository.pas</a>   → task
+    │   ├── <a href="../src/dom/tasks/task.pas">dom/tasks/task.pas</a>                        # TOrm aggregate (depends only on mormot.orm.core)
+    │   ├── <a href="../src/app/tasks/interface/task_dtos.pas">app/tasks/interface/task_dtos.pas</a>         → task
+    │   ├── <a href="../src/app/tasks/implementation/task_mappers.pas">app/tasks/implementation/task_mappers.pas</a> → task, task_dtos
+    │   ├── <a href="../src/dom/tasks/task_repository.pas">dom/tasks/task_repository.pas</a>             → task
     │   ├── <a href="../src/infra/tasks/task_repository_orm.pas">infra/tasks/task_repository_orm.pas</a>
     │   │       → task, task_repository
-    │   ├── <a href="../src/dom/tasks/task_query.pas">dom/tasks/task_query.pas</a>        → task_dtos
-    │   ├── <a href="../src/dom/tasks/task_command.pas">dom/tasks/task_command.pas</a>      → task_dtos, shared_types
-    │   ├── <a href="../src/app/tasks/task_query_impl.pas">app/tasks/task_query_impl.pas</a>
+    │   ├── <a href="../src/app/tasks/interface/task_query.pas">app/tasks/interface/task_query.pas</a>        → task_dtos
+    │   ├── <a href="../src/app/tasks/interface/task_command.pas">app/tasks/interface/task_command.pas</a>      → task_dtos, shared_types
+    │   ├── <a href="../src/app/tasks/implementation/task_query_impl.pas">app/tasks/implementation/task_query_impl.pas</a>
     │   │       → task_query, task, task_dtos, task_mappers, task_repository
-    │   ├── <a href="../src/app/tasks/task_command_impl.pas">app/tasks/task_command_impl.pas</a>
+    │   ├── <a href="../src/app/tasks/implementation/task_command_impl.pas">app/tasks/implementation/task_command_impl.pas</a>
     │   │       → task_command, task, task_dtos, task_mappers, task_repository
-    │   └── <a href="../tests/tasks/task_tests.pas">tests/tasks/task_tests.pas</a>      → task_query, task_command, task_dtos
+    │   └── <a href="../tests/tasks/task_tests.pas">tests/tasks/task_tests.pas</a>                → task_query, task_command, task_dtos
     └── tags: (symmetric)
 </pre>
 
-The key rule: `app/*_impl.pas` depends on `dom/*_repository.pas` (interface), **never** on `infra/*_repository_orm.pas` (implementation). The composition root is the only file that knows the concrete `T*RepositoryOrm` class exists.
+The key rule: `app/*/implementation/*_impl.pas` depends on `dom/*_repository.pas` (interface), **never** on `infra/*_repository_orm.pas` (implementation). The composition root is the only file that knows the concrete `T*RepositoryOrm` class exists.
 
 ## File Naming Conventions
 
@@ -181,12 +194,12 @@ The key rule: `app/*_impl.pas` depends on `dom/*_repository.pas` (interface), **
 | `<entity>.pas`          | dom   | `TOrm` aggregate (doubles as domain object) |
 | `*_repository.pas`      | dom   | `I*Repository` persistence port |
 | `*_repository_orm.pas`  | infra | IRestOrm-backed impl + FTS5 schema + migration |
-| `*_dtos.pas`            | app   | `packed record` DTO family |
-| `*_mappers.pas`         | app   | Pure `OrmTo*` / `*ToOrm` / `Apply*` |
-| `*_query.pas`           | dom   | `I*Query` CQRS read interface |
-| `*_command.pas`         | dom   | `I*Command` CQRS write interface |
-| `*_query_impl.pas`      | app   | `T*QueryService` |
-| `*_command_impl.pas`    | app   | `T*CommandService` |
+| `*_query.pas`           | app/interface | `I*Query` CQRS read interface |
+| `*_command.pas`         | app/interface | `I*Command` CQRS write interface |
+| `*_dtos.pas`            | app/interface | `packed record` DTO family |
+| `*_mappers.pas`         | app/implementation | Pure `OrmTo*` / `*ToOrm` / `Apply*` |
+| `*_query_impl.pas`      | app/implementation | `T*QueryService` |
+| `*_command_impl.pas`    | app/implementation | `T*CommandService` |
 | `*_tests.pas`           | tests | `TSynTestCase` per feature |
 | `ServApp*.pas`          | serv  | Daemon / composition root |
 | `App*Client.pas`        | src   | Transport-agnostic consumer port (`ITaskManagerClient`) |
@@ -195,14 +208,14 @@ The key rule: `app/*_impl.pas` depends on `dom/*_repository.pas` (interface), **
 
 ## Adding a New Feature
 
-1. Create `src/dom/<entity>/`, `src/infra/<entity>/`, `src/app/<entity>/`, `tests/<entity>/`.
+1. Create `src/dom/<entity>/`, `src/infra/<entity>/`, `src/app/<entity>/interface/`, `src/app/<entity>/implementation/`, `tests/<entity>/`.
 2. **Dom**: define the `TOrm` aggregate (and any embedded records) in `<entity>.pas` — depends only on `mormot.orm.core`, no `IRestOrm`.
 3. **Dom**: declare `I<Entity>Repository` (with a fresh GUID) in `<entity>_repository.pas`.
 4. **Infra**: implement `T<Entity>RepositoryOrm` over `IRestOrm` in `<entity>_repository_orm.pas`, alongside any FTS5 schema class and the `Migrate<Entity>IfNeeded` helper.
-5. **App**: define the DTO family in `<entity>_dtos.pas` and register each shape with `Rtti.RegisterFromText` in `initialization`.
-6. **App**: write the mappers in `<entity>_mappers.pas` (pure — no `IRestOrm`).
-7. **Dom**: declare `I<Entity>Query` and `I<Entity>Command` (with fresh GUIDs).
-8. **App**: implement `T<Entity>QueryService` and `T<Entity>CommandService` (descend from `TInjectableObjectRest`, publish `Repo: I<Entity>Repository`). No monitoring code — the framework tracks every service method automatically.
+5. **App** (`interface/`): define the DTO family in `<entity>_dtos.pas` and register each shape with `Rtti.RegisterFromText` in `initialization`.
+6. **App** (`implementation/`): write the mappers in `<entity>_mappers.pas` (pure — no `IRestOrm`).
+7. **App** (`interface/`): declare `I<Entity>Query` and `I<Entity>Command` (with fresh GUIDs).
+8. **App** (`implementation/`): implement `T<Entity>QueryService` and `T<Entity>CommandService` (descend from `TInjectableObjectRest`, publish `Repo: I<Entity>Repository`). No monitoring code — the framework tracks every service method automatically.
 9. **Tests**: write `T<Entity>Tests` in `tests/<entity>/<entity>_tests.pas`.
 10. **Composition root** (`serv/app/ServAppTaskManager.pas` and `AppTaskManagerClientLocal.pas`; the remote backend needs only the new Query/Command `TypeInfo()`s in `RegisterTaskManagerInterfaces`):
     - Add the `TOrm` class to the persistence `TOrmModel.Create([...])`.
@@ -211,4 +224,4 @@ The key rule: `app/*_impl.pas` depends on `dom/*_repository.pas` (interface), **
     - Seed it into the dispatcher's resolver before `ServiceDefine`: `Dispatcher.ServiceContainer.InjectInstance([RepoImpl])` (add to the existing array).
     - Register services on the dispatcher (class form): `Dispatcher.ServiceDefine(T<Entity>QueryService, [I<Entity>Query], sicShared)`; same for Command.
     - Add the test case to the `TSynTests` suite.
-11. **prj/fpc/compile.sh / prj/fpc/compile_cli.sh**: nothing to add — the existing `-Fusrc/dom/<entity> -Fusrc/infra/<entity> -Fusrc/app/<entity>` patterns already cover any new entity once the folder exists; just add new `-Fu` lines per entity folder.
+11. **prj/fpc/compile.sh / prj/fpc/compile_cli.sh**: nothing to add — the existing `-Fusrc/dom/<entity> -Fusrc/infra/<entity> -Fusrc/app/<entity>/interface -Fusrc/app/<entity>/implementation` patterns already cover any new entity once the folder exists; just add new `-Fu` lines per entity folder.
