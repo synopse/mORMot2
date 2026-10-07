@@ -1187,9 +1187,9 @@ begin
     [fServerHost, fServerPort, connection, ip, url, protocol], self);
   if fServerRemoteIPHeader <> '' then
     header := fServerRemoteIPHeader + ip;
-  result := TServerClient(TServerClient.WebSocketsConnect(
+  result := TServerClient.WebSocketsConnect(
     fServerHost, fServerPort, TSynopseClientProtocol.Create(self, protocol),
-    fLog, 'NewServerClient', url, header{%H-}));
+    fLog, 'NewServerClient', url, header{%H-}) as TServerClient;
   if result <> nil then
   begin
     result.Connection := connection;

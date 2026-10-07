@@ -118,6 +118,10 @@ type
     fOnWebSocketsClosed: TNotifyEvent;
     procedure DoCreate(aTimeOut: integer); override;
     procedure SetReceiveTimeout(aReceiveTimeout: integer); override;
+    class function LegacyWebSocketsConnect(const aUri: TUri;
+      aProtocol: TWebSocketProtocol; aLog: TSynLogClass;
+      const aLogContext, aCustomHeaders: RawUtf8;
+      aTLSContext: PNetTlsContext): THttpClientWebSockets;
   public
     /// low-level client WebSockets main connection factory
     // - calls OpenOptions() then WebSocketsUpgrade() for a given protocol
@@ -570,7 +574,7 @@ begin
        (aUri.Server = '') or
        not (aUri.UriScheme in HTTP_SCHEME) then
       EWebSockets.RaiseUtf8('Invalid parameters to %.WebSocketsConnect', [self]);
-    // main connection factory - includes Proxy/ProxyByPass/PAC resolution
+    // call main connection constructor - includes Proxy/ProxyByPass/PAC resolution
     result := OpenOptions(aUri, aOptions, onlog);
     // from now on WebSocketsUpgrade() owns aProtocol
     upgrade := true;
@@ -615,8 +619,9 @@ begin
   result := WebSocketsConnect(uri, aOptions^, aProtocol, aLog, aLogContext, aCustomHeaders);
 end;
 
-function LegacyWebSocketsConnect(const aUri: TUri; aProtocol: TWebSocketProtocol;
-  aLog: TSynLogClass; const aLogContext, aCustomHeaders: RawUtf8;
+class function THttpClientWebSockets.LegacyWebSocketsConnect(
+  const aUri: TUri; aProtocol: TWebSocketProtocol; aLog: TSynLogClass;
+  const aLogContext, aCustomHeaders: RawUtf8;
   aTLSContext: PNetTlsContext): THttpClientWebSockets;
 var
   opt: THttpRequestExtendedOptions;
@@ -626,8 +631,7 @@ begin
   opt.CreateTimeoutMS := 10000;
   if aTLSContext <> nil then
     opt.TLS := aTLSContext^;
-  result := THttpClientWebSockets.WebSocketsConnect(
-    aUri, opt, aProtocol, aLog, aLogContext, aCustomHeaders);
+  result := WebSocketsConnect(aUri, opt, aProtocol, aLog, aLogContext, aCustomHeaders);
 end;
 
 class function THttpClientWebSockets.WebSocketsConnect(
