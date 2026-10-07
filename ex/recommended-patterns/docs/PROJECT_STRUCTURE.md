@@ -169,8 +169,8 @@ Following the Recommended-Patterns [B.6.1](https://github.com/synopse/mORMot2/bl
 <a href="../src/task_manager.pas">task_manager.pas</a>  → <a href="../src/serv/app/ServAppTaskManager.pas">serv/app/ServAppTaskManager.pas</a>
     ├── <a href="../src/shared_types.pas">shared_types.pas</a>, <a href="../src/app_config.pas">app_config.pas</a>
     ├── tasks:
-    │   ├── <a href="../src/dom/tasks/task.pas">dom/tasks/task.pas</a>                        # TOrm aggregate (depends only on mormot.orm.core)
-    │   ├── <a href="../src/app/tasks/interface/task_dtos.pas">app/tasks/interface/task_dtos.pas</a>         → task
+    │   ├── <a href="../src/dom/tasks/task.pas">dom/tasks/task.pas</a>                        → shared_types  # TOrm aggregate (ORM base type only, no IRestOrm)
+    │   ├── <a href="../src/app/tasks/interface/task_dtos.pas">app/tasks/interface/task_dtos.pas</a>         → shared_types, task
     │   ├── <a href="../src/app/tasks/implementation/task_mappers.pas">app/tasks/implementation/task_mappers.pas</a> → task, task_dtos
     │   ├── <a href="../src/dom/tasks/task_repository.pas">dom/tasks/task_repository.pas</a>             → task
     │   ├── <a href="../src/infra/tasks/task_repository_orm.pas">infra/tasks/task_repository_orm.pas</a>
@@ -180,9 +180,10 @@ Following the Recommended-Patterns [B.6.1](https://github.com/synopse/mORMot2/bl
     │   ├── <a href="../src/app/tasks/implementation/task_query_impl.pas">app/tasks/implementation/task_query_impl.pas</a>
     │   │       → task_query, task, task_dtos, task_mappers, task_repository
     │   ├── <a href="../src/app/tasks/implementation/task_command_impl.pas">app/tasks/implementation/task_command_impl.pas</a>
-    │   │       → task_command, task, task_dtos, task_mappers, task_repository
-    │   └── <a href="../tests/tasks/task_tests.pas">tests/tasks/task_tests.pas</a>                → task_query, task_command, task_dtos
-    └── tags: (symmetric)
+    │   │       → task_command, shared_types, task, task_dtos, task_mappers, task_repository
+    │   └── <a href="../tests/tasks/task_tests.pas">tests/tasks/task_tests.pas</a>
+    │           → shared_types, task, task_dtos, task_mappers, task_query, task_command
+    └── tags: (same shape, except that tag.pas does not use shared_types and tag_dtos does not use tag)
 </pre>
 
 The key rule: `app/*/implementation/*_impl.pas` depends on `dom/*_repository.pas` (interface), **never** on `infra/*_repository_orm.pas` (implementation). The composition root is the only file that knows the concrete `T*RepositoryOrm` class exists.
@@ -224,4 +225,6 @@ The key rule: `app/*/implementation/*_impl.pas` depends on `dom/*_repository.pas
     - Seed it into the dispatcher's resolver before `ServiceDefine`: `Dispatcher.ServiceContainer.InjectInstance([RepoImpl])` (add to the existing array).
     - Register services on the dispatcher (class form): `Dispatcher.ServiceDefine(T<Entity>QueryService, [I<Entity>Query], sicShared)`; same for Command.
     - Add the test case to the `TSynTests` suite.
-11. **prj/fpc/compile.sh / prj/fpc/compile_cli.sh**: nothing to add — the existing `-Fusrc/dom/<entity> -Fusrc/infra/<entity> -Fusrc/app/<entity>/interface -Fusrc/app/<entity>/implementation` patterns already cover any new entity once the folder exists; just add new `-Fu` lines per entity folder.
+11. **Build files** — each entity folder is listed explicitly, so a new entity needs:
+    - **FPC** (`prj/fpc/compile.sh` / `.bat`, `prj/fpc/compile_cli.sh` / `.bat`): add `-Fusrc/dom/<entity> -Fusrc/infra/<entity> -Fusrc/app/<entity>/interface -Fusrc/app/<entity>/implementation`, plus `-Futests/<entity>` in `compile.*` only.
+    - **Delphi / Lazarus** (`prj/delphi/*.dpr`, also the main sources of the `.lpi` projects): add a `unit in '..\..\src\…'` entry per new unit — every unit in `task_manager.dpr`; in `cli_client.dpr`, the `interface/` units (and any `dom/` unit they use) always, the remaining units inside `{$ifdef LOCAL_MODE}`. Mirror them as `DCCReference` items in `task_manager.dproj` (all) and `cli_client.dproj` (unconditional ones only). The `.lpi` files need no change.

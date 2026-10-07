@@ -361,9 +361,9 @@ Dispatcher.ServiceDefine(TMyCommandService, [IMyCommand], sicShared);
 
 No manual cleanup needed: `InjectInstance` ref-counts the repos, and `Dispatcher.Free` releases them — ahead of `Persistence.Free` (whose `IRestOrm` they hold), so the references drop in the right order.
 
-### 11. Update compile scripts
+### 11. Update the build files
 
-Add the new folders to `prj/fpc/compile.sh` and `prj/fpc/compile_cli.sh`:
+**FPC**: add the new folders to `prj/fpc/compile.sh` and `prj/fpc/compile_cli.sh`, and the same paths to their Windows twins `compile.bat` / `compile_cli.bat` (`^` line continuations). `-Futests/myfeature` goes in `compile.*` only — the CLI does not link the tests:
 
 ```
 -Fusrc/dom/myfeature \
@@ -372,6 +372,17 @@ Add the new folders to `prj/fpc/compile.sh` and `prj/fpc/compile_cli.sh`:
 -Fusrc/app/myfeature/implementation \
 -Futests/myfeature \
 ```
+
+**Delphi / Lazarus**: the `.lpi` projects use `prj/delphi/*.dpr` as their main source, so both toolchains resolve project units through the `.dpr` `in` clauses — the `.lpi` files need no change. Add each new unit to `prj/delphi/task_manager.dpr`:
+
+```pascal
+myfeature in '..\..\src\dom\myfeature\myfeature.pas',
+myfeature_repository in '..\..\src\dom\myfeature\myfeature_repository.pas',
+myfeature_query in '..\..\src\app\myfeature\interface\myfeature_query.pas',
+// ... and so on for the infra/, implementation/ and tests/ units
+```
+
+In `prj/delphi/cli_client.dpr`, list the `interface/` units (and any `dom/` unit they use) unconditionally, and the remaining units inside the existing `{$ifdef LOCAL_MODE}` block. Then mirror them as `<DCCReference Include="…"/>` items, which msbuild and the Delphi IDE read: every new unit in `task_manager.dproj`, only the unconditional ones in `cli_client.dproj`. The new units also go in the `uses` clause of `AppTaskManagerClientLocal.pas` (step 10).
 
 ## Debugging
 
