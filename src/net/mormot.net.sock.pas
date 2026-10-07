@@ -1846,11 +1846,11 @@ type
     /// compute the whole normalized URI
     // - e.g. 'https://Server:Port/Address' or 'http://unix:/Server:/Address'
     // - User/Password property values won't be included
-    function URI: RawUtf8;
+    function URI(NormalizeToHttp: boolean = false): RawUtf8;
     /// compute the normalized URI of the server and port
     // - e.g. 'https://Server:Port/' or 'http://unix:/Server:/'
     // - i.e. URI result without the Address part
-    function ServerPort: RawUtf8;
+    function ServerPort(NormalizeToHttp: boolean = false): RawUtf8;
     /// the server port, as integer value
     function PortInt: TNetPort;
     /// compute the root resource Address, without any URI-encoded parameter
@@ -6890,12 +6890,12 @@ begin
             u.Same(Server, Port, Https);
 end;
 
-function TUri.URI: RawUtf8;
+function TUri.URI(NormalizeToHttp: boolean): RawUtf8;
 begin
-  Join([ServerPort, Address], result);
+  Join([ServerPort(NormalizeToHttp), Address], result);
 end;
 
-function TUri.ServerPort: RawUtf8;
+function TUri.ServerPort(NormalizeToHttp: boolean): RawUtf8;
 begin
   FastAssignNew(result);
   if layer = nlUnix then
@@ -6903,7 +6903,8 @@ begin
     Join(['http://unix:', Server, ':/'], result); // our own layout
     exit;
   end;
-  if UriScheme = usUndefined then // fields directly set, without any From()
+  if (UriScheme = usUndefined) or // fields directly set, without any From()
+     NormalizeToHttp then
     if Layer = nlUdp then
       UriScheme := usUdp
     else if Server = '' then
@@ -6913,7 +6914,7 @@ begin
     else
       UriScheme := usHttp;
   if UriScheme = usCustom then
-    result := Scheme // as specified
+    result := Scheme          // as specified
   else
     result := _US[UriScheme]; // normalized or default 'http://'
   if result <> '' then
