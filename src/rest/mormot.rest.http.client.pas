@@ -130,8 +130,7 @@ type
     /// connect to TRestHttpServer on aServer:aPort
     // - optional aProxyName may contain the name of the proxy server to use,
     // and aProxyByPass an optional semicolon delimited list of host names or
-    // IP addresses, or both, that should not be routed through the proxy - note
-    // that proxy parameters are currently not available for TRestHttpClientSocket
+    // IP addresses, or both, that should not be routed through the proxy
     // - you can customize the default client timeouts by setting appropriate
     // ConnectTimeout, SendTimeout and ReceiveTimeout parameters (in ms) - if
     // you left the 0 default parameters, it would use global
@@ -809,7 +808,8 @@ begin
   uri.Port := fPort;
   uri.Https := fHttps;
   opt := fExtendedOptions;
-  opt.Proxy := 'none'; // REST sockets connect directly
+  if opt.Proxy = '' then
+    opt.Proxy := 'none'; // backward compatible with old REST sockets code
   if opt.CreateTimeoutMS = 0 then
     opt.CreateTimeoutMS := opt.ReceiveTimeoutMS; // preserve legacy TimeOut
   fSocket := fSocketClass.OpenOptions(uri, opt);
