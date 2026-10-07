@@ -1190,6 +1190,11 @@ function GetSystemProxy(const uri: RawUtf8): RawUtf8;
 // - return '' if no proxy is defined
 function GetProxyForUri(const uri: RawUtf8; fromSystem: boolean = true): RawUtf8;
 
+{$ifdef USEWININET}
+/// wrapper to WinHttpGetProxyInfo() as used by GetProxyForUri()
+procedure GetWinProxyForUri(const uri: RawUtf8; var result: RawUtf8);
+{$endif USEWININET}
+
 /// check if a host matches a Windows-style proxy bypass list
 // - ByPass is a semicolon-delimited list of case-insensitive host masks
 // - '*' is recognized as wildcard; '<local>' matches host names with no dot
@@ -3745,21 +3750,33 @@ begin
   result := GetSetName(TypeInfo(TWGetAlternateState), st, trimmed);
 end;
 
-function GetProxyForUri(const uri: RawUtf8; fromSystem: boolean): RawUtf8;
 {$ifdef USEWININET}
+procedure GetWinProxyForUri(const uri: RawUtf8; var result: RawUtf8);
 var
   pi: TProxyInfo;
+  u: TUri;
+begin
+  if WinHttpGetProxyInfo(Utf8ToSynUnicode(uri), pi) <> 0 then
+    exit;
+  result := SynUnicodeToUtf8(pi.URL);
+  if (pi.Bypass <> '') and
+     u.From(uri) and
+     ProxyByPassMatch(u.Server,
+       StringReplaceChars(SynUnicodeToUtf8(pi.Bypass), ' ', ';')) then
+    result := '';
+end;
 {$endif USEWININET}
+
+function GetProxyForUri(const uri: RawUtf8; fromSystem: boolean): RawUtf8;
 begin
   if not IdemPChar(pointer(uri), 'HTTPS://') or
      not GetSystemEnv('HTTPS_PROXY', result{%H-}) then // from cache
     result := GetSystemEnv('HTTP_PROXY');
   {$ifdef USEWININET}
   if (result = '') and
-     fromsystem then
+     fromSystem then
     // no environment variable was set -> try using mormot.lib.winhttp
-    if WinHttpGetProxyInfo(Utf8ToSynUnicode(uri), pi) = 0 then
-      result := SynUnicodeToUtf8(pi.URL);
+    GetWinProxyForUri(uri, result);
   {$endif USEWININET}
 end;
 

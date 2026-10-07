@@ -1611,7 +1611,7 @@ procedure WinHttpSecurityErrorCallback(hInternet: hInternet; dwContext: PDWORD;
   dwStatusInformationLength: cardinal); stdcall;
 
 type
-  /// proxy information as returned by GetProxyInfo()
+  /// proxy information as returned by WinHttpGetProxyInfo()
   TProxyInfo = record
     /// the proxy server address and port, e.g. '10.0.0.8:7985'
     URL: SynUnicode;
@@ -1619,7 +1619,7 @@ type
     Bypass: SynUnicode;
     /// if the Proxy settings were auto-detected by Internet Explorer
     AutoDetected: Boolean;
-    /// detailed error message, if GetProxyInfo() returned a non 0 error code
+    /// detailed error message, if WinHttpGetProxyInfo() returned a non 0 error code
     ErrorMessage: string;
   end;
 
@@ -2318,28 +2318,34 @@ procedure WinHttpSecurityErrorCallback(hInternet: hInternet; dwContext: PDWORD;
 var
   err: string;
   code: DWord;
+
+  procedure AddErr(const Name: string);
+  begin
+    err := err + ' WINHTTP_CALLBACK_STATUS_FLAG_' + Name;
+  end;
+
 begin
   code := PDWORD(lpvStatusInformation)^;
   if code and $00000001 <> 0 then
-    err := err + ' WINHTTP_CALLBACK_STATUS_FLAG_CERT_REV_FAILED';
+    AddErr('CERT_REV_FAILED');
   if code and $00000002 <> 0 then
-    err := err + ' WINHTTP_CALLBACK_STATUS_FLAG_INVALID_CERT';
+    AddErr('INVALID_CERT');
   if code and $00000004 <> 0 then
-    err := err + ' WINHTTP_CALLBACK_STATUS_FLAG_CERT_REVOKED';
+    AddErr('CERT_REVOKED');
   if code and $00000008 <> 0 then
-    err := err + ' WINHTTP_CALLBACK_STATUS_FLAG_INVALID_CA';
+    AddErr('INVALID_CA');
   if code and $00000010 <> 0 then
-    err := err + ' WINHTTP_CALLBACK_STATUS_FLAG_CERT_CN_INVALID';
+    AddErr('CERT_CN_INVALID');
   if code and $00000020 <> 0 then
-    err := err + ' WINHTTP_CALLBACK_STATUS_FLAG_CERT_DATE_INVALID';
+    AddErr('CERT_DATE_INVALID');
   if code and $00000040 <> 0 then
-    err := err + ' WINHTTP_CALLBACK_STATUS_FLAG_CERT_WRONG_USAGE';
+    AddErr('CERT_WRONG_USAGE');
   if code and $80000000 <> 0 then
-    err := err + ' WINHTTP_CALLBACK_STATUS_FLAG_SECURITY_CHANNEL_ERROR';
+    AddErr('SECURITY_CHANNEL_ERROR');
   // in case lpvStatusInformation^=-2147483648 this is attempt to connect to
   // non-https socket wrong port - perhaps must be 443?
   raise EWinHttp.CreateFmt(
-    'WinHttp security error. Status %d, StatusInfo: %d ($%x%s)',
+    'WinHttp security error - Status: %d, StatusInfo: %d ($%x%s)',
     [dwInternetStatus, code, code, err]);
 end;
 
