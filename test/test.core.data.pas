@@ -11958,9 +11958,14 @@ begin
     Check(zin.Extract('A.1mb') = Data, 'pw2');
     zin := nil;
     // a wrong password is reported as failure, not silently swallowed
-    zin := zlib.NewReader(newfile1, fhZip, 'wrongpassword');
-    Check(not zin.Extract('A.1mb', folder, {nosubfolder=}true), 'pw3');
-    CheckEqual(zin.Extract('A.1mb'), '', 'pw4');
+    TSynLog.Family.ExceptionIgnoreCurrentThread := true;
+    try
+      zin := zlib.NewReader(newfile1, fhZip, 'wrongpassword');
+      Check(not zin.Extract('A.1mb', folder, {nosubfolder=}true), 'pw3');
+      CheckEqual(zin.Extract('A.1mb'), '', 'pw4');
+    finally
+      TSynLog.Family.ExceptionIgnoreCurrentThread := false;
+    end;
     zin := nil;
     // a wrong password raises E7Zip on direct item extraction
     CheckRaised(Run7zExtract, [newfile1, 'wrongpassword'], E7Zip, 'pw5');
