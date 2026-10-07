@@ -1110,9 +1110,14 @@ begin
           props.ExecuteNoResult('insert into MaxIDTest (ID) values (?)', [10]);
           // make 'select max(ID)' fail: ExecuteDirect() returns nil
           props.ExecuteNoResult('alter table MaxIDTest rename to MaxIDAway', []);
-          CheckEqual(ext.EngineLockedNextID, 0, 'no ID on select failure');
-          CheckEqual(ext.EngineLockedNextID, 0, 'no counter from 0');
-          CheckEqual(ext.EngineAdd(ndx, '{"FirstName":"a"}'), 0, 'add');
+          TSynLog.Family.ExceptionIgnoreCurrentThread := true;
+          try
+            CheckEqual(ext.EngineLockedNextID, 0, 'no ID on select failure');
+            CheckEqual(ext.EngineLockedNextID, 0, 'no counter from 0');
+            CheckEqual(ext.EngineAdd(ndx, '{"FirstName":"a"}'), 0, 'add');
+          finally
+            TSynLog.Family.ExceptionIgnoreCurrentThread := false;
+          end;
           // once the database is back, max(ID) is retrieved again
           props.ExecuteNoResult('alter table MaxIDAway rename to MaxIDTest', []);
           CheckEqual(ext.EngineLockedNextID, 11, 'recovered');

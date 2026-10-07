@@ -2878,17 +2878,23 @@ begin
     // a row rejected by the database is reported as such
     db.DB.Execute('CREATE TRIGGER BatchUpdReject BEFORE UPDATE ON BatchUpdB ' +
       'WHEN OLD.ID=2 BEGIN SELECT RAISE(ABORT,''rejected''); END');
-    CheckEqual(Update(TOrmBatchUpdB, 500, [boExtendedJson]), HTTP_SUCCESS);
-    if CheckEqual(length(res), 3) then
-    begin
-      CheckEqual(res[0], HTTP_SUCCESS);
-      check(res[1] <> HTTP_SUCCESS, 'rejected');
-      CheckEqual(res[2], HTTP_SUCCESS);
+    TSynLog.Family.ExceptionIgnoreCurrentThread := true;
+    try
+      CheckEqual(Update(TOrmBatchUpdB, 500, [boExtendedJson]), HTTP_SUCCESS);
+      if CheckEqual(length(res), 3) then
+      begin
+        CheckEqual(res[0], HTTP_SUCCESS);
+        check(res[1] <> HTTP_SUCCESS, 'rejected');
+        CheckEqual(res[2], HTTP_SUCCESS);
+      end;
+      CheckEqual(Values(TOrmBatchUpdB), '501,402,503');
+      // and boRollbackOnError aborts the whole batch transaction
+      CheckNotEqual(
+        Update(TOrmBatchUpdB, 600, [boExtendedJson, boRollbackOnError]),
+        HTTP_SUCCESS, 'rollback');
+    finally
+      TSynLog.Family.ExceptionIgnoreCurrentThread := false;
     end;
-    CheckEqual(Values(TOrmBatchUpdB), '501,402,503');
-    // and boRollbackOnError aborts the whole batch transaction
-    check(Update(TOrmBatchUpdB, 600, [boExtendedJson, boRollbackOnError])
-      <> HTTP_SUCCESS, 'rollback');
     CheckEqual(Values(TOrmBatchUpdB), '501,402,503', 'rollbacked');
     CheckEqual(Values(TOrmBatchUpdA), '301,302,303');
   finally
