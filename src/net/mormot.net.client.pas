@@ -4105,7 +4105,6 @@ begin
   if doBind then
     EHttpSocket.RaiseUtf8('%.OpenBind with doBind=true', [self]);
   fProxyAuthHeader := '';
-  fProxyAuthHeader := '';
   port := aPort;
   if (port = '') and
      (aLayer <> nlUnix) then

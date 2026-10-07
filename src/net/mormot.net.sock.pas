@@ -1985,6 +1985,12 @@ const
   /// the HTTP-based URI schemes recognized by TUri.UriScheme
   // - usUndefined (i.e. direct Server assignment) is assumed as HTTP-compatible
   HTTP_SCHEME = [usUndefined, usHttp, usWs, usHttps, usWss];
+  /// standard URI scheme identifier
+  SCHEME_TEXT: array[usHttp .. high(TUriScheme)] of RawUtf8 = (
+    'http', 'ws', 'https', 'wss', 'udp', 'file', 'ftp', 'ftps', 'ldap', 'ldaps');
+  /// standard URI scheme default port (if any)
+  SCHEME_PORT: array[TUriScheme] of RawUtf8 = (
+    '', '', '80', '80', '443', '443', '', '', '20', '989', '389', '636');
   /// redirect to ws:// or wss:// schemes
   WS_SCHEME: array[boolean] of TUriScheme = (usWs, usWss);
 
@@ -6423,10 +6429,6 @@ begin
 end;
 
 const
-  _US: array[usHttp .. high(TUriScheme)] of RawUtf8 = (
-    'http', 'ws', 'https', 'wss', 'udp', 'file', 'ftp', 'ftps', 'ldap', 'ldaps');
-  _US_PORT: array[TUriScheme] of RawUtf8 = (
-    '', '', '80', '80', '443', '443', '', '', '20', '989', '389', '636');
   SCHEME_FIRST = ['a'..'z', 'A'..'Z'];
   SCHEME_CHARS = ['a'..'z', 'A'..'Z', '+', '-', '.', '0'..'9'];
   _ROOT: AnsiChar = '/';
@@ -6467,7 +6469,8 @@ begin
      (PWord(p + 1)^ = SLASH_16) then // '://'
   begin
     FastSetString(Scheme, aUri, p);
-    UriScheme := TUriScheme(FindPropName(@_US, Scheme, length(_US)) + ord(low(_US)));
+    UriScheme := TUriScheme(FindPropName(@SCHEME_TEXT,
+      Scheme, length(SCHEME_TEXT)) + ord(low(SCHEME_TEXT)));
     case UriScheme of
       usHttps,
       usWss:
@@ -6595,7 +6598,7 @@ begin
       if DefaultPort <> '' then
         Port := DefaultPort
       else
-        Port := _US_PORT[UriScheme];
+        Port := SCHEME_PORT[UriScheme];
     aUri := authorityend;
   end;
   // remaining path/query/fragment
@@ -6625,11 +6628,11 @@ begin
       Layer := nlUdp;
   end;
   UriScheme := aScheme;
-  Scheme := _US[aScheme];
+  Scheme := SCHEME_TEXT[aScheme];
   Server := aServer;
   Port := aPort;
   if Port = '' then
-    Port := _US_PORT[aScheme];
+    Port := SCHEME_PORT[aScheme];
   result := Server <> '';
   if aAddress = '' then
     exit;
@@ -6864,9 +6867,9 @@ begin
     UriScheme := usHttps
   else
     UriScheme := usHttp;
-  Scheme := _US[UriScheme];
+  Scheme := SCHEME_TEXT[UriScheme];
   if Port = '' then
-    Port := _US_PORT[UriScheme];
+    Port := SCHEME_PORT[UriScheme];
   if pe = loc then // empty reference path
     // RFC 3986 inherits the base path verbatim here: normalize=false below
     if q <> nil then // same path, replace query
@@ -6930,11 +6933,11 @@ begin
   if UriScheme = usCustom then
     result := Scheme          // as specified
   else
-    result := _US[UriScheme]; // normalized or default 'http://'
+    result := SCHEME_TEXT[UriScheme]; // normalized or default 'http://'
   if result <> '' then
     if (Port = '') or
        (Port = '0') or
-       (Port = _US_PORT[UriScheme]) then
+       (Port = SCHEME_PORT[UriScheme]) then
       result := Join([result, '://', Server, '/'])
     else
       result := Join([result, '://', Server, ':', Port, '/']);

@@ -5483,6 +5483,14 @@ begin
   CheckEqual(U.URI, 'http://proxy.example:3128/path');
   Check(not U.From('http://server:')); // malformed port: documents
   CheckEqual(U.Server, ''); // invalid
+  Check(not U.From('http://server:   '));
+  CheckEqual(U.Server, '');
+  Check(not U.From('http://server:?x=1'));
+  CheckEqual(U.Server, '');
+  Check(not U.From('http://[::1]garbage'));
+  CheckEqual(U.Server, '');
+  Check(not U.From('http://user:pass@server:'));
+  CheckEqual(U.Server, '');
   // TUri may be used to create an URI from some parameters
   U.Clear;
   U.Server := 'server';
