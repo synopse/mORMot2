@@ -6306,16 +6306,16 @@ end;
 
 function THttpPeerCacheSettings.GuessInterface(out Mac: TMacAddress): RawUtf8;
 begin
-  FastAssignNew(result);
+  FastAssignNew(result); // success
   if fInterfaceName <> '' then
   begin
     if not GetMainMacAddress(Mac, fInterfaceName, {UpAndDown=}true) then
-      // allow to pickup "down" interfaces if name is explicit
-      result := FormatUtf8('impossible to find the [%] network interface',
-        [fInterfaceName]);
+      // an explicitly requested interface may be down
+      FormatUtf8('impossible to find the [%] network interface', [fInterfaceName], result);
   end
-  else if not GetMainMacAddress(Mac, [mafLocalOnly, mafRequireBroadcast]) then
-    result := 'impossible to find a local network interface';
+  else if not GetMainMacAddress(Mac, [mafLocalOnly, mafUpOnly, mafRequireBroadcast]) then
+    // automatic PeerCache selection requires an "up" interface
+    result := 'impossible to find a local active network interface';
 end;
 
 function THttpPeerCacheSettings.HttpDirectUri(
