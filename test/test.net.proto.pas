@@ -5687,6 +5687,18 @@ begin
   Check(U.FromScheme(usLdaps, 'server'));
   CheckEqual(U.Scheme, 'ldaps');
   CheckEqual(U.URI, 'ldaps://server/');
+  // validate ProxyByPassMatch()
+  Check(not ProxyByPassMatch('', '*'));
+  Check(not ProxyByPassMatch('example.com', ''));
+  Check(ProxyByPassMatch('example.com', 'example.com'));
+  Check(ProxyByPassMatch('EXAMPLE.COM', 'example.com'));
+  Check(ProxyByPassMatch('www.example.com', '*.example.com'));
+  Check(ProxyByPassMatch('some-foo-server', '*FOO*'));
+  Check(ProxyByPassMatch('abcXYZdef', 'a*d*f'));
+  Check(ProxyByPassMatch('10.20.30.40', 'localhost; 10.*; *.local'));
+  Check(ProxyByPassMatch('server', '<local>'));
+  Check(not ProxyByPassMatch('server.local', '<local>'));
+  Check(not ProxyByPassMatch('example.org', '*.example.com; 10.*'));
   // validate THttpCookies and CookieFromHeaders()
   hc.ParseServer('');
   CheckEqual(length(hc.Cookies), 0);

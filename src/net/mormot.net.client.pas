@@ -1188,6 +1188,11 @@ function GetSystemProxy(const uri: RawUtf8): RawUtf8;
 function GetProxyForUri(const uri: RawUtf8;
   fromSystem: boolean = true): RawUtf8;
 
+/// check if a host matches a Windows-style proxy bypass list
+// - ByPass is a semicolon-delimited list of case-insensitive host masks
+// - '*' is recognized as wildcard; '<local>' matches host names with no dot
+function ProxyByPassMatch(const Host, ByPass: RawUtf8): boolean;
+
 /// parse a URI into its final resource name
 // - optionally sanitize the output to be filename-compatible
 // - note that it returns an UTF-8 string as resource URI, not TFileName
@@ -3783,6 +3788,69 @@ begin
     result := DefaultHttpClientSocketProxy.URI
   else
     result := GetProxyForUri(uri, DefaultHttpClientSocketProxyAuto);
+end;
+
+function ProxyByPassMatch(const Host, ByPass: RawUtf8): boolean;
+
+  function Match(const Text: RawUtf8; Rule: PUtf8Char; RuleLen: PtrInt): boolean;
+  var
+    t, r, star, retry: PtrInt;
+  begin
+    result := false;
+    t := 1;    // Text[] is 1-indexed
+    r := 0;    // Rule[] is 0-indexed
+    star := 0; // follow r = Rule[] index
+    retry := 0;
+    while t <= length(Text) do
+      if (r < RuleLen) and
+         (Rule[r] = '*') then
+      begin
+        inc(r);
+        star := r;
+        retry := t;
+      end
+      else if (r < RuleLen) and
+              (NormToUpperAnsi7[Text[t]] = NormToUpperAnsi7[Rule[r]]) then
+      begin
+        inc(t);
+        inc(r);
+      end
+      else if star <> 0 then
+      begin
+        r := star;
+        inc(retry);
+        t := retry;
+      end
+      else
+        exit;
+    while (r < RuleLen) and
+          (Rule[r] = '*') do
+      inc(r);
+    result := r >= RuleLen;
+  end;
+
+var
+  rule, p: PUtf8Char;
+  rulelen: PtrInt;
+begin
+  if Host <> '' then
+  begin
+    result := true;
+    p := pointer(ByPass);
+    while p <> nil do
+    begin
+      rulelen := GetNextItemTrimedBuffer(p, ';', rule);
+      if rulelen <> 0 then
+        if PropNameEquals('<local>', pointer(rule), rulelen) then
+        begin
+          if PosExChar('.', Host) = 0 then
+            exit;
+        end
+        else if Match(Host, rule, rulelen) then
+          exit;
+    end;
+  end;
+  result := false;
 end;
 
 function ExtractResourceName(const uri: RawUtf8; sanitize: boolean): RawUtf8;
