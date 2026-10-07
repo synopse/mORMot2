@@ -1027,61 +1027,90 @@ begin
 end;
 
 type
-  // broadcast frames to all connections, from a background thread
-  TWebSocketBroadcastThread = class(TLoggedThread)
-  protected
-    fServer: TWebSocketAsyncServer;
-    fSent: PInteger;
-    procedure DoExecute; override;
+  TWebSocketBroadcastTask = class
+  public
+    Server: TWebSocketAsyncServer;
+    Connected, Done: TSynEvent;
+    Sent: integer;
+    constructor Create(aServer: TWebSocketAsyncServer);
+    destructor Destroy; override;
+    procedure Broadcast(Sender: TObject);
+    procedure WebSocketConnect(Sender: TWebSocketAsyncConnection);
   end;
 
-procedure TWebSocketBroadcastThread.DoExecute;
+constructor TWebSocketBroadcastTask.Create(
+  aServer: TWebSocketAsyncServer);
+begin
+  inherited Create;
+  Server := aServer;
+  Connected := TSynEvent.Create;
+  Done := TSynEvent.Create;
+end;
+
+destructor TWebSocketBroadcastTask.Destroy;
+begin
+  Done.Free;
+  Connected.Free;
+  inherited Destroy;
+end;
+
+procedure TWebSocketBroadcastTask.Broadcast(Sender: TObject);
 var
   frame: TWebSocketFrame;
-  one, sent, ms: integer;
 begin
   frame.opcode := focText;
   frame.content := [];
   frame.tix := 0;
   frame.payload := '{"ping":1}';
-  sent := 0;
-  ms := 0;
-  while not Terminated do
-  begin
-    one := fServer.WebSocketBroadcast(frame, nil, ms);
-    inc(sent, one);
-    TSynLog.Add.Log(sllTrace, 'DoExecute: broadcast(%)=%', [ms, one], self);
-    if ms = 0 then
-      ms := 50
-    else
-      ms := 0;
-  end;
-  TSynLog.Add.Log(sllTrace, 'DoExecute: sent=%', [sent], self);
-  if fSent <> nil then
-    fSent^ := sent;
+  Sent := Server.WebSocketBroadcast(frame, nil, {timeout=}0);
+  TSynLog.Add.Log(sllTrace, 'Broadcast: sent=%', [Sent], self);
+  Done.SetEvent;
+end;
+
+procedure TWebSocketBroadcastTask.WebSocketConnect(
+  Sender: TWebSocketAsyncConnection);
+begin
+  // DoConnect() is called after the 101 response has been written,
+  // fProcess has been created, ProcessStart() called and state set to wpsRun
+  Connected.SetEvent;
+  // each broadcast is synchronized with an actual WebSocket upgrade
 end;
 
 procedure TNetworkProtocols.DoTWebSocketAsyncServer(Sender: TObject);
 var
   server: TWebSocketAsyncServerRest;
-  bcast: TWebSocketBroadcastThread;
+  bcast: TWebSocketBroadcastTask;
   client: TCrtSocket;
   i: PtrInt;
-  sent: integer;
+  sent: integer; // not PtrInt
   wedged: boolean;
-  status: RawUtf8;
+  status, line: RawUtf8;
+
+  function Broadcast(const msg: RawUtf8): boolean;
+  begin
+    bcast.Connected.ResetEvent;
+    bcast.Sent := -1;
+    RunTask(bcast.Broadcast, msg);
+    result := CheckUtf8(bcast.Done.WaitFor(5000), '% timeout', [msg]);
+    if not result then
+      // a task stuck in WebSocketBroadcast() may still reference both
+      // bcast and server, so don't attempt to free them below
+      wedged := true;
+  end;
+
 begin
-  // WebSocketBroadcast() used to deadlock when Write() failed on a reset peer
   wedged := false;
   sent := 0;
-  server := TWebSocketAsyncServerRest.Create('8897', nil, nil, 'wsbcast',
-    2, '', '', {ajax=}true, [], TSynLog);
+  server := TWebSocketAsyncServerRest.Create(
+    '8897', nil, nil, 'wsbcast', 2, '', '', {ajax=}true, [], TSynLog);
   server.WaitStarted(10);
-  bcast := TWebSocketBroadcastThread.Create({susp=}true, nil, nil, TSynLog, 'bcast');
+  bcast := TWebSocketBroadcastTask.Create(server);
+  server.OnWebSocketConnect := bcast.WebSocketConnect;
   try
-    bcast.fServer := server;
-    bcast.fSent := @sent;
-    for i := 1 to 50 do // connect/disconnect 50 clients while broadcasting
+    // first check that broadcasting with no WebSocket connection is harmless
+    Broadcast('WebSocket broadcast empty');
+    CheckEqual(bcast.Sent, 0, 'broadcast without client');
+    for i := 1 to 50 do
     begin
       TSynLog.Add.Log(sllTrace, 'WebSocketAsyncServer: client #%', [i], self);
       client := TCrtSocket.Open('127.0.0.1', '8897', nlTcp, 5000);
@@ -1093,38 +1122,71 @@ begin
           'Sec-WebSocket-Version: 13'#13#10,
           'Sec-WebSocket-Protocol: synopsejson'#13#10]);
         client.SockSendFlush;
-        if i = 1 then
-          bcast.Start; // don't start too early
         // a deadlocked server would not answer any new connection
         try
-          client.SockRecvLn(status); // ENetSock after 5 seconds if wedged
+          client.SockRecvLn(status);
         except
           on E: ENetSock do
           begin
-            wedged := E.LastError = nrTimeout; // can't release a wedged server
+            wedged := E.LastError = nrTimeout;
             StringToUtf8(E.Message, status);
           end;
         end;
         if not CheckUtf8(IdemPChar(pointer(status), 'HTTP/1.1 101'),
-                         'upgrade %', [status]) then
+            'upgrade %', [status]) then
           break;
-        // close with unread frames: RST so that the next server Write() fails
-        client.SockReceivePending(1000); // wait for a broadcasted frame
+        // Consume the whole HTTP upgrade response. Reading only the status
+        // line would make SockReceivePending() below see the remaining HTTP
+        // headers instead of the WebSocket frame.
+        repeat
+          client.SockRecvLn(line);
+        until line = '';
+        // The HTTP response may reach us just before the server executes
+        // DoConnect(), so explicitly wait until fProcess is fully initialized.
+        if not Check(bcast.Connected.WaitFor(5000), 'websocket connected') then
+          break;
+        // Run one broadcast from the shared test thread pool now that this
+        // connection is known to be a fully initialized WebSocket.
+        // From the second iteration onward, the preceding client has just
+        // been reset, so this broadcast may also exercise SendDirect() on
+        // that stale/reset connection.
+        Broadcast('WebSocket broadcast');
+        if not Check(bcast.Sent > 0, 'broadcast sent') then
+          break;
+        inc(sent, bcast.Sent);
+        // Now that all HTTP headers have been consumed, pending input really
+        // is the WebSocket frame emitted by the task above.
+        if not Check(client.SockReceivePending(1000) = cspDataAvailable,
+            'broadcast received') then
+          break;
+        // Leave the WebSocket frame unread and force an RST. The next
+        // WebSocketBroadcast() should survive an eventual failed Write().
         client.Sock.SetLinger(0);
       finally
         client.Free;
       end;
+      if wedged then
+        break;
     end;
+    if not wedged then
+      // The last client has no following upgrade to trigger another broadcast.
+      // Explicitly broadcast once more immediately after its RST so that the
+      // final reset peer gets the same deadlock regression coverage.
+      Broadcast('WebSocket broadcast after reset');
+    CheckUtf8(sent >= 50, 'sent=%', [sent]);
   finally
-    if wedged then
-      bcast.fSent := nil // avoid GPF at shutdown
-    else
+    server.OnWebSocketConnect := nil;
+    if not wedged then
     begin
-      bcast.Free;       // Terminate + WaitFor
+      // no background task can reference bcast/server now
       server.Free;
+      bcast.Free;
     end;
+    // Intentionally leak these objects on the regression failure path:
+    // a task blocked inside WebSocketBroadcast() still references both.
+    // Trying to destroy the server here could reproduce the same deadlock
+    // on the test thread and prevent the test suite from reporting it.
   end;
-  Check(sent > 0, 'sent');
 end;
 
 function TNetworkProtocols.DoShutdownRequest(
