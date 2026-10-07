@@ -1832,7 +1832,7 @@ type
     function FromBuffer(aUri, aUriEnd: PUtf8Char; const DefaultPort: RawUtf8): boolean;
     /// fill the members from a set of parameters and URI scheme
     function FromScheme(aScheme: TUriScheme; const aServer: RawUtf8;
-      const aPort: RawUtf8 = ''): boolean;
+      const aPort: RawUtf8 = ''; const aAddress: RawUtf8 = ''): boolean;
     /// fill the members from a 'Location:' header value following RFC 3986
     // - recognize e.g. 'http://server:port/address' but also '//server/address'
     // - aUri is the current request target, and is replaced by the resolved one
@@ -1985,6 +1985,8 @@ const
   /// the HTTP-based URI schemes recognized by TUri.UriScheme
   // - usUndefined (i.e. direct Server assignment) is assumed as HTTP-compatible
   HTTP_SCHEME = [usUndefined, usHttp, usWs, usHttps, usWss];
+  /// redirect to ws:// or wss:// schemes
+  WS_SCHEME: array[boolean] of TUriScheme = (usWs, usWss);
 
 /// check is the supplied address text is on format '1.2.3.4'
 // - will optionally fill a 32-bit binary buffer with the decoded IPv4 address
@@ -6602,7 +6604,8 @@ begin
   result := Server <> '';
 end;
 
-function TUri.FromScheme(aScheme: TUriScheme; const aServer, aPort: RawUtf8): boolean;
+function TUri.FromScheme(aScheme: TUriScheme;
+  const aServer, aPort, aAddress: RawUtf8): boolean;
 begin
   result := false;
   Clear;
@@ -6623,6 +6626,11 @@ begin
   if Port = '' then
     Port := _US_PORT[aScheme];
   result := Server <> '';
+  if aAddress = '' then
+    exit;
+  Address := aAddress;
+  if Address[1] = '/' then
+    delete(Address, 1, 1);
 end;
 
 procedure _SplitUri(P, PEnd: PUtf8Char; out PathEnd, Query, RefEnd: PUtf8Char);
