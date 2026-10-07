@@ -119,18 +119,25 @@ type
     procedure DoCreate(aTimeOut: integer); override;
     procedure SetReceiveTimeout(aReceiveTimeout: integer); override;
   public
-    /// low-level client WebSockets connection factory for host and port
-    // - calls Open() then WebSocketsUpgrade() for a given protocol
+    /// low-level client WebSockets main connection factory
+    // - calls OpenOptions() then WebSocketsUpgrade() for a given protocol
     // - with error interception and optional logging, returning nil on error
+    class function WebSocketsConnect(const aUri: TUri;
+      var aOptions: THttpRequestExtendedOptions; aProtocol: TWebSocketProtocol;
+      aLog: TSynLogClass = nil; const aLogContext: RawUtf8 = '';
+      const aCustomHeaders: RawUtf8 = ''): THttpClientWebSockets; overload;
+    /// low-level client WebSockets connection factory from an URI string
+    class function WebSocketsConnect(const aUri: RawUtf8;
+      aProtocol: TWebSocketProtocol; aOptions: PHttpRequestExtendedOptions;
+      aLog: TSynLogClass = nil; const aLogContext: RawUtf8 = '';
+      const aCustomHeaders: RawUtf8 = ''): THttpClientWebSockets; overload;
+    /// legacy low-level client WebSockets connection factory for host and port
     class function WebSocketsConnect(const aHost, aPort: RawUtf8;
       aProtocol: TWebSocketProtocol; aLog: TSynLogClass = nil;
       const aLogContext: RawUtf8 = ''; const aUri: RawUtf8 = '';
       const aCustomHeaders: RawUtf8 = ''; aTls: boolean = false;
       aTLSContext: PNetTlsContext = nil): THttpClientWebSockets; overload;
-    /// low-level client WebSockets connection factory for a given URI
-    // - would recognize ws://host:port/uri or wss://host:port/uri (over TLS)
-    // - calls Open() then WebSocketsUpgrade() for a given protocol
-    // - with error interception and optional logging, returning nil on error
+    /// legacy low-level client WebSockets connection factory for a given URI
     class function WebSocketsConnect(const aUri: RawUtf8;
       aProtocol: TWebSocketProtocol; aLog: TSynLogClass = nil;
       const aLogContext: RawUtf8 = ''; const aCustomHeaders: RawUtf8 = '';
@@ -543,40 +550,92 @@ begin
   fSettings.CallbackAnswerTimeOutMS := fReceiveTimeout; // from aTimeOut
 end;
 
-class function THttpClientWebSockets.WebSocketsConnect(
-  const aHost, aPort: RawUtf8; aProtocol: TWebSocketProtocol; aLog: TSynLogClass;
-  const aLogContext, aUri, aCustomHeaders: RawUtf8;
-  aTls: boolean; aTLSContext: PNetTlsContext): THttpClientWebSockets;
+class function THttpClientWebSockets.WebSocketsConnect(const aUri: TUri;
+  var aOptions: THttpRequestExtendedOptions; aProtocol: TWebSocketProtocol;
+  aLog: TSynLogClass; const aLogContext, aCustomHeaders: RawUtf8): THttpClientWebSockets;
 var
   error: RawUtf8;
+  onlog: TSynLogProc;
+  upgrade: boolean;
 begin
   result := nil;
   if (aProtocol = nil) or
-     (aHost = '') then
+     (aUri.Server = '') or
+     not (aUri.UriScheme in HTTP_SCHEME) then
     EWebSockets.RaiseUtf8('%.WebSocketsConnect(nil)', [self]);
+  onlog := nil;
+  if aLog <> nil then
+    onlog := aLog.DoLog;
+  upgrade := false;
   try
-    // call socket constructor
-    result := Open(aHost, aPort, nlTcp, 10000, aTls, aTLSContext);
+    // main connection factory - includes Proxy/ProxyByPass/PAC resolution
+    result := OpenOptions(aUri, aOptions, onlog);
+    // from now on WebSocketsUpgrade() owns aProtocol
+    upgrade := true;
     error := result.WebSocketsUpgrade(
-      aUri, '', false, [], aProtocol, aCustomHeaders);
+      aUri.Address, '', false, [], aProtocol, aCustomHeaders);
     if error <> '' then
-      FreeAndNil(result)
-    else if Assigned(aLog) then
-      result.OnLog := aLog.DoLog;
+      FreeAndNil(result);
   except
     on E: Exception do
     begin
-      aProtocol.Free; // as done in WebSocketsUpgrade()
+      // OpenOptions() failed before WebSocketsUpgrade() took ownership
+      if not upgrade then
+        aProtocol.Free;
       FreeAndNil(result);
       FormatUtf8('% %', [E, E.Message], error);
     end;
   end;
-  if aLog <> nil then
+  if Assigned(onlog) then
     if result <> nil then
-      aLog.Add.Log(sllDebug, '%: WebSocketsConnect %', [aLogContext, result])
+      onlog(sllDebug, '%: WebSocketsConnect %', [aLogContext, result])
     else
-      aLog.Add.Log(sllWarning, '%: WebSocketsConnect %:% failed - %',
-        [aLogContext, aHost, aPort, error]);
+      onlog(sllWarning, '%: WebSocketsConnect % failed - %',
+        [aLogContext, aUri.URI, error]);
+end;
+
+class function THttpClientWebSockets.WebSocketsConnect(const aUri: RawUtf8;
+  aProtocol: TWebSocketProtocol; aOptions: PHttpRequestExtendedOptions;
+  aLog: TSynLogClass; const aLogContext, aCustomHeaders: RawUtf8):
+  THttpClientWebSockets;
+var
+  uri: TUri;
+  opt: THttpRequestExtendedOptions;
+begin
+  uri.From(aUri);
+  if aOptions = nil then
+  begin
+    opt.InitDefault;
+    aOptions := @opt;
+  end;
+  result := WebSocketsConnect(uri, aOptions^, aProtocol, aLog, aLogContext, aCustomHeaders);
+end;
+
+function LegacyWebSocketsConnect(const aUri: TUri; aProtocol: TWebSocketProtocol;
+  aLog: TSynLogClass; const aLogContext, aCustomHeaders: RawUtf8;
+  aTLSContext: PNetTlsContext): THttpClientWebSockets;
+var
+  opt: THttpRequestExtendedOptions;
+begin
+  opt.InitDefault;
+  opt.Proxy := 'none'; // preserve legacy direct WebSockets behavior
+  opt.CreateTimeoutMS := 10000;
+  if aTLSContext <> nil then
+    opt.TLS := aTLSContext^;
+  result := THttpClientWebSockets.WebSocketsConnect(
+    aUri, opt, aProtocol, aLog, aLogContext, aCustomHeaders);
+end;
+
+class function THttpClientWebSockets.WebSocketsConnect(
+  const aHost, aPort: RawUtf8; aProtocol: TWebSocketProtocol;
+  aLog: TSynLogClass; const aLogContext, aUri, aCustomHeaders: RawUtf8;
+  aTls: boolean; aTLSContext: PNetTlsContext): THttpClientWebSockets;
+var
+  uri: TUri;
+begin
+  uri.FromScheme(WS_SCHEME[aTls], aHost, aPort, aUri);
+  result := LegacyWebSocketsConnect(uri, aProtocol, aLog, aLogContext,
+    aCustomHeaders, aTLSContext);
 end;
 
 class function THttpClientWebSockets.WebSocketsConnect(const aUri: RawUtf8;
@@ -586,11 +645,9 @@ class function THttpClientWebSockets.WebSocketsConnect(const aUri: RawUtf8;
 var
   uri: TUri;
 begin
-  if (aProtocol = nil) or
-     not uri.From(aUri) then // detect http[s]:// and ws[s]:// schemes
-    EWebSockets.RaiseUtf8('%.WebSocketsConnect(nil)', [self]);
-  result := WebSocketsConnect(uri.Server, uri.Port, aProtocol,
-    aLog, aLogContext, uri.Address, aCustomHeaders, uri.Https, aTLSContext);
+  uri.From(aUri);
+  result := LegacyWebSocketsConnect(uri, aProtocol, aLog, aLogContext,
+    aCustomHeaders, aTLSContext);
 end;
 
 destructor THttpClientWebSockets.Destroy;
