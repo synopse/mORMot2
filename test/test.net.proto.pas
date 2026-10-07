@@ -3822,11 +3822,35 @@ end;
 
 procedure TNetworkProtocols.TunnelSocket(const log: ISynLog;
   clientinstance, serverinstance: TTunnelLocal; packets: integer);
+
+  procedure DebugSendAll(dest: TNetSocket; const sent: RawUtf8; id: integer);
+  var
+    nr: TNetResult;
+  begin
+    nr := dest.SendAll(pointer(sent), length(sent));
+    if nr <> nrOk then
+      TSynLog.Add.Log(sllFail,
+        'SendAll%=% CLIENT: thread=% processing=% flags=% port=% remote=% ' +
+        'SERVER: thread=% processing=% flags=% port=% remote=%',
+        [id, _NR[nr],
+         clientinstance.Thread,
+         clientinstance.Thread.Processing,
+         ToText(clientinstance.Flags),
+         clientinstance.Port,
+         clientinstance.RemotePort,
+         serverinstance.Thread,
+         serverinstance.Thread.Processing,
+         ToText(serverinstance.Flags),
+         serverinstance.Port,
+         serverinstance.RemotePort], self);
+    CheckUtf8(nr = nrOk, 'SendAll%=%', [id, _NR[nr]]);
+  end;
+
 var
   i: integer;
   nr: TNetResult;
-  clientsock, serversock: TNetSocket;
   local, remote: TNetPort;
+  clientsock, serversock: TNetSocket;
   sent, sent2: RawUtf8;
   received, received2: RawByteString;
   nfo: variant;
@@ -3865,18 +3889,15 @@ begin
       PByteArray(sent)[length(sent) shr 1] := 0;
       rnd.FillAscii(rnd.Next(200) + 1, sent2);
       PByteArray(sent2)[length(sent2) shr 1] := ord('"');
-      nr := clientsock.SendAll(pointer(sent), length(sent));
-      CheckUtf8(nr = nrOk, 'SendAll1=%', [_NR[nr]]);
+      DebugSendAll(clientsock, sent, 1);
       nr := serversock.RecvWait(1000, received);
       CheckUtf8(nr = nrOk, 'RecvWait1=%', [_NR[nr]]);
       CheckBlocks(log, sent, received, 1);
       if CheckFailed(clientinstance.Thread.Processing, 'no client process') or
          CheckFailed(serverinstance.Thread.Processing, 'no server process') then
         break; // don't try any further
-      nr := clientsock.SendAll(pointer(sent2), length(sent2));
-      CheckUtf8(nr = nrOk, 'SendAll2=%', [_NR[nr]]);
-      nr := serversock.SendAll(pointer(sent), length(sent));
-      CheckUtf8(nr = nrOk, 'SendAll3=%', [_NR[nr]]);
+      DebugSendAll(clientsock, sent2, 2);
+      DebugSendAll(serversock, sent, 3);
       nr := clientsock.RecvWait(1000, received);
       CheckUtf8(nr = nrOk, 'RecvWait2=%', [_NR[nr]]);
       nr := serversock.RecvWait(1000, received2);

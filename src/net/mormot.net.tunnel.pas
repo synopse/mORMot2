@@ -356,6 +356,7 @@ type
   end;
 
 function ToText(opt: TTunnelOptions): ShortString; overload;
+function ToText(flg: TTunnelLocalFlags): ShortString; overload;
 
 /// extract the 32-bit session trailer from a ITunnelTransmit.TunnelSend() frame
 function FrameSession(const Frame: RawByteString): TTunnelSession;
@@ -717,6 +718,11 @@ function ToText(opt: TTunnelOptions): ShortString;
 begin
   GetSetNameShort(TypeInfo(TTunnelOptions), opt, result, {trim=}true);
   LowerCaseShort(result);
+end;
+
+function ToText(flg: TTunnelLocalFlags): ShortString;
+begin
+  GetSetNameShort(TypeInfo(TTunnelLocalFlags), flg, result, {trim=}true);
 end;
 
 function FrameSession(const Frame: RawByteString): TTunnelSession;

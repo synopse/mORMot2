@@ -318,8 +318,11 @@ type
     // - POSIX and latest Windows will set idle=value/2 intvl=value/12 cnt=6
     // - typical values are 120 for a client and 180/240 for a server
     procedure SetKeepAlive(secs: cardinal);
-    /// change the SO_LINGER option, i.e. let the socket remain open for a while
-    // - on POSIX, will also set the SO_REUSEADDR/SO_REUSEPORT option
+    /// change the SO_LINGER option, i.e. control socket close behavior
+    // - linger < 0 disables SO_LINGER for a normal asynchronous close
+    // - linger = 0 aborts immediately and discards pending data
+    // - linger > 0 waits up to the given number of seconds on close
+    // - on POSIX, linger > 0 will also set SO_REUSEADDR/SO_REUSEPORT
     procedure SetLinger(linger: integer);
     /// allow to disable the Nagle's algorithm and send packets without delay
     procedure SetNoDelay(nodelay: boolean);
