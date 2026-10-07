@@ -1120,7 +1120,8 @@ function DefaultUserAgent(Instance: TObject): RawUtf8;
 // - useful to easily catch socket error exception ENetSock
 function OpenHttp(const aServer, aPort: RawUtf8; aTLS: boolean = false;
   aLayer: TNetLayer = nlTcp; const aUrlForProxy: RawUtf8 = '';
-  aTimeout: integer = 0; aTLSContext: PNetTlsContext = nil): THttpClientSocket; overload;
+  aTimeout: integer = 0; aTLSContext: PNetTlsContext = nil;
+  const aProxyByPass: RawUtf8 = ''): THttpClientSocket; overload;
 
 /// create a THttpClientSocket, returning nil on error
 // - useful to easily catch socket error exception ENetSock
@@ -1171,8 +1172,10 @@ var
 // THttpClientSocket.Open() constructor
 // - if proxy is set, will return its value from @temp, otherwise return
 // @DefaultHttpClientSocketProxy or call GetProxyForUri() to fill and return @temp
+// - optional bypass is a Windows-style proxy bypass list
 // - return nil if no proxy is to be used for this URI
-function GetSystemProxyUri(const uri, proxy: RawUtf8; var temp: TUri): PUri;
+function GetSystemProxyUri(const uri, proxy: RawUtf8; var temp: TUri;
+  const bypass: RawUtf8 = ''): PUri;
 
 /// ask the Operating System to return the Tunnel/Proxy settings for a given URI
 // - return DefaultHttpClientSocketProxy.URI or call GetProxyForUri()
@@ -1185,8 +1188,7 @@ function GetSystemProxy(const uri: RawUtf8): RawUtf8;
 // WinHttpGetProxyInfo from mormot.lib.winhttp to use the Internet Explorer
 // settings or system PAC file
 // - return '' if no proxy is defined
-function GetProxyForUri(const uri: RawUtf8;
-  fromSystem: boolean = true): RawUtf8;
+function GetProxyForUri(const uri: RawUtf8; fromSystem: boolean = true): RawUtf8;
 
 /// check if a host matches a Windows-style proxy bypass list
 // - ByPass is a semicolon-delimited list of case-insensitive host masks
@@ -3761,13 +3763,15 @@ begin
   {$endif USEWININET}
 end;
 
-function GetSystemProxyUri(const uri, proxy: RawUtf8; var temp: TUri): PUri;
+function GetSystemProxyUri(const uri, proxy: RawUtf8; var temp: TUri;
+  const bypass: RawUtf8): PUri;
 begin
   if IsNone(proxy) or
      (not temp.From(uri)) or
      (temp.Server = '') or
      (not (temp.UriScheme in [usHttp, usHttps])) or
-     IsLocalHost(pointer(temp.Server)) or // no proxy for "127.x.x.x"
+     IsLocalHost(pointer(temp.Server)) or   // no proxy for "127.x.x.x"
+     ProxyByPassMatch(temp.Server, bypass) or
      (DefaultHttpClientSocketProxyNotForIp4 and
       NetIsIP4(pointer(temp.Server))) then  // plain "1.2.3.4" IP has no proxy
     result := nil
@@ -3941,7 +3945,8 @@ begin
     fOnAuthorize := OnAuthorizeSspi;     // as AuthorizeSspiUser()
     {$endif NOKERBEROSCLIENT}
   TLS := fExtendedOptions.TLS;
-  pu := GetSystemProxyUri(aUri.URI, fExtendedOptions.Proxy, temp);
+  pu := GetSystemProxyUri(aUri.URI,
+          fExtendedOptions.Proxy, temp, fExtendedOptions.ProxyByPass);
   if pu <> nil then
     Tunnel := pu^;
   // actually connect to the server (inlined TCrtSock.Open)
@@ -5114,14 +5119,14 @@ end;
 {$endif NOKERBEROSCLIENT}
 
 function OpenHttp(const aServer, aPort: RawUtf8; aTLS: boolean;
-  aLayer: TNetLayer; const aUrlForProxy: RawUtf8;
-  aTimeout: integer; aTLSContext: PNetTlsContext): THttpClientSocket;
+  aLayer: TNetLayer; const aUrlForProxy: RawUtf8; aTimeout: integer;
+  aTLSContext: PNetTlsContext; const aProxyByPass: RawUtf8): THttpClientSocket;
 var
   temp: TUri;
 begin
   try
     result := THttpClientSocket.Open(aServer, aPort, aLayer, aTimeout,
-      aTLS, aTLSContext, GetSystemProxyUri(aUrlForProxy, '', temp));
+      aTLS, aTLSContext, GetSystemProxyUri(aUrlForProxy, '', temp, aProxyByPass));
   except
     on ENetSock do
       result := nil;
