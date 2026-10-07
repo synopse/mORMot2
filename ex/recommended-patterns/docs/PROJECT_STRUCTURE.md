@@ -39,7 +39,7 @@ The layout and the `§…` / `A.x` / `B.x` citations in this document follow the
 │   │   │   │   ├── <a href="../src/app/tasks/interface/task_query.pas">task_query.pas</a>        # ITaskQuery (CQRS read)
 │   │   │   │   ├── <a href="../src/app/tasks/interface/task_command.pas">task_command.pas</a>      # ITaskCommand (CQRS write)
 │   │   │   │   └── <a href="../src/app/tasks/interface/task_dtos.pas">task_dtos.pas</a>         # Family of packed-record DTOs (view/list/create/update/…)
-│   │   │   └── <a href="../src/app/tasks/implementation/">implementation/</a>           # Server side only: clients never reference it
+│   │   │   └── <a href="../src/app/tasks/implementation/">implementation/</a>           # Server side (+ the in-process LOCAL_MODE backend)
 │   │   │       ├── <a href="../src/app/tasks/implementation/task_mappers.pas">task_mappers.pas</a>      # OrmTo* / *ToOrm / Apply* — pure procedures
 │   │   │       ├── <a href="../src/app/tasks/implementation/task_query_impl.pas">task_query_impl.pas</a>   # TTaskQueryService (sicShared)
 │   │   │       └── <a href="../src/app/tasks/implementation/task_command_impl.pas">task_command_impl.pas</a> # TTaskCommandService (sicShared)
@@ -96,7 +96,7 @@ All SQL/FTS5 knowledge lives here. If the application layer ever calls `IRestOrm
 
 ### `app/` — Application (contract, DTOs, mappers, services)
 
-Each `app/<entity>/` is split in two. **`interface/`** is the public contract shared by the server and its clients — the client-facing units (`AppTaskManagerClient`, `AppTaskManagerClientRemote`, `cli_client_core`) reference only this folder. **`implementation/`** holds the server-side services and mappers; clients never reference it. The exceptions run server-side code in-process: the CLI's `LOCAL_MODE` backend (`AppTaskManagerClientLocal`), which hosts the services, and the tests, which exercise the mappers directly.
+Each `app/<entity>/` is split in two. **`interface/`** is the public contract shared by the server and its clients — the client-facing units (`AppTaskManagerClient`, `AppTaskManagerClientRemote`, `cli_client_core`) reference this folder (plus the `dom/` types the DTOs embed, and `shared_types`), never `implementation/`. **`implementation/`** holds the server-side services and mappers; clients never reference it. The exceptions run server-side code in-process: the CLI's `LOCAL_MODE` backend (`AppTaskManagerClientLocal`), which hosts the services, and the tests, which exercise the mappers directly.
 
 `interface/`:
 

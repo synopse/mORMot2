@@ -33,7 +33,7 @@ app/<entity>/
 │   ├── <entity>_query.pas         → I<Entity>Query          (read interface)
 │   ├── <entity>_command.pas       → I<Entity>Command        (write interface)
 │   └── <entity>_dtos.pas          → packed-record DTO family
-└── implementation/                (server side only)
+└── implementation/                (server side + in-process LOCAL_MODE backend)
     ├── <entity>_mappers.pas       → OrmTo* / *ToOrm / Apply* (pure)
     ├── <entity>_query_impl.pas    → T<Entity>QueryService   (sicShared)
     └── <entity>_command_impl.pas  → T<Entity>CommandService (sicShared)

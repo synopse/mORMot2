@@ -481,7 +481,7 @@ Two gotchas are worth knowing before you rely on it:
 
 ### B.1. Storage behind an interface
 
-Every service exposes an `IXxxRepository` in the domain layer (its CQRS pair, see [B.4](#b4-cqrs-readwrite-split), belongs to the application layer — see [B.6.1](#b61-suggested-folder-structure)). Multi-tenancy: per-tenant SQLite when data is tenant-scoped; a single shared database otherwise.
+Every service keeps its storage behind an `IXxxRepository` in the domain layer; the service's CQRS pair ([B.4](#b4-cqrs-readwrite-split)) belongs to the application layer — see [B.6.1](#b61-suggested-folder-structure). Multi-tenancy: per-tenant SQLite when data is tenant-scoped; a single shared database otherwise.
 
 ### B.2. ORM base class and casing
 
@@ -556,7 +556,7 @@ tests/
 
 **The `TOrm` lives in `dom/`, on purpose.** Because the `TOrm` doubles as the domain object ([B.3](#b3-two-types-per-entity-not-three)), it belongs with the domain, not with the persistence machinery. The cost is precise and acceptable: `dom/` depends on the ORM **base type** (`mormot.orm.core`) but never on the ORM **runtime** — no `IRestOrm`, no REST server, no SQL. Those stay in `infra/`. This keeps the dependency direction clean: the port interface in `dom/` can name the entity it returns without reaching into `infra/`, and `infra/` depends on `dom/`, never the reverse. (Some older code merges the two into a single `kdom/`-style folder — that is the case this split is meant to avoid.)
 
-**The CQRS interfaces live in `app/<entity>/interface/`, not in `dom/`.** `I<Entity>Query` / `I<Entity>Command` take and return the DTOs, so declaring them in `dom/` would make the domain depend on the application layer — the inverted direction this layout exists to prevent. They are the application layer's public contract, the use-case boundary clients call (a *driving* port), whereas `I<Entity>Repository` is a port the domain needs (a *driven* port) and stays in `dom/`. Consumer code compiles against `interface/` only; `implementation/` is linked only by the server and the [A.6.1](#a61-trusted--local-deployment) in-process stack.
+**The CQRS interfaces live in `app/<entity>/interface/`, not in `dom/`.** `I<Entity>Query` / `I<Entity>Command` take and return the DTOs, so declaring them in `dom/` would make the domain depend on the application layer — the inverted direction this layout exists to prevent. They are the application layer's public contract, the use-case boundary clients call (a *driving* port), whereas `I<Entity>Repository` is a port the domain needs (a *driven* port) and stays in `dom/`. Consumer code compiles against `interface/` (plus the `dom/` types the DTOs embed), never against `implementation/`, which is linked only by the server and the [A.6.1](#a61-trusted--local-deployment) in-process stack.
 
 | Pattern | Layer | Role |
 |---|---|---|
@@ -581,8 +581,8 @@ tests/
 The following list is a possible starting point. It is not a pattern to always follow:
 
 1. `TOrm` per entity (in `dom/`), doubling as the domain object — see [B.6.1](#b61-suggested-folder-structure).
-2. A family of (possibly `packed record`) DTOs (in `app/<Entity>/interface/`) — register each with `Rtti.RegisterFromText` in the unit's `initialization` on FPC (required through 3.2.2); on Delphi only for the [A.7](#a7-copying-between-objects-records-and-dtos) exceptions (field aliases, custom serialization, or a Delphi RTTI gap).
-3. Possibly pairing `IXxxCommand` + `IXxxQuery` interfaces descending from `IInvokable`.
+2. A family of (possibly `packed record`) DTOs (in `app/<entity>/interface/`) — register each with `Rtti.RegisterFromText` in the unit's `initialization` on FPC (required through 3.2.2); on Delphi only for the [A.7](#a7-copying-between-objects-records-and-dtos) exceptions (field aliases, custom serialization, or a Delphi RTTI gap).
+3. Possibly pairing `IXxxCommand` + `IXxxQuery` interfaces descending from `IInvokable` (in `app/<entity>/interface/`).
 4. Service implementations as `TInjectableObjectRest` subclasses, `IRestOrm` injected via published property.
 5. `sicShared` instance mode unless profiling says otherwise.
 6. Standard daemon: load settings, build the `TOrmModel`, create the persistence server, wire repositories, register services, start `TRestHttpServer`.

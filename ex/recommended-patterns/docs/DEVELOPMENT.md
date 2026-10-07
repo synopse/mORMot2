@@ -7,10 +7,10 @@ See [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md) for the full layout. The `§…
 
 ```
 src/
-├── dom/<entity>/     # TOrm aggregate (<entity>.pas) + I<Entity>Repository
-├── infra/<entity>/   # T<Entity>RepositoryOrm (+ FTS5 schema, migration)
-├── app/<entity>/interface/       # I<Entity>Query, I<Entity>Command + DTOs (shared by server and clients)
-├── app/<entity>/implementation/  # mappers, T<Entity>QueryService, T<Entity>CommandService (server side)
+├── dom/<entity>/                  # TOrm aggregate (<entity>.pas) + I<Entity>Repository
+├── infra/<entity>/                # T<Entity>RepositoryOrm (+ FTS5 schema, migration)
+├── app/<entity>/interface/        # I<Entity>Query, I<Entity>Command + DTOs (shared by server and clients)
+├── app/<entity>/implementation/   # mappers, T<Entity>QueryService, T<Entity>CommandService (server side)
 ├── serv/app/ServAppTaskManager.pas     # Server composition root (RunTaskManagerDaemon)
 ├── task_manager.pas                    # Thin server entry point (calls RunTaskManagerDaemon)
 ├── cli_client.pas                      # Thin CLI consumer (selects backend via -dLOCAL_MODE)
@@ -20,7 +20,7 @@ tests/<entity>/       # TSynTestCase per entity
 prj/                  # Per-toolchain build scripts (fpc/) and IDE project files (delphi/, lazarus/)
 ```
 
-The hard rule: `app/*` depends on `dom/*_repository.pas` (interface), **never** on `infra/*_repository_orm.pas` (implementation). The composition root is the only place where the concrete `T<Entity>RepositoryOrm` class is named — it constructs it and seeds it into the dispatcher's resolver via `Dispatcher.ServiceContainer.InjectInstance([repoImpl])` so service `Repo` properties resolve through `AutoResolve`.
+The hard rule: `app/*/implementation/*_impl.pas` depends on `dom/*_repository.pas` (interface), **never** on `infra/*_repository_orm.pas` (implementation). The composition root is the only place where the concrete `T<Entity>RepositoryOrm` class is named — it constructs it and seeds it into the dispatcher's resolver via `Dispatcher.ServiceContainer.InjectInstance([repoImpl])` so service `Repo` properties resolve through `AutoResolve`.
 
 ## Prerequisites
 

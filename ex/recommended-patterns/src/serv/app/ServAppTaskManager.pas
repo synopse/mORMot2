@@ -5,9 +5,10 @@ unit ServAppTaskManager;
 
   This is the ONE place that names concrete infrastructure classes
   (TTaskRepositoryOrm / TTagRepositoryOrm) and wires them to the CQRS services.
-  The app/ services depend only on the dom/ interfaces; swapping a backend is an
-  infra/ + this-unit change and nothing else. Keeping it under serv/app/ makes
-  the persistence boundary visible exactly as the suggested layout prescribes.
+  The app/ services depend only on the dom/ repository ports and their own
+  app/*/interface contract; swapping a backend is an infra/ + this-unit change
+  and nothing else. Keeping it under serv/app/ makes the persistence boundary
+  visible exactly as the suggested layout prescribes.
 
   Topology (A.6.2, collapsed into a single executable):
    - Persistence = TRestServerDB owns SQLite + FTS5, stays OFF the network.
