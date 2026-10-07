@@ -4100,13 +4100,19 @@ procedure THttpClientSocket.OpenBind(const aServer, aPort: RawUtf8; doBind,
   aTLS: boolean; aLayer: TNetLayer; aSock: TNetSocket; aReusePort: boolean);
 var
   bak: TUri;
+  port: RawUtf8;
 begin
   if doBind then
     EHttpSocket.RaiseUtf8('%.OpenBind with doBind=true', [self]);
   fProxyAuthHeader := '';
+  fProxyAuthHeader := '';
+  port := aPort;
+  if (port = '') and
+     (aLayer <> nlUnix) then
+    port := DEFAULT_PORT[aTLS];
   if (not aTLS) and // proxy to https:// destination requires CONNECT
      (Tunnel.Server <> '') and
-     (Tunnel.Server <> aServer) then
+     not Tunnel.Same(aServer, port, Tunnel.Https) then
   begin
     // plain http:// proxy is implemented in RequestSendHeader not via CONNECT
     bak := Tunnel;

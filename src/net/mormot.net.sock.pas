@@ -6458,7 +6458,7 @@ begin
   p := aUri;
   if p^ in SCHEME_FIRST then
     repeat
-      inc(P);
+      inc(p);
     until (p >= aUriEnd) or
           not (p^ in SCHEME_CHARS);
   UriScheme := usHttp; // fallback to http:// if no scheme specified
@@ -6571,20 +6571,25 @@ begin
     // optional Port - don't consume ?query or #fragment
     if aUri < authorityend then
     begin
-      if aUri^ <> ':' then
+      if aUri^ <> ':' then     // invalid input
+        portend := aUri
+      else
+      begin
+        repeat
+          inc(aUri);
+        until (aUri = authorityend) or
+              (aUri^ <> ' ');
+        portend := authorityend;
+        while (portend > aUri) and
+              ((portend - 1)^ = ' ') do
+          dec(portend);
+      end;
+      if aUri = portend then   // void port is not allowed
+      begin
+        FastAssignNew(Server); // the parsing failed
         exit;
-      inc(aUri);
-      while (aUri < authorityend) and
-            (aUri^ = ' ') do
-        inc(aUri);
-      p := aUri;
-      portend := authorityend;
-      while (portend > p) and
-            ((portend - 1)^ = ' ') do
-        dec(portend);
-      if p = portend then
-        exit; // void port is not allowed
-      FastSetString(Port, p, portend);
+      end;
+      FastSetString(Port, aUri, portend);
     end
     else if Server <> '' then
       if DefaultPort <> '' then
@@ -6597,7 +6602,7 @@ begin
   if aUri < aUriEnd then
   begin
     if aUri^ = '/' then
-      inc(aUri); // Address never starts with the URI path'aUri first '/'
+      inc(aUri); // Address never starts with the URI first '/'
     // keep '?' and '#' delimiters when there is no path
     FastSetString(Address, aUri, aUriEnd);
   end;
