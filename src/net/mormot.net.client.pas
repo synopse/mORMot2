@@ -874,6 +874,7 @@ type
     {$ifndef NOKERBEROSCLIENT}
     fAuthorizeSspiSpn: RawUtf8;
     {$endif NOKERBEROSCLIENT}
+    procedure SetTunnelForUri(const uri: TUri);
     procedure SetAuthBearer(const Value: SpiUtf8);
     procedure DoCreate(aTimeOut: integer); override;
     procedure DoOpenOptions(const aUri: TUri; var aOptions: THttpRequestExtendedOptions;
@@ -4009,9 +4010,6 @@ end;
 procedure THttpClientSocket.DoOpenOptions(const aUri: TUri;
   var aOptions: THttpRequestExtendedOptions; const aOnLog: TSynLogProc;
   aClient: TCrtSocket);
-var
-  temp: TUri;
-  pu: PUri;
 begin
   // setup the proper options before any connection
   fExtendedOptions := aOptions;
@@ -4039,10 +4037,7 @@ begin
     fOnAuthorize := OnAuthorizeSspi;     // as AuthorizeSspiUser()
     {$endif NOKERBEROSCLIENT}
   TLS := fExtendedOptions.TLS;
-  pu := GetSystemProxyUri(aUri, fExtendedOptions.Proxy,
-          fExtendedOptions.ProxyByPass, temp);
-  if pu <> nil then
-    Tunnel := pu^;
+  SetTunnelForUri(aUri);
   // actually connect to the server (inlined TCrtSock.Open)
   OpenBind(aUri.Server, aUri.Port, {bind=}false, aUri.Https, aUri.Layer);
   aOptions.TLS := TLS; // copy back Peer information after connection
@@ -4061,20 +4056,35 @@ begin
   DoOpenOptions(u, o, aClient.OnLog, aClient);
 end;
 
+procedure THttpClientSocket.SetTunnelForUri(const uri: TUri);
+var
+  temp: TUri;
+  proxy: PUri;
+begin
+  Tunnel.Clear;
+  proxy := GetSystemProxyUri(uri, fExtendedOptions.Proxy,
+    fExtendedOptions.ProxyByPass, temp);
+  if proxy <> nil then
+    Tunnel := proxy^;
+end;
+
 function THttpClientSocket.SameOpenOptions(const aUri: TUri;
   const aOptions: THttpRequestExtendedOptions): boolean;
 var
-  tun: TUri;
-begin // timeouts are not checked here because they don't need a reconnection
+  temp: TUri;
+  proxy: PUri; // same route semantics as SetTunnelForUri()
+begin
   result := (aUri.UriScheme in HTTP_SCHEME) and
             aUri.Same(Server, Port, ServerTls) and
             SameNetTlsContext(TLS, aOptions.TLS) and
             fExtendedOptions.SameAuth(@aOptions);
-  if result then
-    if tun.From(aOptions.Proxy) then
-      result := tun.Same(Tunnel.Server, Tunnel.Port, Tunnel.Https)
-    else
-      result := (Tunnel.Server = '');
+  if not result then
+    exit;
+  proxy := GetSystemProxyUri(aUri, aOptions.Proxy, aOptions.ProxyByPass, temp);
+  if proxy = nil then
+    result := Tunnel.Server = ''
+  else
+    result := proxy^.Same(Tunnel.Server, Tunnel.Port, Tunnel.Https);
 end;
 
 procedure THttpClientSocket.OpenBind(const aServer, aPort: RawUtf8; doBind,
@@ -4621,7 +4631,8 @@ begin
           // relocated to another server -> reset the TCP connection
           Close;
           AppendLine(fRequestContext, ['ReOpen ', newuri.URI]);
-          // will properly use the defined timeouts
+          // will proper reuse the timeouts and the proxy of this new URI 
+          SetTunnelForUri(newuri);
           OpenBind(newuri.Server, newuri.Port, {bind=}false, newuri.Https);
         except
           on E: Exception do
