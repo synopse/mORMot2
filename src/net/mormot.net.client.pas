@@ -1192,13 +1192,20 @@ function GetProxyForUri(const uri: RawUtf8; fromSystem: boolean = true): RawUtf8
 
 {$ifdef USEWININET}
 /// wrapper to WinHttpGetProxyInfo() as used by GetProxyForUri()
-procedure GetWinProxyForUri(const uri: RawUtf8; var result: RawUtf8);
+procedure GetWinProxyForUri(const uri: RawUtf8; var proxy: RawUtf8);
 {$endif USEWININET}
 
 /// check if a host matches a Windows-style proxy bypass list
 // - ByPass is a semicolon-delimited list of case-insensitive host masks
 // - '*' is recognized as wildcard; '<local>' matches host names with no dot
 function ProxyByPassMatch(const Host, ByPass: RawUtf8): boolean;
+
+/// check if a host matches a NO_PROXY environment variable value
+// - NoProxy is a comma-delimited list of case-insensitive host/domain names
+// - a domain name matches itself and all its sub-domains
+// - an optional leading '.' before a domain name is ignored
+// - '*' as a single item matches any host
+function NoProxyMatch(const Host, NoProxy: RawUtf8): boolean;
 
 /// parse a URI into its final resource name
 // - optionally sanitize the output to be filename-compatible
@@ -3751,19 +3758,19 @@ begin
 end;
 
 {$ifdef USEWININET}
-procedure GetWinProxyForUri(const uri: RawUtf8; var result: RawUtf8);
+procedure GetWinProxyForUri(const uri: RawUtf8; var proxy: RawUtf8);
 var
   pi: TProxyInfo;
   u: TUri;
 begin
   if WinHttpGetProxyInfo(Utf8ToSynUnicode(uri), pi) <> 0 then
     exit;
-  result := SynUnicodeToUtf8(pi.URL);
+  proxy := SynUnicodeToUtf8(pi.URL);
   if (pi.Bypass <> '') and
      u.From(uri) and
      ProxyByPassMatch(u.Server,
        StringReplaceChars(SynUnicodeToUtf8(pi.Bypass), ' ', ';')) then
-    result := '';
+    proxy := '';
 end;
 {$endif USEWININET}
 
@@ -3869,6 +3876,50 @@ begin
         end
         else if Match(Host, rule, rulelen) then
           exit;
+    end;
+  end;
+  result := false;
+end;
+
+function NoProxyMatch(const Host, NoProxy: RawUtf8): boolean;
+var
+  rule, p, h: PUtf8Char;
+  rulelen, hostlen: PtrInt;
+  isip: boolean;
+begin
+  hostlen := length(Host);
+  if (hostlen <> 0) and
+     (NoProxy <> '') then
+  begin
+    result := true;
+    h := pointer(Host);
+    isip := NetIsIP4(h) or
+            NetIsIP6(h);
+    p := pointer(NoProxy);
+    while p <> nil do
+    begin
+      rulelen := GetNextItemTrimedBuffer(p, ',', rule);
+      if rulelen = 0 then
+        continue;
+      // '*' means no proxy for anything
+      if (rulelen = 1) and
+         (rule^ = '*') then
+        exit;
+      // '.example.com' is the same as 'example.com'
+      if rule^ = '.' then
+      begin
+        inc(rule);
+        dec(rulelen);
+        if rulelen = 0 then
+          continue;
+      end;
+      if rulelen <= hostlen then
+        if IdemPropNameUSameLenNotNull(h + hostlen - rulelen, rule, rulelen) then
+          if hostlen = rulelen then
+            exit
+          else if not isip and
+                  (Host[hostlen - rulelen] = '.') then
+            exit;
     end;
   end;
   result := false;

@@ -5687,7 +5687,7 @@ begin
   Check(U.FromScheme(usLdaps, 'server'));
   CheckEqual(U.Scheme, 'ldaps');
   CheckEqual(U.URI, 'ldaps://server/');
-  // validate ProxyByPassMatch()
+  // validate ProxyByPassMatch() and NoProxyMatch()
   Check(not ProxyByPassMatch('', '*'));
   Check(not ProxyByPassMatch('example.com', ''));
   Check(ProxyByPassMatch('example.com', 'example.com'));
@@ -5699,6 +5699,19 @@ begin
   Check(ProxyByPassMatch('server', '<local>'));
   Check(not ProxyByPassMatch('server.local', '<local>'));
   Check(not ProxyByPassMatch('example.org', '*.example.com; 10.*'));
+  Check(not NoProxyMatch('', '*'));
+  Check(not NoProxyMatch('example.com', ''));
+  Check(NoProxyMatch('example.com', '*'));
+  Check(NoProxyMatch('example.com', 'example.com'));
+  Check(NoProxyMatch('EXAMPLE.COM', 'example.com'));
+  Check(NoProxyMatch('www.example.com', 'example.com'));
+  Check(NoProxyMatch('www.example.com', '.example.com'));
+  Check(NoProxyMatch('foo.www.example.com', 'other.com, example.com'));
+  Check(not NoProxyMatch('notexample.com', 'example.com'));
+  Check(not NoProxyMatch('example.org', 'example.com, localhost'));
+  Check(NoProxyMatch('localhost', 'example.com, localhost'));
+  Check(NoProxyMatch('192.168.1.10', '192.168.1.10'));
+  Check(not NoProxyMatch('192.168.1.10', '168.1.10'));
   // validate THttpCookies and CookieFromHeaders()
   hc.ParseServer('');
   CheckEqual(length(hc.Cookies), 0);
