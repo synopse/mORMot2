@@ -4951,7 +4951,8 @@ var
   res: THttpPeerCryptMessageDecode;
   i, n, alter: integer;
   tmp: THttpPeerCacheMessageEncoded;
-  dUri, dBearer, dTok, params: RawUtf8;
+  dUri, dBearer, dTok, params, err: RawUtf8;
+  mac: TMacAddress;
   decoded: TUri;
   timer: TPrecisionTimer;
 begin
@@ -5008,6 +5009,12 @@ begin
     hps.Port := 8008; // don't use default 8099
     hps.Options := [pcoHttpDirect, pcoCacheTempNoCheckSize,
       pcoVerboseLog, pcoHttpReprDigest {}, pcoSelfSignedHttps{}];
+    err := hps.GuessInterface(mac);
+    if err <> '' then
+    begin
+      AddConsole('Skipped: %', [err]);
+      exit;
+    end;
     try
       hpc := THttpPeerCacheHook.Create(hps, 'secret'{,THttpAsyncServer});
       try
