@@ -6904,7 +6904,7 @@ begin
     exit;
   end;
   if (UriScheme = usUndefined) or // fields directly set, without any From()
-     NormalizeToHttp then
+     NormalizeToHttp then         // e.g. wss:// as https:// for Proxy
     if Layer = nlUdp then
       UriScheme := usUdp
     else if Server = '' then
