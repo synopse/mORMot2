@@ -4169,8 +4169,10 @@ var
   Len: PtrInt;
 begin
   Len := ByteScanIndex(pointer(st.P), st.Len, 13); // fast SSE2 or FPC IndexByte
-  result := (PtrUInt(Len) < PtrUInt(st.Len)) and // detect st.Len=0 and/or Len=-1
-            DoProcessParseLine(st, Len);         // enough input: sub-function
+  if PtrUInt(Len) < PtrUInt(st.Len) then  // detect st.Len=0 and/or Len=-1
+    result := DoProcessParseLine(st, Len) // enough input: sub-function
+  else
+    result := false;
 end;
 
 function THttpRequestContext.DoProcessReadBody(var st: TProcessParseLine): boolean;

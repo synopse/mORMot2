@@ -4729,7 +4729,7 @@ var
 begin
   p := pointer(json);
   repeat
-    p := PosChar(p, '"'); // next "string"
+    p := PosChar(p, '"'); // next "string" - use fast SSE2 asm on i386/x86_64
     if p = nil then
       exit; // exit = leave untouched
     if PCardinal(p)^ = JSON_BASE64_MAGIC_QUOTE_C then
