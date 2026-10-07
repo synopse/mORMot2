@@ -1662,6 +1662,7 @@ var
   var
     c: AnsiChar;
     jc: TJsonChar;
+    bak, json: RawUtf8;
     // _JSONCHARS: array[0 .. 127] of byte; if needs recompute
   begin
     // validate JSON_CHARS[] pre-computed table
@@ -1689,6 +1690,93 @@ var
         include(jc, jcJsonIdentifier);           // _-.[]$0..9a..zA..Z
       Check(JSON_CHARS[c] = jc, 'JSON_CHARS');
     end;
+    // validate RemoveMagicFromJson()
+    json := '{"a":"normal","b":123}'; // no magic
+    bak := json;
+    RemoveMagicFromJson(json);
+    CheckEqual(json, bak);
+    Check(pointer(json) = pointer(bak), 'idem1');
+    json := '["' + BinToBase64WithMagic('abc') + '"]'; // single magic
+    RemoveMagicFromJson(json);
+    CheckEqual(json, '["YWJj"]');
+    json := '["' + BinToBase64WithMagic('abc') +
+           '","' + BinToBase64WithMagic('def') + '"]'; // consecutive magic
+    RemoveMagicFromJson(json);
+    CheckEqual(json, '["YWJj","ZGVm"]');
+    json := '["' + BinToBase64WithMagic('abc') + '","one","two",3,"' +
+                   BinToBase64WithMagic('def') + '","three"]';
+    RemoveMagicFromJson(json); // normal strings between magic strings
+    CheckEqual(json, '["YWJj","one","two",3,"ZGVm","three"]');
+    json := '{"text":"one\"two","blob":"' +
+      BinToBase64WithMagic('abc') + '"}'; // escaped quote
+    RemoveMagicFromJson(json);
+    CheckEqual(json, '{"text":"one\"two","blob":"YWJj"}');
+    json := '{"blob":"' + BinToBase64WithMagic('abc') + '"}';
+    bak := json; // shared instance
+    RemoveMagicFromJson(json);
+    CheckEqual(json, '{"blob":"YWJj"}');
+    Check(pointer(json) <> pointer(bak), 'idem2');
+    CheckEqual(bak, '{"blob":"' + BinToBase64WithMagic('abc') + '"}');
+    bak := json;
+    RemoveMagicFromJson(json); // idempotent
+    CheckEqual(json, bak);
+    json := ''; // empty input
+    RemoveMagicFromJson(json);
+    CheckEqual(json, '');
+    json := '[1,2,3,true,false,null]'; // no JSON strings at all
+    bak := json;
+    RemoveMagicFromJson(json);
+    CheckEqual(json, bak);
+    Check(pointer(json) = pointer(bak), 'idem3');
+    json := '"' + BinToBase64WithMagic('abc') + '"'; // top-level string
+    RemoveMagicFromJson(json);
+    CheckEqual(json, '"YWJj"');
+    // empty BLOB - assuming BinToBase64WithMagic('') emits the magic prefix
+    json := '["' + BinToBase64WithMagic('') + '"]';
+    RemoveMagicFromJson(json);
+    CheckEqual(json, '[""]');
+    // magic occurs inside a string, but not as its prefix: must stay untouched
+    json := '["prefix' + BinToBase64WithMagic('abc') + '"]';
+    bak := json;
+    RemoveMagicFromJson(json);
+    CheckEqual(json, bak);
+    // textual "\uFFF0" JSON escape is not the actual UTF-8 magic marker
+    json := '["\uFFF0YWJj"]';
+    bak := json;
+    RemoveMagicFromJson(json);
+    CheckEqual(json, bak);
+    // magic in a property name
+    json := '{"' + BinToBase64WithMagic('abc') + '":"value"}';
+    RemoveMagicFromJson(json);
+    CheckEqual(json, '{"YWJj":"value"}');
+    // magic in both property name and value
+    json := '{"' + BinToBase64WithMagic('abc') + '":"' +
+                   BinToBase64WithMagic('def') + '"}';
+    RemoveMagicFromJson(json);
+    CheckEqual(json, '{"YWJj":"ZGVm"}');
+    // escaped backslash just before the closing quote
+    json := '{"text":"one\\","blob":"' +
+      BinToBase64WithMagic('abc') + '"}';
+    RemoveMagicFromJson(json);
+    CheckEqual(json, '{"text":"one\\","blob":"YWJj"}');
+    // several escaped quotes/backslashes before the magic string
+    json := '{"text":"a\"b\\c\"d","blob":"' +
+      BinToBase64WithMagic('abc') + '"}';
+    RemoveMagicFromJson(json);
+    CheckEqual(json, '{"text":"a\"b\\c\"d","blob":"YWJj"}');
+    // unique string should really be compacted in place
+    json := '["' + BinToBase64WithMagic('abc') + '","tail"]';
+    p := UniqueRawUtf8(json);
+    RemoveMagicFromJson(json);
+    Check(pointer(json) = p, 'inplace');
+    CheckEqual(json, '["YWJj","tail"]');
+    // several consecutive empty/non-empty BLOBs
+    json := '["' + BinToBase64WithMagic('') +
+           '","' + BinToBase64WithMagic('abc') +
+           '","' + BinToBase64WithMagic('') +
+           '","' + BinToBase64WithMagic('def') + '"]';
+    RemoveMagicFromJson(json);
+    CheckEqual(json, '["","YWJj","","ZGVm"]');
   end;
 
   procedure TestMyColl(MyColl: TMyCollection);
