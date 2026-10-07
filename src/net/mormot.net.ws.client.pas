@@ -125,7 +125,8 @@ type
     class function WebSocketsConnect(const aUri: TUri;
       var aOptions: THttpRequestExtendedOptions; aProtocol: TWebSocketProtocol;
       aLog: TSynLogClass = nil; const aLogContext: RawUtf8 = '';
-      const aCustomHeaders: RawUtf8 = ''): THttpClientWebSockets; overload;
+      const aCustomHeaders: RawUtf8 = '';
+      aErrorMessage: PRawUtf8 = nil): THttpClientWebSockets; overload;
     /// low-level client WebSockets connection factory from an URI string
     class function WebSocketsConnect(const aUri: RawUtf8;
       aProtocol: TWebSocketProtocol; aOptions: PHttpRequestExtendedOptions;
@@ -552,22 +553,23 @@ end;
 
 class function THttpClientWebSockets.WebSocketsConnect(const aUri: TUri;
   var aOptions: THttpRequestExtendedOptions; aProtocol: TWebSocketProtocol;
-  aLog: TSynLogClass; const aLogContext, aCustomHeaders: RawUtf8): THttpClientWebSockets;
+  aLog: TSynLogClass; const aLogContext, aCustomHeaders: RawUtf8;
+  aErrorMessage: PRawUtf8): THttpClientWebSockets;
 var
   error: RawUtf8;
   onlog: TSynLogProc;
   upgrade: boolean;
 begin
   result := nil;
-  if (aProtocol = nil) or
-     (aUri.Server = '') or
-     not (aUri.UriScheme in HTTP_SCHEME) then
-    EWebSockets.RaiseUtf8('%.WebSocketsConnect(nil)', [self]);
   onlog := nil;
-  if aLog <> nil then
-    onlog := aLog.DoLog;
   upgrade := false;
   try
+    if aLog <> nil then
+      onlog := aLog.DoLog;
+    if (aProtocol = nil) or
+       (aUri.Server = '') or
+       not (aUri.UriScheme in HTTP_SCHEME) then
+      EWebSockets.RaiseUtf8('Invalid parameters to %.WebSocketsConnect', [self]);
     // main connection factory - includes Proxy/ProxyByPass/PAC resolution
     result := OpenOptions(aUri, aOptions, onlog);
     // from now on WebSocketsUpgrade() owns aProtocol
@@ -586,6 +588,8 @@ begin
       FormatUtf8('% %', [E, E.Message], error);
     end;
   end;
+  if aErrorMessage <> nil then
+    aErrorMessage^ := error;
   if Assigned(onlog) then
     if result <> nil then
       onlog(sllDebug, '%: WebSocketsConnect %', [aLogContext, result])

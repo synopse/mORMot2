@@ -5259,6 +5259,10 @@ begin
   CheckEqual(U.Uri, 'http://toto.com:123/');
   Check(U.UriScheme = usHttp);
   Check(not U.Https);
+  Check(U.From('http://proxy.example:3128'));
+  Check(not U.Https, 'httpU');
+  Check(not U.Same('proxy.example', '80', U.Https));
+  Check(U.Same('proxy.example', '3128', U.Https));
   Check(U.From('https://toto.com:123/tata/titi'));
   CheckEqual(U.Uri, 'https://toto.com:123/tata/titi');
   Check(U.UriScheme = usHttps);

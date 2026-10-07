@@ -7298,6 +7298,7 @@ begin
     aLayer := nlUnix;      // as detected by NewSocket() below
   fSocketLayer := aLayer;
   fSocketFamily := nfUnknown;
+  fProxyUrl := '';
   fFlags := [];
   if doBind then
     include(fFlags, fWasBind);
@@ -7316,7 +7317,7 @@ begin
       // allow small number of retries (e.g. XP or BSD during aggressive tests)
       retry := 10
     else if (Tunnel.Server <> '') and
-            (Tunnel.Server <> fServer) and
+            (not Tunnel.Same(fServer, fPort, Tunnel.Https)) and
             (aLayer = nlTcp) then
     begin
       // HTTP(S) tunnelling via CONNECT - see also THttpClientSocket.OpenBind

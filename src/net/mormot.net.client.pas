@@ -4081,7 +4081,9 @@ begin
   if proxy = nil then
     result := Tunnel.Server = ''
   else
-    result := proxy^.Same(Tunnel.Server, Tunnel.Port, Tunnel.Https);
+    result := proxy^.Same(Tunnel.Server, Tunnel.Port, Tunnel.Https) and
+              (proxy^.User = Tunnel.User) and // proxy credential matters
+              (proxy^.Password = Tunnel.Password);
 end;
 
 function THttpClientSocket.SameOpenOptions(const aUri: TUri;
