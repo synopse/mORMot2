@@ -875,6 +875,7 @@ type
     fAuthorizeSspiSpn: RawUtf8;
     {$endif NOKERBEROSCLIENT}
     procedure SetTunnelForUri(const uri: TUri);
+    function SameTunnelForUri(const uri: TUri; opt: PHttpRequestExtendedOptions): boolean;
     procedure SetAuthBearer(const Value: SpiUtf8);
     procedure DoCreate(aTimeOut: integer); override;
     procedure DoOpenOptions(const aUri: TUri; var aOptions: THttpRequestExtendedOptions;
@@ -1156,7 +1157,8 @@ var
   // - can be set manually to a forced global value
   DefaultHttpClientSocketProxy: TUri;
 
-  /// force GetProxyForUri(fromSystem=true) in GetSystemProxyUri() function
+  /// the fromSystem parameter used within GetSystemProxyUri() function
+  // - warning: WinHTTP proxy usage is not set by default
   DefaultHttpClientSocketProxyAuto: boolean;
 
   /// disable proxy for any IPv4 '1.2.3.4' address in GetSystemProxyUri() function
@@ -3808,7 +3810,8 @@ begin
      (uri.Server = '') or
      (not (uri.UriScheme in HTTP_SCHEME)) or
      IsLocalHost(pointer(uri.Server)) or   // no proxy for "127.x.x.x"
-     ProxyByPassMatch(uri.Server, bypass) or
+     ((bypass <> '') and
+      ProxyByPassMatch(uri.Server, bypass)) or
      (DefaultHttpClientSocketProxyNotForIp4 and
       NetIsIP4(pointer(uri.Server))) then  // plain "1.2.3.4" IP has no proxy
     result := nil
@@ -4068,23 +4071,27 @@ begin
     Tunnel := proxy^;
 end;
 
-function THttpClientSocket.SameOpenOptions(const aUri: TUri;
-  const aOptions: THttpRequestExtendedOptions): boolean;
+function THttpClientSocket.SameTunnelForUri(const uri: TUri;
+  opt: PHttpRequestExtendedOptions): boolean;
 var
   temp: TUri;
-  proxy: PUri; // same route semantics as SetTunnelForUri()
+  proxy: PUri;
 begin
-  result := (aUri.UriScheme in HTTP_SCHEME) and
-            aUri.Same(Server, Port, ServerTls) and
-            SameNetTlsContext(TLS, aOptions.TLS) and
-            fExtendedOptions.SameAuth(@aOptions);
-  if not result then
-    exit;
-  proxy := GetSystemProxyUri(aUri, aOptions.Proxy, aOptions.ProxyByPass, temp);
+  proxy := GetSystemProxyUri(uri, opt^.Proxy, opt^.ProxyByPass, temp);
   if proxy = nil then
     result := Tunnel.Server = ''
   else
     result := proxy^.Same(Tunnel.Server, Tunnel.Port, Tunnel.Https);
+end;
+
+function THttpClientSocket.SameOpenOptions(const aUri: TUri;
+  const aOptions: THttpRequestExtendedOptions): boolean;
+begin
+  result := (aUri.UriScheme in HTTP_SCHEME) and
+            aUri.Same(Server, Port, ServerTls) and
+            SameNetTlsContext(TLS, aOptions.TLS) and
+            fExtendedOptions.SameAuth(@aOptions) and
+            SameTunnelForUri(aUri, @aOptions);
 end;
 
 procedure THttpClientSocket.OpenBind(const aServer, aPort: RawUtf8; doBind,
@@ -4624,6 +4631,7 @@ begin
       fRedirected := u;
       inc(ctxt.Redirected);
       if crossorigin or
+         (not SameTunnelForUri(newuri, @fExtendedOptions)) or
          (hfConnectionClose in Http.HeaderFlags) or
          (hroForceReconnect in ctxt.RedirectOptions) then
       begin

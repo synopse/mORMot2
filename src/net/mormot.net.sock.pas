@@ -1983,7 +1983,8 @@ const
   HTTPS_TEXT: array[boolean] of RawUtf8 = (
     'http://', 'https://');
   /// the HTTP-based URI schemes recognized by TUri.UriScheme
-  HTTP_SCHEME = [usHttp, usWs, usHttps, usWss];
+  // - usUndefined (i.e. direct Server assignment) is assumed as HTTP-compatible
+  HTTP_SCHEME = [usUndefined, usHttp, usWs, usHttps, usWss];
 
 /// check is the supplied address text is on format '1.2.3.4'
 // - will optionally fill a 32-bit binary buffer with the decoded IPv4 address
