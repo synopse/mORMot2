@@ -1642,7 +1642,10 @@ begin
       except
         pointer(fSecure) := nil; // leak better than propagated GPF
       end;
-      sock.SetLinger(-1);        // don't wait for each peer
+      if fWr.Len = 0 then
+        sock.SetLinger(-1)       // normal close: don't wait for peer
+      else
+        sock.SetLinger(0);       // unfinished write: RST + discard pending data
       sock.ShutdownAndClose({rdwr=}false);
     end;
     // finalize the instance
