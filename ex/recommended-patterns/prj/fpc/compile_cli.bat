@@ -37,8 +37,10 @@ fpc src/cli_client.pas ^
     -Fusrc/dom/tags ^
     -Fusrc/infra/tasks ^
     -Fusrc/infra/tags ^
-    -Fusrc/app/tasks ^
-    -Fusrc/app/tags ^
+    -Fusrc/app/tasks/interface ^
+    -Fusrc/app/tasks/implementation ^
+    -Fusrc/app/tags/interface ^
+    -Fusrc/app/tags/implementation ^
     -Fu../../src/core ^
     -Fu../../src/lib ^
     -Fu../../src/crypt ^
