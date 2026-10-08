@@ -390,10 +390,7 @@ type
     fConnectionAsyncHandle: TConnectionAsyncHandle;
     fErrorMessage: string;
     fTempWriter: TJsonWriter; // reused between SetOutJson() calls
-    {$ifdef USEWININET}
-    fHttpApiRequest: PHTTP_REQUEST;
-    function GetFullUrl: SynUnicode;
-    {$endif USEWININET}
+    function GetFullUrl: RawUtf8; virtual;
     procedure DoPurgeHeaders;
     procedure ProcessErrorMessage;
     procedure ProcessStaticFile(var Context: THttpRequestContext; CompressGz: integer);
@@ -450,14 +447,9 @@ type
     /// optional error message which will be used by SetupResponse
     property ErrorMessage: string
       read fErrorMessage write fErrorMessage;
-    {$ifdef USEWININET}
     /// for THttpApiServer, input parameter containing the caller full URL
-    property FullUrl: SynUnicode
+    property FullUrl: RawUtf8
       read GetFullUrl;
-    /// for THttpApiServer, points to a PHTTP_REQUEST structure
-    property HttpApiRequest: PHTTP_REQUEST
-      read fHttpApiRequest;
-    {$endif USEWININET}
   end;
   /// meta-class of HTTP server requests instances
   THttpServerRequestClass = class of THttpServerRequest;
@@ -2509,7 +2501,6 @@ type
     fPingTimeout: integer;
     fThreadPoolServer: TSynThreadPoolHttpApiWebSocketServer;
     fGuard: TSynWebSocketGuard;
-    fLastConnection: PHttpApiWebSocketConnection;
     fOnWSThreadStart: TOnNotifyThread;
     fOnWSThreadTerminate: TOnNotifyThread;
     fSendOverlaped: TOverlapped;
@@ -3604,18 +3595,10 @@ begin
     Dest.AddValueText('content', fInContent);
 end;
 
-{$ifdef USEWININET}
-
-function THttpServerRequest.GetFullUrl: SynUnicode;
+function THttpServerRequest.GetFullUrl: RawUtf8;
 begin
-  if fHttpApiRequest = nil then
-    result := ''
-  else
-    FastSynUnicode(result, fHttpApiRequest^.CookedUrl.pFullUrl,
-      fHttpApiRequest^.CookedUrl.FullUrlLength shr 1); // length in bytes
+  FastAssignNew(result);
 end;
-
-{$endif USEWININET}
 
 
 { THttpServerGeneric }
@@ -7780,7 +7763,7 @@ end;
 function THttpPeerCache.DirectFileNameHead(Ctxt: THttpServerRequestAbstract;
   const aHash: THashDigest; const aParams: RawUtf8): cardinal;
 var
-  cs:  THttpClientSocketPeerCache;
+  cs: THttpClientSocketPeerCache;
 begin
   try
     cs := nil;
@@ -8020,9 +8003,12 @@ end;
 type
   // private per-thread sub-class to hold the response logic and reusable variables
   THttpApiServerRequest = class(THttpServerRequest)
+  protected
+    function GetFullUrl: RawUtf8; override;
   public
     api: THttpApiServer;
     req: PHTTP_REQUEST; // 16KB first, may be upsized by THttpApiServer.DoExecute
+    ws: PHttpApiWebSocketConnection;
     reqid: HTTP_REQUEST_ID;
     resp: HTTP_RESPONSE;
     bytesread, bytessent, flags: cardinal;
@@ -8034,6 +8020,7 @@ type
     datachunkmem: HTTP_DATA_CHUNK_INMEMORY;
     logbuf: HTTP_LOG_FIELDS_DATA;
     tmp: ShortString;
+    procedure FromReq(var Value: RawUtf8; Head: THttpApiHeader);
     procedure ReqToLog(var log: HTTP_LOG_FIELDS_DATA);
     procedure HttpSendResponse(flags: cardinal);
     procedure SendError(StatusCode: cardinal; const ErrorMsg: RawUtf8;
@@ -8041,6 +8028,15 @@ type
     function SendResponse: boolean;
     procedure ProcessRequest;
   end;
+
+function THttpApiServerRequest.GetFullUrl: RawUtf8;
+begin
+  if req = nil then
+    result := ''
+  else
+    RawUnicodeToUtf8(req^.CookedUrl.pFullUrl,
+      req^.CookedUrl.FullUrlLength shr 1, result); // FullUrlLength in bytes
+end;
 
 procedure THttpApiServerRequest.ReqToLog(var log: HTTP_LOG_FIELDS_DATA);
 var
@@ -8069,6 +8065,14 @@ begin
   log.MethodLength       := length(fMethod);
   log.UserName           := pointer(fAuthenticatedUser);
   log.UserNameLength     := Length(fAuthenticatedUser);
+end;
+
+procedure THttpApiServerRequest.FromReq(var Value: RawUtf8; Head: THttpApiHeader);
+var
+  hdr: PHTTP_KNOWN_HEADER;
+begin
+  hdr := @req^.Headers.KnownHeaders[Head];
+  FastSetString(Value, hdr^.pRawValue, hdr^.RawValueLength);
 end;
 
 procedure THttpApiServerRequest.HttpSendResponse(flags: cardinal);
@@ -8265,7 +8269,7 @@ var
 begin
   // parse method and main headers as ctxt.Prepare() does
   bytessent := 0;
-  fHttpApiRequest := req;
+  ws := nil;
   Recycle(req^.ConnectionID, fServer, {asynchandle=}0,
     HTTP_TLS_FLAGS[req^.pSslInfo <> nil] +
     // no HTTP_UPG_FLAGS[]: plain THttpApiServer don't support upgrade
@@ -8278,23 +8282,18 @@ begin
     fMethod := VERB_TEXT[req^.Verb]
   else
     FastSetString(fMethod, req^.pUnknownVerb, req^.UnknownVerbLength);
-  with req^.headers.KnownHeaders[reqContentType] do
-    FastSetString(fInContentType, pRawValue, RawValueLength);
-  with req^.headers.KnownHeaders[reqUserAgent] do
-    FastSetString(fUserAgent, pRawValue, RawValueLength);
-  with req^.headers.KnownHeaders[reqHost] do
-    FastSetString(fHost, pRawValue, RawValueLength);
+  FromReq(fInContentType, reqContentType);
+  FromReq(fUserAgent, reqUserAgent);
+  FromReq(fHost, reqHost);
   srvhost := fHost; // may be reset during Request()
   hdr := @req^.Headers.KnownHeaders[reqAuthorization];
   if (hdr^.RawValueLength > 7) and
      IdemPChar(pointer(hdr^.pRawValue), 'BEARER ') then
     FastSetString(fAuthBearer, hdr^.pRawValue + 7, hdr^.RawValueLength - 7);
-  with req^.headers.KnownHeaders[reqAcceptEncoding] do
-    FastSetString(inaccept, pRawValue, RawValueLength);
-  with req^.headers.KnownHeaders[reqReferrer] do
-    FastSetString(referer, pRawValue, RawValueLength);
+  FromReq(inaccept, reqAcceptEncoding);
+  FromReq(referer, reqReferrer);
   fServer.fCompressList.DecodeAcceptEncoding(pointer(inaccept), compressset);
-   RetrieveHeadersAndGetRemoteIPConnectionID(req^,
+  RetrieveHeadersAndGetRemoteIPConnectionID(req^,
     fServer.fRemoteIPHeaderUpper, fServer.fRemoteConnIDHeaderUpper, {out}fRemoteIP,
     PQWord(@fConnectionID)^, fInHeaders);
   // retrieve any SetAuthenticationSchemes() information
@@ -8357,8 +8356,7 @@ begin
   if (HTTP_REQUEST_FLAG_MORE_ENTITY_BODY_EXISTS and req^.flags) <> 0 then
   begin
     errmsg := '';
-    with req^.headers.KnownHeaders[reqContentEncoding] do
-      FastSetString(incontenc, pRawValue, RawValueLength);
+    FromReq(incontenc, reqContentEncoding);
     bodyknown := (incontlen <> 0) and // transfer-encoding has precedence
       (req^.headers.KnownHeaders[reqTransferEncoding].RawValueLength = 0);
     if bodyknown then
@@ -9246,10 +9244,10 @@ function THttpApiWebSocketConnection.TryAcceptConnection(
   aProtocol: THttpApiWebSocketServerProtocol;
   Ctxt: THttpServerRequestAbstract; aNeedHeader: boolean): boolean;
 var
-  req: PHTTP_REQUEST;
   reqhead: WEB_SOCKET_HTTP_HEADER_ARR;
   srvhead: PWEB_SOCKET_HTTP_HEADER;
   srvheadcount: ULONG;
+  ctx: THttpApiServerRequest absolute Ctxt;
 begin
   fState := wsConnecting;
   fBuffer := '';
@@ -9257,19 +9255,18 @@ begin
   fLastActionContext := nil;
   FillcharFast(fOverlapped, SizeOf(fOverlapped), 0);
   fProtocol := aProtocol;
-  req := PHTTP_REQUEST((Ctxt as THttpServerRequest).HttpApiRequest);
   fIndex := fProtocol.fFirstEmptyConnectionIndex;
-  fOpaqueHTTPRequestId := req^.RequestId;
+  fOpaqueHTTPRequestId := ctx.req^.RequestId;
   if (fProtocol = nil) or
      (Assigned(fProtocol.OnAccept) and
-      not fProtocol.OnAccept(Ctxt as THttpServerRequest, Self)) then
+      not fProtocol.OnAccept(ctx, Self)) then
   begin
     result := false;
     exit;
   end;
   EWebSocketApi.RaiseOnError(hCreateServerHandle,
     WebSocketApi.CreateServerHandle(nil, 0, fWSHandle));
-  reqhead := HttpSys2ToWebSocketHeaders(req^.headers);
+  reqhead := HttpSys2ToWebSocketHeaders(ctx.req^.headers);
   if aNeedHeader then
     result := WebSocketApi.BeginServerHandshake(fWSHandle,
       pointer(fProtocol.name), nil, 0, @reqhead[0], Length(reqhead), srvhead,
@@ -9292,16 +9289,6 @@ end;
 
 procedure THttpApiWebSocketConnection.DoOnMessage(
   aBufferType: WEB_SOCKET_BUFFER_TYPE; aBuffer: pointer; aBufferSize: ULONG);
-
-  procedure PushFragmentIntoBuffer;
-  var
-    l: integer;
-  begin
-    l := Length(fBuffer);
-    SetLength(fBuffer, l + integer(aBufferSize));
-    MoveFast(aBuffer^, fBuffer[l + 1], aBufferSize);
-  end;
-
 begin
   if fProtocol = nil then
     exit;
@@ -9310,7 +9297,7 @@ begin
   begin
     // Fragment
     if not fProtocol.ManualFragmentManagement then
-      PushFragmentIntoBuffer;
+      Append(fBuffer, aBuffer, aBufferSize);
     if Assigned(fProtocol.OnFragment) then
       fProtocol.OnFragment(self, aBufferType, aBuffer, aBufferSize);
   end
@@ -9323,7 +9310,7 @@ begin
         fProtocol.OnMessage(self, aBufferType, aBuffer, aBufferSize)
       else
       begin
-        PushFragmentIntoBuffer;
+        Append(fBuffer, aBuffer, aBufferSize);
         fProtocol.OnMessage(self, aBufferType, pointer(fBuffer), Length(fBuffer));
         fBuffer := '';
       end;
@@ -9657,47 +9644,25 @@ begin
   inherited DestroyMainThread;
 end;
 
-procedure THttpApiWebSocketServer.DoAfterResponse(Ctxt: THttpServerRequest;
-  const Referer: RawUtf8; StatusCode: cardinal; Elapsed, Received, Sent: QWord);
-begin
-  {$ifdef USE_THREADWINIOCP}
-  if Assigned(fLastConnection) then
-    IocpPostQueuedStatus(fThreadPoolServer.FRequestQueue, 0, nil,
-      @fLastConnection.fOverlapped);
-  {$endif USE_THREADWINIOCP}
-  inherited DoAfterResponse(Ctxt, Referer, StatusCode, Elapsed, Received, Sent);
-end;
-
-function THttpApiWebSocketServer.GetSendResponseFlags(Ctxt: THttpServerRequest): integer;
-begin
-  if (PHTTP_REQUEST(Ctxt.HttpApiRequest)^.UrlContext = WEB_SOCKET_URL_CONTEXT) and
-     (fLastConnection <> nil) then
-    result := HTTP_SEND_RESPONSE_FLAG_OPAQUE or
-      HTTP_SEND_RESPONSE_FLAG_MORE_DATA or HTTP_SEND_RESPONSE_FLAG_BUFFER_DATA
-  else
-    result := inherited GetSendResponseFlags(Ctxt);
-end;
-
 function THttpApiWebSocketServer.UpgradeToWebSocket(
   Ctxt: THttpServerRequestAbstract): cardinal;
 var
   proto: THttpApiWebSocketServerProtocol;
   protos: THttpApiWebSocketServerProtocolDynArray;
   i, j: PtrInt;
-  req: PHTTP_REQUEST;
   hdr: PHTTP_UNKNOWN_HEADER;
   ch, chB: PUtf8Char;
   protoname: RawUtf8;
   specified: boolean;
+  ctx: THttpApiServerRequest absolute Ctxt;
 begin
   result := HTTP_NOTFOUND;
   // search for explicit name specified in 'SEC-WEBSOCKET-PROTOCOL:' header
   proto := nil;
   protos := GetRegisteredProtocols; // local copy
   specified := false;
-  req := PHTTP_REQUEST((Ctxt as THttpServerRequest).HttpApiRequest);
-  hdr := req^.headers.pUnknownHeaders;
-  for j := 1 to req^.headers.UnknownHeaderCount do
+  hdr := ctx.req^.headers.pUnknownHeaders;
+  for j := 1 to ctx.req^.headers.UnknownHeaderCount do
   begin
     if (hdr^.NameLength = Length(sProtocolHeader)) and
        IdemPChar(hdr^.pName, pointer(sProtocolHeader)) then
@@ -9736,21 +9701,46 @@ begin
   // add the connection for this protocol
   proto.fSafe.Lock;
   try
-    New(fLastConnection);
-    if fLastConnection.TryAcceptConnection(proto, Ctxt, specified) then
+    New(ctx.ws);
+    if ctx.ws.TryAcceptConnection(proto, Ctxt, specified) then
     begin
-      proto.AddConnection(fLastConnection);
+      proto.AddConnection(ctx.ws);
       result := HTTP_SWITCHINGPROTOCOLS;
     end
     else
     begin
-      Dispose(fLastConnection);
-      fLastConnection := nil;
+      Dispose(ctx.ws);
+      ctx.ws := nil;
       result := HTTP_NOTALLOWED;
     end;
   finally
     proto.fSafe.UnLock;
   end;
+end;
+
+procedure THttpApiWebSocketServer.DoAfterResponse(Ctxt: THttpServerRequest;
+  const Referer: RawUtf8; StatusCode: cardinal; Elapsed, Received, Sent: QWord);
+var
+  ctx: THttpApiServerRequest absolute Ctxt;
+begin
+  {$ifdef USE_THREADWINIOCP}
+  if Assigned(ctx.ws) then
+    IocpPostQueuedStatus(fThreadPoolServer.FRequestQueue, 0, nil, @ctx.ws.fOverlapped);
+  {$endif USE_THREADWINIOCP}
+  inherited DoAfterResponse(Ctxt, Referer, StatusCode, Elapsed, Received, Sent);
+end;
+
+function THttpApiWebSocketServer.GetSendResponseFlags(Ctxt: THttpServerRequest): integer;
+var
+  ctx: THttpApiServerRequest absolute Ctxt;
+begin
+  if (ctx.RespStatus = HTTP_SWITCHINGPROTOCOLS) and
+     (ctx.ws <> nil) then
+    result := HTTP_SEND_RESPONSE_FLAG_OPAQUE or
+              HTTP_SEND_RESPONSE_FLAG_MORE_DATA or
+              HTTP_SEND_RESPONSE_FLAG_BUFFER_DATA
+  else
+    result := inherited GetSendResponseFlags(Ctxt);
 end;
 
 function THttpApiWebSocketServer.AddUrlWebSocket(const aRoot, aPort: RawUtf8;
@@ -9780,15 +9770,13 @@ end;
 
 function THttpApiWebSocketServer.Request(
   Ctxt: THttpServerRequestAbstract): cardinal;
+var
+  ctx: THttpApiServerRequest absolute Ctxt;
 begin
-  if PHTTP_REQUEST(THttpServerRequest(Ctxt).HttpApiRequest).
-       UrlContext = WEB_SOCKET_URL_CONTEXT then
+  if ctx.req.UrlContext = WEB_SOCKET_URL_CONTEXT then
     result := UpgradeToWebSocket(Ctxt)
   else
-  begin
     result := inherited Request(Ctxt);
-    fLastConnection := nil;
-  end;
 end;
 
 procedure THttpApiWebSocketServer.SendServiceMessage;
