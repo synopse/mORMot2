@@ -8063,9 +8063,6 @@ begin
   hdr := @req^.headers.KnownHeaders[reqReferrer];
   log.ReferrerLength     := hdr^.RawValueLength;
   log.Referrer           := hdr^.pRawValue;
-  hdr := @req^.headers.KnownHeaders[respServer];
-  log.ServerNameLength   := hdr^.RawValueLength;
-  log.ServerName         := hdr^.pRawValue;
   log.ClientIp           := pointer(fRemoteIP);
   log.ClientIpLength     := length(fRemoteIP);
   log.Method             := pointer(fMethod);
@@ -8098,6 +8095,7 @@ begin
       bytessent, nil, 0, nil, log);
   if err <> NO_ERROR then
     api.CheckAndLog(hSendHttpResponse, err);
+  fRespStatus := resp.StatusCode;
   FillcharFast(resp, SizeOf(resp), 0); // reset
 end;
 
@@ -8193,14 +8191,13 @@ begin
         begin
           inc(R);
           size := FileSize(filehandle);
-          rangelen := size - start;
-          if Int64(rangelen) < 0 then
+          if start >= size then
           begin
             SendError(HTTP_RANGENOTSATISFIABLE, 'Invalid Range');
             result := false;
             exit;
           end;
-          chunk.ByteRange.Length.QuadPart := rangelen;
+          chunk.ByteRange.Length.QuadPart := size - start;
           flags := HTTP_SEND_RESPONSE_FLAG_PROCESS_RANGES;
           chunk.ByteRange.StartingOffset.QuadPart := start;
           if R^ in ['0'..'9'] then
@@ -8260,6 +8257,7 @@ var
   err: HRESULT;
   bodyknown: boolean;
   afterstatcode, chunk: cardinal;
+  hdr: PHTTP_KNOWN_HEADER;
   bufread, V: PUtf8Char;
   i, incontlenread: PtrInt;
   incontlen, remain: Qword;
@@ -8287,10 +8285,10 @@ begin
   with req^.headers.KnownHeaders[reqHost] do
     FastSetString(fHost, pRawValue, RawValueLength);
   srvhost := fHost; // may be reset during Request()
-  with req^.Headers.KnownHeaders[reqAuthorization] do
-    if (RawValueLength > 7) and
-       IdemPChar(pointer(pRawValue), 'BEARER ') then
-      FastSetString(fAuthBearer, pRawValue + 7, RawValueLength - 7);
+  hdr := @req^.Headers.KnownHeaders[reqAuthorization];
+  if (hdr^.RawValueLength > 7) and
+     IdemPChar(pointer(hdr^.pRawValue), 'BEARER ') then
+    FastSetString(fAuthBearer, hdr^.pRawValue + 7, hdr^.RawValueLength - 7);
   with req^.headers.KnownHeaders[reqAcceptEncoding] do
     FastSetString(inaccept, pRawValue, RawValueLength);
   with req^.headers.KnownHeaders[reqReferrer] do
@@ -8323,11 +8321,9 @@ begin
             fAuthenticationStatus := hraFailed;
         end;
   // abort request if > MaximumAllowedContentLength or OnBeforeBody
-  with req^.headers.KnownHeaders[reqContentLength] do
-  begin
-    V := pointer(pRawValue);
-    SetQWord(V, V + RawValueLength, incontlen);
-  end;
+  hdr := @req^.headers.KnownHeaders[reqContentLength];
+  V := pointer(hdr^.pRawValue);
+  SetQWord(V, V + hdr^.RawValueLength, incontlen);
   if (incontlen > 0) and
      (fServer.fMaximumAllowedContentLength > 0) and
      (incontlen > QWord(fServer.fMaximumAllowedContentLength)) then
