@@ -1038,7 +1038,7 @@ type
     /// receives additional entity body data for a specified HTTP request
     ReceiveRequestEntityBody: function(ReqQueueHandle: THandle; RequestId:
       HTTP_REQUEST_ID; Flags: ULONG; pBuffer: pointer; BufferLength: cardinal;
-      var pBytesReceived: cardinal; pOverlapped: pointer = nil): HRESULT; stdcall;
+      pBytesReceived: PCardinal; pOverlapped: pointer = nil): HRESULT; stdcall;
     /// sends entity-body data associated with an HTTP response.
     SendResponseEntityBody: function(ReqQueueHandle: THandle; RequestId:
       HTTP_REQUEST_ID; Flags: integer; EntityChunkCount: word;

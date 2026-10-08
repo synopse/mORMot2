@@ -4898,14 +4898,15 @@ type
   POSRWLightLock = ^TOSRWLightLock;
 
   /// TLockedListOne.sequence number identifier
+  // - is an incremental random-seeded 30-bit integer > 65535, to track and
+  // avoid ABA problems when pointer instances are recycled
   TLockedListID = PtrUInt;
 
   /// points to one data entry in TLockedList
   PLockedListOne = ^TLockedListOne;
   /// abstract parent of one data entry in TLockedList, storing two PLockedListOne
   // - TLockedList should store unmanaged records starting with those fields
-  // - sequence field contains an incremental random-seeded 30-bit integer >
-  // 65535, to avoid ABA problems when instances are recycled
+  // - check sequence field to avoid ABA problems when instances are recycled
   TLockedListOne = record
     next, prev: pointer;
     sequence: TLockedListID;

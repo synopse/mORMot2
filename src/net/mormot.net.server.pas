@@ -8386,7 +8386,7 @@ begin
     repeat
       bytesread := 0;
       err := Http.ReceiveRequestEntityBody(api.fReqQueue,
-        req^.RequestId, flags, bufread, chunk, bytesread);
+        req^.RequestId, flags, bufread, chunk, @bytesread);
       if fServer.Terminated then
         exit;
       if err = ERROR_HANDLE_EOF then
@@ -9328,7 +9328,6 @@ end;
 function THttpApiWebSocketConnection.ReadData(const WebsocketBufferData): integer;
 var
   err: HRESULT;
-  read: cardinal;
   buf: WEB_SOCKET_BUFFER_DATA absolute WebsocketBufferData;
 begin
   result := 0;
@@ -9337,7 +9336,7 @@ begin
   FillcharFast(fReadIo.Overlapped, SizeOf(TOverlapped), 0);
   fReadPending := true;
   err := Http.ReceiveRequestEntityBody(fProtocol.fServer.fReqQueue,
-    fOpaqueHTTPRequestId, 0, buf.pbBuffer, buf.ulBufferLength, read,
+    fOpaqueHTTPRequestId, 0, buf.pbBuffer, buf.ulBufferLength, nil,
     @fReadIo.Overlapped);
   case err of
     NO_ERROR,
@@ -9368,8 +9367,10 @@ begin
   err := Http.SendResponseEntityBody(fProtocol.fServer.fReqQueue,
     fOpaqueHTTPRequestId, HTTP_SEND_RESPONSE_FLAG_BUFFER_DATA or
     HTTP_SEND_RESPONSE_FLAG_MORE_DATA, 1, @inmem, Written, nil, nil, nil);
-  result := (err = NO_ERROR) and
-            (Written = buf.ulBufferLength);
+  if err <> NO_ERROR then
+    Written := 0
+  else
+    result := Written = buf.ulBufferLength;
 end;
 
 procedure THttpApiWebSocketConnection.CheckIsActive(Tix64: Int64);
@@ -9462,10 +9463,9 @@ begin
           total := 0;
           for i := 0 to bufcount - 1 do
           begin
-            if not WriteData(buf[i], written) then
+            if WriteData(buf[i], written) then
             begin
-              // Report the bytes actually completed so far.
-              // A partial count cancels this WebSocket send action.
+              inc(total, written); // partial count would cancel this send action
               WebSocketApi.CompleteAction(fWSHandle, actctxt, total);
               fProtocol.BeginClose(@self, wsClosedByServer);
               exit;
