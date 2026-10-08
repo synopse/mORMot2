@@ -9072,15 +9072,20 @@ var
   conn: PHttpApiWebSocketConnection;
 begin
   result := false;
-  if cardinal(index) < cardinal(fConnectionsCount) then
-  begin
-    conn := fConnections[index];
-    if (conn <> nil) and
-       (conn.fState = wsOpen) then
+  fSafe.Lock;
+  try
+    if cardinal(index) < cardinal(fConnectionsCount) then
     begin
-      conn.Close(aStatus, aBuffer, aBufferSize);
-      result := true;
+      conn := fConnections[index];
+      if (conn <> nil) and
+         (conn.fState = wsOpen) then
+      begin
+        conn.Close(aStatus, aBuffer, aBufferSize);
+        result := true;
+      end;
     end;
+  finally
+    fSafe.UnLock;
   end;
 end;
 
@@ -9190,16 +9195,21 @@ var
   conn: PHttpApiWebSocketConnection;
 begin
   result := false;
-  if (index >= 0) and
-     (index < fConnectionsCount) then
-  begin
-    conn := fConnections[index];
-    if (conn <> nil) and
-       (conn.fState = wsOpen) then
+  fSafe.Lock;
+  try
+    if (index >= 0) and
+       (index < fConnectionsCount) then
     begin
-      conn.Send(aBufferType, aBuffer, aBufferSize);
-      result := true;
+      conn := fConnections[index];
+      if (conn <> nil) and
+         (conn.fState = wsOpen) then
+      begin
+        conn.Send(aBufferType, aBuffer, aBufferSize);
+        result := true;
+      end;
     end;
+  finally
+    fSafe.UnLock;
   end;
 end;
 
@@ -9784,7 +9794,7 @@ begin
     conn.Protocol.fSafe.Lock;
     try
       PtrArrayDelete(conn.Protocol.fPendingForClose, conn,
-        @conn.Protocol.fPendingForClose);
+        @conn.Protocol.fPendingForCloseCount);
     finally
       conn.Protocol.fSafe.UnLock;
     end;
