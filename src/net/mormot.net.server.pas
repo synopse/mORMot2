@@ -2359,7 +2359,7 @@ type
     fIndex: integer;
     function ProcessActions(ActionQueue: cardinal): boolean;
     function ReadData(const WebsocketBufferData): integer;
-    procedure WriteData(const WebsocketBufferData);
+    function WriteData(const WebsocketBufferData; out Written: cardinal): boolean;
     procedure BeforeRead;
     procedure DoOnMessage(aBufferType: WEB_SOCKET_BUFFER_TYPE;
       aBuffer: pointer; aBufferSize: ULONG);
@@ -2503,7 +2503,6 @@ type
     fGuard: TSynWebSocketGuard;
     fOnWSThreadStart: TOnNotifyThread;
     fOnWSThreadTerminate: TOnNotifyThread;
-    fSendOverlaped: TOverlapped;
     fServiceOverlaped: TOverlapped;
     fOnServiceMessage: TThreadMethod;
     fOwnedProtocols: THttpApiWebSocketServerProtocolDynArray;
@@ -9360,33 +9359,27 @@ begin
   end;
 end;
 
-procedure THttpApiWebSocketConnection.WriteData(const WebsocketBufferData);
+function THttpApiWebSocketConnection.WriteData(
+  const WebsocketBufferData; out Written: cardinal): boolean;
 var
   err: HRESULT;
   inmem: HTTP_DATA_CHUNK_INMEMORY;
-  writ: cardinal;
   buf: WEB_SOCKET_BUFFER_DATA absolute WebsocketBufferData;
 begin
+  result := false;
+  Written := 0;
   if fWSHandle = nil then
     exit;
-  writ := 0;
+  Written := 0;
   inmem.DataChunkType := hctFromMemory;
   inmem.pBuffer := buf.pbBuffer;
   inmem.BufferLength := buf.ulBufferLength;
   err := Http.SendResponseEntityBody(fProtocol.fServer.fReqQueue,
     fOpaqueHTTPRequestId, HTTP_SEND_RESPONSE_FLAG_BUFFER_DATA or
-    HTTP_SEND_RESPONSE_FLAG_MORE_DATA, 1, @inmem, writ, nil, nil,
-    @fProtocol.fServer.fSendOverlaped);
-  case err of
-    ERROR_HANDLE_EOF:
-      Disconnect;
-    ERROR_IO_PENDING:
-      ; //
-    NO_ERROR:
-      ; //
-  else
-    // todo: close connection?
-  end;
+    HTTP_SEND_RESPONSE_FLAG_MORE_DATA, 1, @inmem, Written, nil, nil, nil);
+  result := err = NO_ERROR;
+  if not result then
+    Disconnect;
 end;
 
 procedure THttpApiWebSocketConnection.CheckIsActive(Tix64: Int64);
@@ -9414,7 +9407,7 @@ begin
 end;
 
 procedure THttpApiWebSocketConnection.Disconnect;
-var //Err: HRESULT; //todo: handle error
+var
   chunk: HTTP_DATA_CHUNK_INMEMORY;
   writ: cardinal;
 begin
@@ -9445,8 +9438,8 @@ begin
   end
   else
     raise EWebSocketApi.CreateFmt(
-      'THttpApiWebSocketConnection.BeforeRead state is not wsOpen (%d)',
-      [ord(fState)]);
+      'THttpApiWebSocketConnection.BeforeRead state is not wsOpen (%s)',
+      [GetEnumName(TypeInfo(TWebSocketState), ord(fState))^]);
 end;
 
 function THttpApiWebSocketConnection.ProcessActions(
@@ -9459,6 +9452,7 @@ var
   appctxt: pointer;
   actctxt: pointer;
   i: PtrInt;
+  written, total: cardinal;
 
   procedure CloseConnection;
   begin
@@ -9795,8 +9789,6 @@ procedure TSynThreadPoolHttpApiWebSocketServer.Task(
 var
   conn: PHttpApiWebSocketConnection;
 begin
-  if aContext = @fServer.fSendOverlaped then
-    exit;
   if aContext = @fServer.fServiceOverlaped then
   begin
     if Assigned(fServer.OnServiceMessage) then
