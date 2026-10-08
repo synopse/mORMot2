@@ -8382,6 +8382,7 @@ var // lots of local variable so that this method is thread-safe
       pRawValue      := pointer(fServerName);
       RawValueLength := length(fServerName);
     end;
+    respsent := true; // response submission attempted
     err := Http.SendHttpResponse(fReqQueue, req^.RequestId, flags, resp^, nil,
         bytessent, nil, 0, nil, log);
     if err <> NO_ERROR then
@@ -8427,7 +8428,6 @@ var // lots of local variable so that this method is thread-safe
     result := not Terminated; // true=success
     if not result then
       exit;
-    respsent := true;
     if not ctxt.OutContentStreamToBuffer then // kernel http.sys needs buffer
       outstatcode := HTTP_SERVERERROR; // failed to read that stream
     resp^.SetStatus(outstatcode, outstat);
@@ -8444,6 +8444,7 @@ var // lots of local variable so that this method is thread-safe
       begin
         SendError(HTTP_NOTFOUND, GetErrorText); // text message from OS
         result := false; // notify fatal error
+        exit;
       end;
       try // http.sys will serve then close the file from kernel
         datachunkfile.DataChunkType := hctFromFileHandle;
@@ -8463,6 +8464,12 @@ var // lots of local variable so that this method is thread-safe
             if R^ = '-' then
             begin
               outcontlen.QuadPart := FileSize(filehandle);
+              if rangestart >= outcontlen.QuadPart then
+              begin
+                SendError(HTTP_RANGENOTSATISFIABLE, 'Invalid Range');
+                result := false;
+                exit;
+              end;
               datachunkfile.ByteRange.Length.QuadPart :=
                 outcontlen.QuadPart - rangestart;
               inc(R);
@@ -8631,9 +8638,13 @@ begin
             end;
             if Assigned(OnBeforeBody) then
             begin
-              err := OnBeforeBody(ctxt.fUrl, ctxt.fMethod, ctxt.fInHeaders,
-                ctxt.fInContentType, ctxt.fRemoteIP, ctxt.fAuthBearer, incontlen,
-                ctxt.ConnectionFlags);
+              try
+                err := OnBeforeBody(ctxt.fUrl, ctxt.fMethod, ctxt.fInHeaders,
+                  ctxt.fInContentType, ctxt.fRemoteIP, ctxt.fAuthBearer,
+                  incontlen, ctxt.ConnectionFlags);
+              except
+                err := HTTP_SERVERERROR;
+              end;
               if err <> HTTP_SUCCESS then
               begin
                 SendError(err, 'Rejected', {disconnect=}true);
@@ -8717,10 +8728,10 @@ begin
               if incontenc <> '' then // optionally uncompress input body
                 fCompressList.UncompressContent(incontenc, ctxt.fInContent);
             end;
+            respsent := false;
             QueryPerformanceMicroSeconds(started);
             try
               // compute response
-              respsent := false;
               outstatcode := 0;
               if fRoute <> nil then
                 // URI rewrite or event callback execution
@@ -8740,7 +8751,7 @@ begin
               end;
               // send response - SendResponse does buffer any SetOutStream()
               if respsent then // e.g. 202 already sent 
-                ctxt.OutContentStreamDiscard //about SetOUtStream()
+                ctxt.OutContentStreamDiscard // we can release SetOutStream()
               else if not SendResponse then
                 continue;
               QueryPerformanceMicroSeconds(elapsed);
@@ -9005,7 +9016,7 @@ begin
     exit;
   EHttpApiServer.RaiseCheckApi2(hSetUrlGroupProperty);
   FillcharFast(timeout, SizeOf(timeout), 0);
-  timeout.Flags := 1;
+  timeout.Flags           := 1;
   timeout.EntityBody      := aEntityBody;
   timeout.DrainEntityBody := aDrainEntityBody;
   timeout.RequestQueue    := aRequestQueue;
@@ -9024,21 +9035,21 @@ var
 begin
   if Assigned(fOnAfterResponse) then
   try
-    ctx.Connection := Ctxt.ConnectionID;
-    ctx.User := pointer(Ctxt.AuthenticatedUser);
-    ctx.Method := pointer(Ctxt.Method);
-    ctx.Host := pointer(Ctxt.Host);
-    ctx.Url := pointer(Ctxt.Url);
-    ctx.Referer := pointer(Referer);
-    ctx.UserAgent := pointer(Ctxt.UserAgent);
-    ctx.RemoteIP := pointer(Ctxt.RemoteIP);
-    ctx.Flags := Ctxt.ConnectionFlags;
-    ctx.State := hrsResponseDone;
-    ctx.StatusCode := StatusCode;
+    ctx.Connection      := Ctxt.ConnectionID;
+    ctx.User            := pointer(Ctxt.AuthenticatedUser);
+    ctx.Method          := pointer(Ctxt.Method);
+    ctx.Host            := pointer(Ctxt.Host);
+    ctx.Url             := pointer(Ctxt.Url);
+    ctx.Referer         := pointer(Referer);
+    ctx.UserAgent       := pointer(Ctxt.UserAgent);
+    ctx.RemoteIP        := pointer(Ctxt.RemoteIP);
+    ctx.Flags           := Ctxt.ConnectionFlags;
+    ctx.State           := hrsResponseDone;
+    ctx.StatusCode      := StatusCode;
     ctx.ElapsedMicroSec := Elapsed;
-    ctx.Received := Received;
-    ctx.Sent := Sent;
-    ctx.Tix64 := 0;
+    ctx.Received        := Received;
+    ctx.Sent            := Sent;
+    ctx.Tix64           := 0;
     fOnAfterResponse(ctx); // e.g. THttpLogger or THttpAnalyzer
   except
     on E: Exception do // paranoid
