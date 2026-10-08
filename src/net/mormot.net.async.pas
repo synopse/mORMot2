@@ -3745,8 +3745,8 @@ begin
     if ifInGC in connection.fInternalFlags then
       exit;
     exclude(connection.fFlags, fRegistered); // not owned any more
-    InterlockedDecrement(fConnectionCount); // before publication to GC
-    AddGC(connection, 'EndConnection');    // also accepts close during shutdown
+    LockedDec32(@fConnectionCount);          // before publication to GC
+    AddGC(connection, 'EndConnection');      // also accepts close at shutdown
   end
   else
     ConnectionDelete(connection);

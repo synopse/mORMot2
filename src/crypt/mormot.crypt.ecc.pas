@@ -4854,7 +4854,7 @@ begin
       fPKI.Free
     else if (fPKI = _FromKeySetCA) and
             (_FromKeySetCARefCount > 0) then
-      InterlockedDecrement(_FromKeySetCARefCount);
+      LockedDec32(@_FromKeySetCARefCount);
   if ownPrivate in fOwned then
     fPrivate.Free;
   inherited Destroy;

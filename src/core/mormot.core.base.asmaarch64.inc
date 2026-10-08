@@ -115,3 +115,29 @@ asm
   cbnz  w3, .LLockedDecLoop
   dmb   #11
 end;
+
+function InterlockedIncrement(var I: integer): integer;
+  assembler; nostackframe;
+asm
+.LInterlockedIncLoop:
+  ldxr  w1, [x0]
+  add   w1, w1, #1
+  stlxr w2, w1, [x0]
+  cbnz  w2, .LInterlockedIncLoop
+  dmb   #11
+  mov   w0, w1            // return new value
+end;
+
+function InterlockedDecrement(var I: integer): integer;
+  assembler; nostackframe;
+asm
+.LInterlockedDecLoop:
+  ldxr  w1, [x0]
+  sub   w1, w1, #1
+  stlxr w2, w1, [x0]
+  cbnz  w2, .LInterlockedDecLoop
+  dmb   #11
+  mov   w0, w1            // return new value
+end;
+
+
