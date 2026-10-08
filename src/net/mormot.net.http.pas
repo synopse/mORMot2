@@ -3521,7 +3521,7 @@ function THttpSocketCompressList.UncompressContent(const ContentEncoding: RawUtf
   var Data: RawByteString): PHttpSocketCompressRec;
 begin
   result := FoundCompress(pointer(Algo),
-    pointer(ContentEncoding), length(ContentEncoding));
+              pointer(ContentEncoding), length(ContentEncoding));
   if result <> nil then
     try
       result^.Func(Data, {compress=}false);
@@ -3560,7 +3560,8 @@ function THttpSocketCompressList.CompressIndex(const Name: RawUtf8): integer;
 begin
   if (@self = nil) or
      (Algo = nil) or
-     (FoundCompress(pointer(Algo), pointer(Name), length(Name), @result) = nil) then
+     (FoundCompress(pointer(Algo),
+        pointer(Name), length(Name), @result) = nil) then
     result := -1;
 end;
 

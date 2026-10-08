@@ -2147,7 +2147,7 @@ type
     function GetMaxConnections: cardinal;
     procedure SetMaxConnections(aValue: cardinal);
     function GetApiVersion: RawUtf8; override;
-    function Check(Api: THttpApiFunction; Error: integer;
+    function CheckAndLog(Api: THttpApiFunction; Error: integer;
       Level: TSynLogLevel = sllWarning; ErrMsg: PRawUtf8 = nil): integer;
     procedure Ensure(Api: THttpApiFunction; Error: integer);
     procedure DoAfterResponse(Ctxt: THttpServerRequest; const Referer: RawUtf8;
@@ -8058,10 +8058,10 @@ begin
   if aRegisterUri then
     AddUrlAuthorize(aRoot, aPort, Https, aDomainName);
   if HasApi2 then
-    result := Check(hAddUrlToUrlGroup,
+    result := CheckAndLog(hAddUrlToUrlGroup,
       Http.AddUrlToUrlGroup(fUrlGroupID, pointer(uri), aContext))
   else
-    result := Check(hAddUrl,
+    result := CheckAndLog(hAddUrl,
       Http.AddUrl(fReqQueue, pointer(uri)));
   if result <> NO_ERROR then
     exit;
@@ -8089,10 +8089,10 @@ begin
     if fRegisteredUnicodeUrl[i] = uri then
     begin
       if HasApi2 then
-        result := Check(hRemoveUrlFromUrlGroup,
+        result := CheckAndLog(hRemoveUrlFromUrlGroup,
           Http.RemoveUrlFromUrlGroup(fUrlGroupID, pointer(uri), 0))
       else
-        result := Check(hRemoveUrl,
+        result := CheckAndLog(hRemoveUrl,
           Http.RemoveUrl(fReqQueue, pointer(uri)));
       if result <> NO_ERROR then
         exit; // shall be handled by caller
@@ -8115,7 +8115,7 @@ begin
     [Http.Version.MajorVersion, Http.Version.MinorVersion], result);
 end;
 
-function THttpApiServer.Check(Api: THttpApiFunction; Error: integer;
+function THttpApiServer.CheckAndLog(Api: THttpApiFunction; Error: integer;
   Level: TSynLogLevel; ErrMsg: PRawUtf8): integer;
 var
   msg: RawUtf8;
@@ -8218,16 +8218,16 @@ begin
     begin
       if fUrlGroupID <> 0 then
       begin
-        Check(hRemoveUrlFromUrlGroup,
+        CheckAndLog(hRemoveUrlFromUrlGroup,
           Http.RemoveUrlFromUrlGroup(fUrlGroupID, nil, HTTP_URL_FLAG_REMOVE_ALL));
-        Check(hCloseUrlGroup,
+        CheckAndLog(hCloseUrlGroup,
           Http.CloseUrlGroup(fUrlGroupID));
         fUrlGroupID := 0;
       end;
       CloseHandle(fReqQueue);
       if fServerSessionID <> 0 then
       begin
-        Check(hCloseServerSession,
+        CheckAndLog(hCloseServerSession,
           Http.CloseServerSession(fServerSessionID));
         fServerSessionID := 0;
       end;
@@ -8235,7 +8235,7 @@ begin
     else
     begin
       for i := 0 to high(fRegisteredUnicodeUrl) do
-        Check(hRemoveUrl,
+        CheckAndLog(hRemoveUrl,
           Http.RemoveUrl(fReqQueue, pointer(fRegisteredUnicodeUrl[i])));
       CloseHandle(fReqQueue); // will break all THttpApiServer.Execute
     end;
@@ -8246,7 +8246,7 @@ begin
         WaitForSingleObject(fThreads[i].Handle, 30000); // maybe needed on FPC
     {$endif FPC}
     ObjArrayClear(fThreads, {continueOnException:}true);
-    Check(hTerminate,
+    CheckAndLog(hTerminate,
       Http.Terminate(HTTP_INITIALIZE_SERVER));
   end;
 end;
@@ -8336,14 +8336,9 @@ var // lots of local variable so that this method is thread-safe
   resp: PHTTP_RESPONSE;
   reqbuf, respbuf, logbuf, chunkbuf: TBytes;
   reqid: HTTP_REQUEST_ID;
-  i: PtrInt;
   bytesread, bytessent, flags: cardinal;
   compressset: THttpSocketCompressSet;
   comprec: PHttpSocketCompressRec;
-  err: HRESULT;
-  incontlen, remain, rangestart, rangelen: Qword;
-  chunk: cardinal;
-  incontlenread: PtrInt;
   incontenc, inaccept, host, range, referer, errmsg: RawUtf8;
   outstat, outmsg: RawUtf8;
   outstatcode, afterstatcode: cardinal;
@@ -8360,7 +8355,7 @@ var // lots of local variable so that this method is thread-safe
   procedure HttpSendResponse(flags: cardinal);
   var
     log: PHTTP_LOG_FIELDS_DATA;
-    err: integer;
+    err: HRESULT;
   begin
     // update log information
     ctxt.RespStatus := resp^.StatusCode; // for ReqToLog()
@@ -8386,7 +8381,7 @@ var // lots of local variable so that this method is thread-safe
     err := Http.SendHttpResponse(fReqQueue, req^.RequestId, flags, resp^, nil,
         bytessent, nil, 0, nil, log);
     if err <> NO_ERROR then
-      Check(hSendHttpResponse, err);
+      CheckAndLog(hSendHttpResponse, err);
     FillcharFast(resp^, SizeOf(resp^), 0);
   end;
 
@@ -8424,6 +8419,7 @@ var // lots of local variable so that this method is thread-safe
   var
     R: PUtf8Char;
     flags: cardinal;
+    rangestart, rangelen: Qword;
   begin
     result := not Terminated; // true=success
     if not result then
@@ -8527,6 +8523,233 @@ var // lots of local variable so that this method is thread-safe
     end;
   end;
 
+  procedure ProcessRequest;
+  var
+    incontlen, remain: Qword;
+    chunk: cardinal;
+    err: HRESULT;
+    i, incontlenread: PtrInt;
+  begin
+    // parse method and main headers as ctxt.Prepare() does
+    bytessent := 0;
+    ctxt.fHttpApiRequest := req;
+    ctxt.Recycle(req^.ConnectionID, self, {asynchandle=}0,
+      HTTP_TLS_FLAGS[req^.pSslInfo <> nil] +
+      // no HTTP_UPG_FLAGS[]: plain THttpApiServer don't support upgrade
+      HTTP_10_FLAGS[(req^.Version.MajorVersion = 1) and
+                    (req^.Version.MinorVersion = 0)],
+      // ctxt.fConnectionOpaque is not supported by http.sys
+      nil);
+    FastSetString(ctxt.fUrl, req^.pRawUrl, req^.RawUrlLength);
+    if req^.Verb in [low(global_verbs)..high(global_verbs)] then
+      ctxt.fMethod := global_verbs[req^.Verb]
+    else
+      FastSetString(ctxt.fMethod, req^.pUnknownVerb, req^.UnknownVerbLength);
+    with req^.headers.KnownHeaders[reqContentType] do
+      FastSetString(ctxt.fInContentType, pRawValue, RawValueLength);
+    with req^.headers.KnownHeaders[reqUserAgent] do
+      FastSetString(ctxt.fUserAgent, pRawValue, RawValueLength);
+    with req^.headers.KnownHeaders[reqHost] do
+      FastSetString(ctxt.fHost, pRawValue, RawValueLength);
+    host := ctxt.Host; // may be reset during Request()
+    with req^.Headers.KnownHeaders[reqAuthorization] do
+      if (RawValueLength > 7) and
+         IdemPChar(pointer(pRawValue), 'BEARER ') then
+        FastSetString(ctxt.fAuthBearer, pRawValue + 7, RawValueLength - 7);
+    with req^.headers.KnownHeaders[reqAcceptEncoding] do
+      FastSetString(inaccept, pRawValue, RawValueLength);
+    with req^.headers.KnownHeaders[reqReferrer] do
+      FastSetString(referer, pRawValue, RawValueLength);
+    fCompressList.DecodeAcceptEncoding(pointer(inaccept), compressset);
+    ctxt.fInHeaders := RetrieveHeadersAndGetRemoteIPConnectionID(
+      req^, fRemoteIPHeaderUpper, fRemoteConnIDHeaderUpper,
+      {out} ctxt.fRemoteIP, PQWord(@ctxt.fConnectionID)^);
+    // retrieve any SetAuthenticationSchemes() information
+    if byte(fAuthenticationSchemes) <> 0 then // set only with HTTP API 2.0
+      // https://docs.microsoft.com/en-us/windows/win32/http/authentication-in-http-version-2-0
+      for i := 0 to req^.RequestInfoCount - 1 do
+        with req^.pRequestInfo^[i] do
+        if InfoType = HttpRequestInfoTypeAuth then
+          case pInfo^.AuthStatus of
+            HttpAuthStatusSuccess:
+              if pInfo^.AuthType > HttpRequestAuthTypeNone then
+              begin
+                byte(ctxt.fAuthenticationStatus) := ord(pInfo^.AuthType) + 1;
+                if pInfo^.AccessToken <> 0 then
+                begin
+                  ctxt.fAuthenticatedUser := LookupToken(pInfo^.AccessToken);
+                  // AccessToken lifecycle is application responsibility
+                  CloseHandle(pInfo^.AccessToken);
+                  ctxt.fAuthBearer := ctxt.fAuthenticatedUser;
+                  include(ctxt.fConnectionFlags, hsrAuthorized);
+                end;
+              end;
+            HttpAuthStatusFailure:
+              ctxt.fAuthenticationStatus := hraFailed;
+          end;
+    // abort request if > MaximumAllowedContentLength or OnBeforeBody
+    with req^.headers.KnownHeaders[reqContentLength] do
+    begin
+      V := pointer(pRawValue);
+      SetQWord(V, V + RawValueLength, incontlen);
+    end;
+    if (incontlen > 0) and
+       (fMaximumAllowedContentLength > 0) and
+       (incontlen > QWord(fMaximumAllowedContentLength)) then
+    begin
+      SendError(HTTP_PAYLOADTOOLARGE, 'Rejected', {disconnect=}true);
+      exit;
+    end;
+    if (hsoRejectBotUserAgent in fOptions) and
+       (ctxt.fUserAgent <> '') and
+       IsHttpUserAgentBot(ctxt.fUserAgent) then
+    begin
+      SendError(HTTP_TEAPOT, BOTBUSTER_RESPONSE, {disconnect=}true);
+      exit;
+    end;
+    if Assigned(OnBeforeBody) then
+    begin
+      try
+        err := OnBeforeBody(ctxt.fUrl, ctxt.fMethod, ctxt.fInHeaders,
+          ctxt.fInContentType, ctxt.fRemoteIP, ctxt.fAuthBearer,
+          incontlen, ctxt.ConnectionFlags);
+      except
+        err := HTTP_SERVERERROR;
+      end;
+      if err <> HTTP_SUCCESS then
+      begin
+        SendError(err, 'Rejected', {disconnect=}true);
+        exit;
+      end;
+    end;
+    // retrieve body
+    incontlenread := 0; // actual number of entity-body bytes received
+    if (HTTP_REQUEST_FLAG_MORE_ENTITY_BODY_EXISTS and req^.flags) <> 0 then
+    begin
+      errmsg := '';
+      with req^.headers.KnownHeaders[reqContentEncoding] do
+        FastSetString(incontenc, pRawValue, RawValueLength);
+      bodyknown := (incontlen <> 0) and // transfer-encoding has precedence
+        (req^.headers.KnownHeaders[reqTransferEncoding].RawValueLength = 0);
+      if bodyknown then
+      begin
+        chunk := MaxPtrUInt(64 * 1024, fReceiveBufferSize); // 1MB default
+        if chunk > incontlen then
+          chunk := incontlen;
+        bufread := FastNewRawByteString(ctxt.fInContent, incontlen);
+      end
+      else
+      begin
+        chunk := 128 shl 10; // chunked doesn't need fReceiveBufferSize
+        if chunkbuf = nil then
+          SetLength(chunkbuf, chunk); // allocate once 128KB
+        bufread := pointer(chunkbuf);
+      end;
+      if HasApi2 then // speed optimization for Vista+ = whole chunk
+        flags := HTTP_RECEIVE_REQUEST_ENTITY_BODY_FLAG_FILL_BUFFER
+      else
+        flags := 0;
+      repeat
+        bytesread := 0;
+        err := Http.ReceiveRequestEntityBody(fReqQueue,
+          req^.RequestId, flags, bufread, chunk, bytesread);
+        if Terminated then
+          exit;
+        if err = ERROR_HANDLE_EOF then
+        begin
+          if incontlenread < length(ctxt.fInContent) then
+            SetLength(ctxt.fInContent, incontlenread);
+          err := NO_ERROR;
+          break; // we reached the end of this body
+        end;
+        if err <> NO_ERROR then
+        begin
+          CheckAndLog(hReceiveRequestEntityBody, err, sllDebug, @errmsg);
+          err := HTTP_NOTACCEPTABLE;
+          break;
+        end;
+        inc(incontlenread, bytesread);
+        if bodyknown then
+        begin
+          remain := incontlen - QWord(incontlenread);
+          if remain = 0 then
+            break; // reached the end of Content-Length
+          inc(bufread, bytesread);
+          if remain < chunk then
+            chunk := remain; // avoid buffer overflow
+        end
+        else if (fMaximumAllowedContentLength > 0) and
+                (incontlenread > fMaximumAllowedContentLength) then
+          err := HTTP_PAYLOADTOOLARGE
+        else if ctxt.fInContent = '' then // initial maybe-single chunk
+          FastSetRawByteString(ctxt.fInContent, bufread, bytesread)
+        else
+        begin
+          if length(ctxt.fInContent) < incontlenread then
+            SetLength(ctxt.fInContent, NextGrow(incontlenread));
+          MoveFast(bufread^, PByteArray(ctxt.fInContent)[
+            incontlenread - PtrInt(bytesread)], bytesread);
+        end;
+      until err <> NO_ERROR;
+      if err <> NO_ERROR then
+      begin
+        SendError(err, errmsg, {disconnect=}true);
+        exit;
+      end;
+      if (incontenc <> '') and // optionally uncompress input body
+         (fCompressList.UncompressContent(incontenc, ctxt.fInContent) = nil) and
+         (fCompressList.CompressIndex(incontenc) >= 0) then
+      begin
+        SendError(HTTP_BADREQUEST, incontenc); // keep the connection
+        exit;
+      end;
+    end;
+    respsent := false;
+    QueryPerformanceMicroSeconds(started);
+    try
+      // compute response
+      outstatcode := 0;
+      if fRoute <> nil then
+        // URI rewrite or event callback execution
+        outstatcode := fRoute.Process(Ctxt);
+      if outstatcode = 0 then // no router callback was executed
+      begin
+        // regular server-side OnRequest execution
+        outstatcode := DoBeforeRequest(ctxt);
+        if outstatcode > 0 then
+          if not SendResponse or
+             (outstatcode <> HTTP_ACCEPTED) then
+            exit;
+        outstatcode := Request(ctxt); // call OnRequest for main process
+        afterstatcode := DoAfterRequest(ctxt);
+        if afterstatcode > 0 then
+          outstatcode := afterstatcode;
+      end;
+      // send response - SendResponse does buffer any SetOutStream()
+      if respsent then // e.g. 202 already sent
+        ctxt.OutContentStreamDiscard // we can release SetOutStream()
+      else if not SendResponse then
+        exit;
+      QueryPerformanceMicroSeconds(elapsed);
+      dec(elapsed, started);
+      ctxt.Host := host; // may have been reset during Request()
+      DoAfterResponse(
+        ctxt, referer, outstatcode, elapsed, incontlenread, bytessent);
+    except
+      on E: Exception do
+      begin
+        ctxt.OutContentStreamDiscard; // release SetOutStream() ASAP
+        // handle any exception raised during process: show must go on!
+        if not respsent then
+          if not E.InheritsFrom(EHttpApiServer) or // ensure still connected
+             (EHttpApiServer(E).LastApiError <> HTTPAPI_ERROR_NONEXISTENTCONNECTION) then
+            SendError(HTTP_SERVERERROR, StringToUtf8(E.Message), false, E);
+      end;
+    end;
+  end;
+
+var
+  err: HRESULT;
 begin
   if Terminated then
     exit;
@@ -8557,220 +8780,14 @@ begin
         break;
       case err of
         NO_ERROR:
-          try
+          begin
             LockedInc32(@fCurrentProcess);
-            // parse method and main headers as ctxt.Prepare() does
-            bytessent := 0;
-            ctxt.fHttpApiRequest := req;
-            ctxt.Recycle(req^.ConnectionID, self, {asynchandle=}0,
-              HTTP_TLS_FLAGS[req^.pSslInfo <> nil] +
-              // no HTTP_UPG_FLAGS[]: plain THttpApiServer don't support upgrade
-              HTTP_10_FLAGS[(req^.Version.MajorVersion = 1) and
-                            (req^.Version.MinorVersion = 0)],
-              // ctxt.fConnectionOpaque is not supported by http.sys
-              nil);
-            FastSetString(ctxt.fUrl, req^.pRawUrl, req^.RawUrlLength);
-            if req^.Verb in [low(global_verbs)..high(global_verbs)] then
-              ctxt.fMethod := global_verbs[req^.Verb]
-            else
-              FastSetString(ctxt.fMethod, req^.pUnknownVerb, req^.UnknownVerbLength);
-            with req^.headers.KnownHeaders[reqContentType] do
-              FastSetString(ctxt.fInContentType, pRawValue, RawValueLength);
-            with req^.headers.KnownHeaders[reqUserAgent] do
-              FastSetString(ctxt.fUserAgent, pRawValue, RawValueLength);
-            with req^.headers.KnownHeaders[reqHost] do
-              FastSetString(ctxt.fHost, pRawValue, RawValueLength);
-            host := ctxt.Host; // may be reset during Request()
-            with req^.Headers.KnownHeaders[reqAuthorization] do
-              if (RawValueLength > 7) and
-                 IdemPChar(pointer(pRawValue), 'BEARER ') then
-                FastSetString(ctxt.fAuthBearer, pRawValue + 7, RawValueLength - 7);
-            with req^.headers.KnownHeaders[reqAcceptEncoding] do
-              FastSetString(inaccept, pRawValue, RawValueLength);
-            with req^.headers.KnownHeaders[reqReferrer] do
-              FastSetString(referer, pRawValue, RawValueLength);
-            fCompressList.DecodeAcceptEncoding(pointer(inaccept), compressset);
-            ctxt.fInHeaders := RetrieveHeadersAndGetRemoteIPConnectionID(
-              req^, fRemoteIPHeaderUpper, fRemoteConnIDHeaderUpper,
-              {out} ctxt.fRemoteIP, PQWord(@ctxt.fConnectionID)^);
-            // retrieve any SetAuthenticationSchemes() information
-            if byte(fAuthenticationSchemes) <> 0 then // set only with HTTP API 2.0
-              // https://docs.microsoft.com/en-us/windows/win32/http/authentication-in-http-version-2-0
-              for i := 0 to req^.RequestInfoCount - 1 do
-                with req^.pRequestInfo^[i] do
-                if InfoType = HttpRequestInfoTypeAuth then
-                  case pInfo^.AuthStatus of
-                    HttpAuthStatusSuccess:
-                      if pInfo^.AuthType > HttpRequestAuthTypeNone then
-                      begin
-                        byte(ctxt.fAuthenticationStatus) := ord(pInfo^.AuthType) + 1;
-                        if pInfo^.AccessToken <> 0 then
-                        begin
-                          ctxt.fAuthenticatedUser := LookupToken(pInfo^.AccessToken);
-                          // AccessToken lifecycle is application responsibility
-                          CloseHandle(pInfo^.AccessToken);
-                          ctxt.fAuthBearer := ctxt.fAuthenticatedUser;
-                          include(ctxt.fConnectionFlags, hsrAuthorized);
-                        end;
-                      end;
-                    HttpAuthStatusFailure:
-                      ctxt.fAuthenticationStatus := hraFailed;
-                  end;
-            // abort request if > MaximumAllowedContentLength or OnBeforeBody
-            with req^.headers.KnownHeaders[reqContentLength] do
-            begin
-              V := pointer(pRawValue);
-              SetQWord(V, V + RawValueLength, incontlen);
-            end;
-            if (incontlen > 0) and
-               (fMaximumAllowedContentLength > 0) and
-               (incontlen > QWord(fMaximumAllowedContentLength)) then
-            begin
-              SendError(HTTP_PAYLOADTOOLARGE, 'Rejected', {disconnect=}true);
-              continue;
-            end;
-            if (hsoRejectBotUserAgent in fOptions) and
-               (ctxt.fUserAgent <> '') and
-               IsHttpUserAgentBot(ctxt.fUserAgent) then
-            begin
-              SendError(HTTP_TEAPOT, BOTBUSTER_RESPONSE, {disconnect=}true);
-              continue;
-            end;
-            if Assigned(OnBeforeBody) then
-            begin
-              try
-                err := OnBeforeBody(ctxt.fUrl, ctxt.fMethod, ctxt.fInHeaders,
-                  ctxt.fInContentType, ctxt.fRemoteIP, ctxt.fAuthBearer,
-                  incontlen, ctxt.ConnectionFlags);
-              except
-                err := HTTP_SERVERERROR;
-              end;
-              if err <> HTTP_SUCCESS then
-              begin
-                SendError(err, 'Rejected', {disconnect=}true);
-                continue;
-              end;
-            end;
-            // retrieve body
-            incontlenread := 0; // actual number of entity-body bytes received
-            if (HTTP_REQUEST_FLAG_MORE_ENTITY_BODY_EXISTS and req^.flags) <> 0 then
-            begin
-              errmsg := '';
-              with req^.headers.KnownHeaders[reqContentEncoding] do
-                FastSetString(incontenc, pRawValue, RawValueLength);
-              bodyknown := (incontlen <> 0) and // transfer-encoding has precedence
-                (req^.headers.KnownHeaders[reqTransferEncoding].RawValueLength = 0);
-              if bodyknown then
-              begin
-                chunk := MaxPtrUInt(64 * 1024, fReceiveBufferSize); // 1MB default
-                if chunk > incontlen then
-                  chunk := incontlen;
-                bufread := FastNewRawByteString(ctxt.fInContent, incontlen);
-              end
-              else
-              begin
-                chunk := 128 shl 10; // chunked doesn't need fReceiveBufferSize
-                if chunkbuf = nil then
-                  SetLength(chunkbuf, chunk); // allocate once 128KB
-                bufread := pointer(chunkbuf);
-              end;
-              if HasApi2 then // speed optimization for Vista+ = whole chunk
-                flags := HTTP_RECEIVE_REQUEST_ENTITY_BODY_FLAG_FILL_BUFFER
-              else
-                flags := 0;
-              repeat
-                bytesread := 0;
-                err := Http.ReceiveRequestEntityBody(fReqQueue,
-                  req^.RequestId, flags, bufread, chunk, bytesread);
-                if Terminated then
-                  exit;
-                if err = ERROR_HANDLE_EOF then
-                begin
-                  if incontlenread < length(ctxt.fInContent) then
-                    SetLength(ctxt.fInContent, incontlenread);
-                  err := NO_ERROR;
-                  break; // we reached the end of this body
-                end;
-                if err <> NO_ERROR then
-                begin
-                  Check(hReceiveRequestEntityBody, err, sllDebug, @errmsg);
-                  err := HTTP_NOTACCEPTABLE;
-                  break;
-                end;
-                inc(incontlenread, bytesread);
-                if bodyknown then
-                begin
-                  remain := incontlen - QWord(incontlenread);
-                  if remain = 0 then
-                    break; // reached the end of Content-Length
-                  inc(bufread, bytesread);
-                  if remain < chunk then
-                    chunk := remain; // avoid buffer overflow
-                end
-                else if (fMaximumAllowedContentLength > 0) and
-                        (incontlenread > fMaximumAllowedContentLength) then
-                  err := HTTP_PAYLOADTOOLARGE
-                else if ctxt.fInContent = '' then // initial maybe-single chunk
-                  FastSetRawByteString(ctxt.fInContent, bufread, bytesread)
-                else
-                begin
-                  if length(ctxt.fInContent) < incontlenread then
-                    SetLength(ctxt.fInContent, NextGrow(incontlenread));
-                  MoveFast(bufread^, PByteArray(ctxt.fInContent)[
-                    incontlenread - PtrInt(bytesread)], bytesread);
-                end;
-              until err <> NO_ERROR;
-              if err <> NO_ERROR then
-              begin
-                SendError(err, errmsg, {disconnect=}true);
-                continue;
-              end;
-              if incontenc <> '' then // optionally uncompress input body
-                fCompressList.UncompressContent(incontenc, ctxt.fInContent);
-            end;
-            respsent := false;
-            QueryPerformanceMicroSeconds(started);
             try
-              // compute response
-              outstatcode := 0;
-              if fRoute <> nil then
-                // URI rewrite or event callback execution
-                outstatcode := fRoute.Process(Ctxt);
-              if outstatcode = 0 then // no router callback was executed
-              begin
-                // regular server-side OnRequest execution
-                outstatcode := DoBeforeRequest(ctxt);
-                if outstatcode > 0 then
-                  if not SendResponse or
-                     (outstatcode <> HTTP_ACCEPTED) then
-                    continue;
-                outstatcode := Request(ctxt); // call OnRequest for main process
-                afterstatcode := DoAfterRequest(ctxt);
-                if afterstatcode > 0 then
-                  outstatcode := afterstatcode;
-              end;
-              // send response - SendResponse does buffer any SetOutStream()
-              if respsent then // e.g. 202 already sent 
-                ctxt.OutContentStreamDiscard // we can release SetOutStream()
-              else if not SendResponse then
-                continue;
-              QueryPerformanceMicroSeconds(elapsed);
-              dec(elapsed, started);
-              ctxt.Host := host; // may have been reset during Request()
-              DoAfterResponse(
-                ctxt, referer, outstatcode, elapsed, incontlenread, bytessent);
+              ProcessRequest;
             except
               on E: Exception do
-              begin
-                ctxt.OutContentStreamDiscard; // release SetOutStream() ASAP
-                // handle any exception raised during process: show must go on!
-                if not respsent then
-                  if not E.InheritsFrom(EHttpApiServer) or // ensure still connected
-                     (EHttpApiServer(E).LastApiError <> HTTPAPI_ERROR_NONEXISTENTCONNECTION) then
-                    SendError(HTTP_SERVERERROR, StringToUtf8(E.Message), false, E);
-              end;
+                fLogClass.Add.Log(sllWarning, 'DoExecute: uncatched %', [E], self);
             end;
-          finally
             LockedDec32(@fCurrentProcess);
             reqid := 0; // reset Request ID to handle the next pending request
           end;
@@ -8785,7 +8802,7 @@ begin
           end;
         ERROR_CONNECTION_INVALID:
           begin
-            Check(hReceiveHttpRequest, err);
+            CheckAndLog(hReceiveHttpRequest, err);
             if reqid = 0 then
               break;
             // TCP connection was corrupted by the peer -> ignore + next request
@@ -8793,7 +8810,7 @@ begin
           end
       else
         begin
-          Check(hReceiveHttpRequest, err);
+          CheckAndLog(hReceiveHttpRequest, err);
           break; // unhandled err value
         end;
       end;

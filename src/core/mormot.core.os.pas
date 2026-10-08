@@ -2853,10 +2853,13 @@ function SystemErrorShort(error: integer = 0): TShort63;
 // - by design, IsSystemError(seOther) = IsSystemError(seSuccess) are always false
 function IsSystemError(os: TSystemError; ErrorCode: integer = 0): boolean;
 
-/// returns a given error code as plain text
+/// returns a given error code as plain RawUtf8 text
 // - redirects to WinApiErrorShort(error, nil) on Windows, or StrError() on POSIX
 // - e.g. GetErrorText(10) = 'ECHILD (No child processes)' on Linux
 function GetErrorText(error: integer = 0): RawUtf8;
+
+/// returns a given error code as plain RawUtf8 text
+procedure SetErrorText(var text: RawUtf8; error: integer = 0);
 
 /// returns a given error code as plain text ShortString
 function GetErrorShort(error: integer = 0): TShort63;
@@ -7302,13 +7305,18 @@ begin
 end;
 
 function GetErrorText(error: integer): RawUtf8;
+begin
+  SetErrorText(result, error);
+end;
+
+procedure SetErrorText(var text: RawUtf8; error: integer);
 var
-  txt: ShortString;
+  tmp: ShortString;
 begin
   if error = 0 then
     error := GetLastError;
-  GetErrorShortVar(error, txt);
-  FastSetString(result, @txt[1], ord(txt[0]));
+  GetErrorShortVar(error, tmp);
+  FastSetString(text, @tmp[1], ord(tmp[0]));
 end;
 
 function ArmCpuType(id: word): TArmCpuType;
