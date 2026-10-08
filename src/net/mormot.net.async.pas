@@ -5456,21 +5456,21 @@ begin
   QueryPerformanceMicroSeconds(ctx.ElapsedMicroSec);
   dec(ctx.ElapsedMicroSec, fAfterResponseStart);
   ctx.Connection := fConnectionID;
-  ctx.Method := pointer(fHttp.CommandMethod);
-  ctx.Host := pointer(fHttp.Host);
-  ctx.Url := pointer(fHttp.CommandUri);
-  ctx.User := nil;
+  ctx.Method     := pointer(fHttp.CommandMethod);
+  ctx.Host       := pointer(fHttp.Host);
+  ctx.Url        := pointer(fHttp.CommandUri);
+  ctx.User       := nil;
   if hsrAuthorized in fRequestFlags then
-    ctx.User := pointer(fHttp.BearerToken); // see fServer.Authorization()
-  ctx.Referer := pointer(fHttp.Referer);
-  ctx.UserAgent := pointer(fHttp.UserAgent);
-  ctx.RemoteIP := pointer(fRemoteIP);
-  ctx.Flags := fRequestFlags;
-  ctx.State := fHttp.State;
+    ctx.User     := pointer(fHttp.BearerToken); // see fServer.Authorization()
+  ctx.Referer    := pointer(fHttp.Referer);
+  ctx.UserAgent  := pointer(fHttp.UserAgent);
+  ctx.RemoteIP   := pointer(fRemoteIP);
+  ctx.Flags      := fRequestFlags;
+  ctx.State      := fHttp.State;
   ctx.StatusCode := fRespStatus;
-  ctx.Received := fBytesRecv;
-  ctx.Sent := fBytesSend;
-  ctx.Tix64 := fServer.fAsync.fLastOperationMS; // ProcessIdleTix() GetTickCount64
+  ctx.Received   := fBytesRecv;
+  ctx.Sent       := fBytesSend;
+  ctx.Tix64      := fServer.fAsync.fLastOperationMS; // from ProcessIdleTix()
   try
     fServer.fOnAfterResponse(ctx); // e.g. THttpLogger or THttpAnalyzer
   except
@@ -5958,7 +5958,7 @@ begin
     hashes := HashFileRaw(fn, fAlgos);
     if hashes = nil then
       exit; // no such file
-    fHashCache.Add(name, hashes);
+    fHashCache.Add(name, hashes); // first insertion wins on contention
   end;
   // return the pre-computed hash of this file
   i := 0;
@@ -6797,7 +6797,7 @@ begin
             html, hpoNoSubFolder in opt);
           if Assigned(one.fMemCache) and
              not (hpoDisableFolderHtmlIndexCache in opt) then
-            one.fMemCache.Add(dig.sha1, html);
+            one.fMemCache.Add(dig.sha1, html); // first inserted wins
         end;
         loginfo := 'html';
         result := Ctxt.SetOutContent(
