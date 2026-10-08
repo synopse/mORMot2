@@ -2339,9 +2339,13 @@ type
     wsClosedByGuard,
     wsClosedByShutdown);
 
-  /// WebSocket connection class
-  THttpApiWebSocketConnection = class
-  protected
+  /// structure representing a single WebSocket connection
+  {$ifdef USERECORDWITHMETHODS}
+  THttpApiWebSocketConnection = record
+  {$else}
+  THttpApiWebSocketConnection = object
+  {$endif USERECORDWITHMETHODS}
+  private
     fOverlapped: TOverlapped;
     fState: TWebSocketState;
     fProtocol: THttpApiWebSocketServerProtocol;
@@ -2352,6 +2356,7 @@ type
     fPrivateData: pointer;
     fBuffer: RawByteString;
     fCloseStatus: WEB_SOCKET_CLOSE_STATUS;
+    fIndex: integer;
     function ProcessActions(ActionQueue: cardinal): boolean;
     function ReadData(const WebsocketBufferData): integer;
     function WriteData(const WebsocketBufferData; out Written: cardinal): boolean;
@@ -2375,6 +2380,9 @@ type
     /// Close connection
     procedure Close(aStatus: WEB_SOCKET_CLOSE_STATUS;
       aBuffer: pointer; aBufferSize: ULONG);
+    /// Index of connection in protocol's connection list
+    property Index: integer
+      read fIndex;
     /// Protocol of connection
     property Protocol: THttpApiWebSocketServerProtocol
        read fProtocol;
@@ -2386,19 +2394,25 @@ type
       read fState;
   end;
 
-  THttpApiWebSocketConnections = array of THttpApiWebSocketConnection;
+  PHttpApiWebSocketConnection = ^THttpApiWebSocketConnection;
+
+  THttpApiWebSocketConnectionVector =
+    array[0..MaxInt div SizeOf(PHttpApiWebSocketConnection) - 1] of
+    PHttpApiWebSocketConnection;
+
+  PHttpApiWebSocketConnectionVector = ^THttpApiWebSocketConnectionVector;
 
   /// Event handler on THttpApiWebSocketServerProtocol Accepted connection
   TOnHttpApiWebSocketServerAcceptEvent = function(Ctxt: THttpServerRequest;
-    Conn: THttpApiWebSocketConnection): boolean of object;
+    var Conn: THttpApiWebSocketConnection): boolean of object;
   /// Event handler on THttpApiWebSocketServerProtocol Message received
-  TOnHttpApiWebSocketServerMessageEvent = procedure(Conn: THttpApiWebSocketConnection;
+  TOnHttpApiWebSocketServerMessageEvent = procedure(var Conn: THttpApiWebSocketConnection;
     aBufferType: WEB_SOCKET_BUFFER_TYPE; aBuffer: pointer; aBufferSize: ULONG) of object;
   /// Event handler on THttpApiWebSocketServerProtocol connection
   TOnHttpApiWebSocketServerConnectEvent = procedure(
-    Conn: THttpApiWebSocketConnection) of object;
+    var Conn: THttpApiWebSocketConnection) of object;
   /// Event handler on THttpApiWebSocketServerProtocol disconnection
-  TOnHttpApiWebSocketServerDisconnectEvent = procedure(Conn: THttpApiWebSocketConnection;
+  TOnHttpApiWebSocketServerDisconnectEvent = procedure(var Conn: THttpApiWebSocketConnection;
     aStatus: WEB_SOCKET_CLOSE_STATUS; aBuffer: pointer; aBufferSize: ULONG) of object;
 
   /// Protocol Handler of websocket endpoints events
@@ -2408,17 +2422,21 @@ type
     fSafe: TOSLock;
     fName: RawUtf8;
     fServer: THttpApiWebSocketServer;
-    fConnections: THttpApiWebSocketConnections;
-    fPendingForClose: THttpApiWebSocketConnections;
+    fConnections: PHttpApiWebSocketConnectionVector;
+    fConnectionsCapacity: integer;
+    // number of used connections. Some of them can be nil (if not used anymore)
     fConnectionsCount: integer;
-    fPendingForCloseCount: integer;
+    fFirstEmptyConnectionIndex: integer;
+    fIndex: integer;
     fOnAccept: TOnHttpApiWebSocketServerAcceptEvent;
     fOnMessage: TOnHttpApiWebSocketServerMessageEvent;
     fOnFragment: TOnHttpApiWebSocketServerMessageEvent;
     fOnConnect: TOnHttpApiWebSocketServerConnectEvent;
     fOnDisconnect: TOnHttpApiWebSocketServerDisconnectEvent;
+    fPendingForClose: TSynList;
     fManualFragmentManagement: boolean;
-    function AddConnection(aConn: THttpApiWebSocketConnection): integer;
+    function AddConnection(aConn: PHttpApiWebSocketConnection): integer;
+    procedure RemoveConnection(index: integer);
     procedure DoShutdown;
   public
     /// initialize the WebSockets process
@@ -2437,6 +2455,9 @@ type
     /// text identifier
     property Name: RawUtf8
       read fName;
+    /// identify the endpoint instance
+    property Index: integer
+      read fIndex;
     /// OnFragment event will be called for each fragment
     property ManualFragmentManagement: boolean
       read fManualFragmentManagement;
@@ -7986,7 +8007,7 @@ type
   public
     api: THttpApiServer;
     req: PHTTP_REQUEST; // 16KB first, may be upsized by THttpApiServer.DoExecute
-    ws: THttpApiWebSocketConnection;
+    ws: PHttpApiWebSocketConnection;
     reqid: HTTP_REQUEST_ID;
     resp: HTTP_RESPONSE;
     bytesread, bytessent, flags: cardinal;
@@ -9040,10 +9061,33 @@ end;
 
 { THttpApiWebSocketServerProtocol }
 
+const
+  WebSocketConnectionCapacity = 1000;
+
 function THttpApiWebSocketServerProtocol.AddConnection(
-  aConn: THttpApiWebSocketConnection): integer;
+  aConn: PHttpApiWebSocketConnection): integer;
+var
+  i: PtrInt;
 begin
-  result := PtrArrayAdd(fConnections, aConn, fConnectionsCount);
+  if fFirstEmptyConnectionIndex >= fConnectionsCapacity - 1 then
+  begin
+    inc(fConnectionsCapacity, WebSocketConnectionCapacity);
+    ReallocMem(fConnections, fConnectionsCapacity * SizeOf(PHttpApiWebSocketConnection));
+    FillcharFast(fConnections^[fConnectionsCapacity - WebSocketConnectionCapacity],
+      WebSocketConnectionCapacity * SizeOf(PHttpApiWebSocketConnection), 0);
+  end;
+  if fFirstEmptyConnectionIndex >= fConnectionsCount then
+    fConnectionsCount := fFirstEmptyConnectionIndex + 1;
+  fConnections[fFirstEmptyConnectionIndex] := aConn;
+  result := fFirstEmptyConnectionIndex;
+  for i := fFirstEmptyConnectionIndex + 1 to fConnectionsCount do
+  begin
+    if fConnections[i] = nil then
+    begin
+      fFirstEmptyConnectionIndex := i;
+      Break;
+    end;
+  end;
 end;
 
 function THttpApiWebSocketServerProtocol.Broadcast(
@@ -9066,23 +9110,18 @@ end;
 function THttpApiWebSocketServerProtocol.Close(index: integer;
   aStatus: WEB_SOCKET_CLOSE_STATUS; aBuffer: pointer; aBufferSize: ULONG): boolean;
 var
-  conn: THttpApiWebSocketConnection;
+  conn: PHttpApiWebSocketConnection;
 begin
   result := false;
-  fSafe.Lock;
-  try
-    if cardinal(index) < cardinal(fConnectionsCount) then
+  if cardinal(index) < cardinal(fConnectionsCount) then
+  begin
+    conn := fConnections^[index];
+    if (conn <> nil) and
+       (conn.fState = wsOpen) then
     begin
-      conn := fConnections[index];
-      if (conn <> nil) and
-         (conn.fState = wsOpen) then
-      begin
-        conn.Close(aStatus, aBuffer, aBufferSize);
-        result := true;
-      end;
+      conn.Close(aStatus, aBuffer, aBufferSize);
+      result := true;
     end;
-  finally
-    fSafe.UnLock;
   end;
 end;
 
@@ -9100,6 +9139,7 @@ begin
       'Error register WebSocket protocol. Protocol %s does not use buffer, ' +
       'but OnFragment handler is not assigned', [aName]);
   fSafe.Init;
+  fPendingForClose := TSynList.Create;
   fName := aName;
   fManualFragmentManagement := aManualFragmentManagement;
   fServer := aServer;
@@ -9108,36 +9148,43 @@ begin
   fOnConnect := aOnConnect;
   fOnDisconnect := aOnDisconnect;
   fOnFragment := aOnFragment;
+  fConnectionsCapacity := WebSocketConnectionCapacity;
+  fConnectionsCount := 0;
+  fFirstEmptyConnectionIndex := 0;
+  fConnections := AllocMem(fConnectionsCapacity * SizeOf(PHttpApiWebSocketConnection));
 end;
 
 destructor THttpApiWebSocketServerProtocol.Destroy;
 var
   i: PtrInt;
-  conn: THttpApiWebSocketConnection;
+  conn: PHttpApiWebSocketConnection;
 begin
   fSafe.Lock;
   try
-    for i := 0 to fPendingForCloseCount - 1 do
+    for i := 0 to fPendingForClose.Count - 1 do
     begin
       conn := fPendingForClose[i];
-      if not Assigned(conn) then
-        continue;
-      conn.DoOnDisconnect;
-      conn.Disconnect;
-      conn.Free;
+      if Assigned(conn) then
+      begin
+        conn.DoOnDisconnect();
+        conn.Disconnect();
+        Dispose(conn);
+      end;
     end;
-    fPendingForCloseCount := 0;
+    fPendingForClose.Free;
   finally
     fSafe.UnLock;
   end;
   fSafe.Done;
+  FreeMem(fConnections);
+  fConnections := nil;
   inherited;
 end;
 
 procedure THttpApiWebSocketServerProtocol.DoShutdown;
 var
   i: PtrInt;
-  conn: THttpApiWebSocketConnection;
+  conn: PHttpApiWebSocketConnection;
 const
   sReason = 'Server shutdown';
 begin
@@ -9147,42 +9194,45 @@ begin
     begin
       conn := fConnections[i];
       if Assigned(conn) then
-      try
+      begin
+        RemoveConnection(i);
         conn.fState := wsClosedByShutdown;
         conn.fBuffer := sReason;
         conn.fCloseStatus := WEB_SOCKET_ENDPOINT_UNAVAILABLE_CLOSE_STATUS;
         conn.Close(WEB_SOCKET_ENDPOINT_UNAVAILABLE_CLOSE_STATUS,
           pointer(conn.fBuffer), Length(conn.fBuffer));
-      finally
-        conn.Free;
+// IocpPostQueuedStatus(fServer.fThreadPoolServer.FRequestQueue, 0, 0, @conn.fOverlapped);
       end;
     end;
-    fConnectionsCount := 0;
   finally
     fSafe.UnLock;
   end;
 end;
 
+procedure THttpApiWebSocketServerProtocol.RemoveConnection(index: integer);
+begin
+  fPendingForClose.Add(fConnections[index]);
+  fConnections[index] := nil;
+  if fFirstEmptyConnectionIndex > index then
+    fFirstEmptyConnectionIndex := index;
+end;
+
 function THttpApiWebSocketServerProtocol.Send(index: integer;
   aBufferType: WEB_SOCKET_BUFFER_TYPE; aBuffer: pointer; aBufferSize: ULONG): boolean;
 var
-  conn: THttpApiWebSocketConnection;
+  conn: PHttpApiWebSocketConnection;
 begin
   result := false;
-  fSafe.Lock;
-  try
-    if cardinal(index) < cardinal(fConnectionsCount) then
+  if (index >= 0) and
+     (index < fConnectionsCount) then
+  begin
+    conn := fConnections^[index];
+    if (conn <> nil) and
+       (conn.fState = wsOpen) then
     begin
-      conn := fConnections[index];
-      if (conn <> nil) and
-         (conn.fState = wsOpen) then
-      begin
-        conn.Send(aBufferType, aBuffer, aBufferSize);
-        result := true;
-      end;
+      conn.Send(aBufferType, aBuffer, aBufferSize);
+      result := true;
     end;
-  finally
-    fSafe.UnLock;
   end;
 end;
 
@@ -9204,6 +9254,7 @@ begin
   fLastActionContext := nil;
   FillcharFast(fOverlapped, SizeOf(fOverlapped), 0);
   fProtocol := aProtocol;
+  fIndex := fProtocol.fFirstEmptyConnectionIndex;
   fOpaqueHTTPRequestId := ctx.req^.RequestId;
   if (fProtocol = nil) or
      (Assigned(fProtocol.OnAccept) and
@@ -9293,7 +9344,7 @@ begin
     fOpaqueHTTPRequestId, 0, buf.pbBuffer, buf.ulBufferLength, read,
     @self.fOverlapped);
   case err of
-    // on page reload Safari do not send a WEB_SOCKET_INDICATE_RECEIVE_COMPLETE_ACTION
+    // On page reload Safari do not send a WEB_SOCKET_INDICATE_RECEIVE_COMPLETE_ACTION
     // with BufferType = WEB_SOCKET_CLOSE_BUFFER_TYPE, instead it send a dummy packet
     // (WEB_SOCKET_RECEIVE_FROM_NETWORK_ACTION) and terminate socket
     // see forum discussion https://synopse.info/forum/viewtopic.php?pid=27125
@@ -9319,6 +9370,7 @@ begin
   Written := 0;
   if fWSHandle = nil then
     exit;
+  Written := 0;
   inmem.DataChunkType := hctFromMemory;
   inmem.pBuffer := buf.pbBuffer;
   inmem.BufferLength := buf.ulBufferLength;
@@ -9343,8 +9395,7 @@ begin
   if elapsed >= delay then
     if elapsed > 2 * delay then
     begin
-      PtrArrayAdd(fProtocol.fPendingForClose, self, fProtocol.fPendingForCloseCount);
-      PtrArrayDelete(fProtocol.fConnections, self, @fProtocol.fConnectionsCount);
+      fProtocol.RemoveConnection(fIndex);
       fState := wsClosedByGuard;
       fCloseStatus := WEB_SOCKET_ENDPOINT_UNAVAILABLE_CLOSE_STATUS;
       fBuffer := 'Closed after ping timeout';
@@ -9407,8 +9458,7 @@ var
   begin
     fProtocol.fSafe.Lock;
     try
-      PtrArrayAdd(fProtocol.fPendingForClose, self, fProtocol.fPendingForCloseCount);
-      PtrArrayDelete(fProtocol.fConnections, self, @fProtocol.fConnectionsCount);
+      fProtocol.RemoveConnection(fIndex);
     finally
       fProtocol.fSafe.UnLock;
     end;
@@ -9630,7 +9680,7 @@ begin
   // add the connection for this protocol
   proto.fSafe.Lock;
   try
-    ctx.ws := THttpApiWebSocketConnection.Create;
+    New(ctx.ws);
     if ctx.ws.TryAcceptConnection(proto, Ctxt, specified) then
     begin
       proto.AddConnection(ctx.ws);
@@ -9638,7 +9688,8 @@ begin
     end
     else
     begin
-      FreeAndNil(ctx.ws);
+      Dispose(ctx.ws);
+      ctx.ws := nil;
       result := HTTP_NOTALLOWED;
     end;
   finally
@@ -9736,7 +9787,7 @@ end;
 procedure TSynThreadPoolHttpApiWebSocketServer.Task(
   aCaller: TSynThreadPoolWorkThread; aContext: pointer);
 var
-  conn: THttpApiWebSocketConnection absolute aContext;
+  conn: PHttpApiWebSocketConnection;
 begin
   if aContext = @fServer.fServiceOverlaped then
   begin
@@ -9744,6 +9795,7 @@ begin
       fServer.OnServiceMessage;
     exit;
   end;
+  conn := PHttpApiWebSocketConnection(aContext);
   if conn.fState = wsConnecting then
   begin
     conn.fState := wsOpen;
@@ -9765,12 +9817,11 @@ begin
     conn.Disconnect;
     conn.Protocol.fSafe.Lock;
     try
-      PtrArrayDelete(conn.Protocol.fPendingForClose, conn,
-        @conn.Protocol.fPendingForCloseCount);
+      conn.Protocol.fPendingForClose.Remove(conn);
     finally
       conn.Protocol.fSafe.UnLock;
     end;
-    FreeAndNilSafe(conn);
+    Dispose(conn);
   end;
 end;
 
@@ -9801,11 +9852,11 @@ begin
       proto := protos[i];
       proto.fSafe.Lock;
       try
-        for j := proto.fConnectionsCount - 1 downto 0 do
+        for j := 0 to proto.fConnectionsCount - 1 do
           if Terminated then
             exit
           else
-            proto.fConnections[j].CheckIsActive(tix);
+            proto.fConnections^[j]^.CheckIsActive(tix);
       finally
         proto.fSafe.UnLock;
       end;
