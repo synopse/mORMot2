@@ -9483,11 +9483,14 @@ begin
         ;
       WEB_SOCKET_SEND_TO_NETWORK_ACTION:
         begin
-          for i := 0 to bufcount - 1 do
-            WriteData(buf[i]);
-          if fWSHandle <> nil then
-            WebSocketApi.CompleteAction(fWSHandle, actctxt, 0);
           result := false;
+          total := 0;
+          for i := 0 to bufcount - 1 do
+            if WriteData(buf[i], written) then
+              inc(total, written)
+            else
+              exit;
+          WebSocketApi.CompleteAction(fWSHandle, actctxt, total);
           exit;
         end;
       WEB_SOCKET_INDICATE_SEND_COMPLETE_ACTION:
