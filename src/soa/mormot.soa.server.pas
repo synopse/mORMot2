@@ -1552,6 +1552,8 @@ begin
         Ctxt.Call.OutStatus := HTTP_SUCCESS;
     end;
     exec.WR.SetText(Ctxt.Call.OutBody);
+    if optCleanMagicJson in opt then
+      RemoveMagicFromJson(Ctxt.Call.OutBody); // remove any JSON_BASE64_MAGIC
   finally
     HandleCleanup;
   end;

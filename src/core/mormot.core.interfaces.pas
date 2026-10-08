@@ -2260,6 +2260,7 @@ type
     optErrorOnMissingParam,
     optForceStandardJson,
     optDontStoreVoidJson,
+    optCleanMagicJson,
     optIgnoreException,
     optFreeTimeout);
 
@@ -2303,6 +2304,7 @@ type
   // you can set optForceStandardJson to ensure standard JSON is always returned
   // - optDontStoreVoidJson will reduce the JSON object verbosity by not writing
   // void (e.g. 0 or '') properties when serializing objects and records
+  // - optCleanMagicJson will apply RemoveMagicFromJson() to the JSON result
   // - any exceptions will be propagated during execution, unless
   // optIgnoreException is set and the exception is trapped (not to be used
   // unless you know what you are doing)
