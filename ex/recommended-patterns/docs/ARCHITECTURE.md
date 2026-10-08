@@ -7,7 +7,7 @@ This document describes the architecture of the mORMot2 Task Manager. It combine
 
 - **DDD (Domain-Driven Design)** aggregates with embedded sub-structures.
 - **CQRS (Command Query Responsibility Segregation)** — separate read and write interfaces per context.
-- **Hexagonal layering** — `dom/` (TOrm aggregates + interfaces), `infra/` (IRestOrm-backed impls), `app/` (DTOs, mappers, services), `serv/` (daemon / composition root — the only place that names concrete `infra/` classes).
+- **Hexagonal layering** — `dom/` (TOrm aggregates + repository ports), `infra/` (IRestOrm-backed impls), `app/` (`interface/`: CQRS interfaces + DTOs; `implementation/`: mappers, services), `serv/` (daemon / composition root — the only place that names concrete `infra/` classes).
 - **`TInjectableObjectRest` + `AutoResolve`** for repository injection — services publish a `Repo` interface property, the framework fills it from the dispatcher's own resolver, seeded per-dispatcher via `ServiceContainer.InjectInstance`.
 - **Two-server daemon shape** (§15.9): an internal `TRestServerDB` for persistence + a public `TRestServerFullMemory` dispatcher that hosts the CQRS services. Only the dispatcher is exposed over HTTP.
 - **`sicShared` SOA registration** in class form (`ServiceDefine(TServiceClass, [I], sicShared)`).
@@ -100,15 +100,15 @@ Lists return `IList<TTask>` from `mormot.core.collections` — interface-managed
 
 `ITaskRepository` / `ITagRepository` are **local DI ports**, not RPC services — they are not passed to `TInterfaceFactory.RegisterInterfaces`, only seeded into the dispatcher's resolver via `ServiceContainer.InjectInstance` at the composition root.
 
-**Why this matters:** the application layer (`app/*_impl.pas`) depends only on the *interface*. To swap SQLite for SQL Server, Oracle, or an in-memory stub: write a new `T<Entity>Repository<Backend>` in `infra/`, seed it at the composition root. The service code does not change.
+**Why this matters:** the application layer (`app/*/implementation/*_impl.pas`) depends only on the *interface*. To swap SQLite for SQL Server, Oracle, or an in-memory stub: write a new `T<Entity>Repository<Backend>` in `infra/`, seed it at the composition root. The service code does not change.
 
 ### 3. CQRS Service Layer
 
-Each context has **separate Query and Command interfaces**, both declared in `dom/<entity>/`:
+Each context has **separate Query and Command interfaces**, both declared in `app/<entity>/interface/` — they take and return the DTOs, so they are the application layer's public contract (shared by server and clients), not part of the domain:
 
 #### Task Context
 
-**ITaskQuery** (`dom/tasks/task_query.pas`):
+**ITaskQuery** (`app/tasks/interface/task_query.pas`):
 ```pascal
 ITaskQuery = interface(IInvokable)
   function GetTaskView(aTaskID: TID): TTaskViewDTO;
@@ -117,7 +117,7 @@ ITaskQuery = interface(IInvokable)
 end;
 ```
 
-**ITaskCommand** (`dom/tasks/task_command.pas`):
+**ITaskCommand** (`app/tasks/interface/task_command.pas`):
 ```pascal
 ITaskCommand = interface(IInvokable)
   function CreateTask(const aData: TTaskCreateDTO): TCommandResult;
@@ -134,14 +134,14 @@ end;
 
 #### Tag Context
 
-`ITagQuery` and `ITagCommand` follow the same shape (see `dom/tags/`).
+`ITagQuery` and `ITagCommand` follow the same shape (see `app/tags/interface/`).
 
 The split buys:
 - Per-direction authorization (read clients cannot accidentally call a write method).
 - Read side could later be served by a replica or cache without touching the write path.
 - Self-documenting endpoints — `TaskQuery.ListTasks` vs `TaskCommand.CreateTask`.
 
-### 4. Typed DTOs (`app/<entity>/<entity>_dtos.pas`)
+### 4. Typed DTOs (`app/<entity>/interface/<entity>_dtos.pas`)
 
 A **family** of operation-specific `packed record` DTOs per entity — no single fat shape:
 
@@ -155,7 +155,7 @@ All registered via `Rtti.RegisterFromText(TypeInfo(T), 'field definitions')` in 
 
 `string` is **forbidden** on the wire — `RawUtf8` for text (zero-copy at the HTTP boundary), `RawByteString` / `TSQLRawBlob` for binary.
 
-### 5. Mappers (`app/<entity>/<entity>_mappers.pas`)
+### 5. Mappers (`app/<entity>/implementation/<entity>_mappers.pas`)
 
 A dedicated mapper unit per entity holds **pure** procedures with the prescribed naming:
 
@@ -170,7 +170,7 @@ A dedicated mapper unit per entity holds **pure** procedures with the prescribed
 
 This makes the mappers the cheapest unit-test target in the project.
 
-### 6. Service Implementations (`app/<entity>/<entity>_*_impl.pas`)
+### 6. Service Implementations (`app/<entity>/implementation/<entity>_*_impl.pas`)
 
 Each service implementation:
 

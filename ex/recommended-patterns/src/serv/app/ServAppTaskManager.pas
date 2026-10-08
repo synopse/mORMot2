@@ -5,9 +5,10 @@ unit ServAppTaskManager;
 
   This is the ONE place that names concrete infrastructure classes
   (TTaskRepositoryOrm / TTagRepositoryOrm) and wires them to the CQRS services.
-  The app/ services depend only on the dom/ interfaces; swapping a backend is an
-  infra/ + this-unit change and nothing else. Keeping it under serv/app/ makes
-  the persistence boundary visible exactly as the suggested layout prescribes.
+  The app/ services depend only on the dom/ repository ports and their own
+  app/*/interface contract; swapping a backend is an infra/ + this-unit change
+  and nothing else. Keeping it under serv/app/ makes the persistence boundary
+  visible exactly as the suggested layout prescribes.
 
   Topology (A.6.2, collapsed into a single executable):
    - Persistence = TRestServerDB owns SQLite + FTS5, stays OFF the network.
@@ -52,25 +53,25 @@ uses
   app_settings,
   // Task feature module
   task,                   // dom/tasks (TOrm aggregate)
-  task_dtos,              // app/tasks
-  task_mappers,           // app/tasks
+  task_dtos,              // app/tasks/interface
+  task_mappers,           // app/tasks/implementation
   task_repository,        // dom/tasks
   task_repository_orm,    // infra/tasks
-  task_query,             // dom/tasks
-  task_command,           // dom/tasks
-  task_query_impl,        // app/tasks
-  task_command_impl,      // app/tasks
+  task_query,             // app/tasks/interface
+  task_command,           // app/tasks/interface
+  task_query_impl,        // app/tasks/implementation
+  task_command_impl,      // app/tasks/implementation
   task_tests,             // tests/tasks
   // Tag feature module
   tag,                    // dom/tags (TOrm aggregate)
-  tag_dtos,               // app/tags
-  tag_mappers,            // app/tags
+  tag_dtos,               // app/tags/interface
+  tag_mappers,            // app/tags/implementation
   tag_repository,         // dom/tags
   tag_repository_orm,     // infra/tags
-  tag_query,              // dom/tags
-  tag_command,            // dom/tags
-  tag_query_impl,         // app/tags
-  tag_command_impl,       // app/tags
+  tag_query,              // app/tags/interface
+  tag_command,            // app/tags/interface
+  tag_query_impl,         // app/tags/implementation
+  tag_command_impl,       // app/tags/implementation
   tag_tests;              // tests/tags
 
 type

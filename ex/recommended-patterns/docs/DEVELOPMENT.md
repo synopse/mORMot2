@@ -7,9 +7,10 @@ See [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md) for the full layout. The `§…
 
 ```
 src/
-├── dom/<entity>/     # TOrm aggregate (<entity>.pas) + I<Entity>Repository, I<Entity>Query, I<Entity>Command
-├── infra/<entity>/   # T<Entity>RepositoryOrm (+ FTS5 schema, migration)
-├── app/<entity>/     # DTOs, mappers, T<Entity>QueryService, T<Entity>CommandService
+├── dom/<entity>/                  # TOrm aggregate (<entity>.pas) + I<Entity>Repository
+├── infra/<entity>/                # T<Entity>RepositoryOrm (+ FTS5 schema, migration)
+├── app/<entity>/interface/        # I<Entity>Query, I<Entity>Command + DTOs (shared by server and clients)
+├── app/<entity>/implementation/   # mappers, T<Entity>QueryService, T<Entity>CommandService (server side)
 ├── serv/app/ServAppTaskManager.pas     # Server composition root (RunTaskManagerDaemon)
 ├── task_manager.pas                    # Thin server entry point (calls RunTaskManagerDaemon)
 ├── cli_client.pas                      # Thin CLI consumer (selects backend via -dLOCAL_MODE)
@@ -19,7 +20,7 @@ tests/<entity>/       # TSynTestCase per entity
 prj/                  # Per-toolchain build scripts (fpc/) and IDE project files (delphi/, lazarus/)
 ```
 
-The hard rule: `app/*` depends on `dom/*_repository.pas` (interface), **never** on `infra/*_repository_orm.pas` (implementation). The composition root is the only place where the concrete `T<Entity>RepositoryOrm` class is named — it constructs it and seeds it into the dispatcher's resolver via `Dispatcher.ServiceContainer.InjectInstance([repoImpl])` so service `Repo` properties resolve through `AutoResolve`.
+The hard rule: `app/*/implementation/*_impl.pas` depends on `dom/*_repository.pas` (interface), **never** on `infra/*_repository_orm.pas` (implementation). The composition root is the only place where the concrete `T<Entity>RepositoryOrm` class is named — it constructs it and seeds it into the dispatcher's resolver via `Dispatcher.ServiceContainer.InjectInstance([repoImpl])` so service `Repo` properties resolve through `AutoResolve`.
 
 ## Prerequisites
 
@@ -73,7 +74,7 @@ The hard rule: `app/*` depends on `dom/*_repository.pas` (interface), **never** 
 ### Key Compiler Flags (in prj/fpc/compile.sh)
 
 - `-Fl../../static/x86_64-linux`: Link static SQLite3 library
-- `-Fusrc -Fusrc/dom/{tasks,tags} -Fusrc/infra/{tasks,tags} -Fusrc/app/{tasks,tags} -Fusrc/serv/app -Futests/{tasks,tags}`: Unit search paths
+- `-Fusrc -Fusrc/dom/{tasks,tags} -Fusrc/infra/{tasks,tags} -Fusrc/app/{tasks,tags}/{interface,implementation} -Fusrc/serv/app -Futests/{tasks,tags}`: Unit search paths
 - `-Fu../../src/{core,orm,rest,soa,...}`: mORMot2 unit paths
 - `-FUbin/units`: Output compiled units
 - `-Mobjfpc`: Object Pascal mode
@@ -111,7 +112,7 @@ The server will:
 
 ### 1. Edit Source Code
 
-Feature files are split across `src/dom/<entity>/`, `src/infra/<entity>/`, `src/app/<entity>/`, with tests in `tests/<entity>/`. See PROJECT_STRUCTURE.md for what lives where.
+Feature files are split across `src/dom/<entity>/`, `src/infra/<entity>/`, `src/app/<entity>/{interface,implementation}/`, with tests in `tests/<entity>/`. See PROJECT_STRUCTURE.md for what lives where.
 
 ### 2. Compile
 
@@ -150,12 +151,13 @@ Open `http://localhost:8080/static/index.html` in your browser.
 
 ## Adding a New Feature (CQRS Pattern)
 
-### 1. Create the four folders
+### 1. Create the five folders
 
 ```
 src/dom/myfeature/
 src/infra/myfeature/
-src/app/myfeature/
+src/app/myfeature/interface/
+src/app/myfeature/implementation/
 tests/myfeature/
 ```
 
@@ -234,10 +236,10 @@ type
 
 All SQL / FTS5 / `IRestOrm` knowledge lives here. The app layer never sees it.
 
-### 5. Define DTOs (app)
+### 5. Define DTOs (app/interface)
 
 ```pascal
-// src/app/myfeature/my_dtos.pas
+// src/app/myfeature/interface/my_dtos.pas
 type
   TMyViewDTO = packed record
     ID: TID;
@@ -259,10 +261,10 @@ initialization
 
 **Important**: `Rtti.RegisterFromText` is required on FPC 3.2.2 because the compiler does not emit field-level RTTI for records. Records must be `packed` to avoid alignment padding mismatches.
 
-### 6. Write mappers — pure procedures (app)
+### 6. Write mappers — pure procedures (app/implementation)
 
 ```pascal
-// src/app/myfeature/my_mappers.pas
+// src/app/myfeature/implementation/my_mappers.pas
 function OrmToMyViewDTO(aEntity: TMyEntity): TMyViewDTO;
 function CreateMyDTOToOrm(const aDto: TCreateMyDTO; aEntity: TMyEntity;
   out aError: RawUtf8): boolean;
@@ -272,10 +274,12 @@ function ApplyUpdateMyDTO(const aDto: TUpdateMyDTO; aEntity: TMyEntity;
 
 Rules: no DB lookups, no `IRestOrm` calls, no `Repo.` calls. Create and update are different functions, never one. Reads are mechanical; writes carry the real logic (defaults, normalization, validation).
 
-### 7. Declare CQRS interfaces (dom)
+### 7. Declare CQRS interfaces (app/interface)
+
+They take and return the DTOs, so they belong to the application layer's public contract, not to `dom/` (which would then depend on `app/`).
 
 ```pascal
-// src/dom/myfeature/my_query.pas
+// src/app/myfeature/interface/my_query.pas
 type
   IMyQuery = interface(IInvokable)
     ['{NEW-GUID-HERE}']
@@ -283,7 +287,7 @@ type
     function ListAll: TMyViewDTODynArray;
   end;
 
-// src/dom/myfeature/my_command.pas
+// src/app/myfeature/interface/my_command.pas
 type
   IMyCommand = interface(IInvokable)
     ['{NEW-GUID-HERE}']
@@ -292,10 +296,10 @@ type
   end;
 ```
 
-### 8. Implement the services (app)
+### 8. Implement the services (app/implementation)
 
 ```pascal
-// src/app/myfeature/my_command_impl.pas
+// src/app/myfeature/implementation/my_command_impl.pas
 type
   // sicShared: fRepo is filled by AutoResolve and immutable after construction.
   TMyCommandService = class(TInjectableObjectRest, IMyCommand)
@@ -357,16 +361,28 @@ Dispatcher.ServiceDefine(TMyCommandService, [IMyCommand], sicShared);
 
 No manual cleanup needed: `InjectInstance` ref-counts the repos, and `Dispatcher.Free` releases them — ahead of `Persistence.Free` (whose `IRestOrm` they hold), so the references drop in the right order.
 
-### 11. Update compile scripts
+### 11. Update the build files
 
-Add the new folders to `prj/fpc/compile.sh` and `prj/fpc/compile_cli.sh`:
+**FPC**: add the new folders to `prj/fpc/compile.sh` and `prj/fpc/compile_cli.sh`, and the same paths to their Windows twins `compile.bat` / `compile_cli.bat` (`^` line continuations). `-Futests/myfeature` goes in `compile.*` only — the CLI does not link the tests:
 
 ```
 -Fusrc/dom/myfeature \
 -Fusrc/infra/myfeature \
--Fusrc/app/myfeature \
+-Fusrc/app/myfeature/interface \
+-Fusrc/app/myfeature/implementation \
 -Futests/myfeature \
 ```
+
+**Delphi / Lazarus**: the `.lpi` projects use `prj/delphi/*.dpr` as their main source, so both toolchains resolve project units through the `.dpr` `in` clauses — the `.lpi` files need no change. Add each new unit to `prj/delphi/task_manager.dpr`:
+
+```pascal
+myfeature in '..\..\src\dom\myfeature\myfeature.pas',
+myfeature_repository in '..\..\src\dom\myfeature\myfeature_repository.pas',
+myfeature_query in '..\..\src\app\myfeature\interface\myfeature_query.pas',
+// ... and so on for the infra/, implementation/ and tests/ units
+```
+
+In `prj/delphi/cli_client.dpr`, list the `interface/` units (and any `dom/` unit they use) unconditionally, and the remaining units inside the existing `{$ifdef LOCAL_MODE}` block. Then mirror them as `<DCCReference Include="…"/>` items, which msbuild and the Delphi IDE read: every new unit in `task_manager.dproj`, only the unconditional ones in `cli_client.dproj`. The new units also go in the `uses` clause of `AppTaskManagerClientLocal.pas` (step 10).
 
 ## Debugging
 

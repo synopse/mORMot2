@@ -481,7 +481,7 @@ Two gotchas are worth knowing before you rely on it:
 
 ### B.1. Storage behind an interface
 
-Every service exposes an `IXxxRepository` (or a CQRS pair, see [B.4](#b4-cqrs-readwrite-split)) in the domain layer. Multi-tenancy: per-tenant SQLite when data is tenant-scoped; a single shared database otherwise.
+Every service keeps its storage behind an `IXxxRepository` in the domain layer; the service's CQRS pair ([B.4](#b4-cqrs-readwrite-split)) belongs to the application layer — see [B.6.1](#b61-suggested-folder-structure). Multi-tenancy: per-tenant SQLite when data is tenant-scoped; a single shared database otherwise.
 
 ### B.2. ORM base class and casing
 
@@ -512,7 +512,7 @@ Every service exposes an `IXxxRepository` (or a CQRS pair, see [B.4](#b4-cqrs-re
 
 ### B.6. Cross-cutting standards
 
-- **Folder layout.** Keep the persistence boundary visible: lowercase `dom/`, `infra/`, `app/`, `tests/`, one subfolder per entity, with the daemon and client units in `serv/` and at the source root. Don't merge domain and infrastructure into one folder. See [B.6.1](#b61-suggested-folder-structure) for the full tree.
+- **Folder layout.** Keep the persistence boundary visible: lowercase `dom/`, `infra/`, `app/`, `tests/`, one subfolder per entity, with the daemon and client units in `serv/` and at the source root. Split each `app/<entity>/` into `interface/` (the CQRS interfaces and DTOs clients compile against) and `implementation/` (server-side services and mappers). Don't merge domain and infrastructure into one folder. See [B.6.1](#b61-suggested-folder-structure) for the full tree.
 - **Result handling.** A shared base enum (e.g. `TServiceResult`: success / invalid-request / not-found / denied / db-error) plus optional per-service extensions — stops the proliferation of near-identical result enums.
 - **Auth on the consumer side.** Extract a single guard helper so every service does one `Guard.Require(Token, …)` call instead of a repeated multi-step token ritual.
 - **Scope every read to the caller.** The most common and most damaging public-service mistake is publishing too much: letting a logged-in user retrieve *all* rows when they should see only their own. Filter every query to the session's identity at the service boundary. No server-topology choice (see [A.6](#a6-minimum-recommended-server-configuration)) substitutes for this.
@@ -524,22 +524,24 @@ The layout below realises the layering of [B.1](#b1-storage-behind-an-interface)
 
 ```text
 src/
-├── dom/                          # domain: the TOrm entity (B.3) + the port interfaces
+├── dom/                          # domain: the TOrm entity (B.3) + its repository port
 │   └── <entity>/                 #   uses mormot.orm.core for the TOrm base type — never IRestOrm
 │       ├── <entity>.pas               # TOrm aggregate = the domain object (B.3)
-│       ├── <entity>_repository.pas    # I<Entity>Repository — persistence port (B.1)
-│       ├── <entity>_query.pas         # I<Entity>Query   — CQRS read  (IInvokable) (B.4)
-│       └── <entity>_command.pas       # I<Entity>Command — CQRS write (IInvokable)
+│       └── <entity>_repository.pas    # I<Entity>Repository — persistence port (B.1)
 ├── infra/                        # infrastructure: IRestOrm runtime, SQL, FTS5, migration
 │   └── <entity>/
 │       └── <entity>_repository_orm.pas # T<Entity>RepositoryOrm implements I<Entity>Repository;
 │                                       #   owns schema migration and all SQL
-├── app/                          # application layer: DTOs, mappers, service impls (B.8)
+├── app/                          # application layer: CQRS contract, DTOs, mappers, service impls (B.8)
 │   └── <entity>/
-│       ├── <entity>_dtos.pas           # packed-record DTO family (Rtti.RegisterFromText on FPC)
-│       ├── <entity>_mappers.pas        # pure OrmTo* / *ToOrm / Apply* — cheapest test target
-│       ├── <entity>_query_impl.pas     # T<Entity>QueryService  (TInjectableObjectRest, sicShared)
-│       └── <entity>_command_impl.pas   # T<Entity>CommandService
+│       ├── interface/                 # public contract — shared by the server and its clients
+│       │   ├── <entity>_query.pas          # I<Entity>Query   — CQRS read  (IInvokable) (B.4)
+│       │   ├── <entity>_command.pas        # I<Entity>Command — CQRS write (IInvokable)
+│       │   └── <entity>_dtos.pas           # packed-record DTO family (Rtti.RegisterFromText on FPC)
+│       └── implementation/            # server side only (and the A.6.1 in-process stack)
+│           ├── <entity>_mappers.pas        # pure OrmTo* / *ToOrm / Apply* — cheapest test target
+│           ├── <entity>_query_impl.pas     # T<Entity>QueryService  (TInjectableObjectRest, sicShared)
+│           └── <entity>_command_impl.pas   # T<Entity>CommandService
 ├── serv/app/
 │   ├── ServApp<Name>.pas         # the daemon / composition root: build the TOrmModel, wire
 │   │                             #   repositories, ServiceDefine, start TRestHttpServer (B.7)
@@ -554,31 +556,33 @@ tests/
 
 **The `TOrm` lives in `dom/`, on purpose.** Because the `TOrm` doubles as the domain object ([B.3](#b3-two-types-per-entity-not-three)), it belongs with the domain, not with the persistence machinery. The cost is precise and acceptable: `dom/` depends on the ORM **base type** (`mormot.orm.core`) but never on the ORM **runtime** — no `IRestOrm`, no REST server, no SQL. Those stay in `infra/`. This keeps the dependency direction clean: the port interface in `dom/` can name the entity it returns without reaching into `infra/`, and `infra/` depends on `dom/`, never the reverse. (Some older code merges the two into a single `kdom/`-style folder — that is the case this split is meant to avoid.)
 
+**The CQRS interfaces live in `app/<entity>/interface/`, not in `dom/`.** `I<Entity>Query` / `I<Entity>Command` take and return the DTOs, so declaring them in `dom/` would make the domain depend on the application layer — the inverted direction this layout exists to prevent. They are the application layer's public contract, the use-case boundary clients call (a *driving* port), whereas `I<Entity>Repository` is a port the domain needs (a *driven* port) and stays in `dom/`. Consumer code compiles against `interface/` (plus the `dom/` types the DTOs embed), never against `implementation/`, which is linked only by the server and the [A.6.1](#a61-trusted--local-deployment) in-process stack.
+
 | Pattern | Layer | Role |
 |---|---|---|
 | `<entity>.pas` | dom | `TOrm` aggregate — the domain object ([B.3](#b3-two-types-per-entity-not-three)) |
 | `<entity>_repository.pas` | dom | `I<Entity>Repository` persistence port |
-| `<entity>_query.pas` | dom | `I<Entity>Query` — CQRS read interface |
-| `<entity>_command.pas` | dom | `I<Entity>Command` — CQRS write interface |
 | `<entity>_repository_orm.pas` | infra | `IRestOrm`-backed repository + schema migration + SQL |
-| `<entity>_dtos.pas` | app | `packed record` DTO family |
-| `<entity>_mappers.pas` | app | pure `OrmTo*` / `*ToOrm` / `Apply*` |
-| `<entity>_query_impl.pas` | app | `T<Entity>QueryService` |
-| `<entity>_command_impl.pas` | app | `T<Entity>CommandService` |
+| `<entity>_query.pas` | app/interface | `I<Entity>Query` — CQRS read interface |
+| `<entity>_command.pas` | app/interface | `I<Entity>Command` — CQRS write interface |
+| `<entity>_dtos.pas` | app/interface | `packed record` DTO family |
+| `<entity>_mappers.pas` | app/implementation | pure `OrmTo*` / `*ToOrm` / `Apply*` |
+| `<entity>_query_impl.pas` | app/implementation | `T<Entity>QueryService` |
+| `<entity>_command_impl.pas` | app/implementation | `T<Entity>CommandService` |
 | `ServApp<Name>.pas` | serv | daemon / composition root |
 | `<name>serverstart.pas` | serv | entry point — runs the daemon as a `TSynDaemon` |
 | `App<Name>ClientLocal.pas` / `…Remote.pas` | (root) | topology selection ([A.6](#a6-minimum-recommended-server-configuration)) |
 | `<entity>_tests.pas` | tests | one `TSynTestCase` per entity |
 
-**The one rule the layout exists to enforce:** `app/*_impl.pas` depends on the `dom/` interfaces, **never** on `infra/*_repository_orm.pas`. `serv/` is the only place that names the concrete `T<Entity>RepositoryOrm` class — it constructs each repository, registers it for injection, and hands the resolver to the services ([B.5](#b5-soa-composition-root-and-dependency-injection), [B.9](#b9-the-two-server-approach-and-its-ambiguous-orm)). Swapping SQLite for another backend, or a stub for tests, is an `infra/` change that nothing in `app/` or `dom/` sees.
+**The one rule the layout exists to enforce:** `app/<entity>/implementation/*_impl.pas` depends on the `dom/` repository ports and its own `interface/` contract, **never** on `infra/*_repository_orm.pas`. `serv/` is the only place that names the concrete `T<Entity>RepositoryOrm` class — it constructs each repository, registers it for injection, and hands the resolver to the services ([B.5](#b5-soa-composition-root-and-dependency-injection), [B.9](#b9-the-two-server-approach-and-its-ambiguous-orm)). Swapping SQLite for another backend, or a stub for tests, is an `infra/` change that nothing in `app/` or `dom/` sees.
 
 ### B.7. Default starting point for a new service
 
 The following list is a possible starting point. It is not a pattern to always follow:
 
 1. `TOrm` per entity (in `dom/`), doubling as the domain object — see [B.6.1](#b61-suggested-folder-structure).
-2. A family of (possibly `packed record`) DTOs (in `app/<Entity>/`) — register each with `Rtti.RegisterFromText` in the unit's `initialization` on FPC (required through 3.2.2); on Delphi only for the [A.7](#a7-copying-between-objects-records-and-dtos) exceptions (field aliases, custom serialization, or a Delphi RTTI gap).
-3. Possibly pairing `IXxxCommand` + `IXxxQuery` interfaces descending from `IInvokable`.
+2. A family of (possibly `packed record`) DTOs (in `app/<entity>/interface/`) — register each with `Rtti.RegisterFromText` in the unit's `initialization` on FPC (required through 3.2.2); on Delphi only for the [A.7](#a7-copying-between-objects-records-and-dtos) exceptions (field aliases, custom serialization, or a Delphi RTTI gap).
+3. Possibly pairing `IXxxCommand` + `IXxxQuery` interfaces descending from `IInvokable` (in `app/<entity>/interface/`).
 4. Service implementations as `TInjectableObjectRest` subclasses, `IRestOrm` injected via published property.
 5. `sicShared` instance mode unless profiling says otherwise.
 6. Standard daemon: load settings, build the `TOrmModel`, create the persistence server, wire repositories, register services, start `TRestHttpServer`.
