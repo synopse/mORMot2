@@ -9406,10 +9406,8 @@ begin
       fState := wsClosedByGuard;
       fCloseStatus := WEB_SOCKET_ENDPOINT_UNAVAILABLE_CLOSE_STATUS;
       fBuffer := 'Closed after ping timeout';
-      {$ifdef USE_THREADWINIOCP}
-      IocpPostQueuedStatus(
-        fProtocol.fServer.fThreadPoolServer.FRequestQueue, 0, nil, @fOverlapped);
-      {$endif USE_THREADWINIOCP}
+      IocpPostQueuedStatus(fProtocol.fServer.fThreadPoolServer.FRequestQueue,
+        0, nil, @fOverlapped);
     end
     else
       Ping;
@@ -9437,9 +9435,8 @@ begin
   begin
     if Assigned(fLastActionContext) then
     begin
-      EWebSocketApi.RaiseOnError(hCompleteAction,
-        WebSocketApi.CompleteAction(fWSHandle, fLastActionContext,
-        fOverlapped.InternalHigh));
+      WebSocketApi.CompleteAction(fWSHandle,
+        fLastActionContext, fOverlapped.InternalHigh);
       fLastActionContext := nil;
     end
     else
@@ -9452,23 +9449,16 @@ begin
       [ord(fState)]);
 end;
 
-const
-  C_WEB_SOCKET_BUFFER_SIZE = 2;
-
-type
-  TWebSocketBufferDataArr = array[0..C_WEB_SOCKET_BUFFER_SIZE - 1] of WEB_SOCKET_BUFFER_DATA;
-
 function THttpApiWebSocketConnection.ProcessActions(
   ActionQueue: WEB_SOCKET_ACTION_QUEUE): boolean;
 var
-  buf: TWebSocketBufferDataArr;
+  buf: array[0 .. 1] of WEB_SOCKET_BUFFER_DATA;
   bufcount: ULONG;
   buftyp: WEB_SOCKET_BUFFER_TYPE;
   action: WEB_SOCKET_ACTION;
   appctxt: pointer;
   actctxt: pointer;
   i: PtrInt;
-  err: HRESULT;
 
   procedure CloseConnection;
   begin
@@ -9478,8 +9468,7 @@ var
     finally
       fProtocol.fSafe.UnLock;
     end;
-    EWebSocketApi.RaiseOnError(hCompleteAction,
-      WebSocketApi.CompleteAction(fWSHandle, actctxt, 0));
+    WebSocketApi.CompleteAction(fWSHandle, actctxt, 0);
   end;
 
 begin
@@ -9488,7 +9477,7 @@ begin
     bufcount := Length(buf);
     EWebSocketApi.RaiseOnError(hGetAction,
       WebSocketApi.GetAction(fWSHandle, ActionQueue, @buf[0], bufcount,
-      action, buftyp, appctxt, actctxt));
+        action, buftyp, appctxt, actctxt));
     case action of
       WEB_SOCKET_NO_ACTION:
         ;
@@ -9497,10 +9486,7 @@ begin
           for i := 0 to bufcount - 1 do
             WriteData(buf[i]);
           if fWSHandle <> nil then
-          begin
-            err := WebSocketApi.CompleteAction(fWSHandle, actctxt, 0);
-            EWebSocketApi.RaiseOnError(hCompleteAction, err);
-          end;
+            WebSocketApi.CompleteAction(fWSHandle, actctxt, 0);
           result := false;
           exit;
         end;
@@ -9538,31 +9524,27 @@ begin
           else if buftyp = WEB_SOCKET_PING_PONG_BUFFER_TYPE then
           begin
             // todo: may be answer to client's ping
-            EWebSocketApi.RaiseOnError(hCompleteAction,
-              WebSocketApi.CompleteAction(fWSHandle, actctxt, 0));
+            WebSocketApi.CompleteAction(fWSHandle, actctxt, 0);
             exit;
           end
           else if buftyp = WEB_SOCKET_UNSOLICITED_PONG_BUFFER_TYPE then
           begin
             // todo: may be handle this situation
-            EWebSocketApi.RaiseOnError(hCompleteAction,
-              WebSocketApi.CompleteAction(fWSHandle, actctxt, 0));
+            WebSocketApi.CompleteAction(fWSHandle, actctxt, 0);
             exit;
           end
           else
           begin
             DoOnMessage(buftyp, buf[0].pbBuffer, buf[0].ulBufferLength);
-            EWebSocketApi.RaiseOnError(hCompleteAction,
-              WebSocketApi.CompleteAction(fWSHandle, actctxt, 0));
+            WebSocketApi.CompleteAction(fWSHandle, actctxt, 0);
             exit;
           end;
         end
     else
       raise EWebSocketApi.CreateFmt('Invalid WebSocket action %d', [byte(action)]);
     end;
-    err := WebSocketApi.CompleteAction(fWSHandle, actctxt, 0);
     if actctxt <> nil then
-      EWebSocketApi.RaiseOnError(hCompleteAction, err);
+      WebSocketApi.CompleteAction(fWSHandle, actctxt, 0);
   until {%H-}action = WEB_SOCKET_NO_ACTION;
 end;
 
@@ -9723,10 +9705,9 @@ procedure THttpApiWebSocketServer.DoAfterResponse(Ctxt: THttpServerRequest;
 var
   ctx: THttpApiServerRequest absolute Ctxt;
 begin
-  {$ifdef USE_THREADWINIOCP}
-  if Assigned(ctx.ws) then
+  if (StatusCode = HTTP_SWITCHINGPROTOCOLS) and
+     Assigned(ctx.ws) then
     IocpPostQueuedStatus(fThreadPoolServer.FRequestQueue, 0, nil, @ctx.ws.fOverlapped);
-  {$endif USE_THREADWINIOCP}
   inherited DoAfterResponse(Ctxt, Referer, StatusCode, Elapsed, Received, Sent);
 end;
 
@@ -9781,9 +9762,7 @@ end;
 
 procedure THttpApiWebSocketServer.SendServiceMessage;
 begin
-  {$ifdef USE_THREADWINIOCP}
   IocpPostQueuedStatus(fThreadPoolServer.FRequestQueue, 0, nil, @fServiceOverlaped);
-  {$endif USE_THREADWINIOCP}
 end;
 
 
@@ -9833,8 +9812,7 @@ begin
       conn.BeforeRead;
     until not conn.ProcessActions(WEB_SOCKET_RECEIVE_ACTION_QUEUE);
   if conn.fState in [wsClosedByGuard] then
-    EWebSocketApi.RaiseOnError(hCompleteAction,
-      WebSocketApi.CompleteAction(conn.fWSHandle, conn.fLastActionContext, 0));
+    WebSocketApi.CompleteAction(conn.fWSHandle, conn.fLastActionContext, 0);
   if conn.fState in
        [wsClosedByClient, wsClosedByServer, wsClosedByGuard, wsClosedByShutdown] then
   begin
@@ -9858,11 +9836,7 @@ begin
   fServer := Server;
   fOnThreadStart := OnThreadStart;
   fOnThreadTerminate := OnThreadTerminate;
-  {$ifdef USE_THREADWINIOCP}
   inherited Create(NumberOfThreads, Server.fReqQueue);
-  {$else}
-  inherited Create(NumberOfThreads, {withqueue=}true);
-  {$endif USE_THREADWINIOCP}
 end;
 
 

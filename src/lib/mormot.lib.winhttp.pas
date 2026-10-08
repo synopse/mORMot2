@@ -1731,8 +1731,8 @@ type
       PWEB_SOCKET_HTTP_HEADER; ulRequestHeaderCount: ULONG; out pResponseHeaders:
       PWEB_SOCKET_HTTP_HEADER; out pulResponseHeaderCount: ULONG): HRESULT; stdcall;
     /// completes an action started by WebSocketGetAction
-    CompleteAction: function(hWebSocket: WEB_SOCKET_HANDLE;
-      pvActionContext: pointer; ulBytesTransferred: ULONG): HRESULT; stdcall;
+    CompleteAction: procedure(hWebSocket: WEB_SOCKET_HANDLE;
+      pvActionContext: pointer; ulBytesTransferred: ULONG); stdcall;
     /// creates a client-side WebSocket session handle
     CreateClientHandle: function(const pProperties: PWEB_SOCKET_PROPERTY;
       ulPropertyCount: ULONG; out phWebSocket: WEB_SOCKET_HANDLE): HRESULT; stdcall;
