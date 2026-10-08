@@ -9353,7 +9353,6 @@ end;
 function THttpApiWebSocketConnection.WriteData(
   const WebsocketBufferData; out Written: cardinal): boolean;
 var
-  err: HRESULT;
   inmem: HTTP_DATA_CHUNK_INMEMORY;
   buf: WEB_SOCKET_BUFFER_DATA absolute WebsocketBufferData;
 begin
@@ -9364,13 +9363,12 @@ begin
   inmem.DataChunkType := hctFromMemory;
   inmem.pBuffer := buf.pbBuffer;
   inmem.BufferLength := buf.ulBufferLength;
-  err := Http.SendResponseEntityBody(fProtocol.fServer.fReqQueue,
-    fOpaqueHTTPRequestId, HTTP_SEND_RESPONSE_FLAG_BUFFER_DATA or
-    HTTP_SEND_RESPONSE_FLAG_MORE_DATA, 1, @inmem, Written, nil, nil, nil);
-  if err <> NO_ERROR then
-    Written := 0
+  if Http.SendResponseEntityBody(fProtocol.fServer.fReqQueue, fOpaqueHTTPRequestId,
+       HTTP_SEND_RESPONSE_FLAG_BUFFER_DATA or HTTP_SEND_RESPONSE_FLAG_MORE_DATA,
+       1, @inmem, Written, nil, nil, nil) = NO_ERROR then
+    result := Written = buf.ulBufferLength
   else
-    result := Written = buf.ulBufferLength;
+    Written := 0;
 end;
 
 procedure THttpApiWebSocketConnection.CheckIsActive(Tix64: Int64);
@@ -9463,9 +9461,9 @@ begin
           total := 0;
           for i := 0 to bufcount - 1 do
           begin
-            if WriteData(buf[i], written) then
+            if not WriteData(buf[i], written) then
             begin
-              inc(total, written); // partial count would cancel this send action
+              inc(total, written); // partial count would cancel this action
               WebSocketApi.CompleteAction(fWSHandle, actctxt, total);
               fProtocol.BeginClose(@self, wsClosedByServer);
               exit;
@@ -9511,6 +9509,8 @@ begin
             FastSetRawByteString(fBuffer, buf[0].pbBuffer, buf[0].ulBufferLength);
             fCloseStatus := buf[0].Reserved1;
             CloseConnection;
+            if fState = wsClosedByClient then
+              Close(fCloseStatus, pointer(fBuffer), length(fBuffer));
             result := false;
             exit;
           end
