@@ -4897,6 +4897,9 @@ type
   end;
   POSRWLightLock = ^TOSRWLightLock;
 
+  /// TLockedListOne.sequence number identifier
+  TLockedListID = PtrUInt;
+
   /// points to one data entry in TLockedList
   PLockedListOne = ^TLockedListOne;
   /// abstract parent of one data entry in TLockedList, storing two PLockedListOne
@@ -4905,7 +4908,7 @@ type
   // 65535, to avoid ABA problems when instances are recycled
   TLockedListOne = record
     next, prev: pointer;
-    sequence: PtrUInt;
+    sequence: TLockedListID;
   end;
   /// optional callback event to finalize one TLockedListOne instance
   TOnLockedListOne = procedure(one: PLockedListOne) of object;
@@ -4926,7 +4929,7 @@ type
     Size: integer;
   private
     fHead, fBin: pointer;
-    fSequence: PtrUInt;
+    fSequence: TLockedListID;
     fOnFree: TOnLockedListOne;
   public
     /// initialize the storage for an inherited TLockedListOne size
@@ -4944,6 +4947,8 @@ type
     /// release all to-be-recycled items available in the internal bin
     // - returns how many items have been released from the internal collector
     function EmptyBin: integer;
+    /// search the list for a given TLockedListOne.sequence identifier
+    function Find(ID: TLockedListID): pointer;
     /// raw access to the stored items as PLockedListOne dual-linked list
     property Head: pointer
       read fHead;
@@ -12254,6 +12259,25 @@ begin
     Safe.UnLock;
   end;
   result := true;
+end;
+
+function TLockedList.Find(ID: TLockedListID): pointer;
+var
+  o: PLockedListOne;
+begin
+  result := nil;
+  if ID = 0 then
+    exit;
+  Safe.Lock;
+  try
+    o := fHead;
+    while (o <> nil) and
+          (o.sequence <> ID) do
+      o := o.next;
+  finally
+    Safe.UnLock;
+  end;
+  result := o;
 end;
 
 

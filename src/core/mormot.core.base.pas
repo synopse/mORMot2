@@ -11450,7 +11450,7 @@ begin
   {$else}
   with PInt64Rec(int64)^ do
     if system.InterlockedIncrement(Lo) = 0 then
-      system.InterlockedIncrement(Hi); // collission is highly unprobable
+      LockedInc32(@Hi); // collission is highly unprobable
   {$endif FPC_64}
   ReadWriteBarrier;
 end;
@@ -11589,17 +11589,17 @@ end;
 
 function StrCntDecFree(var refcnt: TStrCnt): boolean;
 begin
-  // fallback to FPC RTL asm e.g. for ARM - no memory barrier mandatory
+  // follow declocked() FPC RTL semantic without additional memory barrier
   {$ifdef STRCNT32}
   result := system.InterLockedDecrement(refcnt) <= 0;
   {$else}
   result := system.InterLockedDecrement64(refcnt) <= 0;
   {$endif STRCNT32}
-end; // we don't check for ismultithread global
+end;
 
 function DACntDecFree(var refcnt: TDACnt): boolean;
 begin
-  // fallback to FPC RTL asm e.g. for ARM - no memory barrier mandatory
+  // follow declocked() FPC RTL semantic without additional memory barrier
   {$ifdef DACNT32}
   result := system.InterLockedDecrement(refcnt) <= 0;
   {$else}
