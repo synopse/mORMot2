@@ -3127,6 +3127,9 @@ function LookupToken(tok: THandle; out name, domain: RawUtf8;
 /// retrieve the 'domain\name' combined value of a given Token
 function LookupToken(tok: THandle; const server: RawUtf8 = ''): RawUtf8; overload;
 
+/// retrieve the 'domain\name' combined value of a given Token
+procedure LookupTokenVar(tok: THandle; const server: RawUtf8; var result: RawUtf8);
+
 /// retrieve the binary SID and type of a given account by name
 // - use fully qualified account names (for example, domain_name\user_name)
 function LookupName(const system, account: RawUtf8;
@@ -8999,6 +9002,11 @@ begin
 end;
 
 function LookupToken(tok: THandle; const server: RawUtf8): RawUtf8;
+begin
+  LookupTokenVar(tok, server, result);
+end;
+
+procedure LookupTokenVar(tok: THandle; const server: RawUtf8; var result: RawUtf8);
 var
   name, domain: RawUtf8;
 begin

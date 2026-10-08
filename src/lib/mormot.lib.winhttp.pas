@@ -510,9 +510,7 @@ type
     // map the HTTP API 2.0 extended information
     pResponseInfo: PHTTP_RESPONSE_INFO;
     // will set both StatusCode and Reason
-    // - OutStatus is a temporary variable which will be field with the
-    // corresponding text
-    procedure SetStatus(code: integer; var OutStatus: RawUtf8);
+    function SetStatus(code: integer): PRawUtf8;
     // will set the content of the reponse, and ContentType header
     procedure SetContent(var DataChunk: HTTP_DATA_CHUNK_INMEMORY; const Content:
       RawByteString; const ContentType: RawUtf8 = 'text/html');
@@ -956,6 +954,25 @@ const
     'Translate',
     'User-Agent');
 
+  VERB_TEXT: array[hvOPTIONS..pred(hvMaximum)] of RawUtf8 = (
+    'OPTIONS',
+    'GET',
+    'HEAD',
+    'POST',
+    'PUT',
+    'DELETE',
+    'TRACE',
+    'CONNECT',
+    'TRACK',
+    'MOVE',
+    'COPY',
+    'PROPFIND',
+    'PROPPATCH',
+    'MKCOL',
+    'LOCK',
+    'UNLOCK',
+    'SEARCH');
+
 type
   HTTP_SERVER_PROPERTY = (
     HttpServerAuthenticationProperty,
@@ -1235,9 +1252,9 @@ function HttpApiAuthorize(const aRoot, aPort: RawUtf8; Https: boolean;
   const aDomainName: RawUtf8; OnlyDelete: boolean = false): RawUtf8;
 
 /// low-level adjustement of the HTTP_REQUEST headers
-function RetrieveHeadersAndGetRemoteIPConnectionID(const Request: HTTP_REQUEST;
+procedure RetrieveHeadersAndGetRemoteIPConnectionID(const Request: HTTP_REQUEST;
   const RemoteIPHeadUp, ConnectionIDHeadUp: RawUtf8; out RemoteIP: RawUtf8;
-  var ConnectionID: QWord): RawUtf8;
+  var ConnectionID: QWord; var Headers: RawUtf8);
 
 
 { ******************** winhttp.dll Windows API Definitions }
@@ -1914,9 +1931,9 @@ const
   REMOTEIP_HEADERLEN = 10;
   REMOTEIP_HEADER: string[REMOTEIP_HEADERLEN] = 'RemoteIP: ';
 
-function RetrieveHeadersAndGetRemoteIPConnectionID(const Request: HTTP_REQUEST;
+procedure RetrieveHeadersAndGetRemoteIPConnectionID(const Request: HTTP_REQUEST;
   const RemoteIPHeadUp, ConnectionIDHeadUp: RawUtf8; out RemoteIP: RawUtf8;
-  var ConnectionID: QWord): RawUtf8;
+  var ConnectionID: QWord; var Headers: RawUtf8);
 var
   i, L, Lip: integer;
   H: THttpApiHeader;
@@ -1980,7 +1997,7 @@ begin
       inc(P);
     end;
   // set headers content
-  D := FastSetString(result{%H-}, L);
+  D := FastSetString(Headers, L);
   for H := low(HTTP_KNOWNHEADERS) to high(HTTP_KNOWNHEADERS) do
     if Request.Headers.KnownHeaders[H].RawValueLength <> 0 then
     begin
@@ -2022,9 +2039,9 @@ begin
     PWord(D)^ := EOLW;
     inc(D, 2);
   end;
-  Lip := D - pointer(result);
+  Lip := D - pointer(Headers);
   if Lip <> L then // e.g. if external 'RemoteIP:' was filtered
-    FakeLength(result, Lip);
+    FakeLength(Headers, Lip);
 end;
 
 procedure HttpApiInitialize;
@@ -2154,12 +2171,12 @@ end;
 
 { HTTP_RESPONSE }
 
-procedure HTTP_RESPONSE.SetStatus(code: integer; var OutStatus: RawUtf8);
+function HTTP_RESPONSE.SetStatus(code: integer): PRawUtf8;
 begin
   StatusCode := code;
-  StatusCodeToReason(code, OutStatus);
-  ReasonLength := length(OutStatus);
-  pReason      := pointer(OutStatus);
+  result := StatusCodeToText(code); // directly return HTTP_REASON[] constant text
+  ReasonLength := length(result^);
+  pReason      := pointer(result^);
 end;
 
 procedure HTTP_RESPONSE.SetContent(var DataChunk: HTTP_DATA_CHUNK_INMEMORY;
