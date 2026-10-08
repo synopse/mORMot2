@@ -8684,7 +8684,8 @@ begin
                   if remain < chunk then
                     chunk := remain; // avoid buffer overflow
                 end
-                else if incontlenread > fMaximumAllowedContentLength then
+                else if (fMaximumAllowedContentLength > 0) and
+                        (incontlenread > fMaximumAllowedContentLength) then
                   err := HTTP_PAYLOADTOOLARGE
                 else if ctxt.fInContent = '' then // initial maybe-single chunk
                   FastSetRawByteString(ctxt.fInContent, bufread, bytesread)
