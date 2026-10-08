@@ -926,7 +926,7 @@ type
     fConnectionID: THttpServerConnectionID;                  // 64-bit
     fConnectionFlags: THttpServerRequestFlags;               // 8-bit
     fAuthenticationStatus: THttpServerRequestAuthentication; // 8-bit
-    fInternalFlags: set of (ifUrlParamPosSet);               // 8-bit
+    fInternalFlags: set of (ifUrlParamPosSet, ifRespSent);   // 8-bit
     fOutContentStreamOpt: THttpOutStreamOptions;             // 8-bit
     fRespStatus: integer;
     fConnectionThread: TThread;
