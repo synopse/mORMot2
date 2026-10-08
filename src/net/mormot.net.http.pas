@@ -123,6 +123,7 @@ type
     function CompressContent(const Accepted: THttpSocketCompressSet;
       const OutContentType: RawUtf8; var OutContent: RawByteString): PHttpSocketCompressRec;
     /// adjust HTTP body decompression according to the supplied 'CONTENT-ENCODING'
+    // - won't raise an exception but return nil on decompression error
     function UncompressContent(const ContentEncoding: RawUtf8;
       var Data: RawByteString): PHttpSocketCompressRec;
     /// search for a given compression function by name
@@ -3521,11 +3522,14 @@ function THttpSocketCompressList.UncompressContent(const ContentEncoding: RawUtf
 begin
   result := FoundCompress(pointer(Algo),
     pointer(ContentEncoding), length(ContentEncoding));
-  if result = nil then
-    exit;
-  result^.Func(Data, {compress=}false);
-  if Data = '' then
-      result := nil; // error during decompression
+  if result <> nil then
+    try
+      result^.Func(Data, {compress=}false);
+      if Data = '' then
+        result := nil; // error during decompression
+    except
+      result := nil;   // catch any exception here
+    end;
 end;
 
 procedure THttpSocketCompressList.DecodeAcceptEncoding(P: PUtf8Char;
