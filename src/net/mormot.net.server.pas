@@ -9376,20 +9376,29 @@ var
   elapsed, delay: Int64;
 begin
   if (@self = nil) or
+     (not (fState in [wsOpen, wsClosing])) or
      (fLastReceiveTickCount <= 0) or
      (fProtocol.fServer.fPingTimeout <= 0) then
     exit;
   elapsed := Tix64 - fLastReceiveTickCount;
   delay := fProtocol.fServer.PingTimeout * 1000;
-  if elapsed >= delay then
-    if elapsed > 2 * delay then
-    begin
-      fCloseStatus := WEB_SOCKET_ENDPOINT_UNAVAILABLE_CLOSE_STATUS;
-      fBuffer := 'Closed after ping timeout';
-      fProtocol.BeginClose(@self, wsClosedByGuard);
-    end
-    else
+  if elapsed > 2 * delay then
+  begin
+    fCloseStatus := WEB_SOCKET_ENDPOINT_UNAVAILABLE_CLOSE_STATUS;
+    fBuffer := 'Closed after ping timeout';
+    fProtocol.BeginClose(@self, wsClosedByGuard);
+  end
+  else if (elapsed >= delay) and
+          (fState = wsOpen) then
+    try
       Ping;
+    except
+      // A failed ping should close this connection,
+      // not terminate the whole guard thread.
+      fCloseStatus := WEB_SOCKET_ENDPOINT_UNAVAILABLE_CLOSE_STATUS;
+      fBuffer := 'Ping failed';
+      fProtocol.BeginClose(@self, wsClosedByGuard);
+    end;
 end;
 
 procedure THttpApiWebSocketConnection.Disconnect;
