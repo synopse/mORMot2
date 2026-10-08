@@ -2340,7 +2340,7 @@ type
     wsClosedByShutdown);
 
   /// Identify one THttpApiWebSocketConnection instance
-  THttpApiWebSocketConnectionID = PtrUInt;
+  THttpApiWebSocketConnectionID = TLockedListID;
 
   PHttpApiWebSocketConnection = ^THttpApiWebSocketConnection;
 
@@ -2413,8 +2413,6 @@ type
     property ID: THttpApiWebSocketConnectionID
       read fList.sequence;
   end;
-
-  PHttpApiWebSocketConnections = array of PHttpApiWebSocketConnection;
 
   /// Event handler on THttpApiWebSocketServerProtocol Accepted connection
   TOnHttpApiWebSocketServerAcceptEvent = function(Ctxt: THttpServerRequest;
@@ -8465,7 +8463,15 @@ begin
     if ifRespSent in fInternalFlags then // e.g. 202 already sent
       OutContentStreamDiscard            // we can release SetOutStream()
     else if not SendResponse then
+    begin
+      if ws <> nil then
+      try
+        (fServer as THttpApiWebSocketServer).FinishUpgrade(ws, false);
+      finally
+        ws := nil;
+      end;
       exit;
+    end;
     QueryPerformanceMicroSeconds(elapsed);
     dec(elapsed, started);
     fHost := srvhost; // may have been reset during Request()
@@ -8477,6 +8483,12 @@ begin
     // handle any exception raised during process
     on E: Exception do
     begin
+      if ws <> nil then
+      try
+        (fServer as THttpApiWebSocketServer).FinishUpgrade(ws, false);
+      finally
+        ws := nil;
+      end;
       OutContentStreamDiscard; // eventually release SetOutStream()
       if not (ifRespSent in fInternalFlags) then
         SendError(HTTP_SERVERERROR, 'Exception raised', false, E);
@@ -9350,16 +9362,14 @@ begin
   Written := 0;
   if fWSHandle = nil then
     exit;
-  Written := 0;
   inmem.DataChunkType := hctFromMemory;
   inmem.pBuffer := buf.pbBuffer;
   inmem.BufferLength := buf.ulBufferLength;
   err := Http.SendResponseEntityBody(fProtocol.fServer.fReqQueue,
     fOpaqueHTTPRequestId, HTTP_SEND_RESPONSE_FLAG_BUFFER_DATA or
     HTTP_SEND_RESPONSE_FLAG_MORE_DATA, 1, @inmem, Written, nil, nil, nil);
-  result := err = NO_ERROR;
-  if not result then
-    Disconnect;
+  result := (err = NO_ERROR) and
+            (Written = buf.ulBufferLength);
 end;
 
 procedure THttpApiWebSocketConnection.CheckIsActive(Tix64: Int64);
@@ -9451,10 +9461,17 @@ begin
           result := false;
           total := 0;
           for i := 0 to bufcount - 1 do
-            if WriteData(buf[i], written) then
-              inc(total, written)
-            else
+          begin
+            if not WriteData(buf[i], written) then
+            begin
+              // Report the bytes actually completed so far.
+              // A partial count cancels this WebSocket send action.
+              WebSocketApi.CompleteAction(fWSHandle, actctxt, total);
+              fProtocol.BeginClose(@self, wsClosedByServer);
               exit;
+            end;
+            inc(total, written);
+          end;
           WebSocketApi.CompleteAction(fWSHandle, actctxt, total);
           exit;
         end;
@@ -9462,16 +9479,24 @@ begin
         ;
       WEB_SOCKET_RECEIVE_FROM_NETWORK_ACTION:
         begin
-          for i := 0 to bufcount - 1 do
-            if ReadData(buf[i]) = -1 then
-            begin
-              fState := wsClosedByClient;
-              fBuffer := '';
-              fCloseStatus := WEB_SOCKET_ENDPOINT_UNAVAILABLE_CLOSE_STATUS;
-              CloseConnection;
-            end;
-          fLastActionContext := actctxt;
           result := false;
+          // One OVERLAPPED can track only one outstanding receive
+          if (bufcount <> 1) or
+             fReadPending then
+          begin
+            WebSocketApi.CompleteAction(fWSHandle, actctxt, 0);
+            fProtocol.BeginClose(@self, wsClosedByServer);
+            exit;
+          end;
+          fLastActionContext := actctxt;
+          if ReadData(buf[0]) < 0 then
+          begin
+            fLastActionContext := nil;
+            WebSocketApi.CompleteAction(fWSHandle, actctxt, 0);
+            fCloseStatus := WEB_SOCKET_ENDPOINT_UNAVAILABLE_CLOSE_STATUS;
+            fBuffer := '';
+            fProtocol.BeginClose(@self, wsClosedByClient);
+          end;
           exit;
         end;
       WEB_SOCKET_INDICATE_RECEIVE_COMPLETE_ACTION:
@@ -9665,6 +9690,8 @@ begin
   // add the connection for this protocol
   proto.fSafe.Lock;
   try
+    if fWsStopping then
+      exit;
     ctx.ws := proto.fConnections.New; // PHttpApiWebSocketConnection
     try
       ctx.ws.fUpgradePending := true;
@@ -9832,10 +9859,22 @@ begin
       wiReceive:
         begin
           conn.fReadPending := false;
-          status := conn.fReadIo.Overlapped.Internal; // is a NTSTATUS
+          status := cardinal(conn.fReadIo.Overlapped.Internal); // is NTSTATUS
           if (conn.fState in [wsOpen, wsClosing]) and
-             ((status and $80000000) <> 0) then     // NT_SUCCESS(status)
+             (((status and $80000000) <> 0) or
+              (conn.fReadIo.Overlapped.InternalHigh = 0)) then
+          begin
+            // Failed read or connection closed by HTTP.sys
+            // Complete the outstanding WebSocket receive action
+            // with zero bytes before initiating closure
+            if conn.fLastActionContext <> nil then
+            begin
+              WebSocketApi.CompleteAction(conn.fWSHandle, conn.fLastActionContext, 0);
+              conn.fLastActionContext := nil;
+            end;
+            conn.fCloseStatus := WEB_SOCKET_ENDPOINT_UNAVAILABLE_CLOSE_STATUS;
             proto.BeginClose(conn, wsClosedByClient);
+          end;
         end;
       wiWake:
         conn.fWakePending := false;
@@ -9848,7 +9887,8 @@ begin
         conn.fLastReceiveTickCount := mormot.core.os.GetTickCount64;
         conn.DoOnConnect;
       end;
-      if conn.fState in [wsOpen, wsClosing] then
+      if (conn.fState in [wsOpen, wsClosing]) and
+         not conn.fReadPending then
         repeat
           conn.BeforeRead;
         until not conn.ProcessActions(WEB_SOCKET_RECEIVE_ACTION_QUEUE);
