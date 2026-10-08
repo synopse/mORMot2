@@ -3067,13 +3067,16 @@ function InterlockedDecrement(var I: integer): integer; inline;
 {$endif ISDELPHI}
 
 /// redirect to FPC InterlockedIncrement() or Delphi AtomicIncrement() on non Intel CPU
-procedure LockedInc32(int32: PInteger); inline;
+// - with a full memory barrier, i.e. dedicated asm on FPC AARCH64
+procedure LockedInc32(int32: PInteger); {$ifndef FPC_CPUAARCH64} inline; {$endif}
 
 /// redirect to FPC InterlockedDecrement() or Delphi AtomicDecrement() on non Intel CPU
-procedure LockedDec32(int32: PInteger); inline;
+// - with a full memory barrier, i.e. dedicated asm on FPC AARCH64
+procedure LockedDec32(int32: PInteger); {$ifndef FPC_CPUAARCH64} inline; {$endif}
 
 /// redirect to FPC InterlockedIncrement64() or Delphi AtomicIncrement() on non Intel CPU
-procedure LockedInc64(int64: PInt64); inline;
+// - with a full memory barrier, i.e. dedicated asm on FPC AARCH64
+procedure LockedInc64(int64: PInt64); {$ifndef FPC_CPUAARCH64} inline; {$endif}
 
 {$endif ASMINTEL}
 
@@ -3083,35 +3086,43 @@ procedure LockedInc64(int64: PInt64); inline;
 // - used e.g. as thread-safe atomic operation for TLightLock/TRWLock
 // - Target should be aligned, which is the case when defined as a class field
 function LockedExc(var Target: PtrUInt; NewValue, Comperand: PtrUInt): boolean;
-  {$ifndef ASMINTEL} inline; {$endif}
+  {$ifndef ASMINTEL} {$ifndef FPC_CPUAARCH64} inline; {$endif} {$endif}
 
 /// fast atomic compare-and-swap operation on a 32-bit integer value
 // - via Intel/AMD custom asm or FPC RTL InterlockedCompareExchange(pointer)
 // - true if Target was equal to Comparand, and Target set to NewValue
 // - Target should be aligned, which is the case when defined as a class field
 function LockedExc32(var Target: cardinal; NewValue, Comperand: cardinal): boolean;
-  {$ifndef ASMINTEL} inline; {$endif}
+  {$ifndef ASMINTEL} {$ifndef FPC_CPUAARCH64} inline; {$endif} {$endif}
 
 /// fast atomic addition operation on a pointer-sized integer value
 // - via Intel/AMD custom asm or FPC RTL InterlockedExchangeAdd(pointer)
 // - Target should be aligned, which is the case when defined as a class field
 procedure LockedAdd(var Target: PtrUInt; Increment: PtrUInt);
-  {$ifndef ASMINTEL} inline; {$endif}
+  {$ifndef ASMINTEL} {$ifndef FPC_CPUAARCH64} inline; {$endif} {$endif}
 
 /// fast atomic substraction operation on a pointer-sized integer value
 // - via Intel/AMD custom asm or FPC RTL InterlockedExchangeAdd(-pointer)
 // - Target should be aligned, which is the case when defined as a class field
 procedure LockedDec(var Target: PtrUInt; Decrement: PtrUInt);
-  {$ifndef ASMINTEL} inline; {$endif}
+  {$ifndef ASMINTEL} {$ifndef FPC_CPUAARCH64} inline; {$endif} {$endif}
 
 /// fast atomic addition operation on a 32-bit integer value
 // - via Intel/AMD custom asm or FPC RTL InterlockedExchangeAdd(pointer)
 // - Target should be aligned, which is the case when defined as a class field
 procedure LockedAdd32(var Target: cardinal; Increment: cardinal);
-  {$ifndef ASMINTEL} inline; {$endif}
+  {$ifndef ASMINTEL} {$ifndef FPC_CPUAARCH64} inline; {$endif} {$endif}
 
 /// fast atomic "result := Target^; Target^ := New;" on a 32-bit integer value
 function LockedReset32(Target: PInteger; New: integer = 0): integer;
+
+{$ifdef FPC_WEAKATOMICS}
+/// full memory barrier, as called around the RTL atomic functions by Locked*()
+// - FPC RTL InterlockedXXX() are no memory barrier on e.g. ARM/AARCH64
+// - AARCH64 Locked*() don't call it but have their own LDXR/STLXR+DMB asm
+// - not inlined, to avoid "ReadWriteBarrier is not inlined" notes in callers
+procedure LockedBarrier;
+{$endif FPC_WEAKATOMICS}
 
 {$ifdef ISDELPHI}
 
@@ -11374,33 +11385,64 @@ begin
   result := SynLZdecompress1pas(src, size, dst);
 end;
 
+// on FPC_WEAKATOMICS, the RTL atomic opcodes are no memory barrier, whereas
+// Locked*() are expected to be full barriers, as LOCK on Intel:
+// - AARCH64 has dedicated asm in an include file
+// - other CPUs (e.g. 32-bit ARM) surround the RTL calls with LockedBarrier
+
+{$ifdef FPC_WEAKATOMICS}
+procedure LockedBarrier;
+begin
+  ReadWriteBarrier;
+end;
+{$endif FPC_WEAKATOMICS}
+
+{$ifdef FPC_CPUAARCH64}
+
+// optimized Locked*() asm for aarch64 is located in an include file
+{$include mormot.core.base.asmaarch64.inc}
+
+{$else}
+
 procedure LockedInc32(int32: PInteger);
 begin
+  {$ifdef FPC_WEAKATOMICS} LockedBarrier; {$endif}
   {$ifdef ISDELPHI}AtomicIncrement{$else}InterlockedIncrement{$endif}(int32^);
+  {$ifdef FPC_WEAKATOMICS} LockedBarrier; {$endif}
 end;
 
 procedure LockedDec32(int32: PInteger);
 begin
+  {$ifdef FPC_WEAKATOMICS} LockedBarrier; {$endif}
   {$ifdef ISDELPHI}AtomicDecrement{$else}InterlockedDecrement{$endif}(int32^);
+  {$ifdef FPC_WEAKATOMICS} LockedBarrier; {$endif}
 end;
 
 function LockedExc(var Target: PtrUInt; NewValue, Comperand: PtrUInt): boolean;
 begin
+  {$ifdef FPC_WEAKATOMICS} LockedBarrier; {$endif}
   result := {$ifdef ISDELPHI}AtomicCmpExchange{$else}InterlockedCompareExchange{$endif}(
     pointer(Target), pointer(NewValue), pointer(Comperand)) = pointer(Comperand);
+  {$ifdef FPC_WEAKATOMICS} LockedBarrier; {$endif}
 end;
 
 function LockedExc32(var Target: cardinal; NewValue, Comperand: cardinal): boolean;
 begin
+  {$ifdef FPC_WEAKATOMICS} LockedBarrier; {$endif}
   result := {$ifdef ISDELPHI}AtomicCmpExchange{$else}InterlockedCompareExchange{$endif}(
     Target, NewValue, Comperand) = Comperand;
+  {$ifdef FPC_WEAKATOMICS} LockedBarrier; {$endif}
 end;
 
 procedure LockedAdd32(var Target: cardinal; Increment: cardinal);
 begin
+  {$ifdef FPC_WEAKATOMICS} LockedBarrier; {$endif}
   {$ifdef ISDELPHI}AtomicIncrement{$else}InterlockedExchangeAdd{$endif}(
     Target, Increment);
+  {$ifdef FPC_WEAKATOMICS} LockedBarrier; {$endif}
 end;
+
+{$endif FPC_CPUAARCH64}
 
 procedure bswap64array(a,b: PQWordArray; n: PtrInt);
 var
@@ -11505,13 +11547,18 @@ end;
 
 {$else}
 
+{$ifndef FPC_CPUAARCH64} // AARCH64 has its own asm, see above
+
 procedure LockedDec(var Target: PtrUInt; Decrement: PtrUInt);
 begin
+  {$ifdef FPC_WEAKATOMICS} LockedBarrier; {$endif}
   InterlockedExchangeAdd(pointer(Target), pointer(PtrUInt(-PtrInt(Decrement))));
+  {$ifdef FPC_WEAKATOMICS} LockedBarrier; {$endif}
 end;
 
 procedure LockedInc64(int64: PInt64);
 begin
+  {$ifdef FPC_WEAKATOMICS} LockedBarrier; {$endif}
   {$ifdef FPC_64}
   InterlockedIncrement64(int64^); // we can use the existing 64-bit RTL function
   {$else}
@@ -11519,7 +11566,10 @@ begin
     if InterlockedIncrement(Lo) = 0 then
       LockedInc32(@Hi); // collission is highly unprobable
   {$endif FPC_64}
+  {$ifdef FPC_WEAKATOMICS} LockedBarrier; {$endif}
 end;
+
+{$endif FPC_CPUAARCH64}
 
 function StrCntDecFree(var refcnt: TStrCnt): boolean;
 begin
@@ -11541,10 +11591,14 @@ begin
   {$endif DACNT32}
 end;
 
+{$ifndef FPC_CPUAARCH64} // AARCH64 has its own asm, see above
 procedure LockedAdd(var Target: PtrUInt; Increment: PtrUInt);
 begin
+  {$ifdef FPC_WEAKATOMICS} LockedBarrier; {$endif}
   InterlockedExchangeAdd(pointer(Target), pointer(Increment));
+  {$ifdef FPC_WEAKATOMICS} LockedBarrier; {$endif}
 end;
+{$endif FPC_CPUAARCH64}
 
 function bswap32(a: cardinal): cardinal;
 begin

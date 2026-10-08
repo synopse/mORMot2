@@ -445,6 +445,14 @@
     {$define STRCNT32}         // 32-bit TAnsiRec.Ref
     {$define DACNT32}          // 32-bit TDynArrayRec.refCnt
   {$endif CPU64}
+  {$ifndef CPUINTEL}
+    // FPC RTL InterlockedXXX() are plain LDXR/STXR (or LSE CAS/LDADD) loops on
+    // ARM/AARCH64 with no memory barrier, whereas LOCK opcodes are full barriers
+    // on Intel: our Locked*() functions use dedicated asm on AARCH64, or add
+    // explicit memory barriers on other CPUs, so that they are full barriers
+    // and TLightLock/TRWLock & co have proper acquire/release semantics
+    {$define FPC_WEAKATOMICS}
+  {$endif CPUINTEL}
 
 
   // -----------

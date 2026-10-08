@@ -12080,6 +12080,9 @@ end;
 
 procedure TOSRWLightLock.ReadUnLock;
 begin // by design, RW_WRITE is never possible here
+  {$ifdef FPC_WEAKATOMICS}
+  LockedBarrier; // release: the RTL InterlockedDecrement() is no barrier
+  {$endif FPC_WEAKATOMICS}
   if InterlockedDecrement(PInteger(@Flags)^) = 0 then // last reader reached
     if Assigned(OsWakeOnValue) then
       OsWakeOnValue(@Flags); // wakeup any WriteLock waiter
