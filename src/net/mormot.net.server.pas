@@ -8390,7 +8390,9 @@ var // lots of local variable so that this method is thread-safe
   end;
 
   procedure SendError(StatusCode: cardinal; const ErrorMsg: RawUtf8;
-    E: Exception = nil);
+    Disconnect: boolean = false; E: Exception = nil);
+  var
+    flags: cardinal;
   begin
     try
       resp^.SetStatus(StatusCode, outstat);
@@ -8400,7 +8402,17 @@ var // lots of local variable so that this method is thread-safe
         Append(outmsg, [E, ' Exception raised:<br>']);
       Append(outmsg, HtmlEscapeShort(ErrorMsg), '</p><p><small>' + XPOWEREDVALUE);
       resp^.SetContent(datachunkmem, outmsg, HTML_CONTENT_TYPE);
-      HttpSendResponse(0);
+      flags := 0;
+      if Disconnect then
+      begin
+        with resp^.headers.KnownHeaders[reqConnection] do
+        begin
+          pRawValue := 'close';
+          RawValueLength := 5;
+        end;
+        flags := HTTP_SEND_RESPONSE_FLAG_DISCONNECT;
+      end;
+      HttpSendResponse(flags);
     except
       on Exception do
         ; // ignore any HttpApi level errors here (client may have crashed)
@@ -8607,14 +8619,14 @@ begin
                (fMaximumAllowedContentLength > 0) and
                (incontlen > QWord(fMaximumAllowedContentLength)) then
             begin
-              SendError(HTTP_PAYLOADTOOLARGE, 'Rejected');
+              SendError(HTTP_PAYLOADTOOLARGE, 'Rejected', {disconnect=}true);
               continue;
             end;
             if (hsoRejectBotUserAgent in fOptions) and
                (ctxt.fUserAgent <> '') and
                IsHttpUserAgentBot(ctxt.fUserAgent) then
             begin
-              SendError(HTTP_TEAPOT, BOTBUSTER_RESPONSE);
+              SendError(HTTP_TEAPOT, BOTBUSTER_RESPONSE, {disconnect=}true);
               continue;
             end;
             if Assigned(OnBeforeBody) then
@@ -8624,7 +8636,7 @@ begin
                 ctxt.ConnectionFlags);
               if err <> HTTP_SUCCESS then
               begin
-                SendError(err, 'Rejected');
+                SendError(err, 'Rejected', {disconnect=}true);
                 continue;
               end;
             end;
@@ -8699,7 +8711,7 @@ begin
               until err <> NO_ERROR;
               if err <> NO_ERROR then
               begin
-                SendError(err, errmsg);
+                SendError(err, errmsg, {disconnect=}true);
                 continue;
               end;
               if incontenc <> '' then // optionally uncompress input body
@@ -8744,7 +8756,7 @@ begin
                 if not respsent then
                   if not E.InheritsFrom(EHttpApiServer) or // ensure still connected
                      (EHttpApiServer(E).LastApiError <> HTTPAPI_ERROR_NONEXISTENTCONNECTION) then
-                    SendError(HTTP_SERVERERROR, StringToUtf8(E.Message), E);
+                    SendError(HTTP_SERVERERROR, StringToUtf8(E.Message), false, E);
               end;
             end;
           finally
