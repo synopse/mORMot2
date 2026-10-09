@@ -3338,9 +3338,9 @@ begin
       mul64x64(l^, r^, product);
       prev := rlo;
       inc(rlo, product.L);
-      prev := product.H + Ord(rlo < prev);
+      prev := product.H + PtrUInt(ord(rlo < prev));
       inc(rhi, prev);
-      inc(carry, Ord(rhi < prev));
+      inc(carry, ord(rhi < prev));
       inc(l);
       dec(r);
       dec(n);

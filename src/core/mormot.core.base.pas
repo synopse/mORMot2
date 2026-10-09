@@ -11641,6 +11641,20 @@ begin
     result := BsrDword(c) or 32;   // search in highest 32-bit
 end;
 
+procedure mul64x64(const left, right: QWord; out product: THash128Rec);
+var
+  l: TQWordRec absolute left;
+  r: TQWordRec absolute right;
+  t1, t2: TQWordRec;
+begin
+  t1.V := QWord(l.L) * r.L;
+  product.c0 := t1.L;
+  t2.V := QWord(l.H) * r.L + t1.H;
+  t1.V := QWord(l.L) * r.H + t2.L;
+  product.H := QWord(l.H) * r.H + t2.H + t1.H;
+  product.c1 := t1.V;
+end;
+
 {$endif FPC}
 
 function IntegerScan(P: PCardinalArray; Count: PtrInt; Value: cardinal): PCardinal;

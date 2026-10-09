@@ -1421,19 +1421,19 @@ begin
     mul64x64(a4, BARRETT_N_MU_LOW.Q[i], part);
     w := part.L + mulCarry;
     cross.Q[i] := w;
-    mulCarry := part.H + QWord(Ord(w < part.L));
+    mulCarry := part.H + QWord(ord(w < part.L));
   end;
   // Combine both 256-bit terms
   c2 := _add256(acc, acc, cross);
   // top 64 bits, including carries from both add and the implicit a4 * 2^512 term
   w := a4 + mulCarry;
-  q3Hi := QWord(Ord(w < a4));
+  q3Hi := QWord(ord(w < a4));
   old := w;
   inc(w, c1);
-  inc(q3Hi, Ord(w < old));
+  inc(q3Hi, ord(w < old));
   old := w;
   inc(w, c2);
-  inc(q3Hi, Ord(w < old));
+  inc(q3Hi, ord(w < old));
   // q3 = floor(q1 * mu / 2^320) as a 320-bit integer.
   q3.Q[0] := acc.Q[1];
   q3.Q[1] := acc.Q[2];
@@ -1453,7 +1453,7 @@ begin
     borrow := _sub256(trial, rem, Curve_N_32);
     // Subtract when rem >= n: either the fifth limb is nonzero, or
     // the low 256-bit subtraction did not borrow
-    take := QWord(Ord(remHi <> 0)) or (QWord(1) - QWord(borrow));
+    take := QWord(ord(remHi <> 0)) or (QWord(1) - QWord(borrow));
     mask := QWord(0) - take;
     for i := 0 to 3 do
       rem.Q[i] := (rem.Q[i] and not mask) or (trial.Q[i] and mask);
