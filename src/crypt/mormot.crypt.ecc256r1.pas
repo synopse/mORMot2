@@ -748,6 +748,13 @@ const
         QWord($FFFFFFFFFFFFFFFF),
         QWord($FFFFFFFF00000000)));
 
+  // floor(2^512 / Curve_N_32) - the fifth QWord is implicitly 1
+  BARRETT_N_MU_LOW: THash256Rec = (
+    q: (QWord($012FFD85EEDF9BFE),
+        QWord($43190552DF1A6C21),
+        QWord($FFFFFFFEFFFFFFFF),
+        QWord($00000000FFFFFFFF)));
+
   P_1: THash256Rec = (q: (QWord(1), QWord(0), QWord(0), QWord(0)));
   P_3: THash256Rec = (q: (QWord(3), QWord(0), QWord(0), QWord(0)));
   P_11: THash256Rec = (q: (QWord($0101010101010101),
@@ -1381,60 +1388,83 @@ begin
   result := ecdh_shared_secret_uncompressed_pas(pub, PrivateKey, Secret);
 end;
 
+// Product is a full 512-bit unsigned integer - Output := Product mod Curve_N_32
+procedure _reduceNBarrett(out Output: THash256Rec; const Product: THash512Rec);
+var
+  q1, q3, cross, acc, rem, trial: THash256Rec;
+  tmp, tmp2: THash512Rec;
+  part: THash128Rec;
+  a4, mulCarry, w, old, q3Hi, r2Hi, remHi, mask, take: QWord;
+  c1, c2, borrow, i, j: PtrUInt;
+begin
+  // q1 = Product shr 192 = q1lo + a4 * 2^256
+  q1.Q[0] := Product.Q[3];
+  q1.Q[1] := Product.Q[4];
+  q1.Q[2] := Product.Q[5];
+  q1.Q[3] := Product.Q[6];
+  a4 := Product.Q[7];
+  // mu = 2^256 + BARRETT_N_MU_LOW
+  // q1 * mu = q1lo * muLow + (q1lo + a4 * muLow) shl 256 + a4 shl 512
+  _mult256(tmp, q1, BARRETT_N_MU_LOW); // we only need bits 320 and above
+  // accumulate high 256 bits of the first product with the high limb of mu
+  c1 := _add256(acc, tmp.H, q1);
+  // compute a4 * muLow as a 320-bit integer
+  // cross receives the low 256 bits; mulCarry receives the upper 64 bits
+  mulCarry := 0;
+  for i := 0 to 3 do
+  begin
+    mul64x64(a4, BARRETT_N_MU_LOW.Q[i], part);
+    w := part.L + mulCarry;
+    cross.Q[i] := w;
+    mulCarry := part.H + QWord(Ord(w < part.L));
+  end;
+  // Combine both 256-bit terms
+  c2 := _add256(acc, acc, cross);
+  // top 64 bits, including carries from both add and the implicit a4 * 2^512 term
+  w := a4 + mulCarry;
+  q3Hi := QWord(Ord(w < a4));
+  old := w;
+  inc(w, c1);
+  inc(q3Hi, Ord(w < old));
+  old := w;
+  inc(w, c2);
+  inc(q3Hi, Ord(w < old));
+  // q3 = floor(q1 * mu / 2^320) as a 320-bit integer.
+  q3.Q[0] := acc.Q[1];
+  q3.Q[1] := acc.Q[2];
+  q3.Q[2] := acc.Q[3];
+  q3.Q[3] := w;  // q3Hi is its fifth limb
+  // r2 = (q3 * Curve_N_32) mod 2^320 - Only five output limbs are required
+  _mult256(tmp2, q3, Curve_N_32);
+  r2Hi := tmp2.Q[4] + q3Hi * Curve_N_32.Q[0];
+  // r = (Product - q3 * n) mod 2^320
+  borrow := _sub256(rem, Product.L, tmp2.L);
+  remHi := Product.Q[4] - r2Hi - borrow;
+  // Standard Barrett reduction requires at most two final subtractions of n
+  for j := 1 to 2 do
+  begin
+    // Calculate each candidate, then select it using a mask instead of a
+    // data-dependent branch (safer for anti-forensic)
+    borrow := _sub256(trial, rem, Curve_N_32);
+    // Subtract when rem >= n: either the fifth limb is nonzero, or
+    // the low 256-bit subtraction did not borrow
+    take := QWord(Ord(remHi <> 0)) or (QWord(1) - QWord(borrow));
+    mask := QWord(0) - take;
+    for i := 0 to 3 do
+      rem.Q[i] := (rem.Q[i] and not mask) or (trial.Q[i] and mask);
+    dec(remHi, QWord(borrow) and mask);
+  end;
+  // The normalized remainder is now < Curve_N_32
+  _mv(Output, rem);
+end;
+
 // computes result = (Left * Right) mod Curve_N_32
 procedure _modMultN(out Output: THash256Rec; const Left, Right: THash256Rec);
 var
-  carry: QWord;
-  cmp: integer;
-  modbig, product: THash512Rec;
-  digits, bits, prodbits: integer;
-  v: PHash256Rec;
-const
-  modbits = 256; // _numBits(Curve_N_32);
+  product: THash512Rec;
 begin
   _mult256(product, Left, Right);
-  prodbits := _numbits256(product.H);
-  if prodbits <> 0 then
-    inc(prodbits, ECC_QUAD * 64)
-  else
-    prodbits := _numbits256(product.L);
-  if prodbits < modbits then
-  begin
-    // l_product < p_mod
-    _mv(Output, product.L);
-    exit;
-  end;
-  // Shift p_mod by (LeftBits - modbits). This multiplies p_mod by the largest
-  // power of two possible while still resulting in a number less than p_left
-  FillZero(modbig.b);
-  digits := (prodbits - modbits) shr 6;
-  bits   := (prodbits - modbits) and 63;
-  v := @modbig.Q[digits];
-  if bits > 0 then
-    modbig.Q[digits + ECC_QUAD] := _lshift(v^, Curve_N_32, bits)
-  else
-    _mv(v^, Curve_N_32);
-  // Subtract all multiples of Modulo to get the remainder
-  while (prodbits > ECC_QUAD * 64) or
-        (_cmp256(modbig.L, Curve_N_32) >= 0) do
-  begin
-    cmp := _cmp256(modbig.H, product.H);
-    if (cmp < 0) or
-       ((cmp = 0) and
-        (_cmp256(modbig.L, product.L) <= 0)) then
-    begin
-      if _dec256(product.L, modbig.L) <> 0 then
-        _dec256(product.H, P_1); // borrow
-      _dec256(product.H, modbig.H);
-    end;
-    carry := (modbig.Q[ECC_QUAD] and 1) shl 63;
-    _rshift1(modbig.H);
-    _rshift1(modbig.L);
-    if carry <> 0 then
-      modbig.Q[ECC_QUAD - 1] := modbig.Q[ECC_QUAD - 1] or carry;
-    dec(prodbits);
-  end;
-  _mv(Output, product.L);
+  _reduceNBarrett(Output, product);
 end;
 
 function ecdsa_sign_pas(const PrivateKey: TEccPrivateKey; const Hash: TEccHash;
