@@ -1567,9 +1567,10 @@ end;
 
 function ServerForceKeytab(const aKeytabFileName: RawUtf8): boolean;
 begin
-  result := Assigned(GssApi.krb5_gss_register_acceptor_identity) and
-    not GSS_ERROR(GssApi.
-          krb5_gss_register_acceptor_identity(pointer(aKeytabFileName)));
+  result := (aKeytabFileName <> '') and
+            Assigned(GssApi.krb5_gss_register_acceptor_identity) and
+            not GSS_ERROR(GssApi.krb5_gss_register_acceptor_identity(
+                                   pointer(aKeytabFileName)));
 end; // = gsskrb5_register_acceptor_identity()
 
 
@@ -1581,6 +1582,7 @@ threadvar // efficient API call once per thread, with proper hot reload
 function TServerSspiKeyTab.PrepareKeyTab: boolean;
 var
   seq: PInteger;
+  main: integer;
   fn: RawUtf8; // ServerForceKeytab() GSSAPI call expects UTF-8 not TFileName
 begin
   result := false;
@@ -1589,14 +1591,16 @@ begin
     exit; // no SetKeyTab() call yet
   seq := @ServerSspiKeyTabSequence;
   fSafe.Lock;
-  if seq^ <> fKeytabSequence then
-  begin
-    seq^ := fKeytabSequence;
-    StringToUtf8(fKeyTabFile, fn);
-  end;
+  main := fKeytabSequence;
+  if seq^ <> main then
+    StringToUtf8(fKeyTabFile, fn); // needed e.g. for Delphi POSIX
   fSafe.UnLock;
   if fn <> '' then
-    result := ServerForceKeytab(fn); // per-thread GSSAPI call
+    if ServerForceKeytab(fn) then  // per-thread GSSAPI call
+    begin
+      seq^ := main; // retry later on failure (may happen only with Heimdal)
+      result := true;
+    end;
 end;
 
 function TServerSspiKeyTab.SetKeyTab(const aKeyTab: TFileName): boolean;
@@ -1610,18 +1614,22 @@ begin
      (aKeyTab = '') or
      not Assigned(GssApi.krb5_gss_register_acceptor_identity) or
      not FileInfoByName(aKeyTab, fs, ft) or // aKeyTab exists
-     (fs <= 0) or                           // not a file
-     ((ft = fKeyTabTime) and
-      (fs = fKeyTabSize)) then              // did not change on disk
+     (fs <= 0) then                         // not a file
     exit;
-  fKeyTabSize := fs;
-  fKeyTabTime := ft;                        // ensure tried once
-  result := FileIsKeyTab(aKeyTab);
-  if not result then
-    exit;               // keep existing keytab if the new one is invalid
   fSafe.Lock;
-  fKeyTabFile := aKeyTab;
-  inc(fKeytabSequence); // should be the last to notify PrepareKeyTab
+  if (ft <> fKeyTabTime) or
+     (fs <> fKeyTabSize) or
+     (fKeyTabFile <> aKeyTab) then // did change on disk
+  begin
+    fKeyTabSize := fs;        // ensure FileIsKeyTab() tried once
+    fKeyTabTime := ft;
+    if FileIsKeyTab(aKeyTab) then
+    begin
+      fKeyTabFile := aKeyTab;
+      inc(fKeytabSequence); // should be the last to notify PrepareKeyTab
+      result := true;
+    end;
+  end;
   fSafe.UnLock;
 end;
 
