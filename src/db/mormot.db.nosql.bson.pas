@@ -1719,6 +1719,9 @@ begin
   end;
 end;
 
+const
+  BIGPOW10: QWord = 100000000000000000;
+
 function TDecimal128.FromText(text: PUtf8Char; textlen: integer): TDecimal128SpecialValue;
 var
   P, PEnd: PUtf8Char;
@@ -1908,7 +1911,7 @@ begin
   end
   else
   begin
-    mul64x64(signhi, 100000000000000000, sign);
+    mul64x64(signhi, BIGPOW10, sign);
     inc(sign.L, signlo);
     {$ifdef FPC}
     if sign.L < signlo then
