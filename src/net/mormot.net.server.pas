@@ -2127,6 +2127,7 @@ type
     fReceiveBufferSize: cardinal;
     fAuthenticationSchemes: THttpApiRequestAuthentications; // 8-bit
     fLogging: boolean;                                      // 8-bit
+    fIdleThread: TSynBackgroundThreadProcess;
     function GetRegisteredUrl: RawUtf8;
     function GetHttpQueueLength: cardinal; override;
     function GetConnectionsActive: cardinal; override;
@@ -2145,6 +2146,7 @@ type
     procedure Ensure(Api: THttpApiFunction; Error: integer);
     procedure DoAfterResponse(Ctxt: THttpServerRequest; const Referer: RawUtf8;
       StatusCode: cardinal; Elapsed, Received, Sent: QWord); virtual;
+    procedure OnIdleProcess(Sender: TSynBackgroundThreadProcess);
     /// server main loop - don't change directly
     // - will call the Request public virtual method with the appropriate
     // parameters to retrieve the content
@@ -4298,7 +4300,8 @@ begin
 end;
 
 procedure THttpServerSocketGeneric.DoIdle(tix64: Int64; sec32: cardinal);
-begin // is called at most every second, but maybe up to 5 seconds delay
+begin
+  // logger + telemetry + OnIdle()
   inherited DoIdle(tix64, sec32);
   // BlackListUri regular refresh support
   if (fBlackListUriNextTix <> 0) and
@@ -4873,16 +4876,19 @@ end;
 procedure THttpServer.DoIdle(tix64: Int64; sec32: cardinal);
 var
   i: integer;
-begin // is called at most every second, but maybe up to 5 seconds delay
+begin
+  // logger + telemetry + OnIdle + RefreshBlackListUri + fSspiKeyTab.TryRefresh
   inherited DoIdle(tix64, sec32);
+  // e.g. TAcmeLetsEncryptServer.OnAcceptIdle
   if Assigned(fOnAcceptIdle) then
-    fOnAcceptIdle(self, tix64); // e.g. TAcmeLetsEncryptServer.OnAcceptIdle
+    fOnAcceptIdle(self, tix64);
+  // update internal THttpAcceptBan lists
   if Assigned(fBanned) and
      (fBanned.Count <> 0) then
   begin
     if fBanSec <> 0 then
       for i := fBanSec + 1 to sec32 do // as many DoRotate as elapsed seconds
-        fBanned.DoRotate // update internal THttpAcceptBan lists
+        fBanned.DoRotate
     {$ifdef OSPOSIX} // Windows would require some activity - not an issue
     else
       fSock.ReceiveTimeout := 1000 // accept() to exit after one second
@@ -8667,6 +8673,9 @@ begin
   else
     Ensure(hCreateHttpHandle,
       Http.CreateHttpHandle(fReqQueue));
+  // DoIdle() processing thread once per second
+  fIdleThread := TSynBackgroundThreadProcess.Create(
+    'HttpApiIdle', OnIdleProcess, 1000);
   // start the other processing threads
   fReceiveBufferSize := 1 shl 20; // i.e. 1 MB
   if Assigned(log) then
@@ -8747,6 +8756,7 @@ destructor THttpApiServer.Destroy;
 begin
   Terminate; // for Execute to be notified about end of process
   try
+    FreeAndNilSafe(fIdleThread);
     if Http.Module <> 0 then
       DestroyMainThread;
     {$ifdef FPC}
@@ -8755,6 +8765,15 @@ begin
   finally
     inherited Destroy;
   end;
+end;
+
+procedure THttpApiServer.OnIdleProcess(Sender: TSynBackgroundThreadProcess);
+var
+  tix: Int64;
+begin
+  // executed by fIdleThread every second
+  tix := mormot.core.os.GetTickCount64;
+  DoIdle(tix, cardinal(tix div 1000)); // logger + telemetry + OnIdle()
 end;
 
 function THttpApiServer.GetSendResponseFlags(Ctxt: THttpServerRequest): integer;
