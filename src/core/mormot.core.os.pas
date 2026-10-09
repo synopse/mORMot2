@@ -2295,9 +2295,8 @@ function ExpandFileName(const FileName: TFileName): TFileName;
 
 type
   /// our internal Win32 64-bit FILETIME value type definition for POSIX
-  TFileTime = packed record
-    dwLowDateTime:  cardinal;
-    dwHighDateTime: cardinal;
+  TFileTime = record
+    dwLowDateTime, dwHighDateTime: cardinal;
   end;
   /// points to one Win32 64-bit FILETIME value
   PFileTime = ^TFileTime;

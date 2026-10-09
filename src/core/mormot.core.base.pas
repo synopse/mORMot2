@@ -1284,7 +1284,7 @@ var
 
 type
   /// small structure used as convenient result to Div100() procedure
-  TDiv100Rec = packed record
+  TDiv100Rec = record
     /// contains V div 100 after Div100(V)
     D: cardinal;
     /// contains V mod 100 after Div100(V)
@@ -2490,7 +2490,7 @@ type
 
   /// map a 128-bit hash as an array of lower bit size values
   // - consumes 16 bytes of memory
-  THash128Rec = packed record
+  THash128Rec = record
     case integer of
       0: (Lo, Hi: Int64);
       1: (L, H: QWord);
@@ -2520,7 +2520,7 @@ type
 
   /// map a 256-bit hash as an array of lower bit size values
   // - consumes 32 bytes of memory
-  THash256Rec = packed record
+  THash256Rec = record
     case integer of
       0: (Lo, Hi: THash128);
       1: (d0, d1, d2, d3: Int64);
@@ -2553,7 +2553,7 @@ type
 
   /// map a 512-bit hash as an array of lower bit size values
   // - consumes 64 bytes of memory
-  THash512Rec = packed record
+  THash512Rec = record
     case integer of
       0:  (Lo, Hi: THash256);
       1:  (h0, h1, h2, h3: THash128);
@@ -3040,6 +3040,7 @@ const
 
 {$endif ASMINTEL}
 
+fixme
 /// compatibility function, to be implemented according to the running CPU
 // - expect the same result as the homonymous Win32 API function, i.e.
 // returns I + 1, and store I + 1 within I in an atomic/thread-safe way
@@ -10786,7 +10787,7 @@ type
 {$ifdef ASMINTEL}
 
 type
-  TIntelRegisters = packed record
+  TIntelRegisters = record
     eax, ebx, ecx, edx: cardinal;
   end;
 

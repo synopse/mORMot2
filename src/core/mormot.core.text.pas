@@ -7830,7 +7830,7 @@ begin
 end;
 
 type
-  TSplitFloat = packed record
+  TSplitFloat = record
     case byte of
       0: (f: double);
       1: (b: array[0..7] of byte);

@@ -69,7 +69,7 @@ type
 
   /// a debugger symbol, as decoded by TDebugFile from a .map/.dbg/.mab file
   // - may refer to a global variable, function or method name and address
-  TDebugSymbol = packed record
+  TDebugSymbol = record
     /// symbol identifier
     Name: RawUtf8;
     /// relative virtual address where this symbol starts
@@ -87,7 +87,7 @@ type
   // - as decoded by TDebugFile from a .map/.dbg/.mab file
   // - may refer to the main .pas file, a nested .inc file, or source locations
   // generated for compiler features such as inlined routines or generics
-  TDebugBlock = packed record
+  TDebugBlock = record
     /// identifier and address range of this source block
     // - Name is the main Pascal unit identifier, e.g. 'mormot.core.base'
     Symbol: TDebugSymbol;
