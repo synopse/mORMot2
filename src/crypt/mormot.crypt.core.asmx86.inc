@@ -1480,6 +1480,283 @@ asm     // Src=eax Dst=edx Factor=ecx Carry=[ebp]
         pop    ebx
 end;
 
+procedure _mmodP(out Output: THash256Rec; var Product: THash512Rec);
+  {$ifdef FPC}nostackframe; assembler;{$endif}
+asm
+        push   ebx
+        push   esi
+        push   edi
+        sub    esp, 32          // eight 32-bit result limbs on stack
+        mov    edi, eax         // @Output
+        mov    esi, edx         // @Product
+        xor    ebx, ebx         // signed carry
+        // Fold word 0
+        mov     eax, dword ptr [esi + 0]
+        xor     edx, edx
+        mov     ecx, ebx
+        sar     ecx, 31
+        add     eax, ebx
+        adc     edx, ecx
+        add     eax, dword ptr [esi + 32]
+        adc     edx, 0
+        add     eax, dword ptr [esi + 36]
+        adc     edx, 0
+        sub     eax, dword ptr [esi + 44]
+        sbb     edx, 0
+        sub     eax, dword ptr [esi + 48]
+        sbb     edx, 0
+        sub     eax, dword ptr [esi + 52]
+        sbb     edx, 0
+        sub     eax, dword ptr [esi + 56]
+        sbb     edx, 0
+        mov     dword ptr [esp + 0], eax
+        mov     ebx, edx
+        // Fold word 1
+        mov     eax, dword ptr [esi + 4]
+        xor     edx, edx
+        mov     ecx, ebx
+        sar     ecx, 31
+        add     eax, ebx
+        adc     edx, ecx
+        add     eax, dword ptr [esi + 36]
+        adc     edx, 0
+        add     eax, dword ptr [esi + 40]
+        adc     edx, 0
+        sub     eax, dword ptr [esi + 48]
+        sbb     edx, 0
+        sub     eax, dword ptr [esi + 52]
+        sbb     edx, 0
+        sub     eax, dword ptr [esi + 56]
+        sbb     edx, 0
+        sub     eax, dword ptr [esi + 60]
+        sbb     edx, 0
+        mov     dword ptr [esp + 4], eax
+        mov     ebx, edx
+        // Fold word 2
+        mov     eax, dword ptr [esi + 8]
+        xor     edx, edx
+        mov     ecx, ebx
+        sar     ecx, 31
+        add     eax, ebx
+        adc     edx, ecx
+        add     eax, dword ptr [esi + 40]
+        adc     edx, 0
+        add     eax, dword ptr [esi + 44]
+        adc     edx, 0
+        sub     eax, dword ptr [esi + 52]
+        sbb     edx, 0
+        sub     eax, dword ptr [esi + 56]
+        sbb     edx, 0
+        sub     eax, dword ptr [esi + 60]
+        sbb     edx, 0
+        mov     dword ptr [esp + 8], eax
+        mov     ebx, edx
+        // Fold word 3
+        mov     eax, dword ptr [esi + 12]
+        xor     edx, edx
+        mov     ecx, ebx
+        sar     ecx, 31
+        add     eax, ebx
+        adc     edx, ecx
+        sub     eax, dword ptr [esi + 32]
+        sbb     edx, 0
+        sub     eax, dword ptr [esi + 36]
+        sbb     edx, 0
+        add     eax, dword ptr [esi + 44]
+        adc     edx, 0
+        add     eax, dword ptr [esi + 44]
+        adc     edx, 0
+        add     eax, dword ptr [esi + 48]
+        adc     edx, 0
+        add     eax, dword ptr [esi + 48]
+        adc     edx, 0
+        add     eax, dword ptr [esi + 52]
+        adc     edx, 0
+        sub     eax, dword ptr [esi + 60]
+        sbb     edx, 0
+        mov     dword ptr [esp + 12], eax
+        mov     ebx, edx
+        // Fold word 4
+        mov     eax, dword ptr [esi + 16]
+        xor     edx, edx
+        mov     ecx, ebx
+        sar     ecx, 31
+        add     eax, ebx
+        adc     edx, ecx
+        sub     eax, dword ptr [esi + 36]
+        sbb     edx, 0
+        sub     eax, dword ptr [esi + 40]
+        sbb     edx, 0
+        add     eax, dword ptr [esi + 48]
+        adc     edx, 0
+        add     eax, dword ptr [esi + 48]
+        adc     edx, 0
+        add     eax, dword ptr [esi + 52]
+        adc     edx, 0
+        add     eax, dword ptr [esi + 52]
+        adc     edx, 0
+        add     eax, dword ptr [esi + 56]
+        adc     edx, 0
+        mov     dword ptr [esp + 16], eax
+        mov     ebx, edx
+        // F    old word 5
+        mov     eax, dword ptr [esi + 20]
+        xor     edx, edx
+        mov     ecx, ebx
+        sar     ecx, 31
+        add     eax, ebx
+        adc     edx, ecx
+        sub     eax, dword ptr [esi + 40]
+        sbb     edx, 0
+        sub     eax, dword ptr [esi + 44]
+        sbb     edx, 0
+        add     eax, dword ptr [esi + 52]
+        adc     edx, 0
+        add     eax, dword ptr [esi + 52]
+        adc     edx, 0
+        add     eax, dword ptr [esi + 56]
+        adc     edx, 0
+        add     eax, dword ptr [esi + 56]
+        adc     edx, 0
+        add     eax, dword ptr [esi + 60]
+        adc     edx, 0
+        mov     dword ptr [esp + 20], eax
+        mov     ebx, edx
+        // Fold word 6
+        mov     eax, dword ptr [esi + 24]
+        xor     edx, edx
+        mov     ecx, ebx
+        sar     ecx, 31
+        add     eax, ebx
+        adc     edx, ecx
+        sub     eax, dword ptr [esi + 32]
+        sbb     edx, 0
+        sub     eax, dword ptr [esi + 36]
+        sbb     edx, 0
+        add     eax, dword ptr [esi + 52]
+        adc     edx, 0
+        add     eax, dword ptr [esi + 56]
+        adc     edx, 0
+        add     eax, dword ptr [esi + 56]
+        adc     edx, 0
+        add     eax, dword ptr [esi + 56]
+        adc     edx, 0
+        add     eax, dword ptr [esi + 60]
+        adc     edx, 0
+        add     eax, dword ptr [esi + 60]
+        adc     edx, 0
+        mov     dword ptr [esp + 24], eax
+        mov     ebx, edx
+        // Fold word 7
+        mov     eax, dword ptr [esi + 28]
+        xor     edx, edx
+        mov     ecx, ebx
+        sar     ecx, 31
+        add     eax, ebx
+        adc     edx, ecx
+        add     eax, dword ptr [esi + 32]
+        adc     edx, 0
+        sub     eax, dword ptr [esi + 40]
+        sbb     edx, 0
+        sub     eax, dword ptr [esi + 44]
+        sbb     edx, 0
+        sub     eax, dword ptr [esi + 48]
+        sbb     edx, 0
+        sub     eax, dword ptr [esi + 52]
+        sbb     edx, 0
+        add     eax, dword ptr [esi + 60]
+        adc     edx, 0
+        add     eax, dword ptr [esi + 60]
+        adc     edx, 0
+        add     eax, dword ptr [esi + 60]
+        adc     edx, 0
+        mov     dword ptr [esp + 28], eax
+        mov     ebx, edx
+        // Carry C from the 256-bit fold: Result = Low + C*2^256
+        // Since 2^256 = p + D and D=2^224 - 2^192 - 2^96 + 1,
+        // adjust Result modulo p by +C -C*2^96 -C*2^192 +C*2^224
+        mov     ecx, ebx
+        sar     ecx, 31          // sign extension of signed C
+        xor     edx, edx         // 9th word of signed 288-bit accumulator
+        add     dword ptr [esp + 0], ebx
+        adc     dword ptr [esp + 4], ecx
+        adc     dword ptr [esp + 8], ecx
+        adc     dword ptr [esp + 12], ecx
+        adc     dword ptr [esp + 16], ecx
+        adc     dword ptr [esp + 20], ecx
+        adc     dword ptr [esp + 24], ecx
+        adc     dword ptr [esp + 28], ecx
+        adc     edx, ecx
+        sub     dword ptr [esp + 12], ebx
+        sbb     dword ptr [esp + 16], ecx
+        sbb     dword ptr [esp + 20], ecx
+        sbb     dword ptr [esp + 24], ecx
+        sbb     dword ptr [esp + 28], ecx
+        sbb     edx, ecx
+        sub     dword ptr [esp + 24], ebx
+        sbb     dword ptr [esp + 28], ecx
+        sbb     edx, ecx
+        add     dword ptr [esp + 28], ebx
+        adc     edx, ecx
+        // -p < signed Result < 2*p, so at most one correction.
+        test    edx, edx
+        js      @add_p
+        jnz     @sub_p
+        // Compare unsigned Low with p, most-significant limb first.
+        cmp     dword ptr [esp + 28], -1
+        jne     @done
+        cmp     dword ptr [esp + 24], 1
+        ja      @sub_p
+        jb      @done
+        mov     eax, dword ptr [esp + 12]
+        or      eax, dword ptr [esp + 16]
+        or      eax, dword ptr [esp + 20]
+        jnz     @sub_p
+        cmp     dword ptr [esp + 8], -1
+        jne     @done
+        cmp     dword ptr [esp + 4], -1
+        jne     @done
+        cmp     dword ptr [esp + 0], -1
+        jne     @done
+@sub_p: sub     dword ptr [esp + 0], -1
+        sbb     dword ptr [esp + 4], -1
+        sbb     dword ptr [esp + 8], -1
+        sbb     dword ptr [esp + 12], 0
+        sbb     dword ptr [esp + 16], 0
+        sbb     dword ptr [esp + 20], 0
+        sbb     dword ptr [esp + 24], 1
+        sbb     dword ptr [esp + 28], -1
+        jmp     @done
+@add_p: add     dword ptr [esp + 0], -1
+        adc     dword ptr [esp + 4], -1
+        adc     dword ptr [esp + 8], -1
+        adc     dword ptr [esp + 12], 0
+        adc     dword ptr [esp + 16], 0
+        adc     dword ptr [esp + 20], 0
+        adc     dword ptr [esp + 24], 1
+        adc     dword ptr [esp + 28], -1
+@done:  mov     eax, dword ptr [esp + 0]
+        mov     edx, dword ptr [esp + 4]
+        mov     [edi + 0], eax
+        mov     [edi + 4], edx
+        mov     eax, dword ptr [esp + 8]
+        mov     edx, dword ptr [esp + 12]
+        mov     [edi + 8], eax
+        mov     [edi + 12], edx
+        mov     eax, dword ptr [esp + 16]
+        mov     edx, dword ptr [esp + 20]
+        mov     [edi + 16], eax
+        mov     [edi + 20], edx
+        mov     eax, dword ptr [esp + 24]
+        mov     edx, dword ptr [esp + 28]
+        mov     [edi + 24], eax
+        mov     [edi + 28], edx
+        add     esp, 32
+        pop     edi
+        pop     esi
+        pop     ebx
+end;
+
 {$ifdef ASMSSE2}
 procedure Xor512(dst, src: PPtrIntArray);
 {$ifdef FPC}nostackframe; assembler;{$endif}
@@ -1515,6 +1792,7 @@ asm
         movups  dqword ptr [dst + 48], xmm3
 end;
 {$endif ASMSSE2}
+
 
 procedure Sha1ExpandMessageBlocks(W: PCardinalArray; n: cardinal);
 // semi-unrolled optimized asm version by A. Bouchez

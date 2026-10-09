@@ -309,6 +309,8 @@ const
   _xasmdivn    = SizeOf(pointer) * 16; // 512/1024 bits per call
   _xasmmodn    = SizeOf(pointer) * 16; // 512/1024 bits per call
 
+{ x86_64/i386 asm specific mormot.crypt.ecc256r1 computation }
+procedure _mmodP(out Output: THash256Rec; var Product: THash512Rec);
 {$endif ASMINTEL}
 
 

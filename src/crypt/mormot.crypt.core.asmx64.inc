@@ -2990,6 +2990,218 @@ procedure Move512(dst, src: PPtrIntArray);
         movups  dqword ptr [dst + 48], xmm3
 end;
 
+
+// specific mormot.crypt.ecc256r1 computation in pure asm
+procedure _mmodP(out Output: THash256Rec; var Product: THash512Rec);
+{$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
+        // SYSV: RDI=@Output, RSI=@Product; WIN64: RCX=@Output, RDX=@Product
+        {$ifdef ABIWINX64}
+        push    rdi
+        push    rsi
+        mov     rdi, Output
+        mov     rsi, Product
+        {$endif ABIWINX64}
+        push    rbx
+        push    rbp
+        push    r12
+        push    r13
+        push    r14
+        push    r15
+        mov     r12, [rsi]
+        mov     r13, [rsi+8]
+        mov     r14, [rsi+16]
+        mov     r15, [rsi+24]
+        mov     r8, [rsi+32]
+        mov     r9, [rsi+40]
+        mov     r10, [rsi+48]
+        mov     r11, [rsi+56]
+        xor     ebp, ebp
+        // s1
+        xor     eax, eax
+        mov     rcx, r9
+        shr     rcx, 32
+        shl     rcx, 33
+        mov     rdx, r10
+        shld    rdx, r9, 1
+        mov     rbx, r11
+        shld    rbx, r10, 1
+        mov     rbp, r11
+        shr     rbp, 63
+        add     r12, rax
+        adc     r13, rcx
+        adc     r14, rdx
+        adc     r15, rbx
+        adc     rbp, 0
+        // s2
+        xor     eax, eax
+        mov     rcx, r10
+        shl     rcx, 32
+        mov     rdx, r10
+        shrd    rdx, r11, 32
+        mov     rbx, r11
+        shr     rbx, 32
+        shld    rbx, rdx, 1
+        shld    rdx, rcx, 1
+        shl     rcx, 1
+        add     r12, rax
+        adc     r13, rcx
+        adc     r14, rdx
+        adc     r15, rbx
+        adc     rbp, 0
+        // s3
+        mov     rax, r8
+        mov     ecx, r9d
+        xor     edx, edx
+        mov     rbx, r11
+        add     r12, rax
+        adc     r13, rcx
+        adc     r14, rdx
+        adc     r15, rbx
+        adc     rbp, 0
+        // s4
+        mov     rax, r8
+        shrd    rax, r9, 32
+        mov     rcx, r9
+        shr     rcx, 32
+        mov     rdx, r10
+        shr     rdx, 32
+        shl     rdx, 32
+        or      rcx, rdx
+        mov     rdx, r11
+        mov     rbx, r10
+        shrd    rbx, r8, 32
+        add     r12, rax
+        adc     r13, rcx
+        adc     r14, rdx
+        adc     r15, rbx
+        adc     rbp, 0
+        // d1
+        mov     rax, r9
+        shrd    rax, r10, 32
+        mov     rcx, r10
+        shr     rcx, 32
+        mov     rbx, r8
+        mov     ebx, ebx
+        mov     rdx, r9
+        shl     rdx, 32
+        or      rbx, rdx
+        xor     edx, edx
+        sub     r12, rax
+        sbb     r13, rcx
+        sbb     r14, rdx
+        sbb     r15, rbx
+        sbb     rbp, 0
+        // d2
+        mov     rax, r10
+        mov     rcx, r11
+        mov     rbx, r9
+        shr     rbx, 32
+        shl     rbx, 32
+        mov     rdx, r8
+        shr     rdx, 32
+        or      rbx, rdx
+        xor     edx, edx
+        sub     r12, rax
+        sbb     r13, rcx
+        sbb     r14, rdx
+        sbb     r15, rbx
+        sbb     rbp, 0
+        // d3
+        mov     rax, r10
+        shrd    rax, r11, 32
+        mov     rcx, r11
+        shrd    rcx, r8, 32
+        mov     rdx, r8
+        shrd    rdx, r9, 32
+        mov     rbx, r10
+        shl     rbx, 32
+        sub     r12, rax
+        sbb     r13, rcx
+        sbb     r14, rdx
+        sbb     r15, rbx
+        sbb     rbp, 0
+        // d4
+        mov     rax, r11
+        mov     rcx, r8
+        shr     rcx, 32
+        shl     rcx, 32
+        mov     rdx, r9
+        mov     rbx, r10
+        shr     rbx, 32
+        shl     rbx, 32
+        sub     r12, rax
+        sbb     r13, rcx
+        sbb     r14, rdx
+        sbb     r15, rbx
+        sbb     rbp, 0
+        // normalize via signed carry * D, D=2^224-2^192-2^96+1
+        mov     rax, rbp
+        sar     rax, 63
+        mov     rcx, rbp
+        neg     rcx
+        shl     rcx, 32
+        mov     rdx, rcx
+        sar     rdx, 63
+        mov     rbx, rbp
+        shl     rbx, 32
+        sub     rbx, rbp
+        mov     r11, rbx
+        sar     r11, 63
+        xor     r10d, r10d
+        add     r12, rbp
+        adc     r13, rax
+        adc     r14, rax
+        adc     r15, rax
+        adc     r10, rax
+        add     r13, rcx
+        adc     r14, rdx
+        adc     r15, rdx
+        adc     r10, rdx
+        add     r15, rbx
+        adc     r10, r11
+        // P limbs: -1, 0xffffffff, 0, 0xffffffff00000001
+        mov     r8, -1
+        mov     r9, $ffffffff
+        mov     r11, $ffffffff00000001
+        test    r10, r10
+        js      @add_p
+        jnz     @sub_p
+        cmp     r15, r11
+        ja      @sub_p
+        jb      @done
+        test    r14, r14
+        jnz     @sub_p
+        cmp     r13, r9
+        ja      @sub_p
+        jb      @done
+        cmp     r12, r8
+        jne     @done
+@sub_p: sub     r12, r8
+        sbb     r13, r9
+        sbb     r14, 0
+        sbb     r15, r11
+        jmp     @done
+@add_p: add     r12, r8
+        adc     r13, r9
+        adc     r14, 0
+        adc     r15, r11
+@done:  mov     qword ptr [rdi], r12
+        mov     qword ptr [rdi+8], r13
+        mov     qword ptr [rdi+16], r14
+        mov     qword ptr [rdi+24], r15
+        pop     r15
+        pop     r14
+        pop     r13
+        pop     r12
+        pop     rbp
+        pop     rbx
+        {$ifdef ABIWINX64}
+        pop     rsi
+        pop     rdi
+        {$endif ABIWINX64}
+end;
+
+
 procedure MD5Transform(var buf: TMd5Buf; const in_: TMd5In);
 // see https://synopse.info/forum/viewtopic.php?id=4369 for asm numbers
 {

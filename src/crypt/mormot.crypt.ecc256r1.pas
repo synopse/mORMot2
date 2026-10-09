@@ -837,8 +837,8 @@ begin
     _inc256(Output, Curve_P_32);
 end;
 
-// computes result = Product mod Curve_P_32
-// from NIST https://tinyurl.com/3p5mt8kr
+{$ifndef ASMINTEL}
+// computes result = Product mod Curve_P_32 from NIST https://tinyurl.com/3p5mt8kr
 procedure _mmodP(out Output: THash256Rec; var Product: THash512Rec);
 var
   carry: PtrInt;
@@ -929,6 +929,7 @@ begin
           (_cmp256(Curve_P_32, Output) <= 0) do
       dec(carry, _dec256(Output, Curve_P_32));
 end;
+{$endif ASMINTEL}
 
 // computes result = (Left * Right) mod Curve
 procedure _modMultP(out Output: THash256Rec; const Left, Right: THash256Rec);
