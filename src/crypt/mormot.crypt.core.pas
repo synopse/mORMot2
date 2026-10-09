@@ -248,8 +248,9 @@ procedure _mult128({$ifdef FPC}constref{$else}const{$endif} l, r: THash128Rec;
   out product: THash256Rec);
   {$ifndef ASMINTEL} inline; {$endif}
 
-/// 256-to-512-bit multiplication (with x86_64 asm) - used by ecc256r1
+/// 256-to-512-bit multiplication (with Intel/AMD asm) - used by ecc256r1
 procedure _mult256(out Output: THash512Rec; const Left, Right: THash256Rec);
+  {$ifndef ASMINTEL} inline; {$endif}
 
 /// right shift of 1 bit of a 256-bit value - used by ecc256r1
 procedure _rshift1(var V: THash256Rec);
@@ -3031,7 +3032,14 @@ end;
 
 { *************** 256-bit BigInt Low-Level Computation for ECC }
 
-{$ifndef ASMINTEL}
+{$ifdef ASMINTEL} // i386+x64 asm of all those 128-bit and 256-bit functions
+
+procedure _square256(out Output: THash512Rec; const Left: THash256Rec);
+begin
+  _mult256(Output, Left, Left);
+end;
+
+{$else}
 
 procedure bswap256(s, d: PIntegerArray);
 begin
@@ -3274,16 +3282,32 @@ begin
   {$endif CPU32}
 end;
 
-{$define ECC_ORIGINALMULT}
-// original mult() is slightly faster than our unrolled version without asm
+{$ifdef ASMARM64} // mormot.core.base.asmarm.inc publishes _mult128/_mult256
 
-{$ifdef ECC_ORIGINALMULT}
-{$ifdef ASMARM64}
 procedure _square256(out Output: THash512Rec; const Left: THash256Rec);
 begin
   _mult256(Output, Left, Left); // mormot.core.base.asmarm.inc unrolled asm
 end;
+
 {$else}
+
+procedure _mult128({$ifdef FPC}constref{$else}const{$endif} l, r: THash128Rec;
+  out product: THash256Rec);
+var
+  t1, t2: THash128Rec;
+begin
+  mul64x64(l.L, r.L, t1);  // t1.V := l.L * r.L;
+  product.L.L := t1.L;
+  mul64x64(l.H, r.L, t2);
+  _inc64(t2, t1.H);         // t2.V := l.H * r.L + t1.H;
+  mul64x64(l.L, r.H, t1);
+  _inc64(t1, t2.L);         // t1.V := l.L * r.H + t2.L;
+  mul64x64(l.H, r.H, product.h);
+  _inc64(product.H, t2.H);
+  _inc64(product.H, t1.H);  // product.H := l.H * r.H + t2.H + t1.H;
+  product.L.H := t1.L;      // product.L := t3.V shl 64 or t1.L;
+end;
+
 // original 256-bit rolled multiplication as proposed in micro-ecc
 procedure _mult256(out Output: THash512Rec; const Left, Right: THash256Rec);
 var
@@ -3366,95 +3390,9 @@ begin
   end;
   Output.Q[4 * 2 - 1] := rlo;
 end;
-{$endif ASMARM64}
-{$endif ECC_ORIGINALMULT}
 
+{$endif ASMARM64}
 {$endif ASMINTEL}
-
-{$ifdef ASMX64}
-
-procedure _square256(out Output: THash512Rec; const Left: THash256Rec);
-begin
-  _mult256(Output, Left, Left);
-end;
-
-{$else}
-
-{$ifndef ASMARM64}
-{$ifdef FPC} // Delphi is not good at inlining and computing this function
-procedure _mult64(l, r: PQWordRec; out product: THash128Rec); inline;
-var
-  t1, t2: TQWordRec;
-begin
-  t1.V := QWord(l.L) * r.L;
-  product.c0 := t1.L;
-  t2.V := QWord(l.H) * r.L + t1.H;
-  t1.V := QWord(l.L) * r.H + t2.L;
-  product.H := QWord(l.H) * r.H + t2.H + t1.H;
-  product.c1 := t1.V;
-end;
-{$else} // we better use mormot.core.base asm on Delphi
-procedure _mult64(left, right: PQWord; out product: THash128Rec);
-  {$ifdef HASINLINE}inline;{$endif}
-begin
-  mul64x64(left^, right^, product);
-end;
-{$endif FPC}
-procedure _mult128({$ifdef FPC}constref{$else}const{$endif} l, r: THash128Rec;
-  out product: THash256Rec);
-var
-  t1, t2: THash128Rec;
-begin
-  _mult64(@l.L, @r.L, t1);  // t1.V := l.L * r.L;
-  product.L.L := t1.L;
-  _mult64(@l.H, @r.L, t2);
-  _inc64(t2, t1.H);         // t2.V := l.H * r.L + t1.H;
-  _mult64(@l.L, @r.H, t1);
-  _inc64(t1, t2.L);         // t1.V := l.L * r.H + t2.L;
-  _mult64(@l.H, @r.H, product.h);
-  _inc64(product.H, t2.H);
-  _inc64(product.H, t1.H);  // product.H := l.H * r.H + t2.H + t1.H;
-  product.L.H := t1.L;      // product.L := t3.V shl 64 or t1.L;
-end;
-{$endif ASMARM64}
-
-{$ifndef ECC_ORIGINALMULT}
-
-procedure _mult256(out Output: THash512Rec; const Left, Right: THash256Rec);
-var
-  t1, t2: THash256Rec;
-begin
-  _mult128(Left.L, Right.L, t1); // t1.V := Left.L * Right.L;
-  Output.L.Lo := t1.Lo;
-  _mult128(Left.H, Right.L, t2);
-  _inc128(t2, t1.H);             // t2.V := Left.H * Right.L + t1.H;
-  _mult128(Left.L, Right.H, t1);
-  _inc128(t1, t2.L);             // t3.V := Left.L * Right.H + t2.L;
-  _mult128(Left.H, Right.H, Output.H);
-  _inc128(Output.H, t2.H);
-  _inc128(Output.H, t1.H);       // Output.H := Left.H * Right.H + t2.H + t3.H;
-  Output.L.Hi := t1.Lo;          // Output.L := t3.V shl 128 or t1.L;
-end;
-
-procedure _square256(out Output: THash512Rec; const Left: THash256Rec);
-var
-  t1, t2: THash256Rec;
-begin
-  _mult128(Left.L, Left.L, t1);  // t1.V := Left.L * Left.L;
-  Output.L.Lo := t1.Lo;
-  _mult128(Left.H, Left.L, t2);
-  _inc128(t2, t1.H);             // t2.V := Left.H * Left.L + t1.H;
-  _mult128(Left.L, Left.H, t1);
-  _inc128(t1, t2.L);             // t3.V := Left.L * Left.H + t2.L;
-  _mult128(Left.H, Left.H, Output.H);
-  _inc128(Output.H, t2.H);
-  _inc128(Output.H, t1.H);       // Output.H := Left.H * Left.H + t2.H + t3.H;
-  Output.L.Hi := t1.Lo;          // Output.L := t3.V shl 128 or t1.L;
-end;
-
-{$endif ECC_ORIGINALMULT}
-
-{$endif ASMX64}
 
 {$ifdef CPU32}
 
@@ -3559,10 +3497,10 @@ begin
   result := temp shr 31;
 end;
 
-{$else}
+{$else} // CPU64 branch:
 
-{$ifndef ASMX64}   // x64 asm version in mormot.crypt.core.asmx64.inc
-{$ifndef ASMARM64} // aarch64 asm version in mormot.core.base.asmarm.inc
+{$ifndef ASMX64}   // x64 asm versions in mormot.crypt.core.asmx64.inc
+{$ifndef ASMARM64} // aarch64 asm versions in mormot.core.base.asmarm.inc
 procedure _rshift1(var V: THash256Rec);
 var
   carry, temp: PtrUInt;

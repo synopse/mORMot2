@@ -1142,6 +1142,572 @@ asm
         pop    ebx
 end;
 
+procedure _mult128({$ifdef FPC}constref{$else}const{$endif} l, r: THash128Rec;
+  out product: THash256Rec);
+  {$ifdef FPC}nostackframe; assembler;{$endif}
+asm
+        push    ebx
+        push    esi
+        push    edi
+        push    ebp
+        sub     esp, 32                 // local copy of both input operands
+        mov     esi, ecx                // @product (output)
+        mov     ebp, eax                // @l
+        mov     edi, edx                // @r
+        mov     ebx, dword ptr[ebp]
+        mov     dword ptr[esp], ebx
+        mov     ebx, dword ptr[edi]
+        mov     dword ptr[esp + 16], ebx
+        mov     ebx, dword ptr[ebp + 4]
+        mov     dword ptr[esp + 4], ebx
+        mov     ebx, dword ptr[edi + 4]
+        mov     dword ptr[esp + 20], ebx
+        mov     ebx, dword ptr[ebp + 8]
+        mov     dword ptr[esp + 8], ebx
+        mov     ebx, dword ptr[edi + 8]
+        mov     dword ptr[esp + 24], ebx
+        mov     ebx, dword ptr[ebp + 12]
+        mov     dword ptr[esp + 12], ebx
+        mov     ebx, dword ptr[edi + 12]
+        mov     dword ptr[esp + 28], ebx
+        // Column 0: no incoming carry
+        mov     eax, dword ptr[esp]
+        mul     dword ptr[esp + 16]
+        mov     dword ptr[esi], eax
+        mov     ebx, edx     // low accumulator for column 1
+        xor     edi, edi
+        xor     ebp, ebp
+        // Column 1: l0*r1, l1*r0
+        mov     eax, dword ptr[esp]
+        mul     dword ptr[esp + 20]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esp + 4]
+        mul     dword ptr[esp + 16]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     dword ptr[esi + 4], ebx
+        mov     ebx, edi
+        mov     edi, ebp
+        xor     ebp, ebp
+        // Column 2: l0*r2, l1*r1, l2*r0
+        mov     eax, dword ptr[esp]
+        mul     dword ptr[esp + 24]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esp + 4]
+        mul     dword ptr[esp + 20]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esp + 8]
+        mul     dword ptr[esp + 16]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     dword ptr[esi + 8], ebx
+        mov     ebx, edi
+        mov     edi, ebp
+        xor     ebp, ebp
+        // Column 3: l0*r3, l1*r2, l2*r1, l3*r0
+        mov     eax, dword ptr[esp]
+        mul     dword ptr[esp + 28]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esp + 4]
+        mul     dword ptr[esp + 24]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esp + 8]
+        mul     dword ptr[esp + 20]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esp + 12]
+        mul     dword ptr[esp + 16]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     dword ptr[esi + 12], ebx
+        mov     ebx, edi
+        mov     edi, ebp
+        xor     ebp, ebp
+        // Column 4: l1*r3, l2*r2, l3*r1
+        mov     eax, dword ptr[esp + 4]
+        mul     dword ptr[esp + 28]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esp + 8]
+        mul     dword ptr[esp + 24]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esp + 12]
+        mul     dword ptr[esp + 20]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     dword ptr[esi + 16], ebx
+        mov     ebx, edi
+        mov     edi, ebp
+        xor     ebp, ebp
+        // Column 5: l2*r3, l3*r2
+        mov     eax, dword ptr[esp + 8]
+        mul     dword ptr[esp + 28]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esp + 12]
+        mul     dword ptr[esp + 24]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     dword ptr[esi + 20], ebx
+        mov     ebx, edi
+        mov     edi, ebp
+        xor     ebp, ebp
+        // Column 6: l3*r3
+        mov     eax, dword ptr[esp + 12]
+        mul     dword ptr[esp + 28]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     dword ptr[esi + 24], ebx
+        mov     dword ptr[esi + 28], edi
+        add     esp, 32
+        pop     ebp
+        pop     edi
+        pop     esi
+        pop     ebx
+end;
+
+procedure _mult256(out Output: THash512Rec; const Left, Right: THash256Rec);
+  {$ifdef FPC} nostackframe; assembler; {$endif}
+asm
+        // - Accumulator (EBP:EDI:EBX) is a 96-bit unsigned Comba column
+        // - EAX:EDX is the 64-bit result from MUL
+        push    ebx
+        push    esi
+        push    edi
+        push    ebp
+        sub     esp, 68           // 64-byte product + saved Output pointer
+        mov     dword ptr[esp + 64], eax
+        mov     esi, edx          // Left; ECX remains Right
+        xor     ebx, ebx          // Column low
+        xor     edi, edi          // Column middle
+        xor     ebp, ebp          // Column high
+        // column 0: L0*R0
+        mov     eax, dword ptr[esi]
+        mul     dword ptr[ecx]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     dword ptr[esp + 0], ebx
+        mov     ebx, edi
+        mov     edi, ebp
+        xor     ebp, ebp
+        // column 1: L0*R1, L1*R0
+        mov     eax, dword ptr[esi]
+        mul     dword ptr[ecx + 4]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esi + 4]
+        mul     dword ptr[ecx]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     dword ptr[esp + 4], ebx
+        mov     ebx, edi
+        mov     edi, ebp
+        xor     ebp, ebp
+        // column 2: L0*R2, L1*R1, L2*R0
+        mov     eax, dword ptr[esi]
+        mul     dword ptr[ecx + 8]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esi + 4]
+        mul     dword ptr[ecx + 4]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esi + 8]
+        mul     dword ptr[ecx]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     dword ptr[esp + 8], ebx
+        mov     ebx, edi
+        mov     edi, ebp
+        xor     ebp, ebp
+        // column 3: L0*R3, L1*R2, L2*R1, L3*R0
+        mov     eax, dword ptr[esi]
+        mul     dword ptr[ecx + 12]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esi + 4]
+        mul     dword ptr[ecx + 8]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esi + 8]
+        mul     dword ptr[ecx + 4]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esi + 12]
+        mul     dword ptr[ecx]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     dword ptr[esp + 12], ebx
+        mov     ebx, edi
+        mov     edi, ebp
+        xor     ebp, ebp
+        // column 4: L0*R4, L1*R3, L2*R2, L3*R1, L4*R0
+        mov     eax, dword ptr[esi]
+        mul     dword ptr[ecx + 16]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esi + 4]
+        mul     dword ptr[ecx + 12]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esi + 8]
+        mul     dword ptr[ecx + 8]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esi + 12]
+        mul     dword ptr[ecx + 4]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esi + 16]
+        mul     dword ptr[ecx]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     dword ptr[esp + 16], ebx
+        mov     ebx, edi
+        mov     edi, ebp
+        xor     ebp, ebp
+        // column 5: L0*R5, L1*R4, L2*R3, L3*R2, L4*R1, L5*R0
+        mov     eax, dword ptr[esi]
+        mul     dword ptr[ecx + 20]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esi + 4]
+        mul     dword ptr[ecx + 16]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esi + 8]
+        mul     dword ptr[ecx + 12]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esi + 12]
+        mul     dword ptr[ecx + 8]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esi + 16]
+        mul     dword ptr[ecx + 4]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esi + 20]
+        mul     dword ptr[ecx]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     dword ptr[esp + 20], ebx
+        mov     ebx, edi
+        mov     edi, ebp
+        xor     ebp, ebp
+        // column 6: L0*R6, L1*R5, L2*R4, L3*R3, L4*R2, L5*R1, L6*R0
+        mov     eax, dword ptr[esi]
+        mul     dword ptr[ecx + 24]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esi + 4]
+        mul     dword ptr[ecx + 20]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esi + 8]
+        mul     dword ptr[ecx + 16]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esi + 12]
+        mul     dword ptr[ecx + 12]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esi + 16]
+        mul     dword ptr[ecx + 8]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esi + 20]
+        mul     dword ptr[ecx + 4]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esi + 24]
+        mul     dword ptr[ecx]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     dword ptr[esp + 24], ebx
+        mov     ebx, edi
+        mov     edi, ebp
+        xor     ebp, ebp
+        // column 7: L0*R7, L1*R6, L2*R5, L3*R4, L4*R3, L5*R2, L6*R1, L7*R0
+        mov     eax, dword ptr[esi]
+        mul     dword ptr[ecx + 28]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esi + 4]
+        mul     dword ptr[ecx + 24]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esi + 8]
+        mul     dword ptr[ecx + 20]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esi + 12]
+        mul     dword ptr[ecx + 16]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esi + 16]
+        mul     dword ptr[ecx + 12]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esi + 20]
+        mul     dword ptr[ecx + 8]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esi + 24]
+        mul     dword ptr[ecx + 4]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esi + 28]
+        mul     dword ptr[ecx]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     dword ptr[esp + 28], ebx
+        mov     ebx, edi
+        mov     edi, ebp
+        xor     ebp, ebp
+        // column 8: L1*R7, L2*R6, L3*R5, L4*R4, L5*R3, L6*R2, L7*R1
+        mov     eax, dword ptr[esi + 4]
+        mul     dword ptr[ecx + 28]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esi + 8]
+        mul     dword ptr[ecx + 24]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esi + 12]
+        mul     dword ptr[ecx + 20]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esi + 16]
+        mul     dword ptr[ecx + 16]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esi + 20]
+        mul     dword ptr[ecx + 12]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esi + 24]
+        mul     dword ptr[ecx + 8]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esi + 28]
+        mul     dword ptr[ecx + 4]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     dword ptr[esp + 32], ebx
+        mov     ebx, edi
+        mov     edi, ebp
+        xor     ebp, ebp
+        // column 9: L2*R7, L3*R6, L4*R5, L5*R4, L6*R3, L7*R2
+        mov     eax, dword ptr[esi + 8]
+        mul     dword ptr[ecx + 28]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esi + 12]
+        mul     dword ptr[ecx + 24]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esi + 16]
+        mul     dword ptr[ecx + 20]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esi + 20]
+        mul     dword ptr[ecx + 16]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esi + 24]
+        mul     dword ptr[ecx + 12]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esi + 28]
+        mul     dword ptr[ecx + 8]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     dword ptr[esp + 36], ebx
+        mov     ebx, edi
+        mov     edi, ebp
+        xor     ebp, ebp
+        // column 10: L3*R7, L4*R6, L5*R5, L6*R4, L7*R3
+        mov     eax, dword ptr[esi + 12]
+        mul     dword ptr[ecx + 28]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esi + 16]
+        mul     dword ptr[ecx + 24]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esi + 20]
+        mul     dword ptr[ecx + 20]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esi + 24]
+        mul     dword ptr[ecx + 16]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esi + 28]
+        mul     dword ptr[ecx + 12]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     dword ptr[esp + 40], ebx
+        mov     ebx, edi
+        mov     edi, ebp
+        xor     ebp, ebp
+        // column 11: L4*R7, L5*R6, L6*R5, L7*R4
+        mov     eax, dword ptr[esi + 16]
+        mul     dword ptr[ecx + 28]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esi + 20]
+        mul     dword ptr[ecx + 24]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esi + 24]
+        mul     dword ptr[ecx + 20]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esi + 28]
+        mul     dword ptr[ecx + 16]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     dword ptr[esp + 44], ebx
+        mov     ebx, edi
+        mov     edi, ebp
+        xor     ebp, ebp
+        // column 12: L5*R7, L6*R6, L7*R5
+        mov     eax, dword ptr[esi + 20]
+        mul     dword ptr[ecx + 28]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esi + 24]
+        mul     dword ptr[ecx + 24]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esi + 28]
+        mul     dword ptr[ecx + 20]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     dword ptr[esp + 48], ebx
+        mov     ebx, edi
+        mov     edi, ebp
+        xor     ebp, ebp
+        // column 13: L6*R7, L7*R6
+        mov     eax, dword ptr[esi + 24]
+        mul     dword ptr[ecx + 28]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esi + 28]
+        mul     dword ptr[ecx + 24]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     dword ptr[esp + 52], ebx
+        mov     ebx, edi
+        mov     edi, ebp
+        xor     ebp, ebp
+        // column 14: L7*R7
+        mov     eax, dword ptr[esi + 28]
+        mul     dword ptr[ecx + 28]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     dword ptr[esp + 56], ebx
+        mov     dword ptr[esp + 60], edi
+        // copy the complete product after all input reads
+        mov     edi, dword ptr[esp + 64]
+        mov     esi, esp
+        mov     ecx, 16
+        cld
+        rep     movsd
+        add     esp, 68
+        pop     ebp
+        pop     edi
+        pop     esi
+        pop     ebx
+end;
+
 // use CF flag to propagate 32-bit additions carry
 function _xasmadd(Value, Adds: pointer; Carry: PtrUInt): PtrUInt;
   {$ifdef FPC}nostackframe; assembler;{$endif}
