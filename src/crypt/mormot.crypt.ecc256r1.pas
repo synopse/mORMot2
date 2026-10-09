@@ -1389,15 +1389,19 @@ begin
   result := ecdh_shared_secret_uncompressed_pas(pub, PrivateKey, Secret);
 end;
 
-// Product is a full 512-bit unsigned integer - Output := Product mod Curve_N_32
-procedure _reduceNBarrett(out Output: THash256Rec; const Product: THash512Rec);
+{$ifdef HASQWORD} // circumvent Delphi 7/2007 compiler restriction
+
+procedure _modMultN(out Output: THash256Rec; const Left, Right: THash256Rec);
 var
+  product: THash512Rec;
   q1, q3, cross, acc, rem, trial: THash256Rec;
   tmp, tmp2: THash512Rec;
   part: THash128Rec;
   a4, mulCarry, w, old, q3Hi, r2Hi, remHi, mask, take: QWord;
   c1, c2, borrow, i, j: PtrUInt;
 begin
+  // Perform the Barret Reduction of (Left * Right) mod Curve_N_32
+  _mult256(product, Left, Right);
   // q1 = Product shr 192 = q1lo + a4 * 2^256
   q1.Q[0] := Product.Q[3];
   q1.Q[1] := Product.Q[4];
@@ -1459,14 +1463,64 @@ begin
   _mv(Output, rem);
 end;
 
-// computes result = (Left * Right) mod Curve_N_32
+{$else} // old algorithm which compiles for Delphi 7/2007 with UInt64 = Int64
+
 procedure _modMultN(out Output: THash256Rec; const Left, Right: THash256Rec);
 var
-  product: THash512Rec;
+  carry: QWord;
+  cmp: integer;
+  modbig, product: THash512Rec;
+  digits, bits, prodbits: integer;
+  v: PHash256Rec;
+const
+  modbits = 256; // _numBits(Curve_N_32);
 begin
   _mult256(product, Left, Right);
-  _reduceNBarrett(Output, product);
+  prodbits := _numbits256(product.H);
+  if prodbits <> 0 then
+    inc(prodbits, ECC_QUAD * 64)
+  else
+    prodbits := _numbits256(product.L);
+  if prodbits < modbits then
+  begin
+    // l_product < p_mod
+    _mv(Output, product.L);
+    exit;
+  end;
+  // Shift p_mod by (LeftBits - modbits). This multiplies p_mod by the largest
+  // power of two possible while still resulting in a number less than p_left
+  FillZero(modbig.b);
+  digits := (prodbits - modbits) shr 6;
+  bits   := (prodbits - modbits) and 63;
+  v := @modbig.Q[digits];
+  if bits > 0 then
+    modbig.Q[digits + ECC_QUAD] := _lshift(v^, Curve_N_32, bits)
+  else
+    _mv(v^, Curve_N_32);
+  // Subtract all multiples of Modulo to get the remainder
+  while (prodbits > ECC_QUAD * 64) or
+        (_cmp256(modbig.L, Curve_N_32) >= 0) do
+  begin
+    cmp := _cmp256(modbig.H, product.H);
+    if (cmp < 0) or
+       ((cmp = 0) and
+        (_cmp256(modbig.L, product.L) <= 0)) then
+    begin
+      if _dec256(product.L, modbig.L) <> 0 then
+        _dec256(product.H, P_1); // borrow
+      _dec256(product.H, modbig.H);
+    end;
+    carry := (modbig.Q[ECC_QUAD] and 1) shl 63;
+    _rshift1(modbig.H);
+    _rshift1(modbig.L);
+    if carry <> 0 then
+      modbig.Q[ECC_QUAD - 1] := modbig.Q[ECC_QUAD - 1] or carry;
+    dec(prodbits);
+  end;
+  _mv(Output, product.L);
 end;
+
+{$endif HASQWORD}
 
 function ecdsa_sign_pas(const PrivateKey: TEccPrivateKey; const Hash: TEccHash;
   out Signature: TEccSignature): boolean;
