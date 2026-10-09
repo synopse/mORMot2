@@ -970,53 +970,58 @@ begin
   _set1(Output);
   FillZero(v.b);
   repeat
-    cmp := _cmp256(a, b);
-    if cmp = 0 then
-      break;
     carry := 0;
     if (a.C[0] and 1) = 0 then
     begin
       _rshift1(a);
-      if (Output.C[0] and 1) = 1 then
+      if (Output.C[0] and 1) <> 0 then
         carry := _inc256(Output, Modulo);
       _rshift1(Output);
       if carry <> 0 then
-        Output.B[ECC_BYTES - 1] := Output.B[ECC_BYTES - 1] or $80;
+        Output.B[ECC_BYTES - 1] :=
+          Output.B[ECC_BYTES - 1] or $80;
     end
     else if (b.C[0] and 1) = 0 then
     begin
       _rshift1(b);
-      if (v.C[0] and 1) = 1 then
-        carry := _add256(v, v, Modulo);
+      if (v.C[0] and 1) <> 0 then
+        carry := _inc256(v, Modulo);
       _rshift1(v);
       if carry <> 0 then
-        v.B[ECC_BYTES - 1] := v.B[ECC_BYTES - 1] or $80;
-    end
-    else if cmp > 0 then
-    begin
-      _dec256(a, b);
-      _rshift1(a);
-      if _cmp256(Output, v) < 0 then
-        _inc256(Output, Modulo);
-      _dec256(Output, v);
-      if (Output.C[0] and 1) = 1 then
-        carry := _inc256(Output, Modulo);
-      _rshift1(Output);
-      if carry <> 0 then
-        Output.B[ECC_BYTES - 1] := Output.B[ECC_BYTES - 1] or $80;
+        v.B[ECC_BYTES - 1] :=
+          v.B[ECC_BYTES - 1] or $80;
     end
     else
     begin
-      _dec256(b, a);
-      _rshift1(b);
-      if _cmp256(v, Output) < 0 then
-        _inc256(v, Modulo);
-      _dec256(v, Output);
-      if (v.C[0] and 1) = 1 then
-        carry := _inc256(v, Modulo);
-      _rshift1(v);
-      if carry > 0 then
-        v.B[ECC_BYTES - 1] := v.B[ECC_BYTES - 1] or $80;
+      cmp := _cmp256(a, b); // compare only when both operands are odd
+      if cmp = 0 then
+        break;
+      if cmp > 0 then
+      begin
+        _dec256(a, b);
+        _rshift1(a);
+        if _sub256(Output, Output, v) <> 0 then
+          _inc256(Output, Modulo);
+        if (Output.C[0] and 1) <> 0 then
+          carry := _inc256(Output, Modulo);
+        _rshift1(Output);
+        if carry <> 0 then
+          Output.B[ECC_BYTES - 1] :=
+            Output.B[ECC_BYTES - 1] or $80;
+      end
+      else
+      begin
+        _dec256(b, a);
+        _rshift1(b);
+        if _sub256(v, v, Output) <> 0 then
+          _inc256(v, Modulo);
+        if (v.C[0] and 1) <> 0 then
+          carry := _inc256(v, Modulo);
+        _rshift1(v);
+        if carry <> 0 then
+          v.B[ECC_BYTES - 1] :=
+            v.B[ECC_BYTES - 1] or $80;
+      end;
     end;
   until false;
 end;
