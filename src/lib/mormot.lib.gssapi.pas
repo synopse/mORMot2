@@ -612,7 +612,7 @@ type
   // - calling ServerForceKeytab() on each thread, only when needed
   TServerSspiKeyTab = class(TObjectLightLock)
   protected
-    fKeyTab: TFileName;
+    fKeyTabFile: TFileName;
     fKeyTabSize: Int64;
     fKeyTabTime: TUnixMSTime;
     fKeyTabSequence: integer; // stored in a threadvar
@@ -622,7 +622,7 @@ type
   public
     /// each thread should call this method before KerberosServerAuthHeader()
     // - will do nothing if the thread is already prepared for the keytab
-    procedure PrepareKeyTab;
+    function PrepareKeyTab: boolean;
     /// propagate a keytab file to all server threads
     // - returns true if the keytab was identified as changed
     function SetKeyTab(const aKeyTab: TFileName): boolean;
@@ -642,13 +642,14 @@ type
       read fKeyTabSequence;
   end;
 
-/// force loading server credentials from specified keytab file
+/// force the current thread to load server credentials from a keytab file
 // - by default, clients may authenticate to any service principal
 // in the default keytab (/etc/krb5.keytab or the value of the global
 // KRB5_KTNAME environment variable)
-// - this function is thread-specific and should be done on all threads, e.g.
+// - this function is thread-specific and should be done for all threads, e.g.
 // via TServerSspiKeyTab.PrepareKeyTab
-function ServerForceKeytab(const aKeytab: TFileName): boolean;
+// - warning: the file name parameter is UTF-8 as expected by the GSSAPI
+function ServerForceKeytab(const aKeytabFileName: RawUtf8): boolean;
 
 const
   /// the API available on this system to implement Kerberos
@@ -1564,11 +1565,12 @@ begin
   result := ForceSecKerberosSpn;
 end;
 
-function ServerForceKeytab(const aKeytab: TFileName): boolean;
+function ServerForceKeytab(const aKeytabFileName: RawUtf8): boolean;
 begin
   result := Assigned(GssApi.krb5_gss_register_acceptor_identity) and
-    not GSS_ERROR(GssApi.krb5_gss_register_acceptor_identity(pointer(aKeytab)));
-end;         // = gsskrb5_register_acceptor_identity()
+    not GSS_ERROR(GssApi.
+          krb5_gss_register_acceptor_identity(pointer(aKeytabFileName)));
+end; // = gsskrb5_register_acceptor_identity()
 
 
 { TServerSspiKeyTab }
@@ -1576,18 +1578,25 @@ end;         // = gsskrb5_register_acceptor_identity()
 threadvar // efficient API call once per thread, with proper hot reload
   ServerSspiKeyTabSequence: integer;
 
-procedure TServerSspiKeyTab.PrepareKeyTab;
+function TServerSspiKeyTab.PrepareKeyTab: boolean;
 var
   seq: PInteger;
+  fn: RawUtf8; // ServerForceKeytab() GSSAPI call expects UTF-8 not TFileName
 begin
+  result := false;
   if (self = nil) or
      (fKeytabSequence = 0) then
     exit; // no SetKeyTab() call yet
   seq := @ServerSspiKeyTabSequence;
-  if seq^ = fKeytabSequence then
-    exit; // we can reuse existing keytab already set for this particular thread
-  seq^ := fKeytabSequence;
-  ServerForceKeytab(fKeyTab); // per-thread GSSAPI call
+  fSafe.Lock;
+  if seq^ <> fKeytabSequence then
+  begin
+    seq^ := fKeytabSequence;
+    StringToUtf8(fKeyTabFile, fn);
+  end;
+  fSafe.UnLock;
+  if fn <> '' then
+    result := ServerForceKeytab(fn); // per-thread GSSAPI call
 end;
 
 function TServerSspiKeyTab.SetKeyTab(const aKeyTab: TFileName): boolean;
@@ -1596,24 +1605,24 @@ var
   ft: TUnixMSTime;
 begin
   result := false;
-  if (self <> nil) and
-     (aKeyTab <> '') and
-     Assigned(GssApi.krb5_gss_register_acceptor_identity) and
-     FileInfoByName(aKeyTab, fs, ft) and // aKeyTab exists
-     (fs > 0) then                       // not a folder
-    if (ft <> fKeyTabTime) or            // ensure don't reload if not changed
-       (fs <> fKeyTabSize) or
-       (fKeyTab <> aKeyTab) then
-      if FileIsKeyTab(aKeyTab) then // ensure this new file is a valid keytab
-      begin
-        fSafe.Lock;
-        fKeyTab := aKeyTab;
-        fKeyTabSize := fs;
-        fKeyTabTime := ft;
-        inc(fKeytabSequence); // should be the last to notify PrepareKeyTab
-        fSafe.UnLock;
-        result := true;
-      end;
+  // don't reload unless actually changed on disk
+  if (self = nil) or
+     (aKeyTab = '') or
+     not Assigned(GssApi.krb5_gss_register_acceptor_identity) or
+     not FileInfoByName(aKeyTab, fs, ft) or // aKeyTab exists
+     (fs <= 0) or                           // not a file
+     ((ft = fKeyTabTime) and
+      (fs = fKeyTabSize)) then              // did not change on disk
+    exit;
+  fKeyTabSize := fs;
+  fKeyTabTime := ft;                        // ensure tried once
+  result := FileIsKeyTab(aKeyTab);
+  if not result then
+    exit;               // keep existing keytab if the new one is invalid
+  fSafe.Lock;
+  fKeyTabFile := aKeyTab;
+  inc(fKeytabSequence); // should be the last to notify PrepareKeyTab
+  fSafe.UnLock;
 end;
 
 procedure TServerSspiKeyTab._SetKeyTab(const aKeyTab: TFileName);
@@ -1626,7 +1635,11 @@ begin
   if self = nil then
     result := ''
   else
-    result := fKeyTab;
+  begin
+    fSafe.Lock;
+    result := fKeyTabFile;
+    fSafe.UnLock;
+  end;
 end;
 
 class procedure TServerSspiKeyTab.FileSetter(var aInstance: TServerSspiKeyTab;
@@ -1658,22 +1671,24 @@ begin
 end;
 
 function TServerSspiKeyTab.TryRefresh(Tix32: cardinal): boolean;
+var
+  fn: TFileName;
 begin
   result := false;
   Tix32 := (Tix32 shr 1) + 1;    // try at most every two seconds
   if (self = nil) or
-     (fKeyTab = '') or           // no file to refresh
+     (fKeyTabFile = '') or       // no file to refresh
      (Tix32 = fLastRefresh) then // quick path
     exit;
   fSafe.Lock;
   if Tix32 <> fLastRefresh then  // thread-safe path
   begin
-    result := true;
+    fn := fKeyTabFile;
     fLastRefresh := Tix32;
   end;
   fSafe.UnLock;
-  if result then
-    result := SetKeyTab(fKeyTab);
+  if fn <> '' then
+    result := SetKeyTab(fn);
 end;
 
 
