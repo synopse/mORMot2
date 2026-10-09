@@ -9334,19 +9334,18 @@ begin
       fProtocol.OnFragment(self, aBufferType, aBuffer, aBufferSize);
   end
   else
-  begin
+  try
     // last Fragment
     if Assigned(fProtocol.OnMessage) then
-    begin
       if fProtocol.ManualFragmentManagement then
         fProtocol.OnMessage(self, aBufferType, aBuffer, aBufferSize)
       else
       begin
         Append(fBuffer, aBuffer, aBufferSize);
         fProtocol.OnMessage(self, aBufferType, pointer(fBuffer), Length(fBuffer));
-        fBuffer := '';
       end;
-    end;
+  finally
+    fBuffer := '';
   end;
 end;
 
@@ -9512,9 +9511,8 @@ begin
             inc(total, written);
           end;
           WebSocketApi.CompleteAction(fWSHandle, actctxt, total);
-          if ActionQueue = WEB_SOCKET_SEND_ACTION_QUEUE then
-            exit;
-          result := true; // need to continue
+          result := true;
+          continue; // fetch next action, without completing actctxt twice
         end;
       WEB_SOCKET_INDICATE_SEND_COMPLETE_ACTION:
         ;
@@ -9716,6 +9714,7 @@ begin
               not (ch^ in [',']) do
           inc(ch);
         FastSetString(protoname, chB, ch);
+        TrimSelf(protoname);
         for i := 0 to Length(protos) - 1 do
           if protos[i].name = protoname then
           begin
