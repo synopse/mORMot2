@@ -408,6 +408,7 @@
       {$define CPUARM3264}
       {$define FPC_CPUARM}     // circumvent bug e.g. about sets in registers
       {$define FPC_CPUAARCH64}
+      {$define ASMARM}         // Locked*() in mormot.core.base.asmarm.inc
       {$ifdef OSWINDOWS}       // aarch64-win64 compatibility
         {$undef FPC_SINGLEABI}
         {$define DISPINVOKE_NO_OLESTR} // avoid late binding _ := 'constant'
@@ -441,6 +442,9 @@
     {$ifdef CPUARM}
       {$define CPUARM3264}
       {$define FPC_CPUARM}
+      {$ifdef CPUARM_HAS_DMB}  // ARMv7+
+        {$define ASMARM}       // Locked*() in mormot.core.base.asmarm.inc
+      {$endif CPUARM_HAS_DMB}
     {$endif CPUARM}
     {$define STRCNT32}         // 32-bit TAnsiRec.Ref
     {$define DACNT32}          // 32-bit TDynArrayRec.refCnt
@@ -965,6 +969,7 @@
     {$undef FPC_CPUX64}
     {$undef FPC_PICX64}
     {$undef FPC_CPUAARCH64}
+    {$undef ASMARM}
     // the vmtAutoTable tricks seems to fail - TODO: check again
     {$define NOPATCHVMT}
     // no static linking

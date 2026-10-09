@@ -3045,59 +3045,59 @@ const
 // returns I + 1, and store I + 1 within I in an atomic/thread-safe way
 // - this unit adds a ReadWriteBarrier to the FPC RTL system.InterlockedIncrement()
 function InterlockedIncrement(var I: integer): integer;
-  {$ifndef ASMINTEL} {$ifndef FPC_CPUAARCH64} inline; {$endif} {$endif}
+  {$ifndef ASMINTEL} {$ifndef ASMARM} inline; {$endif} {$endif}
 
 /// compatibility function, to be implemented according to the running CPU
 // - expect the same result as the homonymous Win32 API function, i.e.
 // returns I - 1, and store I - 1 within I in an atomic/thread-safe way
 // - this unit adds a ReadWriteBarrier to the FPC RTL system.InterlockedDecrement()
 function InterlockedDecrement(var I: integer): integer;
-  {$ifndef ASMINTEL} {$ifndef FPC_CPUAARCH64} inline; {$endif} {$endif}
+  {$ifndef ASMINTEL} {$ifndef ASMARM} inline; {$endif} {$endif}
 
 /// slightly faster than InterlockedIncrement() when you don't need the result
 procedure LockedInc32(int32: PInteger);
-  {$ifndef ASMINTEL} {$ifndef FPC_CPUAARCH64} inline; {$endif} {$endif}
+  {$ifndef ASMINTEL} {$ifndef ASMARM} inline; {$endif} {$endif}
 
 /// slightly faster than InterlockedDecrement() when you don't need the result
 procedure LockedDec32(int32: PInteger);
-  {$ifndef ASMINTEL} {$ifndef FPC_CPUAARCH64} inline; {$endif} {$endif}
+  {$ifndef ASMINTEL} {$ifndef ASMARM} inline; {$endif} {$endif}
 
 /// slightly faster than InterlockedIncrement64()
 procedure LockedInc64(int64: PInt64);
-  {$ifndef ASMINTEL} {$ifndef FPC_CPUAARCH64} inline; {$endif} {$endif}
+  {$ifndef ASMINTEL} {$ifndef ASMARM} inline; {$endif} {$endif}
 
 /// fast atomic compare-and-swap operation on a pointer-sized integer value
-// - via Intel/AMD/aarch64 custom asm or FPC RTL InterlockedCompareExchange()
+// - via Intel/AMD/ARM custom asm or FPC RTL InterlockedCompareExchange()
 // - true if Target was equal to Comparand, and Target set to NewValue
 // - used e.g. as thread-safe atomic operation for TLightLock/TRWLock
 // - Target should be aligned, which is the case when defined as a class field
 function LockedExc(var Target: PtrUInt; NewValue, Comperand: PtrUInt): boolean;
-  {$ifndef ASMINTEL} {$ifndef FPC_CPUAARCH64} inline; {$endif} {$endif}
+  {$ifndef ASMINTEL} {$ifndef ASMARM} inline; {$endif} {$endif}
 
 /// fast atomic compare-and-swap operation on a 32-bit integer value
-// - via Intel/AMD/aarch64 custom asm or FPC RTL InterlockedCompareExchange()
+// - via Intel/AMD/ARM custom asm or FPC RTL InterlockedCompareExchange()
 // - true if Target was equal to Comparand, and Target set to NewValue
 // - Target should be aligned, which is the case when defined as a class field
 function LockedExc32(var Target: cardinal; NewValue, Comperand: cardinal): boolean;
-  {$ifndef ASMINTEL} {$ifndef FPC_CPUAARCH64} inline; {$endif} {$endif}
+  {$ifndef ASMINTEL} {$ifndef ASMARM} inline; {$endif} {$endif}
 
 /// fast atomic addition operation on a pointer-sized integer value
-// - via Intel/AMD/aarch64 custom asm or FPC RTL InterlockedExchangeAdd()
+// - via Intel/AMD/ARM custom asm or FPC RTL InterlockedExchangeAdd()
 // - Target should be aligned, which is the case when defined as a class field
 procedure LockedAdd(var Target: PtrUInt; Increment: PtrUInt);
-  {$ifndef ASMINTEL} {$ifndef FPC_CPUAARCH64} inline; {$endif} {$endif}
+  {$ifndef ASMINTEL} {$ifndef ASMARM} inline; {$endif} {$endif}
 
 /// fast atomic substraction operation on a pointer-sized integer value
-// - via Intel/AMD/aarch64 custom asm or FPC RTL InterlockedExchangeAdd()
+// - via Intel/AMD/ARM custom asm or FPC RTL InterlockedExchangeAdd()
 // - Target should be aligned, which is the case when defined as a class field
 procedure LockedDec(var Target: PtrUInt; Decrement: PtrUInt);
-  {$ifndef ASMINTEL} {$ifndef FPC_CPUAARCH64} inline; {$endif} {$endif}
+  {$ifndef ASMINTEL} {$ifndef ASMARM} inline; {$endif} {$endif}
 
 /// fast atomic addition operation on a 32-bit integer value
-// - via Intel/AMD/aarch64 custom asm or FPC RTL InterlockedExchangeAdd()
+// - via Intel/AMD/ARM custom asm or FPC RTL InterlockedExchangeAdd()
 // - Target should be aligned, which is the case when defined as a class field
 procedure LockedAdd32(var Target: cardinal; Increment: cardinal);
-  {$ifndef ASMINTEL} {$ifndef FPC_CPUAARCH64} inline; {$endif} {$endif}
+  {$ifndef ASMINTEL} {$ifndef ASMARM} inline; {$endif} {$endif}
 
 /// fast atomic "result := Target^; Target^ := New;" on a 32-bit integer value
 function LockedReset32(Target: PInteger; New: integer = 0): integer;
@@ -11374,13 +11374,13 @@ end;
 {$ifdef FPC}
 // on arm32/aarch64, the FPC RTL atomic opcodes are no memory barrier, whereas
 // Locked*() are expected to be full barriers, as LOCK on Intel
-// - AARCH64 has dedicated asm in an include file
-// - other CPUs (e.g. 32-bit ARM) surround the RTL calls with ReadWriteBarrier
+// - AARCH64 and ARMv7 have dedicated asm in an include file
+// - other CPUs (e.g. ARMv6) surround the RTL calls with ReadWriteBarrier
 
-{$ifdef FPC_CPUAARCH64}
+{$ifdef ASMARM}
 
-// optimized Locked*() asm for aarch64 is located in an include file
-{$include mormot.core.base.asmaarch64.inc}
+// optimized Locked*() asm for aarch64 and ARMv7 is located in an include file
+{$include mormot.core.base.asmarm.inc}
 
 {$else}
 
@@ -11469,7 +11469,7 @@ begin
   ReadWriteBarrier;
 end;
 
-{$endif FPC_CPUAARCH64}
+{$endif ASMARM}
 
 function StrCntDecFree(var refcnt: TStrCnt): boolean;
 begin
