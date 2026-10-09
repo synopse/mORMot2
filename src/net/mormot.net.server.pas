@@ -2127,6 +2127,7 @@ type
     fReceiveBufferSize: cardinal;
     fAuthenticationSchemes: THttpApiRequestAuthentications; // 8-bit
     fLogging: boolean;                                      // 8-bit
+    fIdleTix64: Int64; // set every second by OnIdleProcess
     fIdleThread: TSynBackgroundThreadProcess;
     function GetRegisteredUrl: RawUtf8;
     function GetHttpQueueLength: cardinal; override;
@@ -2328,7 +2329,6 @@ type
 
 type
   TSynThreadPoolHttpApiWebSocketServer = class;
-  TSynWebSocketGuard = class;
   THttpApiWebSocketServer = class;
   THttpApiWebSocketServerProtocol = class;
 
@@ -2378,7 +2378,7 @@ type
     fOpaqueHTTPRequestId: HTTP_REQUEST_ID;
     fWSHandle: WEB_SOCKET_HANDLE;
     fLastActionContext: pointer;
-    fLastReceiveTickCount: Int64;
+    fLastActiveTix64, fLastPingTix64: Int64;
     fPrivateData: pointer;
     fBuffer: RawByteString;
     function ProcessActions(ActionQueue: cardinal): boolean;
@@ -2508,7 +2508,6 @@ type
     fOwnedProtocolsSafe: TLightLock;
     fPingTimeout: integer;
     fThreadPoolServer: TSynThreadPoolHttpApiWebSocketServer;
-    fGuard: TSynWebSocketGuard;
     fOnWSThreadStart: TOnNotifyThread;
     fOnWSThreadTerminate: TOnNotifyThread;
     fServiceOverlaped: TOverlapped;
@@ -2521,6 +2520,7 @@ type
     procedure DoAfterResponse(Ctxt: THttpServerRequest; const Referer: RawUtf8;
       StatusCode: cardinal; Elapsed, Received, Sent: QWord); override;
     function GetSendResponseFlags(Ctxt: THttpServerRequest): integer; override;
+    procedure DoIdle(tix64: Int64; sec32: cardinal); override;
     procedure DestroyMainThread; override;
   public
     /// initialize the HTTPAPI based Server with WebSocket support
@@ -2547,12 +2547,10 @@ type
     /// handle the HTTP request
     function Request(Ctxt: THttpServerRequestAbstract): cardinal; override;
     /// Ping timeout in seconds. 0 mean no ping.
-    // - if connection not receive messages longer than this timeout
-    // TSynWebSocketGuard will send ping frame
-    // - if connection not receive any messages longer than double of
-    // this timeout it will be closed
+    // - send ping frames on connection idle more than this timeout
+    // - any connection idle longer than double of this timeout will be closed
     property PingTimeout: integer
-      read fPingTimeout;
+      read fPingTimeout write fPingTimeout;
     /// access to the associated endpoints as a thread-safe array copy
     function GetRegisteredProtocols: THttpApiWebSocketServerProtocolDynArray;
     /// event called when the processing thread starts
@@ -2586,17 +2584,6 @@ type
     /// initialize the thread pool
     constructor Create(Server: THttpApiWebSocketServer;
       NumberOfThreads: integer = 1); reintroduce;
-  end;
-
-  /// Thread for closing deprecated WebSocket connections
-  // - i.e. which have not responsed after PingTimeout interval
-  TSynWebSocketGuard = class(TThreadAbstract)
-  protected
-    fServer: THttpApiWebSocketServer;
-    procedure Execute; override;
-  public
-    /// initialize the background thread
-    constructor Create(Server: THttpApiWebSocketServer); reintroduce;
   end;
 
 {$endif USEWININET}
@@ -8768,12 +8755,10 @@ begin
 end;
 
 procedure THttpApiServer.OnIdleProcess(Sender: TSynBackgroundThreadProcess);
-var
-  tix: Int64;
 begin
   // executed by fIdleThread every second
-  tix := mormot.core.os.GetTickCount64;
-  DoIdle(tix, cardinal(tix div 1000)); // logger + telemetry + OnIdle()
+  fIdleTix64 := mormot.core.os.GetTickCount64;
+  DoIdle(fIdleTix64, cardinal(fIdleTix64 div 1000)); // virtual method
 end;
 
 function THttpApiServer.GetSendResponseFlags(Ctxt: THttpServerRequest): integer;
@@ -9329,7 +9314,7 @@ begin
     result := WebSocketApi.EndServerHandshake(fWSHandle) = S_OK;
   end;
   if result then
-    fLastReceiveTickCount := 0
+    fLastActiveTix64 := 0
   else if fWSHandle <> nil then
   begin
     WebSocketApi.AbortHandle(fWSHandle);
@@ -9434,10 +9419,10 @@ var
 begin
   if (@self = nil) or
      (not (fState in WSAPI_ACTIVE)) or
-     (fLastReceiveTickCount <= 0) or
+     (fLastActiveTix64 <= 0) or
      (fProtocol.fServer.fPingTimeout <= 0) then
     exit;
-  elapsed := Tix64 - fLastReceiveTickCount;
+  elapsed := Tix64 - fLastActiveTix64;
   delay := fProtocol.fServer.PingTimeout * 1000;
   if elapsed > 2 * delay then
   begin
@@ -9446,15 +9431,17 @@ begin
     fProtocol.BeginClose(@self, wsClosedByGuard);
   end
   else if (elapsed >= delay) and
-          (fState = wsOpen) then
-    try
-      Ping;
-    except
-      // a failed ping should close this connection, not terminate the thread
-      fCloseStatus := WEB_SOCKET_ENDPOINT_UNAVAILABLE_CLOSE_STATUS;
-      fBuffer := 'Ping failed';
-      fProtocol.BeginClose(@self, wsClosedByGuard);
-    end;
+          (fState = wsOpen) and
+          (fLastPingTix64 < fLastActiveTix64) then
+  try
+    Ping;
+    fLastPingTix64 := Tix64;
+  except
+    // a failed ping should close this connection, not terminate the thread
+    fCloseStatus := WEB_SOCKET_ENDPOINT_UNAVAILABLE_CLOSE_STATUS;
+    fBuffer := 'Ping failed';
+    fProtocol.BeginClose(@self, wsClosedByGuard);
+  end;
 end;
 
 procedure THttpApiWebSocketConnection.Disconnect;
@@ -9534,7 +9521,7 @@ begin
           continue; // fetch next action, without completing actctxt twice
         end;
       WEB_SOCKET_INDICATE_SEND_COMPLETE_ACTION:
-        ;
+        fLastActiveTix64 := fProtocol.fServer.fIdleTix64; // from OnIdleProcess
       WEB_SOCKET_RECEIVE_FROM_NETWORK_ACTION:
         begin
           result := false;
@@ -9559,7 +9546,7 @@ begin
         end;
       WEB_SOCKET_INDICATE_RECEIVE_COMPLETE_ACTION:
         begin
-          fLastReceiveTickCount := mormot.core.os.GetTickCount64;
+          fLastActiveTix64 := fProtocol.fServer.fIdleTix64; // from OnIdleProcess
           if buftyp = WEB_SOCKET_CLOSE_BUFFER_TYPE then
           begin
             if fState = wsOpen then
@@ -9652,8 +9639,6 @@ begin
     raise EWebSocketApi.Create('WebSocket API not supported');
   inherited Create(QueueName, nil, nil, '', ProcessOptions);
   fPingTimeout := aPingTimeout;
-  if fPingTimeout > 0 then
-    fGuard := TSynWebSocketGuard.Create(Self);
   fOnWSThreadStart := aOnWSThreadStart;
   fOnWSThreadTerminate := aOnWSThreadTerminate;
   fThreadPoolServer := TSynThreadPoolHttpApiWebSocketServer.Create(Self,
@@ -9662,8 +9647,8 @@ end;
 
 function THttpApiWebSocketServer.GetRegisteredProtocols: THttpApiWebSocketServerProtocolDynArray;
 begin
-  fOwnedProtocolsSafe.Lock; // thread-safe by-reference copy
-  result := fOwnedProtocols;
+  fOwnedProtocolsSafe.Lock; // thread-safe copy
+  result := copy(fOwnedProtocols);
   fOwnedProtocolsSafe.UnLock;
 end;
 
@@ -9673,7 +9658,6 @@ var
   running, tix, endtix, lasttix: cardinal;
 begin
   fWsStopping := true;
-  FreeAndNilSafe(fGuard);
   for i := 0 to High(fOwnedProtocols) do
     fOwnedProtocols[i].DoShutdown;
   endtix := GetTickSec + 5; // never wait forever
@@ -9880,6 +9864,39 @@ begin
   IocpPostQueuedStatus(fThreadPoolServer.FRequestQueue, 0, nil, @fServiceOverlaped);
 end;
 
+procedure THttpApiWebSocketServer.DoIdle(tix64: Int64; sec32: cardinal);
+var
+  i: PtrInt;
+  conn: PHttpApiWebSocketConnection;
+  proto: THttpApiWebSocketServerProtocol;
+  protos: THttpApiWebSocketServerProtocolDynArray;
+begin
+  // logger + telemetry + OnIdle()
+  inherited DoIdle(tix64, sec32);
+  // PING support
+  if (fPingTimeout > 0) and
+     not fWsStopping and
+     (fThreadPoolServer <> nil) then
+  begin
+    protos := GetRegisteredProtocols;
+    for i := 0 to High(protos) do
+    begin
+      proto := protos[i];
+      proto.fSafe.Lock;
+      try
+        conn := proto.fConnections.Head;
+        while conn <> nil do
+        begin
+          conn.CheckIsActive(tix64);
+          conn := conn.fList.next;
+        end;
+      finally
+        proto.fSafe.UnLock;
+      end;
+    end;
+  end;
+end;
+
 
 { TSynThreadPoolHttpApiWebSocketServer }
 
@@ -9953,7 +9970,7 @@ begin
          not conn.fUpgradePending then
       begin
         conn.fState := wsOpen;
-        conn.fLastReceiveTickCount := mormot.core.os.GetTickCount64;
+        conn.fLastActiveTix64 := fServer.fIdleTix64; // set by OnIdleProcess
         conn.fConnected := true;
         conn.DoOnConnect;
       end;
@@ -10000,49 +10017,6 @@ begin
   fOnThreadStart := OnThreadStart;
   fOnThreadTerminate := OnThreadTerminate;
   inherited Create(NumberOfThreads, Server.fReqQueue);
-end;
-
-
-{ TSynWebSocketGuard }
-
-procedure TSynWebSocketGuard.Execute;
-var
-  i: PtrInt;
-  conn: PHttpApiWebSocketConnection;
-  proto: THttpApiWebSocketServerProtocol;
-  protos: THttpApiWebSocketServerProtocolDynArray;
-  tix: Int64;
-begin
-  repeat
-    tix := mormot.core.os.GetTickCount64;
-    protos := fServer.GetRegisteredProtocols; // local copy
-    for i := 0 to Length(protos) - 1 do
-    begin
-      proto := protos[i];
-      proto.fSafe.Lock;
-      try
-        conn := proto.fConnections.Head;
-        while (conn <> nil) and
-              not Terminated do
-        begin
-          conn.CheckIsActive(tix);
-          conn := conn.fList.next;
-        end;
-      finally
-        proto.fSafe.UnLock;
-      end;
-    end;
-    inc(tix, fServer.PingTimeout * MilliSecsPerSec);
-    while not Terminated and
-          (mormot.core.os.GetTickCount64 < tix) do
-      SleepHiRes(100);
-  until Terminated;
-end;
-
-constructor TSynWebSocketGuard.Create(Server: THttpApiWebSocketServer);
-begin
-  fServer := Server;
-  inherited Create({suspended=}false);
 end;
 
 {$endif USEWININET}
