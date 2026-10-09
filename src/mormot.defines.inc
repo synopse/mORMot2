@@ -157,7 +157,7 @@
     CPU32 CPU64
     CPUINTEL CPUX86 CPUX64 CPUARM3264 CPUARM CPUAARCH64 CPUX86NOTPIC
     NOASMBLOCK KEEP_STACKFRAMES
-    ASMINTEL ASMINTELNOTPIC ASMSSE2 ASMAESNI
+    ASMINTEL ASMINTELNOTPIC ASMSSE2 ASMAESNI ASMARM ASMARM64 ASMINTELARM
     ASMX86 ASMX86NOTPIC ASMX64 ASMX64NOTPIC ASMX64AVX0 ASMX64AVX1
     ABIX86 ABIX64 ABIWINX64 ABISYSVX64 ABIA32 ABIA64 ABIWINA64 ABISYSVA64
     TSYNEXTENDED80 EXTENDEDTOSHORT_USESTR DOUBLETOSHORT_USEGRISU
@@ -387,6 +387,7 @@
       {$ASMMODE INTEL}         // as Delphi requires
       {$define CPUINTEL}
       {$define ASMINTEL}
+      {$define ASMINTELARM}
       {$define ASMX64}
       {$define FPC_CODEALIGN}  // we can use {$CODEALIGN LOOP=16} conditional
       {$define FPC_CPUX64}
@@ -409,6 +410,8 @@
       {$define FPC_CPUARM}     // circumvent bug e.g. about sets in registers
       {$define FPC_CPUAARCH64}
       {$define ASMARM}         // Locked*() in mormot.core.base.asmarm.inc
+      {$define ASMARM64}
+      {$define ASMINTELARM}
       {$ifdef OSWINDOWS}       // aarch64-win64 compatibility
         {$undef FPC_SINGLEABI}
         {$define DISPINVOKE_NO_OLESTR} // avoid late binding _ := 'constant'
@@ -421,6 +424,7 @@
       {$define FPC_INTEL}
       {$ASMMODE INTEL}         // as Delphi requires
       {$define ASMINTEL}
+      {$define ASMINTELARM}
       {$define ASMX86}
       {$define CPUINTEL}
       {.$define FPC_CODEALIGN} // no need of {$CODEALIGN LOOP=16} conditional
@@ -444,6 +448,7 @@
       {$define FPC_CPUARM}
       {$ifdef CPUARM_HAS_DMB}  // ARMv7+
         {$define ASMARM}       // Locked*() in mormot.core.base.asmarm.inc
+        {$define ASMINTELARM}
       {$endif CPUARM_HAS_DMB}
     {$endif CPUARM}
     {$define STRCNT32}         // 32-bit TAnsiRec.Ref
@@ -638,6 +643,7 @@
     {$endif CPUARM64}
     {$ifdef CPUINTEL}
       {$define ASMINTEL}
+      {$define ASMINTELARM}
     {$else}
       {$ifdef CPU64BITS}  // handle non INTEL/AMD Delphi targets
         {$define CPU64}
@@ -651,6 +657,7 @@
     {$define CPUINTEL}
     {$define CPUX86}
     {$define ASMINTEL}
+    {$define ASMINTELARM}
     {$define ASMX86}
   {$ifend}
 
@@ -949,6 +956,9 @@
   {$ifdef NOASMBLOCK}
     {$undef ASMINTEL}
     {$undef ASMINTELNOTPIC}
+    {$undef ASMARM}
+    {$undef ASMARM64}
+    {$undef ASMINTELARM}
     {$undef ASMSSE2}
     {$undef ASMAESNI}
     {$undef ASMX86}
@@ -966,7 +976,6 @@
     {$undef FPC_CPUX64}
     {$undef FPC_PICX64}
     {$undef FPC_CPUAARCH64}
-    {$undef ASMARM}
     // the vmtAutoTable tricks seems to fail - TODO: check again
     {$define NOPATCHVMT}
     // no static linking
