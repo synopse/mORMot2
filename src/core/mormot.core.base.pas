@@ -2712,6 +2712,7 @@ function _dec256(var Value: THash256Rec; const Subs: THash256Rec): PtrUInt;
 function _sub256(out Output: THash256Rec; const Left, Right: THash256Rec): PtrUInt;
 procedure _rshift1(var V: THash256Rec);
 function _lshift1(var V: THash256Rec): PtrUInt;
+function _cmp256(const Left, Right: THash256Rec): integer;
 procedure _mult128(constref l, r: THash128Rec; out product: THash256Rec);
 procedure _mult256(out Output: THash512Rec; const Left, Right: THash256Rec);
 {$endif ASMARM64}

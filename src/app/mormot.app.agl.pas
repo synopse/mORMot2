@@ -403,7 +403,7 @@ type
   end;
 
   /// used to serialize the current state of the services
-  // - as a local temporary binary file, for "agl --list" execution
+  // - "packed" for local temporary binary file, for "agl --list" execution
   TSynAngelizeState = packed record
     Service: array of record
       Name: RawUtf8;

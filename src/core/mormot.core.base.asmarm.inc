@@ -287,6 +287,30 @@ asm
   mov   x0, x5
 end;
 
+function _cmp256(const Left, Right: THash256Rec): integer;
+  assembler; nostackframe;
+asm
+  // branchless constant time comparison of x0 = @Left vs x1 = @Right
+  ldp   x2, x3, [x0]
+  ldp   x4, x5, [x0, #16]
+  ldp   x6, x7, [x1]
+  ldp   x8, x9, [x1, #16]
+  // compute borrow(Left - Right)
+  subs  xzr, x2, x6
+  sbcs  xzr, x3, x7
+  sbcs  xzr, x4, x8
+  sbcs  xzr, x5, x9
+  sbc   x10, xzr, xzr  // -1 when Left < Right
+  // compute borrow(Right - Left)
+  subs  xzr, x6, x2
+  sbcs  xzr, x7, x3
+  sbcs  xzr, x8, x4
+  sbcs  xzr, x9, x5
+  sbc   x0, xzr, xzr   // -1 when Right < Left
+  sub   x0, x10, x0    // -1, 0, or 1
+end;
+
+
 procedure LockedInc32(int32: PInteger); assembler; nostackframe;
 asm
 .LLockedInc32Loop:

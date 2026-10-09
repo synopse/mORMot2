@@ -259,15 +259,15 @@ procedure _rshift1(var V: THash256Rec);
 function _lshift1(var V: THash256Rec): PtrUInt;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// returns sign of 256-bit Left - Right comparison - used by ecc256r1
+function _cmp256(const Left, Right: THash256Rec): integer;
+  {$ifdef HASINLINE}{$ifndef ASMX64}inline;{$endif}{$endif}
+
 {$endif ASMARM64}
 
 /// 256-to-512-bit ^2 computation - used by ecc256r1
 procedure _square256(out Output: THash512Rec; const Left: THash256Rec);
   {$ifdef ASMX64}inline;{$endif} {$ifdef ASMARM64}inline;{$endif}
-
-/// returns sign of 256-bit Left - Right comparison - used by ecc256r1
-function _cmp256(const Left, Right: THash256Rec): integer;
-  {$ifdef CPU64}inline;{$endif}
 
 /// move and change endianness of a 256-bit value - not as 32-bit bswap256()
 // - warning: this code requires dest <> source
@@ -3559,6 +3559,25 @@ end;
 
 {$else}
 
+{$ifndef ASMX64}   // x64 asm version in mormot.crypt.core.asmx64.inc
+{$ifndef ASMARM64} // aarch64 asm version in mormot.core.base.asmarm.inc
+procedure _rshift1(var V: THash256Rec);
+var
+  carry, temp: PtrUInt;
+begin
+  temp := V.Q[3];
+  carry := temp shl 63;
+  V.Q[3] := temp shr 1;
+  temp := V.Q[2];
+  V.Q[2] := (temp shr 1) or carry;
+  carry := temp shl 63;
+  temp := V.Q[1];
+  V.Q[1] := (temp shr 1) or carry;
+  carry := temp shl 63;
+  temp := V.Q[0];
+  V.Q[0] := (temp shr 1) or carry;
+end;
+
 function _cmp256(const Left, Right: THash256Rec): integer;
 var
   l, r: QWord;
@@ -3582,24 +3601,7 @@ begin
   r := Right.Q[0];
   result := ord(l > r) - ord(l < r);
 end;
-
-{$ifndef ASMX64} // mormot.crypt.core.asmx64.inc has its own shrd-based version
-procedure _rshift1(var V: THash256Rec);
-var
-  carry, temp: PtrUInt;
-begin
-  temp := V.Q[3];
-  carry := temp shl 63;
-  V.Q[3] := temp shr 1;
-  temp := V.Q[2];
-  V.Q[2] := (temp shr 1) or carry;
-  carry := temp shl 63;
-  temp := V.Q[1];
-  V.Q[1] := (temp shr 1) or carry;
-  carry := temp shl 63;
-  temp := V.Q[0];
-  V.Q[0] := (temp shr 1) or carry;
-end;
+{$endif ASMARM64}
 {$endif ASMX64}
 
 function _lshift1(var V: THash256Rec): PtrUInt;

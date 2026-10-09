@@ -2387,6 +2387,24 @@ procedure _rshift1(var V: THash256Rec);
         mov     qword ptr [V + 0 * 8], r10
 end;
 
+function _cmp256(const Left, Right: THash256Rec): integer;
+{$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
+        mov   rax, qword ptr [Left + 18H]
+        cmp   rax, qword ptr [Right + 18H]
+        jne   @done
+        mov   rax, qword ptr [Left + 10H]
+        cmp   rax, qword ptr [Right + 10H]
+        jne   @done
+        mov   rax, qword ptr [Left + 8H]
+        cmp   rax, qword ptr [Right + 8H]
+        jne   @done
+        mov   rax, qword ptr [Left]
+        cmp   rax, qword ptr [Right]
+@done:  mov   eax, 0
+        seta  al
+        sbb   eax, 0
+end;
+
 {$ifdef FPC} // constref to force passing by reference (as Win64/Delphi does)
 procedure _mult128(constref l, r: THash128Rec; out product: THash256Rec);
   nostackframe; assembler; asm
