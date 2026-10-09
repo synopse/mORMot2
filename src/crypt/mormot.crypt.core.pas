@@ -268,7 +268,7 @@ function _cmp256(const Left, Right: THash256Rec): integer;
 
 /// 256-to-512-bit ^2 computation - used by ecc256r1
 procedure _square256(out Output: THash512Rec; const Left: THash256Rec);
-  {$ifdef ASMX64}inline;{$endif} {$ifdef ASMARM64}inline;{$endif}
+  {$ifndef ASMINTEL} inline; {$endif}
 
 /// move and change endianness of a 256-bit value - not as 32-bit bswap256()
 // - warning: this code requires dest <> source
@@ -3032,14 +3032,7 @@ end;
 
 { *************** 256-bit BigInt Low-Level Computation for ECC }
 
-{$ifdef ASMINTEL} // i386+x64 asm of all those 128-bit and 256-bit functions
-
-procedure _square256(out Output: THash512Rec; const Left: THash256Rec);
-begin
-  _mult256(Output, Left, Left);
-end;
-
-{$else}
+{$ifndef ASMINTEL} // i386+x64 asm of all those 128-bit and 256-bit functions
 
 procedure bswap256(s, d: PIntegerArray);
 begin

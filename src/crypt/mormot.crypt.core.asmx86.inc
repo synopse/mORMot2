@@ -1290,8 +1290,7 @@ end;
 procedure _mult256(out Output: THash512Rec; const Left, Right: THash256Rec);
   {$ifdef FPC} nostackframe; assembler; {$endif}
 asm
-        // - Accumulator (EBP:EDI:EBX) is a 96-bit unsigned Comba column
-        // - EAX:EDX is the 64-bit result from MUL
+        // Accumulator (EBP:EDI:EBX) is a 96-bit unsigned Comba column
         push    ebx
         push    esi
         push    edi
@@ -1707,6 +1706,382 @@ asm
         pop     esi
         pop     ebx
 end;
+
+procedure _square256(out Output: THash512Rec; const Left: THash256Rec);
+  {$ifdef FPC}nostackframe; assembler;{$endif}
+asm
+        push    ebx
+        push    esi
+        push    edi
+        push    ebp
+        sub     esp, 32
+        mov     edi, eax       // @Output
+        mov     esi, edx       // @Left
+        // Load the entire input before writing to Output.
+        mov     ebx, dword ptr [esi + 0]
+        mov     dword ptr [esp + 0], ebx
+        mov     ebx, dword ptr [esi + 4]
+        mov     dword ptr [esp + 4], ebx
+        mov     ebx, dword ptr [esi + 8]
+        mov     dword ptr [esp + 8], ebx
+        mov     ebx, dword ptr [esi + 12]
+        mov     dword ptr [esp + 12], ebx
+        mov     ebx, dword ptr [esi + 16]
+        mov     dword ptr [esp + 16], ebx
+        mov     ebx, dword ptr [esi + 20]
+        mov     dword ptr [esp + 20], ebx
+        mov     ebx, dword ptr [esi + 24]
+        mov     dword ptr [esp + 24], ebx
+        mov     ebx, dword ptr [esi + 28]
+        mov     dword ptr [esp + 28], ebx
+        // The three-limb unsigned accumulator is EBP:ESI:EBX.
+        xor     ebx, ebx
+        xor     esi, esi
+        xor     ebp, ebp
+        // Column 0: a0*a0
+        mov     eax, dword ptr [esp + 0]
+        mul     dword ptr [esp + 0]
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        mov     dword ptr [edi + 0], ebx
+        mov     ebx, esi
+        mov     esi, ebp
+        xor     ebp, ebp
+        // Column 1: a0*a1 doubled
+        mov     eax, dword ptr [esp + 0]
+        mul     dword ptr [esp + 4]
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        mov     dword ptr [edi + 4], ebx
+        mov     ebx, esi
+        mov     esi, ebp
+        xor     ebp, ebp
+        // Column 2: a0*a2 doubled, a1*a1
+        mov     eax, dword ptr [esp + 0]
+        mul     dword ptr [esp + 8]
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr [esp + 4]
+        mul     dword ptr [esp + 4]
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        mov     dword ptr [edi + 8], ebx
+        mov     ebx, esi
+        mov     esi, ebp
+        xor     ebp, ebp
+        // Column 3: a0*a3 doubled, a1*a2 doubled
+        mov     eax, dword ptr [esp + 0]
+        mul     dword ptr [esp + 12]
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr [esp + 4]
+        mul     dword ptr [esp + 8]
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        mov     dword ptr [edi + 12], ebx
+        mov     ebx, esi
+        mov     esi, ebp
+        xor     ebp, ebp
+        // Column 4: a0*a4 doubled, a1*a3 doubled, a2*a2
+        mov     eax, dword ptr [esp + 0]
+        mul     dword ptr [esp + 16]
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr [esp + 4]
+        mul     dword ptr [esp + 12]
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr [esp + 8]
+        mul     dword ptr [esp + 8]
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        mov     dword ptr [edi + 16], ebx
+        mov     ebx, esi
+        mov     esi, ebp
+        xor     ebp, ebp
+        // Column 5: a0*a5 doubled, a1*a4 doubled, a2*a3 doubled
+        mov     eax, dword ptr [esp + 0]
+        mul     dword ptr [esp + 20]
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr [esp + 4]
+        mul     dword ptr [esp + 16]
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr [esp + 8]
+        mul     dword ptr [esp + 12]
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        mov     dword ptr [edi + 20], ebx
+        mov     ebx, esi
+        mov     esi, ebp
+        xor     ebp, ebp
+        // Column 6: a0*a6 doubled, a1*a5 doubled, a2*a4 doubled, a3*a3
+        mov     eax, dword ptr [esp + 0]
+        mul     dword ptr [esp + 24]
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr [esp + 4]
+        mul     dword ptr [esp + 20]
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr [esp + 8]
+        mul     dword ptr [esp + 16]
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr [esp + 12]
+        mul     dword ptr [esp + 12]
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        mov     dword ptr [edi + 24], ebx
+        mov     ebx, esi
+        mov     esi, ebp
+        xor     ebp, ebp
+        // Column 7: a0*a7 doubled, a1*a6 doubled, a2*a5 doubled, a3*a4 doubled
+        mov     eax, dword ptr [esp + 0]
+        mul     dword ptr [esp + 28]
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr [esp + 4]
+        mul     dword ptr [esp + 24]
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr [esp + 8]
+        mul     dword ptr [esp + 20]
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr [esp + 12]
+        mul     dword ptr [esp + 16]
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        mov     dword ptr [edi + 28], ebx
+        mov     ebx, esi
+        mov     esi, ebp
+        xor     ebp, ebp
+        // Column 8: a1*a7 doubled, a2*a6 doubled, a3*a5 doubled, a4*a4
+        mov     eax, dword ptr [esp + 4]
+        mul     dword ptr [esp + 28]
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr [esp + 8]
+        mul     dword ptr [esp + 24]
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr [esp + 12]
+        mul     dword ptr [esp + 20]
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr [esp + 16]
+        mul     dword ptr [esp + 16]
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        mov     dword ptr [edi + 32], ebx
+        mov     ebx, esi
+        mov     esi, ebp
+        xor     ebp, ebp
+        // Column 9: a2*a7 doubled, a3*a6 doubled, a4*a5 doubled
+        mov     eax, dword ptr [esp + 8]
+        mul     dword ptr [esp + 28]
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr [esp + 12]
+        mul     dword ptr [esp + 24]
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr [esp + 16]
+        mul     dword ptr [esp + 20]
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        mov     dword ptr [edi + 36], ebx
+        mov     ebx, esi
+        mov     esi, ebp
+        xor     ebp, ebp
+        // Column 10: a3*a7 doubled, a4*a6 doubled, a5*a5
+        mov     eax, dword ptr [esp + 12]
+        mul     dword ptr [esp + 28]
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr [esp + 16]
+        mul     dword ptr [esp + 24]
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr [esp + 20]
+        mul     dword ptr [esp + 20]
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        mov     dword ptr [edi + 40], ebx
+        mov     ebx, esi
+        mov     esi, ebp
+        xor     ebp, ebp
+        // Column 11: a4*a7 doubled, a5*a6 doubled
+        mov     eax, dword ptr [esp + 16]
+        mul     dword ptr [esp + 28]
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr [esp + 20]
+        mul     dword ptr [esp + 24]
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        mov     dword ptr [edi + 44], ebx
+        mov     ebx, esi
+        mov     esi, ebp
+        xor     ebp, ebp
+        // Column 12: a5*a7 doubled, a6*a6
+        mov     eax, dword ptr [esp + 20]
+        mul     dword ptr [esp + 28]
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr [esp + 24]
+        mul     dword ptr [esp + 24]
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        mov     dword ptr [edi + 48], ebx
+        mov     ebx, esi
+        mov     esi, ebp
+        xor     ebp, ebp
+        // Column 13: a6*a7 doubled
+        mov     eax, dword ptr [esp + 24]
+        mul     dword ptr [esp + 28]
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        mov     dword ptr [edi + 52], ebx
+        mov     ebx, esi
+        mov     esi, ebp
+        xor     ebp, ebp
+        // Column 14: a7*a7
+        mov     eax, dword ptr [esp + 28]
+        mul     dword ptr [esp + 28]
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        mov     dword ptr [edi + 56], ebx
+        mov     dword ptr [edi + 60], esi
+        add     esp, 32
+        pop     ebp
+        pop     edi
+        pop     esi
+        pop     ebx
+end;
+
 
 // use CF flag to propagate 32-bit additions carry
 function _xasmadd(Value, Adds: pointer; Carry: PtrUInt): PtrUInt;

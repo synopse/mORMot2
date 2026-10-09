@@ -2587,6 +2587,131 @@ procedure _mult256(out Output: THash512Rec; const Left, Right: THash256Rec);
         {$endif ABIWINX64}
 end;
 
+procedure _square256(out Output: THash512Rec; const Left: THash256Rec);
+{$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif}
+        {$ifdef ABIWINX64}
+        push    rdi
+        push    rsi
+        mov     rdi, Output
+        mov     rsi, Left
+        {$endif ABIWINX64}
+        push    r12
+        push    r13
+        push    r14
+        push    r15
+        mov     r12, qword ptr [rsi]
+        mov     r13, qword ptr [rsi + 8]
+        mov     r14, qword ptr [rsi + 16]
+        mov     r15, qword ptr [rsi + 24]
+        // The 192-bit accumulator is R10:R9:R8.
+        // Column zero is just a0*a0.
+        mov     rax, r12
+        mul     r12
+        mov     qword ptr [rdi], rax
+        mov     r8, rdx
+        xor     r9d, r9d
+        xor     r10d, r10d
+        // Column 1: a0*a1 doubled
+        mov     rax, r12
+        mul     r13
+        add     r8, rax
+        adc     r9, rdx
+        adc     r10, 0
+        add     r8, rax
+        adc     r9, rdx
+        adc     r10, 0
+        mov     qword ptr [rdi + 8], r8
+        mov     r8, r9
+        mov     r9, r10
+        xor     r10d, r10d
+        // Column 2: a0*a2 doubled, a1*a1
+        mov     rax, r12
+        mul     r14
+        add     r8, rax
+        adc     r9, rdx
+        adc     r10, 0
+        add     r8, rax
+        adc     r9, rdx
+        adc     r10, 0
+        mov     rax, r13
+        mul     r13
+        add     r8, rax
+        adc     r9, rdx
+        adc     r10, 0
+        mov     qword ptr [rdi + 16], r8
+        mov     r8, r9
+        mov     r9, r10
+        xor     r10d, r10d
+        // Column 3: a0*a3 doubled, a1*a2 doubled
+        mov     rax, r12
+        mul     r15
+        add     r8, rax
+        adc     r9, rdx
+        adc     r10, 0
+        add     r8, rax
+        adc     r9, rdx
+        adc     r10, 0
+        mov     rax, r13
+        mul     r14
+        add     r8, rax
+        adc     r9, rdx
+        adc     r10, 0
+        add     r8, rax
+        adc     r9, rdx
+        adc     r10, 0
+        mov     qword ptr [rdi + 24], r8
+        mov     r8, r9
+        mov     r9, r10
+        xor     r10d, r10d
+        // Column 4: a1*a3 doubled, a2*a2
+        mov     rax, r13
+        mul     r15
+        add     r8, rax
+        adc     r9, rdx
+        adc     r10, 0
+        add     r8, rax
+        adc     r9, rdx
+        adc     r10, 0
+        mov     rax, r14
+        mul     r14
+        add     r8, rax
+        adc     r9, rdx
+        adc     r10, 0
+        mov     qword ptr [rdi + 32], r8
+        mov     r8, r9
+        mov     r9, r10
+        xor     r10d, r10d
+        // Column 5: a2*a3 doubled
+        mov     rax, r14
+        mul     r15
+        add     r8, rax
+        adc     r9, rdx
+        adc     r10, 0
+        add     r8, rax
+        adc     r9, rdx
+        adc     r10, 0
+        mov     qword ptr [rdi + 40], r8
+        mov     r8, r9
+        mov     r9, r10
+        xor     r10d, r10d
+        // Column 6: a3*a3
+        mov     rax, r15
+        mul     r15
+        add     r8, rax
+        adc     r9, rdx
+        adc     r10, 0
+        mov     qword ptr [rdi + 48], r8
+        mov     qword ptr [rdi + 56], r9
+        pop     r15
+        pop     r14
+        pop     r13
+        pop     r12
+        {$ifdef ABIWINX64}
+        pop     rsi
+        pop     rdi
+        {$endif ABIWINX64}
+end;
+
 procedure _inc64(var Value: THash128Rec; var Added: QWord);
 {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
         // rcx/rdi=Value rdx/rsi=Added
