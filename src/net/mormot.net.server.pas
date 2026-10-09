@@ -9131,11 +9131,16 @@ begin
   raise EWebSocketApi.Create('Cannot post WebSocket IOCP wakeup');
 end;
 
+const
+  WSAPI_CLOSED = [
+    wsClosedByClient, wsClosedByServer, wsClosedByGuard, wsClosedByShutdown];
+  WSAPI_ACTIVE = [
+    wsOpen, wsClosing];
+
 procedure THttpApiWebSocketServerProtocol.BeginClose(
   conn: PHttpApiWebSocketConnection; Reason: TWebSocketState);
 begin
-  if not (conn.fState in [wsClosedByClient, wsClosedByServer,
-                          wsClosedByGuard, wsClosedByShutdown]) then
+  if not (conn.fState in WSAPI_CLOSED) then
   begin
     // no CLOSE frame was received: use an explicit reason,
     // not any partially accumulated application message
@@ -9158,19 +9163,29 @@ function THttpApiWebSocketServerProtocol.Broadcast(
 var
   conn: PHttpApiWebSocketConnection;
 begin
+  result := true;
   fSafe.Lock;
   try
     conn := fConnections.Head;
     while conn <> nil do
     begin
       if conn.fState = wsOpen then
-        conn.Send(aBufferType, aBuffer, aBufferSize);
-      conn := conn.fList.Next;
+        try
+          conn.Send(aBufferType, aBuffer, aBufferSize);
+          if conn.fState <> wsOpen then
+            result := false;
+        except
+          on E: Exception do
+          begin
+            result := false;
+            BeginClose(conn, wsClosedByServer);
+          end;
+        end;
+      conn := conn.fList.next;
     end;
   finally
     fSafe.UnLock;
   end;
-  result := true;
 end;
 
 function THttpApiWebSocketServerProtocol.Send(aID: THttpApiWebSocketConnectionID;
@@ -9221,9 +9236,12 @@ begin
     conn := fConnections.Head;
     while conn <> nil do
     begin
-      conn.fCloseStatus := WEB_SOCKET_ENDPOINT_UNAVAILABLE_CLOSE_STATUS;
-      conn.fBuffer := 'Server shutdown';
-      BeginClose(conn, wsClosedByShutdown);
+      if not (conn.fState in WSAPI_CLOSED) then
+      begin
+        conn.fCloseStatus := WEB_SOCKET_ENDPOINT_UNAVAILABLE_CLOSE_STATUS;
+        conn.fBuffer := 'Server shutdown';
+        BeginClose(conn, wsClosedByShutdown);
+      end;
       conn := conn.fList.next;
     end;
   finally
@@ -9385,7 +9403,7 @@ var
   elapsed, delay: Int64;
 begin
   if (@self = nil) or
-     (not (fState in [wsOpen, wsClosing])) or
+     (not (fState in WSAPI_ACTIVE)) or
      (fLastReceiveTickCount <= 0) or
      (fProtocol.fServer.fPingTimeout <= 0) then
     exit;
@@ -9427,7 +9445,7 @@ end;
 procedure THttpApiWebSocketConnection.BeforeRead;
 begin
   // if reading is in progress then try read messages else try receive new messages
-  if fState in [wsOpen, wsClosing] then
+  if fState in WSAPI_ACTIVE then
   begin
     if Assigned(fLastActionContext) then
     begin
@@ -9456,12 +9474,6 @@ var
   actctxt: pointer;
   i: PtrInt;
   written, total: cardinal;
-
-  procedure CloseConnection;
-  begin
-    WebSocketApi.CompleteAction(fWSHandle, actctxt, 0);
-  end;
-
 begin
   result := true;
   repeat
@@ -9488,7 +9500,9 @@ begin
             inc(total, written);
           end;
           WebSocketApi.CompleteAction(fWSHandle, actctxt, total);
-          exit;
+          if ActionQueue = WEB_SOCKET_SEND_ACTION_QUEUE then
+            exit;
+          result := true; // need to continue
         end;
       WEB_SOCKET_INDICATE_SEND_COMPLETE_ACTION:
         ;
@@ -9525,7 +9539,7 @@ begin
               fState := wsClosedByServer;
             FastSetRawByteString(fBuffer, buf[0].pbBuffer, buf[0].ulBufferLength);
             fCloseStatus := buf[0].Reserved1;
-            CloseConnection;
+            WebSocketApi.CompleteAction(fWSHandle, actctxt, 0);
             if fState = wsClosedByClient then
               Close(fCloseStatus, pointer(fBuffer), length(fBuffer));
             result := false;
@@ -9885,7 +9899,7 @@ begin
         begin
           conn.fReadPending := false;
           status := cardinal(conn.fReadIo.Overlapped.Internal); // is NTSTATUS
-          if (conn.fState in [wsOpen, wsClosing]) and
+          if (conn.fState in WSAPI_ACTIVE) and
              (((status and $80000000) <> 0) or
               (conn.fReadIo.Overlapped.InternalHigh = 0)) then
           begin
@@ -9913,7 +9927,7 @@ begin
         conn.fConnected := true;
         conn.DoOnConnect;
       end;
-      if (conn.fState in [wsOpen, wsClosing]) and
+      if (conn.fState in WSAPI_ACTIVE) and
          not conn.fReadPending then
         repeat
           conn.BeforeRead;
@@ -9926,9 +9940,7 @@ begin
     // - the upgrade handoff is finished;
     // - no HTTP.sys receive completion is outstanding;
     // - no manually posted wakeup is outstanding.
-    if (conn.fState in
-        [wsClosedByClient, wsClosedByServer,
-         wsClosedByGuard, wsClosedByShutdown]) and
+    if (conn.fState in WSAPI_CLOSED) and
        not conn.fUpgradePending and
        not conn.fReadPending and
        not conn.fWakePending then
