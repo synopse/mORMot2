@@ -2715,6 +2715,7 @@ function _lshift1(var V: THash256Rec): PtrUInt;
 function _cmp256(const Left, Right: THash256Rec): integer;
 procedure _mult128(constref l, r: THash128Rec; out product: THash256Rec);
 procedure _mult256(out Output: THash512Rec; const Left, Right: THash256Rec);
+procedure _mmodP(out Output: THash256Rec; var Product: THash512Rec);
 {$endif ASMARM64}
 {$endif ASMINTEL}
 

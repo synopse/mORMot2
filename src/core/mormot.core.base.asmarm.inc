@@ -181,6 +181,154 @@ asm
   str   x12, [x0, #56]
 end;
 
+// specific mormot.crypt.ecc256r1 computation in pure asm
+procedure _mmodP(out Output: THash256Rec; var Product: THash512Rec);
+  assembler; nostackframe;
+asm
+  ldp   x2, x3, [x1]
+  ldp   x4, x5, [x1, #16]
+  ldp   x6, x7, [x1, #32]
+  ldp   x8, x9, [x1, #48]
+  mov   x10, x2
+  mov   x11, x3
+  mov   x12, x4
+  mov   x13, x5
+  // s1 = 2 * {h3,h2,(h1 & 0xffffffff00000000),0}
+  lsr   x16, x7, #32
+  lsl   x16, x16, #33
+  extr  x17, x8, x7, #63
+  extr  x1, x9, x8, #63
+  lsr   x14, x9, #63
+  adds  x11, x11, x16
+  adcs  x12, x12, x17
+  adcs  x13, x13, x1
+  adc   x14, x14, xzr
+  // s2 = 2 * {(h3 >> 32), (h2 >> 32)|(h3 << 32), (h2 << 32),0}
+  lsl   x16, x8, #33
+  extr  x17, x9, x8, #31
+  lsr   x1, x9, #31
+  adds  x11, x11, x16
+  adcs  x12, x12, x17
+  adcs  x13, x13, x1
+  adc   x14, x14, xzr
+  // s3 = {h3,0,low32(h1),h0}
+  mov   x15, x6
+  and   x16, x7, #0xffffffff
+  mov   x1, x9
+  adds  x10, x10, x15
+  adcs  x11, x11, x16
+  adcs  x12, x12, xzr
+  adcs  x13, x13, x1
+  adc   x14, x14, xzr
+  // s4
+  extr  x15, x7, x6, #32
+  lsr   x16, x7, #32
+  and   x17, x8, #0xffffffff00000000
+  orr   x16, x16, x17
+  mov   x17, x9
+  extr  x1, x6, x8, #32
+  adds  x10, x10, x15
+  adcs  x11, x11, x16
+  adcs  x12, x12, x17
+  adcs  x13, x13, x1
+  adc   x14, x14, xzr
+  // d1
+  extr  x15, x8, x7, #32
+  lsr   x16, x8, #32
+  and   x1, x6, #0xffffffff
+  orr   x1, x1, x7, lsl #32
+  subs  x10, x10, x15
+  sbcs  x11, x11, x16
+  sbcs  x12, x12, xzr
+  sbcs  x13, x13, x1
+  sbc   x14, x14, xzr
+  // d2
+  mov   x16, x9
+  lsr   x1, x6, #32
+  and   x15, x7, #0xffffffff00000000
+  orr   x1, x1, x15
+  mov   x15, x8
+  subs  x10, x10, x15
+  sbcs  x11, x11, x16
+  sbcs  x12, x12, xzr
+  sbcs  x13, x13, x1
+  sbc   x14, x14, xzr
+  // d3
+  extr  x15, x9, x8, #32
+  extr  x16, x6, x9, #32
+  extr  x17, x7, x6, #32
+  lsl   x1, x8, #32
+  subs  x10, x10, x15
+  sbcs  x11, x11, x16
+  sbcs  x12, x12, x17
+  sbcs  x13, x13, x1
+  sbc   x14, x14, xzr
+  // d4
+  mov   x15, x9
+  and   x16, x6, #0xffffffff00000000
+  mov   x17, x7
+  and   x1, x8, #0xffffffff00000000
+  subs  x10, x10, x15
+  sbcs  x11, x11, x16
+  sbcs  x12, x12, x17
+  sbcs  x13, x13, x1
+  sbc   x14, x14, xzr
+  // Fold C * 2^256 using 2^256 = P + D.
+  // D = 1 - 2^96 - 2^192 + 2^224.
+  // Account for signed extension into a fifth limb x2.
+  asr   x15, x14, #63
+  neg   x16, x14
+  lsl   x16, x16, #32
+  asr   x17, x16, #63
+  lsl   x1, x14, #32
+  sub   x1, x1, x14
+  asr   x3, x1, #63
+  adds  x10, x10, x14
+  adcs  x11, x11, x15
+  adcs  x12, x12, x15
+  adcs  x13, x13, x15
+  adc   x2, xzr, x15
+  adds  x11, x11, x16
+  adcs  x12, x12, x17
+  adcs  x13, x13, x17
+  adc   x2, x2, x17
+  adds  x13, x13, x1
+  adc   x2, x2, x3
+  // Range is -P < signed {x2:x13:x12:x11:x10} < 2*P.
+  // Three candidates: current, current - P, current + P.
+  // Select without data-dependent branches.
+  mov   x15, #-1                        // P[0]
+  mov   x16, #0xffffffff                // P[1]
+  mov   x17, #0xffffffff00000001        // P[3]
+  subs  x3, x10, x15
+  sbcs  x4, x11, x16
+  sbcs  x5, x12, xzr
+  sbcs  x6, x13, x17
+  adc   x14, xzr, xzr                   // low >= P
+  adds  x7, x10, x15
+  adcs  x8, x11, x16
+  adcs  x9, x12, xzr
+  adc   x1, x13, x17
+  cmp   x2, #0
+  cset  x15, mi                         // add P if negative
+  cset  x16, gt                         // sub P if high > 0
+  cset  x17, eq
+  and   x14, x14, x17
+  orr   x16, x16, x14                   // sub P if high>0 or low>=P
+  cmp   x16, #0
+  csel  x10, x3, x10, ne
+  csel  x11, x4, x11, ne
+  csel  x12, x5, x12, ne
+  csel  x13, x6, x13, ne
+  cmp   x15, #0
+  csel  x10, x7, x10, ne
+  csel  x11, x8, x11, ne
+  csel  x12, x9, x12, ne
+  csel  x13, x1, x13, ne
+  stp   x10, x11, [x0]
+  stp   x12, x13, [x0, #16]
+end;
+
 // Output := Left + Right (mod 2^256); return carry (0 or 1)
 function _add256(out Output: THash256Rec; const Left, Right: THash256Rec): PtrUInt;
   assembler; nostackframe;
