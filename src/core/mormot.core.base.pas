@@ -11371,17 +11371,24 @@ begin
     b^[i] := {$ifdef FPC}SwapEndian{$else}bswap64{$endif}(a^[i]);
 end;
 
-// on FPC_WEAKATOMICS, the FPC RTL atomic opcodes are no memory barrier, whereas
+{$ifdef FPC}
+// on arm32/aarch64, the FPC RTL atomic opcodes are no memory barrier, whereas
 // Locked*() are expected to be full barriers, as LOCK on Intel
 // - AARCH64 has dedicated asm in an include file
 // - other CPUs (e.g. 32-bit ARM) surround the RTL calls with ReadWriteBarrier
-{$ifdef FPC_WEAKATOMICS}
+
 {$ifdef FPC_CPUAARCH64}
 
 // optimized Locked*() asm for aarch64 is located in an include file
 {$include mormot.core.base.asmaarch64.inc}
 
 {$else}
+
+{$ifdef CPUINTEL}
+procedure ReadWriteBarrier; inline;
+begin // Intel/AMD system.Interlocked* FPC RTL functions use LOCK 
+end;  // which has a memory barrier: this function is a no-op
+{$endif CPUINTEL}
 
 function InterlockedIncrement(var I: integer): integer;
 begin
@@ -11464,9 +11471,45 @@ end;
 
 {$endif FPC_CPUAARCH64}
 
-{$endif FPC_WEAKATOMICS}
+function StrCntDecFree(var refcnt: TStrCnt): boolean;
+begin
+  // follow declocked() FPC RTL semantic without additional memory barrier
+  {$ifdef STRCNT32}
+  result := system.InterLockedDecrement(refcnt) <= 0;
+  {$else}
+  result := system.InterLockedDecrement64(refcnt) <= 0;
+  {$endif STRCNT32}
+end;
 
-{$ifdef ISDELPHI}  // use Delphi intrinsic function
+function DACntDecFree(var refcnt: TDACnt): boolean;
+begin
+  // follow declocked() FPC RTL semantic without additional memory barrier
+  {$ifdef DACNT32}
+  result := system.InterLockedDecrement(refcnt) <= 0;
+  {$else}
+  result := system.InterLockedDecrement64(refcnt) <= 0;
+  {$endif DACNT32}
+end;
+
+function bswap32(a: cardinal): cardinal;
+begin
+  result := SwapEndian(a); // use fast platform-specific function
+end;
+
+procedure bswap32array(a: PCardinalArray; n: PtrInt);
+begin
+  repeat // assume n > 0 like the asm
+    dec(n);
+    a[n] := SwapEndian(a[n]);
+  until n = 0;
+end;
+
+function bswap64({$ifdef FPC_X86}constref{$else}const{$endif} a: QWord): QWord;
+begin
+  result := SwapEndian(a); // use fast platform-specific function
+end;
+
+{$else} // we use Delphi intrinsic functions or emulate them if missing
 
 procedure LockedInc32(int32: PInteger);
 begin
@@ -11585,47 +11628,7 @@ begin
     result := BsrDword(c) or 32;   // search in highest 32-bit
 end;
 
-{$else} // FPC non-Intel/AMD branch
-
-function StrCntDecFree(var refcnt: TStrCnt): boolean;
-begin
-  // follow declocked() FPC RTL semantic without additional memory barrier
-  {$ifdef STRCNT32}
-  result := system.InterLockedDecrement(refcnt) <= 0;
-  {$else}
-  result := system.InterLockedDecrement64(refcnt) <= 0;
-  {$endif STRCNT32}
-end;
-
-function DACntDecFree(var refcnt: TDACnt): boolean;
-begin
-  // follow declocked() FPC RTL semantic without additional memory barrier
-  {$ifdef DACNT32}
-  result := system.InterLockedDecrement(refcnt) <= 0;
-  {$else}
-  result := system.InterLockedDecrement64(refcnt) <= 0;
-  {$endif DACNT32}
-end;
-
-function bswap32(a: cardinal): cardinal;
-begin
-  result := SwapEndian(a); // use fast platform-specific function
-end;
-
-procedure bswap32array(a: PCardinalArray; n: PtrInt);
-begin
-  repeat // assume n > 0 like the asm
-    dec(n);
-    a[n] := SwapEndian(a[n]);
-  until n = 0;
-end;
-
-function bswap64({$ifdef FPC_X86}constref{$else}const{$endif} a: QWord): QWord;
-begin
-  result := SwapEndian(a); // use fast platform-specific function
-end;
-
-{$endif ISDELPHI}
+{$endif FPC}
 
 function IntegerScan(P: PCardinalArray; Count: PtrInt; Value: cardinal): PCardinal;
 begin
