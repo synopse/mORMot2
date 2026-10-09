@@ -2389,6 +2389,7 @@ type
       aBuffer: pointer; aBufferSize: ULONG);
     procedure DoOnConnect;
     procedure DoOnDisconnect;
+    procedure DoClose(Reason: TWebSocketState; const Context: RawUtf8 = '');
     procedure InternalSend(aBufferType: WEB_SOCKET_BUFFER_TYPE; WebsocketBufferData: pointer);
     procedure Ping;
     procedure Disconnect;
@@ -9167,8 +9168,7 @@ begin
     end;
     conn.fState := Reason;
     if conn.fOpaqueHTTPRequestId <> 0 then
-      Http.CancelHttpRequest(
-        fServer.fReqQueue, conn.fOpaqueHTTPRequestId);
+      Http.CancelHttpRequest(fServer.fReqQueue, conn.fOpaqueHTTPRequestId);
   end;
   PostWake(conn);
 end;
@@ -9253,11 +9253,7 @@ begin
     while conn <> nil do
     begin
       if not (conn.fState in WSAPI_CLOSED) then
-      begin
-        conn.fCloseStatus := WEB_SOCKET_ENDPOINT_UNAVAILABLE_CLOSE_STATUS;
-        conn.fBuffer := 'Server shutdown';
-        BeginClose(conn, wsClosedByShutdown);
-      end;
+        conn.DoClose(wsClosedByShutdown, 'Server shutdown');
       conn := conn.fList.next;
     end;
   finally
@@ -9425,22 +9421,16 @@ begin
   elapsed := Tix64 - fLastActiveTix64;
   delay := fProtocol.fServer.PingTimeout * 1000;
   if elapsed > 2 * delay then
-  begin
-    fCloseStatus := WEB_SOCKET_ENDPOINT_UNAVAILABLE_CLOSE_STATUS;
-    fBuffer := 'Closed after ping timeout';
-    fProtocol.BeginClose(@self, wsClosedByGuard);
-  end
+    DoClose(wsClosedByGuard, 'Closed after ping timeout')
   else if (elapsed >= delay) and
           (fState = wsOpen) and
-          (fLastPingTix64 < fLastActiveTix64) then
+          (fLastPingTix64 <= fLastActiveTix64) then
   try
-    Ping;
     fLastPingTix64 := Tix64;
+    Ping;
   except
     // a failed ping should close this connection, not terminate the thread
-    fCloseStatus := WEB_SOCKET_ENDPOINT_UNAVAILABLE_CLOSE_STATUS;
-    fBuffer := 'Ping failed';
-    fProtocol.BeginClose(@self, wsClosedByGuard);
+    DoClose(wsClosedByGuard, 'Ping failed');
   end;
 end;
 
@@ -9521,7 +9511,8 @@ begin
           continue; // fetch next action, without completing actctxt twice
         end;
       WEB_SOCKET_INDICATE_SEND_COMPLETE_ACTION:
-        fLastActiveTix64 := fProtocol.fServer.fIdleTix64; // from OnIdleProcess
+         if buftyp <> WEB_SOCKET_PING_PONG_BUFFER_TYPE then
+          fLastActiveTix64 := fProtocol.fServer.fIdleTix64; // from OnIdleProcess
       WEB_SOCKET_RECEIVE_FROM_NETWORK_ACTION:
         begin
           result := false;
@@ -9538,9 +9529,7 @@ begin
           begin
             fLastActionContext := nil;
             WebSocketApi.CompleteAction(fWSHandle, actctxt, 0);
-            fCloseStatus := WEB_SOCKET_ENDPOINT_UNAVAILABLE_CLOSE_STATUS;
-            fBuffer := '';
-            fProtocol.BeginClose(@self, wsClosedByClient);
+            DoClose(wsClosedByClient);
           end;
           exit;
         end;
@@ -9624,6 +9613,14 @@ end;
 procedure THttpApiWebSocketConnection.Ping;
 begin
   InternalSend(WEB_SOCKET_PING_PONG_BUFFER_TYPE, nil);
+end;
+
+procedure THttpApiWebSocketConnection.DoClose(Reason: TWebSocketState;
+  const Context: RawUtf8);
+begin
+  fCloseStatus := WEB_SOCKET_ENDPOINT_UNAVAILABLE_CLOSE_STATUS;
+  fBuffer := Context;
+  fProtocol.BeginClose(@self, Reason);
 end;
 
 
@@ -9958,8 +9955,7 @@ begin
               WebSocketApi.CompleteAction(conn.fWSHandle, conn.fLastActionContext, 0);
               conn.fLastActionContext := nil;
             end;
-            conn.fCloseStatus := WEB_SOCKET_ENDPOINT_UNAVAILABLE_CLOSE_STATUS;
-            proto.BeginClose(conn, wsClosedByClient);
+            conn.DoClose(wsClosedByClient);
           end;
         end;
       wiWake:
@@ -10000,10 +9996,8 @@ begin
         end;
       if conn.fWSHandle <> nil then
         conn.Disconnect;
-      // TLockedList.Free invokes OnConnectionFree, zeroes
-      // the record, then moves it into its recycle bin.
-      // Do not access conn after this call.
-      proto.fConnections.Free(conn);
+      // eventuall remove from TLockedList
+      proto.fConnections.Free(conn); // calls OnConnectionFree
     end;
   finally
     proto.fSafe.UnLock;
