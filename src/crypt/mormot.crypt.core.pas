@@ -3274,51 +3274,47 @@ end;
 {$ifdef ECC_ORIGINALMULT}
 
 // original 256-bit rolled multiplication as proposed in micro-ecc
-
 procedure _mult256(out Output: THash512Rec; const Left, Right: THash256Rec);
 var
-  i, k, min: PtrInt;
+  k, n: PtrInt;
   product: THash128Rec;
-  carry, prev, rlo, rhi: UInt64; // force UInt64 comparisons
-  l, r: ^UInt64;
+  carry: cardinal;
+  prev, rlo, rhi: UInt64;
+  l, r: PUInt64;
 begin
   rlo := 0;
   rhi := 0;
-  min := 0;
-  // Compute each digit of Output in sequence, maintaining the carries
   for k := 0 to 6 do
   begin
     carry := 0;
-    if k >= 4 then
+    if k < 4 then
     begin
-      i := k + (1 - 4);
-      l := @Left.Q[i];
-      r := @Right.Q[k - i];
-      min := i;
+      n := k + 1;
+      l := @Left.Q[0];
+      r := @Right.Q[k];
     end
     else
     begin
-      l := @Left.Q[0];
-      r := @Right.Q[k];
+      n := 7 - k;
+      l := @Left.Q[k - 3];
+      r := @Right.Q[3];
     end;
-    for i := min to k do
-    begin
-      if i >= 4 then
-        break;
+    repeat
       mul64x64(l^, r^, product);
       prev := rlo;
       inc(rlo, product.L);
-      inc(rhi, product.H);
-      inc(rhi, ord(rlo < prev));
-      inc(carry, ord(rhi < product.H));
+      prev := product.H + Ord(rlo < prev);
+      inc(rhi, prev);
+      inc(carry, Ord(rhi < prev));
       inc(l);
       dec(r);
-    end;
-    Output.Q[k] := rlo;
+      dec(n);
+    until n = 0;
+    PQWordArray(@Output)[k] := rlo;
     rlo := rhi;
     rhi := carry;
   end;
-  Output.Q[7] := rlo;
+  PQWordArray(@Output)[7] := rlo;
 end;
 
 procedure _square256(out Output: THash512Rec; const Left: THash256Rec);
