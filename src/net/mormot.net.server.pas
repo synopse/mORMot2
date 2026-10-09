@@ -2368,6 +2368,7 @@ type
     fReadPending: boolean;
     fWakePending: boolean;
     fUpgradePending: boolean;
+    fConnected: boolean;
     fState: TWebSocketState;
     fCloseStatus: WEB_SOCKET_CLOSE_STATUS;
     fProtocol: THttpApiWebSocketServerProtocol;
@@ -8028,7 +8029,7 @@ type
     tmp: ShortString;
     procedure FromReq(var Value: RawUtf8; Head: THttpApiHeader);
     procedure ReqToLog(var log: HTTP_LOG_FIELDS_DATA);
-    procedure HttpSendResponse(flags: cardinal);
+    function HttpSendResponse(flags: cardinal): boolean;
     procedure SendError(StatusCode: cardinal; const ErrorMsg: RawUtf8;
       Disconnect: boolean = false; E: Exception = nil);
     function SendResponse: boolean;
@@ -8081,7 +8082,7 @@ begin
   FastSetString(Value, hdr^.pRawValue, hdr^.RawValueLength);
 end;
 
-procedure THttpApiServerRequest.HttpSendResponse(flags: cardinal);
+function THttpApiServerRequest.HttpSendResponse(flags: cardinal): boolean;
 var
   log: PHTTP_LOG_FIELDS_DATA;
   hdr: PHTTP_KNOWN_HEADER;
@@ -8103,7 +8104,8 @@ begin
   include(fInternalFlags, ifRespSent); // response submission attempted
   err := Http.SendHttpResponse(api.fReqQueue, req^.RequestId, flags, resp, nil,
       bytessent, nil, 0, nil, log);
-  if err <> NO_ERROR then
+  result := err = NO_ERROR;
+  if not result then
     api.CheckAndLog(hSendHttpResponse, err);
   fRespStatus := resp.StatusCode;
   FillcharFast(resp, SizeOf(resp), 0); // reset
@@ -8157,14 +8159,12 @@ var
   hdr: PHTTP_KNOWN_HEADER;
   chunk: HTTP_DATA_CHUNK_FILEHANDLE;
 begin
-  result := not fServer.Terminated; // true=success
-  if not result then
+  result := false; // true=success
+  if fServer.Terminated then
     exit;
   if not OutContentStreamToBuffer then // kernel http.sys needs buffer
     fRespStatus := HTTP_SERVERERROR; // failed to read that stream
   resp.SetStatus(fRespStatus);
-  if fServer.Terminated then
-    exit;
   // associate response headers
   resp.SetHeaders(pointer(OutCustomHeaders), heads,
     hsoNoXPoweredHeader in fServer.fOptions);
@@ -8177,7 +8177,6 @@ begin
     begin
       SetErrorText(errmsg); // text message from OS
       SendError(HTTP_NOTFOUND, errmsg);
-      result := false; // notify fatal error
       exit;
     end;
     try
@@ -8204,7 +8203,6 @@ begin
           if start >= size then
           begin
             SendError(HTTP_RANGENOTSATISFIABLE, 'Invalid Range');
-            result := false;
             exit;
           end;
           chunk.ByteRange.Length.QuadPart := size - start;
@@ -8232,7 +8230,7 @@ begin
       hdr^.RawValueLength := 5;
       resp.EntityChunkCount := 1;
       resp.pEntityChunks := @chunk;
-      HttpSendResponse(flags);
+      result := HttpSendResponse(flags);
     finally
       FileClose(filehandle);
     end;
@@ -8258,7 +8256,7 @@ begin
       end;
     end;
     resp.SetContent(datachunkmem, OutContent, OutContentType);
-    HttpSendResponse(api.GetSendResponseFlags(self));
+    result := HttpSendResponse(api.GetSendResponseFlags(self));
   end;
 end;
 
@@ -9139,6 +9137,13 @@ begin
   if not (conn.fState in [wsClosedByClient, wsClosedByServer,
                           wsClosedByGuard, wsClosedByShutdown]) then
   begin
+    // no CLOSE frame was received: use an explicit reason,
+    // not any partially accumulated application message
+    if Reason in [wsClosedByClient, wsClosedByServer] then
+    begin
+      conn.fCloseStatus := WEB_SOCKET_ENDPOINT_UNAVAILABLE_CLOSE_STATUS;
+      conn.fBuffer := '';
+    end;
     conn.fState := Reason;
     if conn.fOpaqueHTTPRequestId <> 0 then
       Http.CancelHttpRequest(
@@ -9181,7 +9186,7 @@ begin
        (conn.fState <> wsOpen) then
       exit;
     conn.Send(aBufferType, aBuffer, aBufferSize);
-    result := true;
+    result := conn.fState = wsOpen;
   finally
     fSafe.UnLock;
   end;
@@ -9201,7 +9206,7 @@ begin
        (conn.fState <> wsOpen) then
       exit;
     conn.Close(aStatus, aBuffer, aBufferSize);
-    result := true;
+    result := conn.fState = wsClosing;
   finally
     fSafe.UnLock;
   end;
@@ -9274,10 +9279,14 @@ begin
   finally
     result := WebSocketApi.EndServerHandshake(fWSHandle) = S_OK;
   end;
-  if not result then
-    Disconnect
-  else
-    fLastReceiveTickCount := 0;
+  if result then
+    fLastReceiveTickCount := 0
+  else if fWSHandle <> nil then
+  begin
+    WebSocketApi.AbortHandle(fWSHandle);
+    WebSocketApi.DeleteHandle(fWSHandle);
+    fWSHandle := nil;
+  end;
 end;
 
 procedure THttpApiWebSocketConnection.DoOnMessage(
@@ -9393,8 +9402,7 @@ begin
     try
       Ping;
     except
-      // A failed ping should close this connection,
-      // not terminate the whole guard thread.
+      // a failed ping should close this connection, not terminate the thread
       fCloseStatus := WEB_SOCKET_ENDPOINT_UNAVAILABLE_CLOSE_STATUS;
       fBuffer := 'Ping failed';
       fProtocol.BeginClose(@self, wsClosedByGuard);
@@ -9619,28 +9627,32 @@ end;
 procedure THttpApiWebSocketServer.DestroyMainThread;
 var
   i: PtrInt;
-  drained: boolean;
+  running, tix, endtix, lasttix: cardinal;
 begin
   fWsStopping := true;
   FreeAndNilSafe(fGuard);
   for i := 0 to High(fOwnedProtocols) do
     fOwnedProtocols[i].DoShutdown;
+  endtix := GetTickSec + 5; // never wait forever
+  lasttix := 0;
   repeat
-    drained := true;
+    running := 0;
     for i := 0 to High(fOwnedProtocols) do
-      if fOwnedProtocols[i].fConnections.Count <> 0 then
-      begin
-        drained := false;
-        break;
-      end;
-    if not drained then
-      SleepHiRes(5);
-  until drained;
+      inc(running, fOwnedProtocols[i].fConnections.Count);
+    if running = 0 then
+      break;
+    tix := GetTickSec;
+    if tix > endtix then
+      break;
+    if tix <> lasttix then // log every second
+      fLogClass.Add.Log(sllDebug, 'DestroyMainThread running=%', [running], self);
+    lasttix := tix;
+    SleepHiRes(10);
+  until false;
   FreeAndNilSafe(fThreadPoolServer);
   ObjArrayClear(fOwnedProtocols);
   inherited DestroyMainThread;
 end;
-
 
 function THttpApiWebSocketServer.UpgradeToWebSocket(
   Ctxt: THttpServerRequestAbstract): cardinal;
@@ -9713,12 +9725,16 @@ begin
         result := HTTP_NOTALLOWED;
       end;
     except
-      // The failure path must release any partially created
-      // websocket.dll handle before recycling the record.
+      // the failure path must release any partially created
+      // websocket.dll handle before recycling the record
       if ctx.ws <> nil then
       begin
         if ctx.ws.fWSHandle <> nil then
-          ctx.ws.Disconnect;
+        begin
+          WebSocketApi.AbortHandle(ctx.ws.fWSHandle);
+          WebSocketApi.DeleteHandle(ctx.ws.fWSHandle);
+          ctx.ws.fWSHandle := nil;
+        end;
         proto.fConnections.Free(ctx.ws);
         ctx.ws := nil;
       end;
@@ -9894,6 +9910,7 @@ begin
       begin
         conn.fState := wsOpen;
         conn.fLastReceiveTickCount := mormot.core.os.GetTickCount64;
+        conn.fConnected := true;
         conn.DoOnConnect;
       end;
       if (conn.fState in [wsOpen, wsClosing]) and
@@ -9916,11 +9933,12 @@ begin
        not conn.fReadPending and
        not conn.fWakePending then
     begin
-      try
-        conn.DoOnDisconnect;
-      except
-        // A user callback must not prevent resource cleanup.
-      end;
+      if conn.fConnected then
+        try
+          conn.DoOnDisconnect;
+        except
+          // A user callback must not prevent resource cleanup.
+        end;
       if conn.fWSHandle <> nil then
         conn.Disconnect;
       // TLockedList.Free invokes OnConnectionFree, zeroes
