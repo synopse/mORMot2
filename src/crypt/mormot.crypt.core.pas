@@ -217,6 +217,16 @@ var
 
 { *************** 256-bit BigInt Low-Level Computation for ECC }
 
+/// optimized 128-bit addition (with Intel/AMD asm) - used by ecc256r1
+procedure _inc128(var Value: THash256Rec; var Added: THash128Rec);
+  {$ifndef ASMINTEL} inline; {$endif}
+
+/// optimized 64-bit addition (with Intel/AMD asm) - used by ecc256r1
+procedure _inc64(var Value: THash128Rec; var Added: QWord);
+  {$ifndef ASMINTEL} inline; {$endif}
+
+{$ifndef ASMARM64} // mormot.core.base.asmarm.inc has its own ARMv8 asm
+
 /// optimized 256-bit addition (with Intel/AMD asm) - used by ecc256r1
 function _add256(out Output: THash256Rec; const Left, Right: THash256Rec): PtrUInt;
   {$ifndef ASMINTEL} inline; {$endif}
@@ -233,14 +243,6 @@ function _inc256(var Value: THash256Rec; const Added: THash256Rec): PtrUInt;
 function _dec256(var Value: THash256Rec; const Subs: THash256Rec): PtrUInt;
   {$ifndef ASMINTEL} inline; {$endif}
 
-/// optimized 128-bit addition (with Intel/AMD asm) - used by ecc256r1
-procedure _inc128(var Value: THash256Rec; var Added: THash128Rec);
-  {$ifndef ASMINTEL} inline; {$endif}
-
-/// optimized 64-bit addition (with Intel/AMD asm) - used by ecc256r1
-procedure _inc64(var Value: THash128Rec; var Added: QWord);
-  {$ifndef ASMINTEL} inline; {$endif}
-
 /// 128-to-256-bit multiplication (with Intel/AMD asm) - used by ecc256r1
 procedure _mult128({$ifdef FPC}constref{$else}const{$endif} l, r: THash128Rec;
   out product: THash256Rec);
@@ -249,9 +251,19 @@ procedure _mult128({$ifdef FPC}constref{$else}const{$endif} l, r: THash128Rec;
 /// 256-to-512-bit multiplication (with x86_64 asm) - used by ecc256r1
 procedure _mult256(out Output: THash512Rec; const Left, Right: THash256Rec);
 
+/// right shift of 1 bit of a 256-bit value - used by ecc256r1
+procedure _rshift1(var V: THash256Rec);
+  {$ifdef HASINLINE}{$ifndef ASMX64}inline;{$endif}{$endif}
+
+/// left shift of 1 bit of a 256-bit value - used by ecc256r1
+function _lshift1(var V: THash256Rec): PtrUInt;
+  {$ifdef HASINLINE}inline;{$endif}
+
+{$endif ASMARM64}
+
 /// 256-to-512-bit ^2 computation - used by ecc256r1
 procedure _square256(out Output: THash512Rec; const Left: THash256Rec);
-  {$ifdef ASMX64}inline;{$endif}
+  {$ifdef ASMX64}inline;{$endif} {$ifdef ASMARM64}inline;{$endif}
 
 /// returns sign of 256-bit Left - Right comparison - used by ecc256r1
 function _cmp256(const Left, Right: THash256Rec): integer;
@@ -260,14 +272,6 @@ function _cmp256(const Left, Right: THash256Rec): integer;
 /// move and change endianness of a 256-bit value - not as 32-bit bswap256()
 // - warning: this code requires dest <> source
 procedure _bswap256(dest, source: PQWordArray);
-
-/// right shift of 1 bit of a 256-bit value - used by ecc256r1
-procedure _rshift1(var V: THash256Rec);
-  {$ifdef HASINLINE}{$ifndef ASMX64}inline;{$endif}{$endif}
-
-/// left shift of 1 bit of a 256-bit value - used by ecc256r1
-function _lshift1(var V: THash256Rec): PtrUInt;
-  {$ifdef HASINLINE}inline;{$endif}
 
 // computes Output = Input shl Shift, returning carry, of a 256-bit value
 // - can modify in place (if Output == Input). 0 < Shift < 64
@@ -3272,7 +3276,12 @@ end;
 // original mult() is slightly faster than our unrolled version without asm
 
 {$ifdef ECC_ORIGINALMULT}
-
+{$ifdef ASMARM64}
+procedure _square256(out Output: THash512Rec; const Left: THash256Rec);
+begin
+  _mult256(Output, Left, Left); // mormot.core.base.asmarm.inc unrolled asm
+end;
+{$else}
 // original 256-bit rolled multiplication as proposed in micro-ecc
 procedure _mult256(out Output: THash512Rec; const Left, Right: THash256Rec);
 var
@@ -3355,7 +3364,7 @@ begin
   end;
   Output.Q[4 * 2 - 1] := rlo;
 end;
-
+{$endif ASMARM64}
 {$endif ECC_ORIGINALMULT}
 
 {$endif ASMINTEL}
@@ -3369,8 +3378,8 @@ end;
 
 {$else}
 
+{$ifndef ASMARM64}
 {$ifdef FPC} // Delphi is not good at inlining and computing this function
-
 procedure _mult64(l, r: PQWordRec; out product: THash128Rec); inline;
 var
   t1, t2: TQWordRec;
@@ -3382,17 +3391,13 @@ begin
   product.H := QWord(l.H) * r.H + t2.H + t1.H;
   product.c1 := t1.V;
 end;
-
 {$else} // we better use mormot.core.base asm on Delphi
-
 procedure _mult64(left, right: PQWord; out product: THash128Rec);
   {$ifdef HASINLINE}inline;{$endif}
 begin
   mul64x64(left^, right^, product);
 end;
-
 {$endif FPC}
-
 procedure _mult128({$ifdef FPC}constref{$else}const{$endif} l, r: THash128Rec;
   out product: THash256Rec);
 var
@@ -3409,6 +3414,7 @@ begin
   _inc64(product.H, t1.H);  // product.H := l.H * r.H + t2.H + t1.H;
   product.L.H := t1.L;      // product.L := t3.V shl 64 or t1.L;
 end;
+{$endif ASMARM64}
 
 {$ifndef ECC_ORIGINALMULT}
 

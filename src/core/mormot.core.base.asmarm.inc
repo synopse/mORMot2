@@ -25,6 +25,268 @@
 
 {$ifdef FPC_CPUAARCH64}
 
+procedure mul64x64(const left, right: QWord; out product: THash128Rec);
+  assembler; nostackframe;
+asm
+  // x0 = left  x1 = right  x2 = @product
+  mul   x3, x0, x1
+  umulh x4, x0, x1
+  stp   x3, x4, [x2]
+end;
+
+procedure _mult128(constref l, r: THash128Rec; out product: THash256Rec);
+  assembler; nostackframe;
+asm
+  // x0 = @l, x1 = @r, x2 = @product
+  ldp   x3, x4, [x0]       // l0, l1
+  ldp   x5, x6, [x1]       // r0, r1
+  mul   x7, x3, x5        // low(l0*r0)
+  umulh x8, x3, x5        // high(l0*r0)
+  str   x7, [x2]
+  mul   x9, x4, x5        // low(l1*r0)
+  umulh x10, x4, x5       // high(l1*r0)
+  adds  x8, x8, x9
+  adc   x10, x10, xzr     // high(l1*r0) <= 2^64-2, so no overflow here
+  mul   x9, x3, x6        // low(l0*r1)
+  umulh x11, x3, x6       // high(l0*r1)
+  adds  x8, x8, x9
+  adcs  x10, x10, x11
+  adc   x12, xzr, xzr     // carry to highest 64-bit limb
+  str   x8, [x2, #8]
+  mul   x13, x4, x6       // low(l1*r1)
+  umulh x14, x4, x6       // high(l1*r1)
+  adds  x13, x13, x10
+  adc   x14, x14, x12
+  stp   x13, x14, [x2, #16]
+end;
+
+procedure _mult256(out Output: THash512Rec; const Left, Right: THash256Rec);
+  assembler; nostackframe;
+asm
+  // x0 = @Output, x1 = @Left, x2 = @Right
+  // a0..a3 = x3..x6, b0..b3 = x7..x10
+  ldp   x3, x4, [x1]
+  ldp   x5, x6, [x1, #16]
+  ldp   x7, x8, [x2]
+  ldp   x9, x10, [x2, #16]
+  // x11: low accumulator, x12: high, x13: overflow
+  // x14/x15: low/high halves of the current 64x64 product
+  // Column 0: a0*b0
+  mul   x14, x3, x7
+  umulh x11, x3, x7
+  str   x14, [x0]
+  mov   x12, xzr
+  mov   x13, xzr
+  // Column 1
+  mul   x14, x4, x7   // a1*b0
+  umulh x15, x4, x7
+  adds  x11, x11, x14
+  adcs  x12, x12, x15
+  adc   x13, x13, xzr
+  mul   x14, x3, x8   // a0*b1
+  umulh x15, x3, x8
+  adds  x11, x11, x14
+  adcs  x12, x12, x15
+  adc   x13, x13, xzr
+  str   x11, [x0, #8]
+  mov   x11, x12
+  mov   x12, x13
+  mov   x13, xzr
+  // Column 2
+  mul   x14, x5, x7   // a2*b0
+  umulh x15, x5, x7
+  adds  x11, x11, x14
+  adcs  x12, x12, x15
+  adc   x13, x13, xzr
+  mul   x14, x4, x8   // a1*b1
+  umulh x15, x4, x8
+  adds  x11, x11, x14
+  adcs  x12, x12, x15
+  adc   x13, x13, xzr
+  mul   x14, x3, x9   // a0*b2
+  umulh x15, x3, x9
+  adds  x11, x11, x14
+  adcs  x12, x12, x15
+  adc   x13, x13, xzr
+  str   x11, [x0, #16]
+  mov   x11, x12
+  mov   x12, x13
+  mov   x13, xzr
+  // Column 3
+  mul   x14, x6, x7   // a3*b0
+  umulh x15, x6, x7
+  adds  x11, x11, x14
+  adcs  x12, x12, x15
+  adc   x13, x13, xzr
+  mul   x14, x5, x8   // a2*b1
+  umulh x15, x5, x8
+  adds  x11, x11, x14
+  adcs  x12, x12, x15
+  adc   x13, x13, xzr
+  mul   x14, x4, x9   // a1*b2
+  umulh x15, x4, x9
+  adds  x11, x11, x14
+  adcs  x12, x12, x15
+  adc   x13, x13, xzr
+  mul   x14, x3, x10   // a0*b3
+  umulh x15, x3, x10
+  adds  x11, x11, x14
+  adcs  x12, x12, x15
+  adc   x13, x13, xzr
+  str   x11, [x0, #24]
+  mov   x11, x12
+  mov   x12, x13
+  mov   x13, xzr
+  // Column 4
+  mul   x14, x6, x8   // a3*b1
+  umulh x15, x6, x8
+  adds  x11, x11, x14
+  adcs  x12, x12, x15
+  adc   x13, x13, xzr
+  mul   x14, x5, x9   // a2*b2
+  umulh x15, x5, x9
+  adds  x11, x11, x14
+  adcs  x12, x12, x15
+  adc   x13, x13, xzr
+  mul   x14, x4, x10   // a1*b3
+  umulh x15, x4, x10
+  adds  x11, x11, x14
+  adcs  x12, x12, x15
+  adc   x13, x13, xzr
+  str   x11, [x0, #32]
+  mov   x11, x12
+  mov   x12, x13
+  mov   x13, xzr
+  // Column 5
+  mul   x14, x6, x9   // a3*b2
+  umulh x15, x6, x9
+  adds  x11, x11, x14
+  adcs  x12, x12, x15
+  adc   x13, x13, xzr
+  mul   x14, x5, x10   // a2*b3
+  umulh x15, x5, x10
+  adds  x11, x11, x14
+  adcs  x12, x12, x15
+  adc   x13, x13, xzr
+  str   x11, [x0, #40]
+  mov   x11, x12
+  mov   x12, x13
+  mov   x13, xzr
+  // Column 6
+  mul   x14, x6, x10   // a3*b3
+  umulh x15, x6, x10
+  adds  x11, x11, x14
+  adc   x12, x12, x15
+  str   x11, [x0, #48]
+  str   x12, [x0, #56]
+end;
+
+// Output := Left + Right (mod 2^256); return carry (0 or 1)
+function _add256(out Output: THash256Rec; const Left, Right: THash256Rec): PtrUInt;
+  assembler; nostackframe;
+asm
+  // x0 = @Output, x1 = @Left, x2 = @Right
+  ldp   x3, x4, [x1]
+  ldp   x5, x6, [x1, #16]
+  ldp   x7, x8, [x2]
+  ldp   x9, x10, [x2, #16]
+  adds  x3, x3, x7
+  adcs  x4, x4, x8
+  adcs  x5, x5, x9
+  adcs  x6, x6, x10
+  stp   x3, x4, [x0]
+  stp   x5, x6, [x0, #16]
+  adc   x0, xzr, xzr
+end;
+
+// Value := Value + Added (mod 2^256); return carry (0 or 1)
+function _inc256(var Value: THash256Rec; const Added: THash256Rec): PtrUInt;
+  assembler; nostackframe;
+asm
+  // x0 = @Value, x1 = @Added
+  ldp   x2, x3, [x0]
+  ldp   x4, x5, [x0, #16]
+  ldp   x6, x7, [x1]
+  ldp   x8, x9, [x1, #16]
+  adds  x2, x2, x6
+  adcs  x3, x3, x7
+  adcs  x4, x4, x8
+  adcs  x5, x5, x9
+  stp   x2, x3, [x0]
+  stp   x4, x5, [x0, #16]
+  adc   x0, xzr, xzr
+end;
+
+// Value := Value - Subs (mod 2^256); return borrow (0 or 1)
+function _dec256(var Value: THash256Rec; const Subs: THash256Rec): PtrUInt;
+  assembler; nostackframe;
+asm
+  // x0 = @Value, x1 = @Subs
+  ldp   x2, x3, [x0]
+  ldp   x4, x5, [x0, #16]
+  ldp   x6, x7, [x1]
+  ldp   x8, x9, [x1, #16]
+  subs  x2, x2, x6
+  sbcs  x3, x3, x7
+  sbcs  x4, x4, x8
+  sbcs  x5, x5, x9
+  stp   x2, x3, [x0]
+  stp   x4, x5, [x0, #16]
+  sbc  x0, xzr, xzr
+  and  x0, x0, #1
+end;
+
+// Output := Left - Right (mod 2^256); return borrow (0 or 1)
+function _sub256(out Output: THash256Rec; const Left, Right: THash256Rec): PtrUInt;
+  assembler; nostackframe;
+asm
+  // x0 = @Output, x1 = @Left, x2 = @Right
+  ldp   x3, x4, [x1]
+  ldp   x5, x6, [x1, #16]
+  ldp   x7, x8, [x2]
+  ldp   x9, x10, [x2, #16]
+  subs  x3, x3, x7
+  sbcs  x4, x4, x8
+  sbcs  x5, x5, x9
+  sbcs  x6, x6, x10
+  stp   x3, x4, [x0]
+  stp   x5, x6, [x0, #16]
+  sbc  x0, xzr, xzr
+  and  x0, x0, #1
+end;
+
+// V := V >> 1; low bit discarded, high bit cleared
+procedure _rshift1(var V: THash256Rec);
+  assembler; nostackframe;
+asm
+  // x0 = @V
+  ldp   x1, x2, [x0]
+  ldp   x3, x4, [x0, #16]
+  extr  x1, x2, x1, #1
+  extr  x2, x3, x2, #1
+  extr  x3, x4, x3, #1
+  lsr   x4, x4, #1
+  stp   x1, x2, [x0]
+  stp   x3, x4, [x0, #16]
+end;
+
+// V := V << 1; return old bit 255 (0 or 1)
+function _lshift1(var V: THash256Rec): PtrUInt;
+  assembler; nostackframe;
+asm
+  // x0 = @V
+  ldp   x1, x2, [x0]
+  ldp   x3, x4, [x0, #16]
+  lsr   x5, x4, #63
+  extr  x4, x4, x3, #63
+  extr  x3, x3, x2, #63
+  extr  x2, x2, x1, #63
+  lsl   x1, x1, #1
+  stp   x1, x2, [x0]
+  stp   x3, x4, [x0, #16]
+  mov   x0, x5
+end;
+
 procedure LockedInc32(int32: PInteger); assembler; nostackframe;
 asm
 .LLockedInc32Loop:
@@ -149,6 +411,39 @@ asm
 end;
 
 {$else} // ARMv7 with CPUARM_HAS_DMB
+
+procedure mul64x64(constref left, right: QWord; out product: THash128Rec);
+  assembler; nostackframe;
+asm
+  // r0 = @left  r1 = @right  r2 = @product
+  push  {r4-r7}
+  // Load both 64-bit operands
+  ldr   r3, [r0, #4]     // left.H
+  ldr   r0, [r0]         // left.L
+  ldr   r12, [r1, #4]    // right.H
+  ldr   r1, [r1]         // right.L
+  // Low x Low
+  umull r4, r5, r0, r1
+  // Low x High
+  umull r6, r7, r0, r12
+  adds  r5, r5, r6
+  adc   r7, r7, #0
+  // High x Low
+  umull r0, r6, r3, r1
+  adds  r5, r5, r0
+  adcs  r7, r7, r6
+  // High x High
+  umull r0, r1, r3, r12
+  adc   r1, r1, #0
+  adds  r0, r0, r7
+  adc   r1, r1, #0
+  // Store 128-bit product
+  str   r4, [r2]
+  str   r5, [r2, #4]
+  str   r0, [r2, #8]
+  str   r1, [r2, #12]
+  pop   {r4-r7}
+end;
 
 procedure LockedInc32(int32: PInteger); assembler; nostackframe;
 asm

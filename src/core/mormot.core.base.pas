@@ -2702,8 +2702,19 @@ function IsEqual(const A, B; count: PtrInt): boolean; overload;
 {$ifdef ASMINTEL}
 procedure mul64x64(const left, right: QWord; out product: THash128Rec);
 {$else}
-procedure mul64x64({$ifdef FPC}constref{$else}const{$endif} left, right: QWord;
-  out product: THash128Rec); inline;
+procedure mul64x64({$ifdef FPC_32}constref{$else}const{$endif} left, right: QWord;
+  out product: THash128Rec); {$ifndef ASMARM} inline; {$endif}
+
+{$ifdef ASMARM64} // unrolled ARMv8 64-bit asm used by mormot.crypt.* units
+function _add256(out Output: THash256Rec; const Left, Right: THash256Rec): PtrUInt;
+function _inc256(var Value: THash256Rec; const Added: THash256Rec): PtrUInt;
+function _dec256(var Value: THash256Rec; const Subs: THash256Rec): PtrUInt;
+function _sub256(out Output: THash256Rec; const Left, Right: THash256Rec): PtrUInt;
+procedure _rshift1(var V: THash256Rec);
+function _lshift1(var V: THash256Rec): PtrUInt;
+procedure _mult128(constref l, r: THash128Rec; out product: THash256Rec);
+procedure _mult256(out Output: THash512Rec; const Left, Right: THash256Rec);
+{$endif ASMARM64}
 {$endif ASMINTEL}
 
 /// simply compute inc(d[], s[]) in a loop, up to a few elements
@@ -11337,22 +11348,6 @@ begin
   {$endif CPU64}
 end;
 
-procedure mul64x64({$ifdef FPC}constref{$else}const{$endif} left, right: QWord;
-  out product: THash128Rec);
-var
-  l: TQWordRec absolute left;
-  r: TQWordRec absolute right;
-  t1, t2: TQWordRec;
-begin
-  // CPU-neutral implementation
-  t1.V := QWord(l.L) * r.L;
-  product.c0 := t1.L;
-  t2.V := QWord(l.H) * r.L + t1.H;
-  t1.V := QWord(l.L) * r.H + t2.L;
-  product.H := QWord(l.H) * r.H + t2.H + t1.H;
-  product.c1 := t1.V;
-end;
-
 function SynLZcompress1(src: PAnsiChar; size: integer; dst: PAnsiChar): integer;
 begin
   result := SynLZcompress1pas(src, size, dst);
@@ -11383,6 +11378,23 @@ end;
 {$include mormot.core.base.asmarm.inc}
 
 {$else}
+
+procedure mul64x64({$ifdef FPC_32}constref{$else}const{$endif} left, right: QWord;
+  out product: THash128Rec);
+var
+  l0, l1, r0, r1: cardinal;
+  t0, t1, t2: QWord;
+begin
+  l0 := cardinal(left);
+  l1 := cardinal(left shr 32);
+  r0 := cardinal(right);
+  r1 := cardinal(right shr 32);
+  t0 := QWord(l0) * r0;
+  t1 := QWord(l1) * r0 + (t0 shr 32);
+  t2 := QWord(l0) * r1 + cardinal(t1);
+  PQWordArray(@product)[0] := (t2 shl 32) or cardinal(t0);
+  PQWordArray(@product)[1] := QWord(l1) * r1 + (t1 shr 32) + (t2 shr 32);
+end;
 
 {$ifdef CPUINTEL}
 procedure ReadWriteBarrier; inline;
