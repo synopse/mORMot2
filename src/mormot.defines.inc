@@ -445,9 +445,6 @@
     {$define STRCNT32}         // 32-bit TAnsiRec.Ref
     {$define DACNT32}          // 32-bit TDynArrayRec.refCnt
   {$endif CPU64}
-  {$ifndef CPUINTEL}
-    {$define FPC_WEAKATOMICS}  // FPC RTL Interlocked* require a memory barrier
-  {$endif CPUINTEL}
 
 
   // -----------

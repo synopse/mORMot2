@@ -5711,12 +5711,7 @@ begin
     T.ToHttpDateShort(fHttpDateNowUtc, 'GMT'#13#10, 'Date: ');
   end;
   // ensure log file(s) are flushed/consolidated if needed
-  if fLogger <> nil then
-    fLogger.OnIdle(fAsync.fLastOperationMS) // = ProcessIdleTix() GetTickCount64
-  else if fAnalyzer <> nil then
-    fAnalyzer.OnIdle(fAsync.fLastOperationMS);
-  if Assigned(fOnIdle) then
-    fOnIdle(self, fAsync.fLastOperationMS); // custom callback
+  DoIdle(fAsync.fLastOperationMS, fAsync.fLastOperationSec);
   // clean interned HTTP headers at least every 16 secs
   if (fInterning <> nil) and
      (fAsync <> nil) then
@@ -5734,15 +5729,6 @@ begin
       fInterningTix := tix;
     end;
   end;
-  // BlackListUri regular refresh support
-  if (fBlackListUriNextTix <> 0) and
-     (fAsync.LastOperationSec >= fBlackListUriNextTix) then
-    RefreshBlackListUri(fAsync.LastOperationSec);
-  {$ifdef OSPOSIX}
-  if Assigned(fSspiKeyTab) and
-     fSspiKeyTab.TryRefresh(fAsync.fLastOperationSec) then
-    fAsync.DoLog(sllDebug, 'IdleEverySecond: refreshed %', [fSspiKeyTab], self);
-  {$endif OSPOSIX}
 end;
 
 procedure THttpAsyncServer.AppendHttpDate(var Dest: TRawByteStringBuffer);
@@ -6511,12 +6497,12 @@ begin
   if fSettings.Server.ServerName <> '' then
     fServer.ServerName := fSettings.Server.ServerName; // override 'mORMot (OS)'
   if fServer.Logger <> nil then
-    fServer.Logger.Settings := fSettings.Server.Log; // override default
+    fServer.Logger.Settings := fSettings.Server.Log;   // override default
   fav := StringFromFile(fSettings.Server.FaviconFile);
   if fav = '' then
     fav := 'default';
   fServer.SetFavIcon(fav); // do once
-  fServer.IdleEverySecond;
+  fServer.IdleEverySecond; // initial setup of background processing
   fServer.OnIdle := OnIdle;
   if not (psoDisableGzip in fSettings.Server.Options) then
     fServer.RegisterCompress(CompressGZip);

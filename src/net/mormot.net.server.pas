@@ -562,6 +562,7 @@ type
     function GetHttpQueueLength: cardinal; virtual; abstract;
     procedure SetHttpQueueLength(aValue: cardinal); virtual; abstract;
     function GetConnectionsActive: cardinal; virtual; abstract;
+    procedure DoIdle(tix64: Int64; sec32: cardinal); virtual;
     function DoBeforeRequest(Ctxt: THttpServerRequest): cardinal;
       {$ifdef HASINLINE}inline;{$endif}
     function DoAfterRequest(Ctxt: THttpServerRequest): cardinal;
@@ -1085,6 +1086,7 @@ type
     procedure SetKeyTab(const aKeyTab: TFileName);
     function GetKeyTab: TFileName;
     {$endif OSPOSIX}
+    procedure DoIdle(tix64: Int64; sec32: cardinal); override;
     function HeaderRetrieveAbortTix: Int64;
     function DoRequest(Ctxt: THttpServerRequest): boolean; // fRoute or Request()
     function DoProcessBody(var Ctxt: THttpRequestContext;
@@ -1096,8 +1098,7 @@ type
       {$ifdef HASINLINE} inline; {$endif}
     function OnNginxAllowSend(Context: THttpServerRequestAbstract;
       const LocalFileName: TFileName): boolean;
-    // this overridden version will return e.g. 'Winsock 2.514'
-    function GetApiVersion: RawUtf8; override;
+    function GetApiVersion: RawUtf8; override; // = SocketApiVersion
     function GetExecuteState: THttpServerExecuteState; virtual; abstract;
     function GetBanned: THttpAcceptBan; virtual; abstract;
     function GetRegisterCompressGzStatic: boolean;
@@ -1374,7 +1375,7 @@ type
     function GetHttpQueueLength: cardinal; override;
     procedure SetHttpQueueLength(aValue: cardinal); override;
     function GetConnectionsActive: cardinal; override;
-    procedure DoCallbacks(tix64: Int64; sec32: integer);
+    procedure DoIdle(tix64: Int64; sec32: cardinal); override;
     /// server main loop - don't change directly
     procedure DoExecute; override;
     /// this method is called on every new client connection, i.e. every time
@@ -3933,6 +3934,15 @@ begin
   fRemoteConnIDHeaderUpper := UpperCase(aHeader);
 end;
 
+procedure THttpServerGeneric.DoIdle(tix64: Int64; sec32: cardinal);
+begin // is called at most every second, but maybe up to 5 seconds delay
+  if Assigned(fLogger) then
+    fLogger.OnIdle(tix64)      // flush log file(s) on idle server
+  else if Assigned(fAnalyzer) then
+    fAnalyzer.OnIdle(tix64);   // consolidate telemetry if needed
+  if Assigned(fOnIdle) then
+    fOnIdle(self, tix64);      // custom callback
+end;
 
 const
   // was generated from InitNetTlsContextSelfSignedServer() commented lines
@@ -4285,6 +4295,21 @@ begin
   result := fHeaderRetrieveAbortDelay;
   if result <> 0 then
     inc(result, mormot.core.os.GetTickCount64()); // FPC requires () on Windows
+end;
+
+procedure THttpServerSocketGeneric.DoIdle(tix64: Int64; sec32: cardinal);
+begin // is called at most every second, but maybe up to 5 seconds delay
+  inherited DoIdle(tix64, sec32);
+  // BlackListUri regular refresh support
+  if (fBlackListUriNextTix <> 0) and
+     (sec32 >= fBlackListUriNextTix) then
+    RefreshBlackListUri(sec32);
+  {$ifdef OSPOSIX}
+  // POSIX Kerberos keytab regular refresh
+  if Assigned(fSspiKeyTab) and
+     fSspiKeyTab.TryRefresh(sec32) then
+    fLogClass.Add.Log(sllDebug, 'DoIdle: refreshed %', [fSspiKeyTab], self);
+  {$endif OSPOSIX}
 end;
 
 function THttpServerSocketGeneric.DoRequest(Ctxt: THttpServerRequest): boolean;
@@ -4845,18 +4870,13 @@ begin
   result := fServerConnectionActive;
 end;
 
-procedure THttpServer.DoCallbacks(tix64: Int64; sec32: integer);
+procedure THttpServer.DoIdle(tix64: Int64; sec32: cardinal);
 var
   i: integer;
 begin // is called at most every second, but maybe up to 5 seconds delay
+  inherited DoIdle(tix64, sec32);
   if Assigned(fOnAcceptIdle) then
     fOnAcceptIdle(self, tix64); // e.g. TAcmeLetsEncryptServer.OnAcceptIdle
-  if Assigned(fLogger) then
-    fLogger.OnIdle(tix64)      // flush log file(s) on idle server
-  else if Assigned(fAnalyzer) then
-    fAnalyzer.OnIdle(tix64);   // consolidate telemetry if needed
-  if Assigned(fOnIdle) then
-    fOnIdle(self, tix64);      // custom callback
   if Assigned(fBanned) and
      (fBanned.Count <> 0) then
   begin
@@ -4869,14 +4889,6 @@ begin // is called at most every second, but maybe up to 5 seconds delay
     {$endif OSPOSIX};
     fBanSec := sec32;
   end;
-  if (fBlackListUriNextTix <> 0) and
-     (cardinal(sec32) >= fBlackListUriNextTix) then
-    RefreshBlackListUri(sec32);
-  {$ifdef OSPOSIX}
-  if Assigned(fSspiKeyTab) and
-     fSspiKeyTab.TryRefresh(sec32) then
-    fLogClass.Add.Log(sllDebug, 'DoCallbacks: refreshed %', [fSspiKeyTab], self);
-  {$endif OSPOSIX}
 end;
 
 procedure THttpServer.DoExecute;
@@ -4930,7 +4942,7 @@ begin
       if res = nrRetry then // accept() timeout after 1 or 5 seconds on POSIX
       begin
         tix64 := mormot.core.os.GetTickCount64;
-        DoCallbacks(tix64, tix64 div 1000);
+        DoIdle(tix64, tix64 div 1000);
         continue;
       end;
       {$else} // Windows accept() does not timeout and return nrRetry
@@ -4939,7 +4951,7 @@ begin
       if sec <> acceptsec then // trigger the callbacks once per second
       begin
         acceptsec := sec;
-        DoCallbacks(tix64, sec);
+        DoIdle(tix64, sec);
       end;
       if res = nrRetry then
         continue; // not seen in practice, but won't hurt
