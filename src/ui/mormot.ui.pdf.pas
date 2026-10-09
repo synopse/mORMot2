@@ -12391,6 +12391,8 @@ begin
       end
       else if (WorldTransform.eM11 = WorldTransform.eM22) and
               (WorldTransform.eM12 = -WorldTransform.eM21) and
+              // a pure positive uniform scaling is no rotation: default branch below
+              not ((WorldTransform.eM12 = 0) and (WorldTransform.eM11 > 0)) and
               not SameValue(ArcCos(WorldTransform.eM11), 0, 0.0001) then
       begin
         xs := 0;
