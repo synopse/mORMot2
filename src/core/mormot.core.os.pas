@@ -474,7 +474,8 @@ type
     wsWeakDpApi,
     wsWeakCng,
     wsWeakHttpApi,
-    wsWeakHttpSys);
+    wsWeakHttpSys,
+    wsTls13);
 
   /// notable Linux distributions, organized by their package management system
   TLinuxDistribution = (

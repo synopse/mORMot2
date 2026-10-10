@@ -2097,11 +2097,6 @@ end;
 
 { ******************** TLS / HTTPS Encryption Abstract Layer }
 
-// TLS 1.3 is officially supported starting in Windows 11 and Server 2022.
-// Enabling TLS 1.3 on earlier versions of Windows is possible through the
-// registry, but is explictly documented as unsafe by Microsoft.
-// https://learn.microsoft.com/en-us/windows/win32/secauthn/protocols-in-tls-ssl--schannel-ssp-
-
 procedure CredInit(var cred: TSChannelCred; const ctx: TNetTlsContext;
   dwFlags: cardinal; paServCred: pointer; RootStore: HCERTSTORE);
 begin
@@ -2111,8 +2106,7 @@ begin
      (OSVersion >= wSeven) then
     dwFlags := dwFlags or SCH_USE_STRONG_CRYPTO;
   if SChannelEnableTls13 and
-     ((OSVersion in [wEleven, wEleven_64]) or
-      (OSVersion >= wServer2022_64)) and
+     (wsTls13 in WindowsSpecs) and // Windows 11 or Server 2022
      not ctx.DisableTls13 then
   begin
     // new SCH_CREDENTIALS structure is required in order to enable TLS 1.3

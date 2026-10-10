@@ -5337,6 +5337,12 @@ begin
       OsWakeAllOnValue := @WakeByAddressAll;    // defined as stdcall
     end;
   end;
+  if (OSVersion in [wEleven, wEleven_64]) or
+     (OSVersion >= wServer2022_64) then
+    // TLS 1.3 is officially supported starting in Windows 11 and Server 2022.
+    // Enabling TLS 1.3 on earlier versions of Windows is possible through the
+    // registry, but is explictly documented as unsafe by Microsoft.
+    include(WindowsSpecs, wsTls13);
   h := GetModuleHandle(ntdll); // late binding over unstable / altered API
   if h > 0 then
   begin

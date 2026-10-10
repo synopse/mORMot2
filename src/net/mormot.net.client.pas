@@ -5872,11 +5872,13 @@ begin
   // WINHTTP_FLAG_SECURE_PROTOCOL_SSL2 and WINHTTP_FLAG_SECURE_PROTOCOL_SSL3
   // are unsafe, disabled at Windows level, therefore never supplied
   result := WINHTTP_FLAG_SECURE_PROTOCOL_TLS1;
-  // Windows 7 and newer support TLS 1.1 & 1.2
-  if OSVersion >= wSeven then
+  if OSVersion >= wSeven then // Windows 7 and newer support TLS 1.1 & 1.2
     result := result or
               WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_1 or
               WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_2;
+  if wsTls13 in WindowsSpecs then // Windows 11 or Server 2022
+    result := result or
+              WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_3;
 end;
 
 procedure TWinHttp.InternalConnect;
