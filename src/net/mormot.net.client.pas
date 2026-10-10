@@ -5975,10 +5975,14 @@ begin
 end;
 
 procedure TWinHttp.InternalAddHeader(const hdr: RawUtf8);
+var
+  w: SynUnicode;
 begin
-  if (hdr <> '') and
-     not WinHttpApi.AddRequestHeaders(FRequest,
-     pointer(Utf8ToSynUnicode(hdr)), length(hdr), WINHTTP_ADDREQ_FLAG_COALESCE) then
+  if hdr = '' then
+    exit;
+  Utf8ToSynUnicode(hdr, w);
+  if not WinHttpApi.AddRequestHeaders(FRequest,
+     pointer(w), length(w), WINHTTP_ADDREQ_FLAG_COALESCE) then
     RaiseFromLastError('AddRequestHeaders');
 end;
 
@@ -6674,8 +6678,8 @@ begin
     s := GetNextLine(P, P);
     i := PosExChar(':', s);
     if i > 1 then
-      fRequest.AddHeader(Utf8ToString(TrimU(copy(s, 1, i - 1))),
-        Utf8ToString(TrimU(copy(s, i + 1, maxInt))));
+      fRequest.AddHeader(Utf8ToString(TrimCopy(s, 1, i - 1)),
+        Utf8ToString(TrimCopy(s, i + 1, maxInt)));
   end;
 end;
 
