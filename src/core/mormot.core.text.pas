@@ -7678,20 +7678,20 @@ type
 const
   ROUNDER = $80000000;
 
-{$ifdef ASMINTEL} // our faster version using 128-bit x86_64 multiplication
+{$ifdef ASMINTELARM} // our faster version using 128-bit x86_64 multiplication
 
 procedure d2a_diy_fp_multiply(var x, y: TDIY_FP; normalize: boolean;
   out result: TDIY_FP); {$ifdef HASINLINE}inline;{$endif}
 var
   p: THash128Rec;
 begin
-  mul64x64(x.f, y.f, p); // fast x86_64 / i386 asm
+  mul64x64(x.f, y.f, p); // fast x86_64 / i386 / armv7 / aarch64 asm
   if (p.c1 and ROUNDER) <>  0 then
     inc(p.h);
   result.f := p.h;
   result.e := PtrInt(x.e) + PtrInt(y.e) + 64;
   if normalize then
-    if (PQWordRec(@result.f)^.h and ROUNDER) = 0 then
+    if (PQWordArray(@result.f)^[1] and ROUNDER) = 0 then
     begin
       result.f := result.f * 2;
       dec(result.e);
@@ -7722,7 +7722,7 @@ begin
     end;
 end;
 
-{$endif ASMINTEL}
+{$endif ASMINTELARM}
 
 const
   // alpha =-61; gamma = 0
