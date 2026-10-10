@@ -1,6 +1,6 @@
 ## Copyright Holder
 
-According to [the project licence terms](LICENCE.md), Synopse Informatique, and Arnaud Bouchez as the main Author of the Open Source *mORMot* framework, are the Copyright Holders.
+According to [the project licence terms](LICENCE.md), Synopse aka Arnaud Bouchez is the main Author of the Open Source *mORMot* framework, and the Copyright Holders.
 
 But nothing would have been possible without a big number of Contributors, who provided fixes or enhancements.
 
@@ -31,7 +31,9 @@ A huge *THANK YOU* is worth giving to all of the contributors of our Open Source
 - David Mead (MDW)
 - Delphinium (louisyeow)
 - DigDiver
+- Dkounal
 - Dominikcz
+- Dpremus
 - EgorovAlex
 - Emanuele (lele9)
 - Eric Grange
@@ -41,16 +43,21 @@ A huge *THANK YOU* is worth giving to all of the contributors of our Open Source
 - Eva Freimann (EVaF)
 - Evan Blaudy (eblaudy)
 - FeelAirSlow
+- Flydev
 - F-Vicente
 - Goran Despalatovic (gigo)
 - Hubert Touvet
+- Izva
 - Javier Tarí Agulló (Javierus TK)
 - Jean-Baptiste Roussia (jbroussia)
+- Joao Paulo Schuler
 - Joe (jokusoft)
 - Johan Bontes
+- Jonjbar
 - Jordi Tudela
 - Kevin Chen
 - Lagodny
+- Landrix
 - Leon Oosthuizen
 - Macc2010
 - Maciej Izak (hnb)
@@ -70,6 +77,7 @@ A huge *THANK YOU* is worth giving to all of the contributors of our Open Source
 - Michalis Kamburelis
 - MilesYou
 - Mingda
+- Moonbot-Tech
 - Mr Yang (ysair)
 - Nicolas Marchand (MC)
 - Nortg
@@ -77,26 +85,32 @@ A huge *THANK YOU* is worth giving to all of the contributors of our Open Source
 - OkobaPatino
 - Oleg Tretyakov
 - Ondrej (reddwarf)
+- OsVegn
 - Pavel Mashlyakovskii (mpv)
 - Pierre le Riche
+- RaelB
 - RalfS
 - Richard6688
 - Rik (rvk)
 - Sabbiolina
 - Sanyin
+- SDiestelmann
 - Sinisa (sinisav)
 - Sllimr7139
+- SovdChains
 - SSoftPro
 - Stefan (itSDS)
 - Svetozar Belic (transmogrifix)
 - Thomas Prud'homme (osvegn)
 - Ti Hory (tihorygit)
 - Tino Teuber
+- Tobfel
 - TTomas (tom)
 - Thomas (tbo)
 - Uian2000
 - Vaclav
 - Vadim Orel
+- VennexTSE
 - Willo vd Merwe
 - Win2014
 - Wloochacz
@@ -104,6 +118,7 @@ A huge *THANK YOU* is worth giving to all of the contributors of our Open Source
 - Yoanq
 - Ysair
 - Zed
+- Zen010101
 
 Don't be shy, contribute and make a pull request, and you will be in this Hall of Fame!
 
