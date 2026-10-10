@@ -6669,7 +6669,7 @@ end;
 procedure TDelphiNetHttp.InternalAddHeader(const hdr: RawUtf8);
 var
   P: PUtf8Char;
-  s: RawUtf8;
+  s, n, v: RawUtf8;
   i: PtrInt;
 begin
   P := pointer(hdr);
@@ -6678,8 +6678,11 @@ begin
     s := GetNextLine(P, P);
     i := PosExChar(':', s);
     if i > 1 then
-      fRequest.AddHeader(Utf8ToString(TrimCopy(s, 1, i - 1)),
-        Utf8ToString(TrimCopy(s, i + 1, maxInt)));
+    begin
+      TrimCopy(s, 1, i - 1, n);
+      TrimCopy(s, i + 1, maxInt, v);
+      fRequest.AddHeader(Utf8ToString(n), Utf8ToString(v));
+    end;
   end;
 end;
 
