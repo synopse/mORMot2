@@ -5753,6 +5753,22 @@ end;
 
 { ******************** TWinHttp TWinINet classes }
 
+procedure RemoveHeadInHeaders(var Header: RawUtf8);
+var
+  i: PtrInt;
+begin
+  // trim leading 'HTTP/1.1 200 OK'#$D#$A - needed for WinINet/WinHttp + curl
+  TrimSelf(Header);
+  if not IdemPChar(pointer(Header), 'HTTP/') then
+    exit;
+  i := Pos(#13#10, Header); // end of line
+  if i = 0 then
+    Header := ''
+  else
+    Delete(Header, 1, i + 1);
+end;
+
+
 {$ifdef USEWININET}
 
 { TWinHttpApi }
@@ -5766,6 +5782,7 @@ begin
   // HTTP_QUERY* and WINHTTP_QUERY* do match -> common to TWinINet + TWinHttp
   result         := InternalGetInfo32(HTTP_QUERY_STATUS_CODE);
   Header         := InternalGetInfo(HTTP_QUERY_RAW_HEADERS_CRLF);
+  RemoveHeadInHeaders(Header); // trim 'HTTP/1.1 200 OK' first line
   Encoding       := InternalGetInfo(HTTP_QUERY_CONTENT_ENCODING);
   AcceptEncoding := InternalGetInfo(HTTP_QUERY_ACCEPT_ENCODING);
   // retrieve received content (if any)
@@ -6559,16 +6576,8 @@ begin
   rc := 0;
   curl.easy_getinfo(fHandle, ciResponseCode, rc);
   result := rc;
-  Header := TrimU(fOut.Header);
-  if IdemPChar(pointer(Header), 'HTTP/') then
-  begin
-    i := 6;
-    while Header[i] >= ' ' do
-      inc(i);
-    while ord(Header[i]) in [10, 13] do
-      inc(i);
-    system.Delete(Header, 1, i - 1); // trim leading 'HTTP/1.1 200 OK'#$D#$A
-  end;
+  Header := fOut.Header;
+  RemoveHeadInHeaders(Header); // trim 'HTTP/1.1 200 OK' first line
   P := pointer(Header);
   while P <> nil do
   begin
