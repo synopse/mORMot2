@@ -6428,7 +6428,10 @@ const
   NO_PROXY: AnsiChar = #0; // non-nil pointer to an empty C string
 begin
   fIn.URL := Join([fRootURL, aUrl]);
-  curl.easy_setopt(fHandle, coFollowLocation, ord(fExtendedOptions.RedirectMax > 0));
+  curl.easy_setopt(fHandle, coFollowLocation,
+    ord(fExtendedOptions.RedirectMax > 0));
+  if fExtendedOptions.RedirectMax > 0 then
+    curl.easy_setopt(fHandle, coMaxRedirs, fExtendedOptions.RedirectMax);
   //curl.easy_setopt(fHandle,coTCPNoDelay,0); // disable Nagle
   if fLayer = nlUnix then
     curl.easy_setopt(fHandle, coUnixSocketPath, pointer(fServer));
