@@ -6409,6 +6409,19 @@ begin
   fTls.PassPhrase := aPassPhrase;
 end;
 
+function CurlWriteLastResponseHeader(buffer: PAnsiChar; size, nitems: integer;
+  opaque: pointer): integer; cdecl;
+var
+  headers: PRawByteString absolute opaque;
+begin
+  if (headers <> nil) and
+     (size * nitems >= 5) then
+    if IdemPChar(pointer(buffer), 'HTTP/') then
+      // a new HTTP response starts (e.g. redirect): discard previous headers
+      headers^ := '';
+  result := CurlWriteRawByteString(buffer, size, nitems, opaque);
+end;
+
 procedure TCurlHttp.InternalCreateRequest(const aMethod, aUrl: RawUtf8);
 const
   CERT_PEM: RawUtf8 = 'PEM';
@@ -6455,7 +6468,7 @@ begin
     end;
   curl.easy_setopt(fHandle, coUserAgent, pointer(fExtendedOptions.UserAgent));
   curl.easy_setopt(fHandle, coWriteFunction, @CurlWriteRawByteString);
-  curl.easy_setopt(fHandle, coHeaderFunction, @CurlWriteRawByteString);
+  curl.easy_setopt(fHandle, coHeaderFunction, @CurlWriteLastResponseHeader);
   fIn.Method := UpperCase(aMethod);
   if fIn.Method = '' then
     fIn.Method := 'GET';
