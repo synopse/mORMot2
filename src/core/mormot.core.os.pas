@@ -4272,6 +4272,8 @@ function GetFileNameFromUrl(const Uri: RawUtf8): TFileName;
 {$else}
 
 /// internal function just wrapping fppoll(POLLIN or POLLPRI)
+// - returns 1 if some data is pending, 0 on timeout or EINTR, and -1 on
+// HUP/ERR/NVAL with nothing to read (e.g. closed pipe) or on poll() error
 function WaitReadPending(fd, timeout: integer): integer;
 
 type

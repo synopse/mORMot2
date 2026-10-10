@@ -2111,7 +2111,10 @@ begin
     if p.revents and (POLLIN or POLLPRI) <> 0 then
       result := 1   // something is available
     else
-      result := -1; // HUP/ERR/NVAL: not readable console input
+      result := -1  // HUP/ERR/NVAL: not readable console input
+  else if (result < 0) and
+          (fpgeterrno = ESysEINTR) then
+    result := 0;    // interrupted by a signal: nothing pending yet
 end;
 
 procedure ConsoleErrorWrite(const text: RawUtf8);
@@ -5539,9 +5542,13 @@ var
   function RedirectOutput(killing: boolean; var redir: RawByteString): boolean;
   var
     u: RawUtf8;
+    pending: integer;
   begin
     result := false; // return false on pipe closed
-    if WaitReadPending(fd, wait) > 0 then
+    pending := WaitReadPending(fd, wait);
+    if pending < 0 then
+      exit; // HUP/ERR with nothing left to read = the child closed its stdout
+    if pending > 0 then
     begin
       n := fpread(fd, @tmp, SizeOf(tmp));
       if n <= 0 then
