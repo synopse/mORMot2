@@ -916,6 +916,7 @@ var
       IDs: TIntegerDynArray;
       Row, RowDoc, all: variant;
       r, v: PDocVariantData;
+      stmt: ISqlDBStatement;
 
       procedure DoInsert;
       var
@@ -945,6 +946,18 @@ var
       TSynLogTestLog.EnterLocal(log, proxy, msg);
       if proxy <> Props then
         Check(proxy.UserID = 'user');
+      // the same statement instance should be executable several times
+      stmt := proxy.NewThreadSafeStatementPrepared(
+        'select count(*) from People where YearOfDeath=?', true, true);
+      for i := 1 to 3 do
+      begin
+        stmt.Bind(1, 1519);
+        stmt.ExecutePrepared;
+        Check(stmt.Step, 'reuse');
+        CheckEqual(stmt.ColumnInt(0), DoCount, 'reuse');
+        stmt.Instance.Reset;
+      end;
+      stmt := nil;
       proxy.ExecuteNoResult('delete from people where ID>=?', [50000]);
       res := proxy.Execute('select * from People where YearOfDeath=?', [1519]);
       Check(res <> nil);
