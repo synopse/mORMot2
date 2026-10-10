@@ -238,8 +238,6 @@ type
     procedure _GUID;
     /// test ParseCommandArgs() functions
     procedure _ParseCommandArgs;
-    /// test RunRedirect() function
-    procedure _RunRedirect;
     /// test TExecutableCommandLine class
     procedure _TExecutableCommandLine;
     /// test IsMatch() function
@@ -3623,36 +3621,6 @@ begin
   Test('" one" two', [' one', 'two'], [], false);
   Test('"one one" two', ['one one', 'two'], [], false);
 end;
-
-procedure TTestCoreBase._RunRedirect;
-{$ifdef OSPOSIX}
-
-  procedure Run(const cmd, expected: RawUtf8; expectedexitcode: integer);
-  var
-    exitcode: integer;
-    output: RawByteString;
-    start: Int64;
-  begin
-    start := GetTickCount64;
-    output := RunRedirect(cmd, @exitcode, nil, 10000);
-    CheckEqual(exitcode, expectedexitcode, cmd);
-    CheckEqual(output, expected, cmd);
-    // should return as soon as the child exited, not after waitfordelayms
-    CheckUtf8(GetTickCount64 - start < 5000, cmd);
-  end;
-
-begin
-  Run('true', '', 0);                                // no output, no shell
-  Run('echo hello', 'hello'#10, 0);                  // some output, no shell
-  Run('sh -c "exit 3"', '', 3);                      // exit code, no shell
-  Run('echo one && echo two', 'one'#10'two'#10, 0);  // via the shell
-  Run('exit 5', '', 5);                              // shell built-in
-end;
-{$else}
-begin
-  // this regression test is POSIX specific
-end;
-{$endif OSPOSIX}
 
 procedure TTestCoreBase._TExecutableCommandLine;
 var

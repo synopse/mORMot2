@@ -6075,9 +6075,9 @@ begin
   if fExtendedOptions.RedirectMax > 0 then
     if not WinHttpApi.SetOption(fRequest,
         WINHTTP_OPTION_MAX_HTTP_AUTOMATIC_REDIRECTS,
-        @fExtendedOptions.RedirectMax,
-        SizeOf(fExtendedOptions.RedirectMax)) then
-      RaiseFromLastError('SetOption(redirectmax)');  L := length(aData);
+        @fExtendedOptions.RedirectMax, SizeOf(fExtendedOptions.RedirectMax)) then
+      RaiseFromLastError('SetOption(redirectmax)');
+  L := length(aData);
   if _SendRequest(L) and
      WinHttpApi.ReceiveResponse(fRequest, nil) then
     exit; // success
