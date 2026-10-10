@@ -5761,7 +5761,7 @@ begin
   TrimSelf(Header);
   if not IdemPChar(pointer(Header), 'HTTP/') then
     exit;
-  i := Pos(#13#10, Header); // end of line
+  i := PosEx(#13#10, Header); // end of line
   if i = 0 then
     Header := ''
   else
@@ -6029,7 +6029,7 @@ procedure TWinHttp.InternalSendRequest(const aMethod: RawUtf8;
 
 var
   L: integer;
-  winAuth: cardinal;
+  policy, winAuth: cardinal;
   usr, pwd: SynUnicode;
 begin
   if AuthScheme <> wraNone then
@@ -6066,11 +6066,18 @@ begin
          @SECURITY_FLAG_IGNORE_CERTIFICATES, SizeOf(cardinal)) then
         RaiseFromLastError('SetOption(ignorecert)');
   if fExtendedOptions.RedirectMax > 0 then
-    if WinHttpApi.SetOption(fRequest, WINHTTP_OPTION_REDIRECT_POLICY,
-         @REDIRECT_POLICY_ALWAYS, SizeOf(cardinal)) then
-      WinHttpApi.SetOption(fRequest, WINHTTP_OPTION_MAX_HTTP_AUTOMATIC_REDIRECTS,
-        @fExtendedOptions.RedirectMax, SizeOf(cardinal)); // ignore errors
-  L := length(aData);
+    policy := WINHTTP_OPTION_REDIRECT_POLICY_DISALLOW_HTTPS_TO_HTTP
+  else
+    policy := WINHTTP_OPTION_REDIRECT_POLICY_NEVER;
+  if not WinHttpApi.SetOption(fRequest, WINHTTP_OPTION_REDIRECT_POLICY,
+      @policy, SizeOf(policy)) then
+    RaiseFromLastError('SetOption(redirectpolicy)');
+  if fExtendedOptions.RedirectMax > 0 then
+    if not WinHttpApi.SetOption(fRequest,
+        WINHTTP_OPTION_MAX_HTTP_AUTOMATIC_REDIRECTS,
+        @fExtendedOptions.RedirectMax,
+        SizeOf(fExtendedOptions.RedirectMax)) then
+      RaiseFromLastError('SetOption(redirectmax)');  L := length(aData);
   if _SendRequest(L) and
      WinHttpApi.ReceiveResponse(fRequest, nil) then
     exit; // success
