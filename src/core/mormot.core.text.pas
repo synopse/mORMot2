@@ -7691,7 +7691,7 @@ begin
   result.f := p.h;
   result.e := PtrInt(x.e) + PtrInt(y.e) + 64;
   if normalize then
-    if (PQWordArray(@result.f)^[1] and ROUNDER) = 0 then
+    if (PQWordRec(@result.f)^.h and ROUNDER) = 0 then
     begin
       result.f := result.f * 2;
       dec(result.e);
