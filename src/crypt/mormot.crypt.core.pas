@@ -330,7 +330,7 @@ const
   AesBlockMod = 15;
 
   /// the AES-GCM GMAC size (in bytes)
-  GMAC_SIZE = 16;
+  GMAC_SIZE = SizeOf(THash128);
 
 type
   /// 128-bit memory block for AES data cypher/uncypher
@@ -1284,6 +1284,10 @@ type
     // Encrypt/Decrypt before reusing this instance
     function AesGcmFinal(var Tag: TAesBlock; TagLen: integer = 16): boolean; virtual; abstract;
     /// AES-GCM pure alternative to MacAndCrypt() over memory buffers
+    // - will use PKCS-7 padding and optional 16-byte of IV if needed so it is
+    // not the most standard layout either - but more than MacAndCrypt() anyway
+    // - consider AesGcmAad + Encrypt/Decrypt + AesGcmFinal with your own IV and
+    // proper tag appending to have a more standard encoding
     // - returns -1 on error, or the number of bytes written to Output (which
     // may be 0 with a 16-byte input padding)
     function AesGcmBuffer(Input, Output: pointer; InputLen, OutputMax: PtrInt;
@@ -1468,6 +1472,11 @@ const
 // - will return either TAesFast[aesMode] or TAesInternal[aesMode] as fallback
 function AesIvUpdatedCreate(aesMode: TAesMode;
   const key; keySizeBits: cardinal; iv: PAesBlock = nil): TAesAbstract;
+
+/// increment the 96-bit AES-GCM nonce from bytes [0..11] in big-endian order
+// - could be used to ensure a genuine IV is used for new TAesGcmAbstract round
+// especially since TAesGcmOsl
+procedure GCM_IncIV(var x: TAesBlock);
 
 const
   /// the AES chaining modes which supports AEAD process
@@ -4571,6 +4580,18 @@ begin
   inc(x[13]);
   if x[13] = 0 then
     inc(x[12]);
+end;
+
+procedure GCM_IncIV(var x: TAesBlock);
+var
+  i: PtrInt;
+begin
+  for i := 11 downto 0 do // Big-Endian increase, 32-bit CTR [12..15] untouched
+  begin
+    inc(x[i]);
+    if x[i] <> 0 then
+      break;
+  end;
 end;
 
 procedure TAesGcmEngine.internal_crypt(ptp, ctp: PByte; ILen: PtrUInt);
