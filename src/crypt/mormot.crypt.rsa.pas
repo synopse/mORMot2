@@ -2346,6 +2346,21 @@ begin
   result := AllocateFrom(1);
   bits := exp.BitCount;
   base := Reduce(b, m, BarrettMu);
+  if (bits = 17) and
+     exp.BitIsSet(0) and
+     (exp.BitSetCount = 2) then
+  begin
+    // fast path for most common public exponent e = 65537 = 2^16 + 1
+    result.Release;
+    result := base.Copy;
+    for j := 1 to 16 do
+      result := Reduce(result.Square, m, BarrettMu);
+    result := Reduce(
+      result.Multiply(base.Copy), m, BarrettMu);
+    base.Release;
+    exp.Release;
+    exit;
+  end;
   if bits < 256 then
   begin
     // simple binary exponentiation
