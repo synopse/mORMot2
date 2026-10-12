@@ -114,18 +114,21 @@ type
     fStarted: boolean;
     fOwner: TTunnelLocal;
     fSession: TTunnelSession;
-    fAes: array[{sending:}boolean] of TAesAbstract;
+    fAesGcm: array[{sending:}boolean] of TAesAbstract;
     fServerSock, fClientSock: TNetSocket;
     fClientAddr: TNetAddr;
     fPort: TNetPort;
     fTimeoutAcceptSecs: cardinal;
+    fAesIv: array[{sending:}boolean] of TAesBlock;
     function TransmitSock: TNetSocket;
       {$ifdef HASINLINE} inline; {$endif}
     /// accept/connect the connection, then crypt/redirect to fTransmit
     procedure DoExecute; override;
+    procedure EncryptGcm(var Frame: RawByteString);
+    function DecryptGcm(Frame: pointer; FrameLen: PtrInt): RawByteString;
   public
     /// initialize and start the thread - called from Open()
-    constructor Create(owner: TTunnelLocal; const key, iv: THash128;
+    constructor Create(owner: TTunnelLocal; const keyrec, keysnd, iv: THash128;
       sock: TNetSocket; acceptSecs: cardinal); reintroduce;
     /// release all sockets and encryption state
     destructor Destroy; override;
@@ -158,9 +161,12 @@ type
   end;
 
   /// identify the TTunnelLocal handshake protocol version
+  // - tlmVersion2 is the first stable actually released, using AES-GCM with
+  // each frame authentication and proper distinct receive/send keys
   TTunnelLocalMagic = (
     tlmNone,
-    tlmVersion1);
+    tlmVersion1_aesctr,
+    tlmVersion2);
 
   /// the header of the inital frame exchanged between both TTunnelLocal ends
   // - full header content (therefore the execution context) should match
@@ -740,19 +746,21 @@ end;
 { TTunnelLocalThread }
 
 constructor TTunnelLocalThread.Create(owner: TTunnelLocal;
-  const key, iv: THash128; sock: TNetSocket; acceptSecs: cardinal);
+  const keyrec, keysnd, iv: THash128; sock: TNetSocket; acceptSecs: cardinal);
 begin
   fSafe.Init; // mandatory for TOSLightLock
   fOwner := owner;
   fPort := owner.Port;
   fSession := owner.Session;
   fTimeoutAcceptSecs := acceptSecs;
-  if not IsZero(key) then
+  if not IsZero(keyrec) then
   begin
-    // ecc256r1 shared secret has 128-bit resolution -> 128-bit AES-CTR
-    fAes[{sending:}false] := AesIvUpdatedCreate(mCtr, key, 128, @iv);
-    fAes[{sending:}true]  := AesIvUpdatedCreate(mCtr, key, 128, @iv);
-    // won't include an IV with each frame, but update it after each frame
+    // ecc256r1 shared secret has 128-bit resolution -> 128-bit AES-GCM
+    fAesGcm[{sending:}false] := TAesFast[mGcm].Create(keyrec, 128, @iv);
+    fAesGcm[{sending:}true ] := TAesFast[mGcm].Create(keysnd, 128, @iv);
+    // won't include an IV with each frame, but update it for each direction
+    fAesIV[false] := iv;
+    fAesIV[true ] := iv;
   end;
   fServerSock := sock;
   inherited Create({susp=}true, nil, nil, fOwner.fLogClass, Make(['tun', fPort]));
@@ -769,8 +777,8 @@ begin
   fClientSock := nil;
   // release internal resources
   fOwner := nil;
-  FreeAndNil(fAes[true]);
-  FreeAndNil(fAes[false]);
+  FreeAndNil(fAesGcm[true]);
+  FreeAndNil(fAesGcm[false]);
   fSafe.Done; // mandatory for TOSLightLock
 end;
 
@@ -788,6 +796,52 @@ function TTunnelLocalThread.Processing: boolean;
 begin
   result := (self <> nil) and
             (fState = stProcessing);
+end;
+
+procedure TTunnelLocalThread.EncryptGcm(var Frame: RawByteString);
+var
+  n: PtrInt;
+  tag: TAesBlock;
+  gcm: TAesGcmAbstract;
+  p: PAnsiChar;
+begin
+  n := length(Frame);
+  p := FastNewString(n + GMAC_SIZE + TRAIL_SIZE);
+  fAesGcm[true].IV := fAesIV[true];
+  GCM_IncIV(fAesIV[true]);                         // genuine IV per direction
+  gcm := fAesGcm[true] as TAesGcmAbstract;
+  gcm.Encrypt(nil, nil, 0);                        // reset
+  gcm.AesGcmAad(@fSession, SizeOf(fSession));      // AAD session
+  gcm.Encrypt(pointer(Frame), p, n);               // no padding
+  FastAssignNew(Frame, p);
+  if not gcm.AesGcmFinal(tag) then
+    ETunnel.RaiseUtf8('%.EncryptGcm: finalization failed', [self]);
+  PAesBlock(p + n)^ := tag;
+end; // caller will append fSession as trailer
+
+function TTunnelLocalThread.DecryptGcm(
+  Frame: pointer; FrameLen: PtrInt): RawByteString;
+var
+  n: PtrInt;
+  gcm: TAesGcmAbstract;
+begin
+  result := '';
+  n := FrameLen - SizeOf(TAesBlock);
+  if (Frame = nil) or
+     (n <= 0) then
+  begin
+    Terminate;
+    ETunnel.RaiseUtf8('%.DecryptGcm: invalid frame length=%', [self, FrameLen]);
+  end;
+  FastNewRawByteString(result, n);
+  gcm := fAesGcm[false] as TAesGcmAbstract;
+  gcm.IV := fAesIV[false];
+  GCM_IncIV(fAesIV[false]);                    // genuine IV per direction
+  gcm.Decrypt(nil, nil, 0);                    // reset
+  gcm.AesGcmAad(@fSession, SizeOf(fSession));  // AAD session
+  gcm.Decrypt(Frame, pointer(result), n);      // no padding
+  if not gcm.AesGcmFinal(PAesBlock(PAnsiChar(Frame) + n)^) then
+    FastAssignNew(result);
 end;
 
 function TTunnelLocalThread.TransmitSock: TNetSocket;
@@ -814,10 +868,9 @@ begin
     fLogClass.Add.Log(sllDebug, 'OnReceived: accepted', self);
   end;
   try
-    if fAes[{sending:}false] <> nil then
+    if fAesGcm[{sending:}false] <> nil then
     begin
-      data := fAes[false].DecryptPkcs7Buffer(
-        Frame, FrameLen, {ivatbeg=}false, {raise=}false);
+      data := DecryptGcm(Frame, FrameLen);
       if data = '' then
       begin
         Terminate;
@@ -913,8 +966,8 @@ begin
               // emit the (encrypted) data with a 32-bit TTunnelSession trailer
               if fOwner <> nil then
                 inc(fOwner.fBytesOut, length(tmp)); // size before encryption
-              if fAes[{send:}true] <> nil then
-                tmp := fAes[true].EncryptPkcs7(tmp, {ivatbeg=}false, TRAIL_SIZE)
+              if fAesGcm[{send:}true] <> nil then
+                EncryptGcm(tmp)
               else
                 SetLength(tmp, length(tmp) + TRAIL_SIZE);
               PTunnelSession(@PByteArray(tmp)[length(tmp) - TRAIL_SIZE])^ := fSession;
@@ -1290,7 +1343,7 @@ var
   infoaes: TAesCtr;
   rem: PTunnelLocalHandshake absolute remote;
   loc: TTunnelLocalHandshake;
-  key, iv: THash256Rec;
+  key, keyrec, keysnd, iv: THash256Rec;
   hmac, hmac2: THmacSha256;
   log: ISynLog;
 const // port is asymmetrical so not included to the KDF - nor the crc
@@ -1305,6 +1358,10 @@ begin
   fVerifyCert := VerifyCert;
   fOptions := TransmitOptions - [toClientSigned, toServerSigned];
   IncludeOptionsFromCert; // adjust from fSignCert/fVerifyCert
+  if (toEncrypt in fOptions) and
+     (AppSecret = '') and
+     not (toEcdhe in fOptions) then
+    ETunnel.RaiseUtf8('%.Open: encrypted tunnel requires AppSecret or ECDHE', [self]);
   if fLogClass <> nil then
     fLogClass.EnterLocal(log, 'Open(%,[%])', [Int64(Sess), ToText(fOptions)], self);
   fTransmit := Transmit;
@@ -1324,14 +1381,14 @@ begin
   infoaes := nil;
   try
     // header with optional ECDHE
-    loc.Info.magic   := tlmVersion1;
+    loc.Info.magic   := tlmVersion2; // AES-GCM
     loc.Info.options := fOptions;
-    loc.Info.session := fSession; // is typically an increasing sequence number
+    loc.Info.session := fSession;    // typically an increasing sequence number
     loc.Info.port    := result;
-    Random128(@loc.Ecdh.rnd);     // unpredictable
+    Random128(@loc.Ecdh.rnd);        // unpredictable
     if toEcdhe in fOptions then
     begin
-      if IsZero(fEcdhe.pub) then  // ephemeral key was not specified at Create
+      if IsZero(fEcdhe.pub) then     // no ephemeral key specified at Create
       begin
         if Assigned(log) then
           log.Log(sllTrace, 'Open: generate ECHDE key', self);
@@ -1398,9 +1455,14 @@ begin
       ETunnel.RaiseUtf8('Open: invalid handshake signature on port %', [result]);
     if not FrameVerify(pointer(remote), l, SizeOf(loc)) then
       ETunnel.RaiseUtf8('Open: handshake failed on port %', [result]);
+    if IsEqual(loc.Info.crc, rem^.Info.crc) then
+      ETunnel.RaiseUtf8('Open: identical handshake CRCs on port %', [result]);
     fRemotePort := rem^.Info.port;
     // optional encryption - maybe with ECDHE ephemeral keys
     FillZero(key.b);
+    FillZero(keyrec.b);
+    FillZero(keysnd.b);
+    FillZero(iv.b);
     if toEncrypted * fOptions <> [] then // toEncrypt or toEcdhe
     begin
       // hmac has been pre-computed above with loc.Info and AppSecret
@@ -1414,11 +1476,19 @@ begin
             [self, result]);
         hmac.Update(key.b); // prime256v1 shared secret
       end;
-      hmac2 := hmac;     // two labeled hmacs - see NIST SP 800-108
+      hmac2 := hmac;              // several labeled hmacs - see NIST SP 800-108
       hmac.Update('AES key'#0);
-      hmac.Done(key.b);   // AES-128-CTR key
+      hmac.Update(loc.Info.crc);  // AES-128-GCM receive key
+      hmac.Done(keyrec.b);
+      hmac := hmac2;
+      hmac.Update('AES key'#0);
+      hmac.Update(rem^.Info.crc); // AES-128-GCM send key
+      hmac.Done(keysnd.b);
+      if IsEqual(keyrec.Lo, keysnd.Lo) then
+        ETunnel.RaiseUtf8('%.Open: identical directional AES keys on port %',
+          [self, result]);
       hmac2.Update('IV'#1);
-      hmac2.Done(iv.b);     // AES-128-CTR iv
+      hmac2.Done(iv.b);           // same initial AES-128-GCM iv
     end;
     // launch the background processing thread
     fPort := result;
@@ -1429,7 +1499,8 @@ begin
         ETunnel.RaiseUtf8('%.Open: closed during handshake', [self]);
       if fThread <> nil then // already checked by Open/OpenSocket
         ETunnel.RaiseUtf8('%.Open: existing %', [self, fThread]);
-      fThread := TTunnelLocalThread.Create(self, key.Lo, iv.Lo, Sock, TimeOutMS);
+      fThread := TTunnelLocalThread.Create(
+                   self, keyrec.Lo, keysnd.Lo, iv.Lo, Sock, TimeOutMS);
       Sock := nil;   // ownership transfered
       fThread.Start; // ensure fThread is set when DoExecute starts
     finally
@@ -1521,7 +1592,7 @@ function TTunnelLocal.Encrypted: boolean;
 begin
   result := (self <> nil) and
             (fThread <> nil) and
-            (fThread.fAes[false] <> nil);
+            (fThread.fAesGcm[false] <> nil);
 end;
 
 procedure TTunnelLocal.OnTunnelInfo(var Info: TDocVariantData);

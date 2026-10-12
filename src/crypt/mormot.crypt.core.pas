@@ -4586,12 +4586,14 @@ procedure GCM_IncIV(var x: TAesBlock);
 var
   i: PtrInt;
 begin
-  for i := 11 downto 0 do // Big-Endian increase, 32-bit CTR [12..15] untouched
-  begin
+  i := 11; // Big-Endian increase, 32-bit CTR [12..15] untouched
+  repeat
     inc(x[i]);
-    if x[i] <> 0 then
+    if (x[i] <> 0) or
+       (i = 0) then
       break;
-  end;
+    dec(i);
+  until false;
 end;
 
 procedure TAesGcmEngine.internal_crypt(ptp, ctp: PByte; ILen: PtrUInt);
