@@ -1441,19 +1441,18 @@ begin
     l := length(remote) - SUFFIX_SIZE;
     if l >= 0 then
     begin
-      li := PWord(@PByteArray(remote)^[l])^;
+      li := PWord(@PByteArray(remote)^[l])^; // JSON size
       dec(l, li);
     end;
-    if l < 0 then
-      ETunnel.RaiseUtf8('Open: invalid remote frame on port %', [result]);
+    if l < SizeOf(loc) then
+      ETunnel.RaiseUtf8('Open: wrong handshake size=% on port %', [l, result]);
     FastSetRawByteString(info, @PByteArray(remote)^[l], li);
     if infoaes <> nil then
       info := infoaes.DecryptPkcs7(info, {ivatbeg=}false);
     if fInfo.InitJsonInPlace(pointer(info), JSON_FAST) = nil then
       ETunnel.RaiseUtf8('Open: invalid JSON info on port %', [result]);
+    FillZero(info);
     // check the digital signature, maybe using the certificate
-    if l < SizeOf(loc) then // may have a signature trailer
-      ETunnel.RaiseUtf8('Open: wrong handshake size=% on port %', [l, result]);
     if not CompareMemSmall(@rem.Info, @loc.Info, KDF_SIZE) then
       ETunnel.RaiseUtf8('Open: unexpected handshake on port %', [result]);
     TunnelHandshakeCrc(rem^, AppSecret, key.Lo);
