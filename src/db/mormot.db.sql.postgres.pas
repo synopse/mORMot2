@@ -939,7 +939,11 @@ begin
           'parameter #% of type %', [self, i, ToText(p^.VType)^]);
       end;
     if fPGParams[i] = nil then
-      fPGParams[i] := pointer(p^.VData);
+      if (p^.VType <> ftNull) and
+         (p^.VData = '') then
+        fPGParams[i] := @NULCHAR // empty value, not SQL NULL
+      else
+        fPGParams[i] := pointer(p^.VData);
     inc(p);
   end;
 end;
