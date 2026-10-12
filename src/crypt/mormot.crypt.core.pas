@@ -4842,6 +4842,7 @@ begin
   FillZero(state.txt_ghv);
   state.aad_cnt.V := 0;
   state.atx_cnt.V := 0;
+  state.blen := 0;
   state.flags := state.flags - [flagFinalComputed, flagFlushed];
   result := true;
 end;
