@@ -646,6 +646,7 @@
     {$ifdef CPUINTEL}
       {$define ASMINTEL}
       {$define ASMINTELARM}
+      {$define ASMINTELARM64}
     {$else}
       {$ifdef CPU64BITS}  // handle non INTEL/AMD Delphi targets
         {$define CPU64}
@@ -660,6 +661,7 @@
     {$define CPUX86}
     {$define ASMINTEL}
     {$define ASMINTELARM}
+    {$define ASMINTELARM64}
     {$define ASMX86}
   {$ifend}
 
