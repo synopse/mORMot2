@@ -149,6 +149,10 @@ type
     procedure Save(data: PByteArray; bytes: integer; andrelease: boolean); overload;
     /// export a Big Integer value into a binary RawByteString
     function Save(andrelease: boolean = false): RawByteString; overload;
+    /// export exactly bytes big-endian bytes, padding with leading zeros
+    // - returns '' if the value does not fit
+    // - optionally releases self, like Save()
+    function SaveFixed(bytes: integer; andrelease: boolean = false): RawByteString;
     /// delete any meaningless leading zeros and return self
     function Trim: PBigInt;
       {$ifdef HASSAFEINLINE} inline; {$endif}
@@ -1260,6 +1264,32 @@ begin
     exit;
   pointer(result) := FastNewString(Size * HALF_BYTES);
   Save(pointer(result), length(result), andrelease);
+end;
+
+function TBigInt.SaveFixed(bytes: integer; andrelease: boolean): RawByteString;
+var
+  used: integer;
+  p: PByteArray;
+begin
+  FastAssignNew(result);
+  try
+    if (@self = nil) or
+       (bytes <= 0) then
+      exit;
+    used := 0; // number of significant bytes
+    if Size > 0 then
+      used := (BitCount + 7) shr 3;
+    if used > bytes then // I2OSP requires to fit the requested width
+      exit;
+    p := FastNewString(bytes);
+    pointer(result) := p;
+    dec(bytes, used);
+    FillCharFast(p^, bytes, 0);
+    MoveSwap(@p[bytes], pointer(Value), used); // fill the actual data
+  finally
+    if andrelease then
+      Release;
+  end;
 end;
 
 function TBigInt.Add(b: PBigInt): PBigInt;
@@ -3215,15 +3245,21 @@ begin
   fSafe.Lock;
   try
     enc := Load(Input, fModulusLen);
+    if enc.Compare(fM) >= 0 then // RFC 8017: ciphertext must be < n
+    begin
+      enc.Release;
+      exit;
+    end;
     dec := ChineseRemainderTheorem(enc);
     if dec = nil then
       exit;
-    exp := dec.Save({andrelease=}true);
+    exp := dec.SaveFixed(fModulusLen, {andrelease=}true);
   finally
     fSafe.UnLock;
   end;
   // decode the result following proper padding (PKCS#1.5 with TRsa class)
-  result := Pkcs1UnPad(pointer(exp), {verify=}false);
+  if exp <> '' then
+    result := Pkcs1UnPad(pointer(exp), {verify=}false);
 end;
 
 function TRsa.Pkcs1Verify(Input: pointer): RawByteString;
@@ -3239,16 +3275,22 @@ begin
   fSafe.Lock;
   try
     enc := Load(Input, fModulusLen);
+    if enc.Compare(fM) >= 0 then // reject noncanonical RSA signatures
+    begin
+      enc.Release;
+      exit;
+    end;
     CurrentModulo := rmM; // for ModPower()
     dec := ModPower(enc, fE, nil); // calls enc.Release
     if dec = nil then
       exit;
-    exp := dec.Save({andrelease=}true);
+    exp := dec.SaveFixed(fModulusLen, {andrelease=}true);
   finally
     fSafe.UnLock;
   end;
   // decode the result following proper padding (PKCS#1.5 with TRsa class)
-  result := Pkcs1UnPad(pointer(exp), {verify=}true);
+  if exp <> '' then
+    result := Pkcs1UnPad(pointer(exp), {verify=}true);
 end;
 
 function TRsa.Pkcs1Encrypt(Input: pointer; InputLen: integer): RawByteString;
@@ -3262,12 +3304,15 @@ begin
     exit;
   // encode input using proper padding (PKCS#1.5 with TRsa class)
   exp := Pkcs1Pad(Input, InputLen, {sign=}false);
+  if exp = '' then
+    exit;
   // encrypt with the RSA public key
   fSafe.Lock;
   try
     dec := Load(pointer(exp), fModulusLen);
     CurrentModulo := rmM; // for ModPower()
-    result := ModPower(dec, fE, nil).Save({andrelease=}true);
+    result := ModPower(dec, fE, nil).
+              SaveFixed(fModulusLen, {andrelease=}true);
   finally
     fSafe.UnLock;
   end;
@@ -3284,11 +3329,14 @@ begin
     exit;
   // encode input using proper padding (PKCS#1.5 with TRsa class)
   exp := Pkcs1Pad(Input, InputLen, {sign=}true);
+  if exp = '' then
+    exit;
   // encrypt the signature with the RSA Private Key
   fSafe.Lock;
   try
     dec := Load(pointer(exp), fModulusLen);
-    result := ChineseRemainderTheorem(dec).Save({andrelease=}true);
+    result := ChineseRemainderTheorem(dec).
+              SaveFixed(fModulusLen, {andrelease=}true);
   finally
     fSafe.UnLock;
   end;
@@ -3453,7 +3501,7 @@ end;
 
 function TRsaPss.Verify(Hash, Sig: pointer; HashAlgo: THashAlgo; SigLen: integer): boolean;
 var
-  hlen, bits, len, dblen, padding: integer;
+  hlen, bits, len, dblen, pslen, i: integer;
   encoded, decoded: PBigInt;
   exp: RawByteString;
   e, h: PByteArray;
@@ -3463,50 +3511,62 @@ begin
   result := false;
   hlen := HASH_SIZE[HashAlgo];
   if (Hash = nil) or
-     (fModulusLen < hlen + 6) or
+     (Sig = nil) or
      (SigLen <> fModulusLen) or
      not HasPublicKey then
     exit;
-  // decrypt the signature with the RSA Public Key
   fSafe.Lock;
   try
     encoded := Load(Sig, fModulusLen);
-    CurrentModulo := rmM; // for ModPower()
-    decoded := ModPower(encoded, fE, nil); // calls encoded.Release
+    if encoded.Compare(fM) >= 0 then // RSA verification requires 0 <= s < n
+    begin
+      encoded.Release;
+      exit;
+    end;
+    CurrentModulo := rmM;
+    decoded := ModPower(encoded, fE, nil);
     if decoded = nil then
       exit;
-    exp := decoded.Save({andrelease=}true);
+    exp := decoded.SaveFixed(fModulusLen, {andrelease=}true);
   finally
     fSafe.UnLock;
   end;
   if exp = '' then
     exit;
-  // RFC 8017 9.1.2 verification operation
-  e := pointer(exp);
+  // RFC 8017, EMSA-PSS-VERIFY
   bits := fModulusBits - 1;
-  if (bits and 7) = 0 then
-    if e[0] = 0 then
-      inc(PByte(e)) // just ignore leading 0
-    else
-      exit;
   len := (bits + 7) shr 3;
-  if (len < hlen + 2) or
-     (e[len - 1] <> $bc) or
-     (e[0] and ($ff shl (bits and 7)) <> 0) then
+  // this implementation uses salt length = hash length
+  if (len < 2 * hlen + 2) or
+     ((len <> fModulusLen) and
+      (len <> fModulusLen - 1)) then
     exit;
+  e := pointer(exp);
+  // for emLen = k-1, skip the mandatory leading zero byte
+  if len = fModulusLen - 1 then
+  begin
+    if e[0] <> 0 then
+      exit;
+    inc(PByte(e));
+  end;
+  if e[len - 1] <> $bc then
+    exit;
+  // verify the unused most-significant bits
+  if (bits and 7) <> 0 then
+    if (e[0] and ($ff shl (bits and 7))) <> 0 then
+      exit;
   dblen := len - hlen - 1;
   h := @e[dblen];
+  // recover DB by XORing the MGF1 mask.
   RsaPssComputeMask(h, e, HashAlgo, hlen, dblen, bits);
-  padding := 0;
-  while e[padding] = 0 do
-  begin
-    inc(padding);
-    if padding = dblen then
+  // enforce DB = PS || $01 || salt, with salt length exactly hlen bytes
+  pslen := dblen - hlen - 1;
+  for i := 0 to pslen - 1 do
+    if e[i] <> 0 then
       exit;
-  end;
-  if e[padding] <> 1 then
+  if e[pslen] <> 1 then
     exit;
-  RsaPssComputeSaltedHash(Hash, {salt=}@e[padding + 1], HashAlgo, hlen, h2);
+  RsaPssComputeSaltedHash(Hash, @e[pslen + 1], HashAlgo, hlen, h2);
   result := CompareMem(@h2, h, hlen);
 end;
 

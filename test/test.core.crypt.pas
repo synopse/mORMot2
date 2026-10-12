@@ -5401,7 +5401,7 @@ var
   rnd: HalfUInt; // truncated to 16-bit or 32-bit value
   a, b, s, d, e, m, v: PBigInt;
   cu, pem, txt: RawUtf8;
-  bin, pub, hash, signed, encrypted: RawByteString;
+  bin, pub, hash, signed, encrypted, exp: RawByteString;
   pub1, pub2: TRsaPublicKey;
   pri1, pri2: TRsaPrivateKey;
   timer: TPrecisionTimer;
@@ -5669,6 +5669,12 @@ begin
     v.ResetPermanentAndRelease;
     a.Release;
     e.Release;
+    a := c.AllocateFrom(1);
+    exp := a.SaveFixed(256, true);
+    CheckEqual(length(exp), 256);
+    for i := 1 to 255 do
+      CheckEqual(ord(exp[i]), 0);
+    CheckEqual(ord(exp[256]), 1);
   finally
     c.Free;
   end;
