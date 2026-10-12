@@ -3754,6 +3754,7 @@ begin
      Terminated then
     exit;
   tix := mormot.core.os.GetTickCount64; // retrieve once outside lock
+  fProcessing := true;
   LockedInc32(@fProcessingCounter);
   try
     i := 0;
