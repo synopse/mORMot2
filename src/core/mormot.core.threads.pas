@@ -3876,7 +3876,7 @@ end;
 
 procedure TSynBackgroundTimer.WaitUntilNotProcessing(timeoutsecs: integer);
 begin
-  SleepHiRes(timeoutsecs, fProcessing, {terminatedvalue=}false);
+  SleepHiRes(timeoutsecs * MilliSecsPerSec, fProcessing, {terminatedvalue=}false);
 end;
 
 function TSynBackgroundTimer.ExecuteNow(
