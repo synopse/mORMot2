@@ -323,12 +323,15 @@ type
     procedure ResetModulo(modulo: TRsaModulo);
     /// compute the reduction of a Big Integer value in a given modulo
     // - if m is nil, SetModulo() should have previously be called
+    // - optional BarrettMu = floor(RSA_RADIX^(2*m.Size) / m) is borrowed
+    // for an explicit nonzero trimmed m, without changing CurrentModulo
     // - will eventually release the b instance
-    function Reduce(b, m: PBigint): PBigInt;
+    function Reduce(b, m: PBigint; BarrettMu: PBigInt = nil): PBigInt;
     /// compute a modular exponentiation, i.e. b^exp mod m
     // - if m is nil, SetModulo() should have previously be called
+    // - optional BarrettMu is borrowed and reused for all reductions with m
     // - will eventually release the b and exp instances
-    function ModPower(b, exp, m: PBigInt): PBigInt;
+    function ModPower(b, exp, m: PBigInt; BarrettMu: PBigInt = nil): PBigInt;
   end;
 
 const
@@ -1635,7 +1638,7 @@ end;
 function TBigInt.IsPrime(Extend: TBigIntSimplePrime; Iterations: integer;
   Lecuyer: PLecuyer): boolean;
 var
-  r, a, w: PBigInt;
+  r, a, w, mu, t: PBigInt;
   s, n, bak: integer;
 begin
   // first check if not a factor of a well-known small prime
@@ -1651,26 +1654,36 @@ begin
     Lecuyer := ThreadRandom; // if not supplied by caller
   bak := RefCnt;
   RefCnt := -1; // make permanent for use as modulo below
-  w := Clone.IntSub(1); // w = value - 1
-  r := w.Clone;
-  a := Owner.Allocate(Size, []);
+  w := nil;
+  r := nil;
+  a := nil;
+  mu := nil;
+  t := nil;
   try
+    w := Clone.IntSub(1); // w = value - 1
+    r := w.Clone;
+    a := Owner.Allocate(Size, []);
     // compute s = lsb(w) and r = w shr s
     s := r.FindMinBit;
     r.ShrBits(s);
+    // one Barrett reciprocal per candidate, shared by all witness rounds
+    // keep it local: IsPrime may run on an already initialized RSA context
+    t := Owner.AllocateFrom(1).LeftShift(2 * Size);
+    mu := t.Divide(@self);
+    Owner.Release([@t]);
     while Iterations > 0 do
     begin
       dec(Iterations);
       // generate random 1 < a < value - 1
       a.FillMillerRabinWitness(Lecuyer, w);
       // search if a is composite
-      a := Owner.ModPower(a, r.Copy, @self); // a = a^r mod value
+      a := Owner.ModPower(a, r.Copy, @self, mu); // a = a^r mod value
       if (a.Compare(1) = 0) or
          (a.Compare(w) = 0) then
         continue; // this random is related: try outside the family
       for n := 1 to s - 1 do
       begin
-        a := Owner.Reduce(a.Square, @self); // a = (a*a) mod value
+        a := Owner.Reduce(a.Square, @self, mu); // a = (a*a) mod value
         if (a.Compare(w) = 0) or
            (a.Compare(1) = 0) then
           break;
@@ -1684,6 +1697,8 @@ begin
     a.Release;
     r.Release;
     w.Release;
+    mu.Release;
+    t.Release;
     RefCnt := bak;
   end;
 end;
@@ -2304,7 +2319,7 @@ begin
     result := result.Substract(modulus.Copy);
 end;
 
-function TRsaContext.Reduce(b, m: PBigInt): PBigInt;
+function TRsaContext.Reduce(b, m: PBigInt; BarrettMu: PBigInt): PBigInt;
 var
   modvalue, mu: PBigInt;
 begin
@@ -2318,28 +2333,31 @@ begin
     else
       result := b^.Divide(modvalue, bidModNorm);
   end
+  else if (BarrettMu <> nil) and
+          (b^.Size <= 2 * m^.Size) then
+    result := BarrettReduce(b, m, BarrettMu)
   else
     // full slower modulo calculation of arbitrary modulus
     result := b^.Divide(m, bidMod);
   b^.Release;
 end;
 
-function TRsaContext.ModPower(b, exp, m: PBigInt): PBigInt;
+function TRsaContext.ModPower(b, exp, m: PBigInt; BarrettMu: PBigInt): PBigInt;
 var
   base, exponent: PBigInt;
 begin
   result := AllocateFrom(1);
   exponent := exp.Clone;
   exp.Release;
-  base := Reduce(b, m);
+  base := Reduce(b, m, BarrettMu);
   while not exponent.IsZero do
   begin
     if exponent.IsOdd then
-      result := Reduce(result.Multiply(base.Copy), m);
+      result := Reduce(result.Multiply(base.Copy), m, BarrettMu);
     exponent.ShrBits;
     if exponent.IsZero then
       break;
-    base := Reduce(base.Square, m);
+    base := Reduce(base.Square, m, BarrettMu);
   end;
   base.Release;
   exponent.Release;

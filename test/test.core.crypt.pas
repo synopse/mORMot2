@@ -52,6 +52,7 @@ type
     procedure RsaSlow(Context: TObject);
     procedure CrcSlow(Context: TObject); // 32-bit, 64-bit and 128-bit hash
     procedure RsaBarrett;
+    procedure RsaMillerRabin;
     procedure Rfc(a: TSignAlgo; const P, S: RawUtf8; c, l: integer;
       const exp, msg: RawUtf8);
     procedure Kdf(a: TSignAlgo; const key, exp, msg: RawUtf8;
@@ -5010,6 +5011,7 @@ var
 begin
   // validate Barret Reduction algorithm
   RsaBarrett;
+  RsaMillerRabin;
   // validate RSA key generation - in a background thread for this slow process
   hash := HexToBin(_hash);
   CheckEqual(length(hash), SizeOf(TSha256Digest));
@@ -5057,6 +5059,98 @@ begin
     encrypted := c.Seal(bin); // bin is typically > 1KB long
     Check(encrypted <> '', 'Seal');
     Check(c.Open(encrypted) = bin, 'Open');
+  finally
+    c.Free;
+  end;
+end;
+
+procedure TTestCoreCrypto.RsaMillerRabin;
+const
+  VALUES: array[0..7] of RawUtf8 = (
+    '00010001', // common exponent: early return
+    '00010003', // 65539
+    '78000001', // 2013265921: many Miller-Rabin squarings (s = 27)
+    '7fffffff', // 2^31 - 1
+    '0000000100000001', // 641 * 6700417: passes bspFast sieve
+    '1fffffffffffffff', // 2^61 - 1
+    '3fffffff00000001', // (2^31 - 1)^2: passes even bspAll sieve
+    '7fffffffffffffffffffffffffffffff'); // 2^127 - 1
+  PRIME: array[0..7] of boolean = (true, true, true, true, false, true, false, true);
+var
+  c: TRsaContext;
+  m, t, mu, e, a, b: PBigInt;
+  rnd: TLecuyer;
+  slot: TRsaModulo;
+  i, j, bak, active: integer;
+  hex: RawUtf8;
+begin
+  c := TRsaContext.Create;
+  try
+    // IsPrime must preserve all loaded RSA caches and CurrentModulo
+    for slot := low(TRsaModulo) to high(TRsaModulo) do
+      c.SetModulo(c.AllocateFrom(257 + ord(slot)).SetPermanent, slot);
+    c.CurrentModulo := rmQ;
+    for i := 0 to high(VALUES) do
+    begin
+      m := c.AllocateFromHex(VALUES[i]).Trim;
+      hex := m^.ToHexa;
+      // compare cached modular powers with the independent division path
+      m^.SetPermanent;
+      t := c.AllocateFrom(1).LeftShift(2 * m^.Size);
+      mu := t^.Divide(m);
+      t.Release;
+      e := m^.Clone.IntSub(1);
+      e^.ShrBits(e^.FindMinBit);
+      for j := 1 to 3 do
+      begin
+        if j = 3 then // initial base outside Barrett's bound: division fallback
+          t := c.AllocateFrom(1).LeftShift(2 * m^.Size)
+        else
+          t := c.AllocateFrom(j * 2 + 1);
+        a := c.ModPower(t^.Copy, e^.Copy, m);
+        b := c.ModPower(t, e^.Copy, m, mu);
+        CheckEqual(a^.Compare(b), 0, 'Miller-Rabin Barrett vs division');
+        CheckEqual(mu^.RefCnt, 1, 'borrowed Barrett reciprocal');
+        a.Release;
+        b.Release;
+      end;
+      e.Release;
+      mu.Release;
+      // successful and composite exits preserve normal, shared and permanent m
+      for j := 0 to 2 do
+      begin
+        case j of
+          0: m^.RefCnt := 1;
+          1: m^.Copy;
+          2:
+            begin
+              m.Release; // drop the shared reference before making permanent
+              m^.SetPermanent;
+            end;
+        end;
+        bak := m^.RefCnt;
+        active := c.ActiveCount;
+        rnd.SeedGenerator(123456789);
+        Check(m^.IsPrime(bspFast, 10, @rnd) = PRIME[i], 'Miller-Rabin prime');
+        CheckEqual(m^.RefCnt, bak, 'candidate references preserved');
+        CheckEqual(m^.ToHexa, hex, 'candidate value preserved');
+        CheckEqual(c.ActiveCount, active, 'Miller-Rabin temporaries released');
+        Check(c.CurrentModulo = rmQ, 'current RSA modulus preserved');
+      end;
+      m^.ResetPermanentAndRelease;
+      for slot := low(TRsaModulo) to high(TRsaModulo) do
+      begin
+        c.CurrentModulo := slot;
+        a := c.Reduce(c.AllocateFrom(1000), nil);
+        CheckEqual(a^.Compare(1000 mod (257 + ord(slot))), 0, 'RSA cache preserved');
+        a.Release;
+      end;
+      c.CurrentModulo := rmQ;
+      CheckEqual(c.ActiveCount, 9, 'only RSA caches remain');
+    end;
+    for slot := low(TRsaModulo) to high(TRsaModulo) do
+      c.ResetModulo(slot);
+    CheckEqual(c.ActiveCount, 0, 'Miller-Rabin tests released');
   finally
     c.Free;
   end;
