@@ -2339,23 +2339,60 @@ end;
 
 function TRsaContext.ModPower(b, exp, m: PBigInt; BarrettMu: PBigInt): PBigInt;
 var
-  base, exponent: PBigInt;
+  base, exponent, base2: PBigInt;
+  powers: array[0..3] of PBigInt; // base^1, base^3, base^5, base^7
+  bits, i, j, lo, w: PtrInt;
 begin
   result := AllocateFrom(1);
-  exponent := exp.Clone;
-  exp.Release;
+  bits := exp.BitCount;
   base := Reduce(b, m, BarrettMu);
-  while not exponent.IsZero do
+  if bits < 256 then
   begin
-    if exponent.IsOdd then
-      result := Reduce(result.Multiply(base.Copy), m, BarrettMu);
-    exponent.ShrBits;
-    if exponent.IsZero then
-      break;
-    base := Reduce(base.Square, m, BarrettMu);
+    // simple binary exponentiation
+    exponent := exp.Clone;
+    exp.Release;
+    while not exponent.IsZero do
+    begin
+      if exponent.IsOdd then
+        result := Reduce(result.Multiply(base.Copy), m, BarrettMu);
+      exponent.ShrBits;
+      if exponent.IsZero then
+        break;
+      base := Reduce(base.Square, m, BarrettMu);
+    end;
+    base.Release;
+    exponent.Release;
+    exit;
   end;
-  base.Release;
-  exponent.Release;
+  // 3-bit sliding window: precompute odd powers once
+  powers[0] := base;
+  base2 := Reduce(base.Copy.Square, m, BarrettMu);
+  for j := 1 to high(powers) do
+    powers[j] := Reduce(powers[j - 1].Copy.Multiply(base2.Copy), m, BarrettMu);
+  base2.Release;
+  i := bits - 1;
+  while i >= 0 do
+    if not exp.BitIsSet(i) then
+    begin
+      result := Reduce(result.Square, m, BarrettMu);
+      dec(i);
+    end
+    else
+    begin
+      lo := MaxPtrInt(0, i - 2);
+      while not exp.BitIsSet(lo) do
+        inc(lo); // choose an odd w of up to 3 bits
+      w := 0;
+      for j := i downto lo do
+        w := (w shl 1) or ord(exp.BitIsSet(j));
+      for j := lo to i do
+        result := Reduce(result.Square, m, BarrettMu);
+      result := Reduce(result.Multiply(powers[(w - 1) shr 1].Copy), m, BarrettMu);
+      i := lo - 1;
+    end;
+  for j := 0 to high(powers) do
+    powers[j].Release;
+  exp.Release;
 end;
 
 
