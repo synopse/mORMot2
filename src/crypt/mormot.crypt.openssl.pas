@@ -64,7 +64,7 @@ type
   /// exception class raised by the AES classes of this unit
   EOpenSslCrypto = class(EOpenSsl);
 
-  /// TAesPrng-compatible class using OpenSSL 1.1
+  /// TAesPrng-compatible class using OpenSSL
   // - we abbreviate OpenSsl as Osl in class names for brevity
   // - may be used instead of TAesPrng if a "proven" generator is required -
   // you could override MainAesPrng global variable
@@ -76,7 +76,7 @@ type
   // $  mORMot FillRandom in 46us, 2 GB/s
   TAesPrngOsl = class(TAesPrngAbstract)
   public
-    /// initialize the CSPRNG using OpenSSL 1.1
+    /// initialize the CSPRNG using OpenSSL
     // - if the library is not available, will raise an Exception
     constructor Create; override;
     /// wrapper around function OpenSslIsAvailable
@@ -112,10 +112,11 @@ type
     procedure Done;
     procedure Clone(another: PAesOsl);
     procedure SetEvp(DoEncrypt: boolean; const method: ShortString);
-    procedure UpdEvp(DoEncrypt: boolean; BufIn, BufOut: pointer; Count: cardinal);
+    procedure UpdEvp(DoEncrypt: boolean; BufIn, BufOut: pointer; Count: cardinal;
+      KeepIV: boolean = false);
   end;
 
-  /// handle AES cypher/uncypher with chaining with OpenSSL 1.1
+  /// handle AES cypher/uncypher with chaining with OpenSSL
   // - we abbreviate OpenSsl as Osl in class names for brevity
   // - use any of the inherited implementation, corresponding to the chaining
   // mode required - TAesEcbOsl, TAesCbcOsl, TAesCfbOsl, TAesOfbOsl and TAesCtrOsl
@@ -224,10 +225,6 @@ type
   // $  mormot aes-256-gcm in 102us i.e. 4.6M/s, aver. 204ns, 233.7 MB/s
   // $  openssl aes-128-gcm in 515us i.e. 0.9M/s, aver. 1.03us, 46.2 MB/s
   // $  openssl aes-256-gcm in 541us i.e. 0.8M/s, aver. 1.08us, 44 MB/s
-  // - WARNING: AEAD associated information is currently unsupported by
-  // TAesGcmOsl, due to some obscure OpenSSL padding issue in our code - GMAC
-  // will be properly handled by TAesGcmOsl, but you should use plain TAesGcm
-  // instead if you really need to authenticate some associated information
   TAesGcmOsl = class(TAesGcmAbstract)
   protected
     fAes: TAesOsl;
@@ -248,10 +245,6 @@ type
     // - set the IV as usual (only the first 12 bytes will be used for GCM),
     // then optionally append any AEAD data with this method; warning: you need
     // to call Encrypt() once before - perhaps as Encrypt(nil, nil, 0)
-    // - WARNING: AEAD associated information is currently unsupported by
-    // TAesGcmOsl, due to some obscure OpenSSL padding issue in our code - GMAC
-    // will be properly handled by TAesGcmOsl, but you should use plain TAesGcm
-    // instead if you really need to authenticate some associated information
     procedure AesGcmAad(Buf: pointer; Len: integer); override;
     /// AES-GCM pure alternative to MacEncryptGetTag/MacDecryptCheckTag
     // - after Encrypt, fill tag with the GCM value of the data and return true
@@ -882,17 +875,18 @@ begin
     EVP_CIPHER_CTX_set_padding(c, 0));
 end;
 
-procedure TAesOsl.UpdEvp(DoEncrypt: boolean; BufIn, BufOut: pointer; Count: cardinal);
+procedure TAesOsl.UpdEvp(DoEncrypt: boolean; BufIn, BufOut: pointer;
+  Count: cardinal; KeepIV: boolean);
 var
   outl: integer;
-var
   c: PEVP_CIPHER_CTX;
 begin
   outl := 0;
   c := Ctx[DoEncrypt];
   EOpenSslCrypto.Check(Owner, 'UpdEvp',
     EVP_CipherUpdate(c, BufOut, @outl, BufIn, Count));
-  Owner.IV := PAesBlock(EVP_CIPHER_CTX_iv(c))^; // for fIVUpdated := true
+  if not KeepIV then
+    Owner.IV := PAesBlock(EVP_CIPHER_CTX_iv(c))^; // for fIVUpdated := true
   // no need to call EVP_CipherFinal_ex() since we expect no padding
 end;
 
@@ -1063,13 +1057,14 @@ end;
 
 function TAesGcmOsl.AesGcmProcess(BufIn, BufOut: pointer; Count: cardinal): boolean;
 begin
-  fAes.UpdEvp(fStarted = stEnc, BufIn, BufOut, Count);
+  fAes.UpdEvp(fStarted = stEnc, BufIn, BufOut, Count, {keepIV=}true);
   result := true;
 end;
 
 procedure TAesGcmOsl.AesGcmAad(Buf: pointer; Len: integer);
 begin
-  fAes.UpdEvp(fStarted = stEnc, Buf, nil, Len);
+  if Len > 0 then
+    fAes.UpdEvp(fStarted = stEnc, Buf, nil, Len, {keepIV=}true);
 end;
 
 function TAesGcmOsl.AesGcmFinal(var Tag: TAesBlock; TagLen: integer): boolean;
