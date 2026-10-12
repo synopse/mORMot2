@@ -2068,9 +2068,44 @@ begin
   result := r.Trim;
 end;
 
-function TBigInt.Square: PBigint;
+function TBigInt.Square: PBigInt;
+var
+  r: PBigInt;
+  i, j, n: PtrInt;
+  v, carry: PtrUInt;
 begin
-  result := Multiply(Copy);
+  n := Size;
+  if n <= 2 then
+  begin
+    result := Multiply(Copy); // not worth any optimization
+    exit;
+  end;
+  r := Owner.Allocate(n shl 1); // zeroed 2*n-limb result
+  // compute off-diagonal products as r = sum(a[i] * a[j] * B^(i+j)), for j < i
+  for i := 1 to n - 1 do
+    RawMultiply(pointer(Value), @r^.Value[i], i, Value[i]);
+  // double all off-diagonal products
+  carry := 0;
+  for i := 0 to (n shl 1) - 1 do
+  begin
+    v := (PtrUInt(r^.Value[i]) shl 1) + carry;
+    r^.Value[i] := v;
+    carry := v shr HALF_BITS;
+  end;
+  // add diagonal products a[i]^2 at positions 2*i, propagating the carry
+  carry := 0;
+  for i := 0 to n - 1 do
+  begin
+    j := i shl 1;
+    v := PtrUInt(Value[i]) * Value[i] +
+         r^.Value[j] + carry;
+    r^.Value[j] := v;
+    v := (v shr HALF_BITS) + r^.Value[j + 1];
+    r^.Value[j + 1] := v;
+    carry := v shr HALF_BITS;
+  end;
+  Release;
+  result := r.Trim;
 end;
 
 function TBigInt.IntAdd(b: HalfUInt): PBigInt;
