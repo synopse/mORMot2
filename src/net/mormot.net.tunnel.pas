@@ -813,7 +813,7 @@ begin
   gcm.Encrypt(nil, nil, 0);                        // reset
   gcm.AesGcmAad(@fSession, SizeOf(fSession));      // AAD session
   gcm.Encrypt(pointer(Frame), p, n);               // no padding
-  FastAssignNew(Frame, p);
+  FastAssignNew(Frame, p);                         // set result before ETunnel
   if not gcm.AesGcmFinal(tag) then
     ETunnel.RaiseUtf8('%.EncryptGcm: finalization failed', [self]);
   PAesBlock(p + n)^ := tag;
@@ -841,7 +841,7 @@ begin
   gcm.AesGcmAad(@fSession, SizeOf(fSession));  // AAD session
   gcm.Decrypt(Frame, pointer(result), n);      // no padding
   if not gcm.AesGcmFinal(PAesBlock(PAnsiChar(Frame) + n)^) then
-    FastAssignNew(result);
+    FillZero(result);
 end;
 
 function TTunnelLocalThread.TransmitSock: TNetSocket;
@@ -1239,7 +1239,8 @@ procedure TunnelHandshakeCrc(const Handshake: TTunnelLocalHandshake;
 var
   sha3: TSha3;
 begin
-  sha3.Init(SHAKE_128); // 128-bit digital signature of Handshake.Ecdh+Info
+  sha3.Init(SHAKE_128);      // 128-bit digital signature of Handshake.Ecdh+Info
+  sha3.Update('Handshake'#0); // padding
   if appsecret = '' then
     sha3.Update('AB15C52F754F49CB9B23CF88735E39C8') // some default secret
   else
@@ -1413,7 +1414,7 @@ begin
       hmac.Update(@loc.Info, KDF_SIZE); // no replay (sequential session)
       hmac2 := hmac; // use hmac2 to compute info KDF
       hmac2.Done(key.b);
-      infoaes := TAesCtr.Create(key.Lo, 128, @key.Hi); // simple encryption
+      infoaes := TAesCtr.Create(key.Lo, 128, @key.Hi); // simple obfuscation
       info := infoaes.EncryptPkcs7(info, {ivatbeg=}false);
       infoaes.IV := key.Hi; // use the same IV for decoding "remote" info below
     end;
@@ -1438,8 +1439,11 @@ begin
       ETunnel.RaiseUtf8('Open: wrong handshake trailer on port %', [result]);
     // extract (and potentially decrypt) the associated JSON info payload
     l := length(remote) - SUFFIX_SIZE;
-    li := PWord(@PByteArray(remote)^[l])^;
-    dec(l, li);
+    if l >= 0 then
+    begin
+      li := PWord(@PByteArray(remote)^[l])^;
+      dec(l, li);
+    end;
     if l < 0 then
       ETunnel.RaiseUtf8('Open: invalid remote frame on port %', [result]);
     FastSetRawByteString(info, @PByteArray(remote)^[l], li);
@@ -1542,6 +1546,8 @@ begin
   end;
   infoaes.Free;
   FillZero(key.b);
+  FillZero(keyrec.b);
+  FillZero(keysnd.b);
   FillZero(iv.b);
 end;
 
