@@ -4725,7 +4725,7 @@ end;
 procedure TAesGcmEngine.AvxProcess(BufIn, BufOut: PByte; Count: cardinal;
   Encrypt: boolean);
 var
-  blocks, ctr, onepass, n, i, pos: cardinal;
+  blocks, ctr, onepass, n, i, pos: PtrUInt;
   txt, buf: PAesBlock;
 begin
   if Count = 0 then
@@ -4742,9 +4742,7 @@ begin
   if state.blen <> 0 then // continue partial CTR
   begin
     pos := state.blen;
-    n := SizeOf(TAesBlock) - pos;
-    if n > Count then
-      n := Count;
+    n := MinPtrUInt(Count, SizeOf(TAesBlock) - pos);
     for i := 0 to n - 1 do
     begin
       if Encrypt then
@@ -4771,10 +4769,8 @@ begin
       exit;
   end;
   while Count >= SizeOf(TAesBlock) do // // 8x interleaved aesni + pclmulqdq
-  begin
-    onepass := Count and not cardinal(AesBlockMod);
-    if onepass > 1 shl 20 then
-      onepass := 1 shl 20; // keep chunks <= 1 MB to fit in the CPU cache
+  begin // keep chunks <= 1 MB to fit in the CPU cache
+    onepass := MinPtrUInt(1 shl 20, Count and not cardinal(AesBlockMod));
     if not Encrypt then
       GcmAvxAuth(@gf_t4k, BufIn, onepass, @state.txt_ghv); // decrypt: AAD first
     // AES-CTR using AES-NI and SSE4.1 over a 32-bit counter
@@ -4916,8 +4912,12 @@ end;
 procedure TAesGcmEngine.Clone(another: PAesGcmEngine);
 begin // only copy what is really needed
   {$ifdef USEGCMAVX}
-  if flagAVX in state.flags then // x86_64 asm uses 256 bytes in gf_t4k[]
-    MoveFast(self, another^, PtrInt(@PAesGcmEngine(nil)^.gf_t4k[256 div 16]))
+  if flagAVX in state.flags then // x86_64 asm uses 256+32 bytes in gf_t4k[]
+  begin
+    MoveFast(self, another^, PtrInt(@PAesGcmEngine(nil)^.gf_t4k[256 div 16]));
+    another^.aad_pending^ := aad_pending^;
+    another^.txt_pending^ := txt_pending^;
+  end
   else
   {$endif USEGCMAVX}
   if flagCLMUL in state.flags then // USECLMUL or USEARMCRYPTO: no gf_t4k[] use
@@ -5046,7 +5046,8 @@ begin
   begin
     result := false;
     if (pAAD = nil) or
-       (flagFinalComputed in state.flags) then
+       (flagFinalComputed in state.flags) or
+       (state.atx_cnt.V <> 0) then
       exit;
     {$ifdef USEGCMAVX}
     if flagAVX in state.flags then
@@ -5057,9 +5058,7 @@ begin
       inc(state.aad_cnt.V, aLen);
       if used <> 0 then // complete partial AAD from earlier call
       begin
-        n := SizeOf(TAesBlock) - used;
-        if n > aLen then
-          n := aLen;
+        n := MinPtrInt(aLen, SizeOf(TAesBlock) - used);
         MoveFast(pAAD^, aad_pending^[used], n);
         inc(PByte(pAAD), n);
         dec(aLen, n);
@@ -6759,9 +6758,13 @@ end;
 
 procedure TAesGcm.AesGcmAad(Buf: pointer; Len: integer);
 begin
-  fGcm.Add_AAD(Buf, Len);
+  if Len <> 0 then
+    if (Len < 0) or
+       (Buf = nil) or
+       (fStarted = stNone) or
+       not fGcm.Add_AAD(Buf, Len) then
+      ESynCrypto.RaiseUtf8('%.AesGcmAad: invalid AAD or GCM state', [self]);
 end;
-
 function TAesGcm.AesGcmFinal(var Tag: TAesBlock; TagLen: integer): boolean;
 var
   decoded: THash128Rec;

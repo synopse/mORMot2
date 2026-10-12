@@ -801,7 +801,6 @@ end;
 procedure TTunnelLocalThread.EncryptGcm(var Frame: RawByteString);
 var
   n: PtrInt;
-  tag: TAesBlock;
   gcm: TAesGcmAbstract;
   p: PAnsiChar;
 begin
@@ -814,9 +813,8 @@ begin
   gcm.AesGcmAad(@fSession, SizeOf(fSession));      // AAD session
   gcm.Encrypt(pointer(Frame), p, n);               // no padding
   FastAssignNew(Frame, p);                         // set result before ETunnel
-  if not gcm.AesGcmFinal(tag) then
+  if not gcm.AesGcmFinal(PAesBlock(p + n)^) then
     ETunnel.RaiseUtf8('%.EncryptGcm: finalization failed', [self]);
-  PAesBlock(p + n)^ := tag;
 end; // caller will append fSession as trailer
 
 function TTunnelLocalThread.DecryptGcm(
