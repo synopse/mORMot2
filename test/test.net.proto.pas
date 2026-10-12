@@ -2294,6 +2294,16 @@ begin
     l.TargetUri := 'ad.synopse.info';
     CheckEqual(l.TargetUri, 'ldap://ad.synopse.info');
     CheckEqual(l.KerberosDN, '');
+    l.TargetUri := 'ldaps://dc.test.local/test.local';
+    CheckEqual(l.TargetPort, LDAP_TLS_PORT, 'ldaps:');
+    Check(l.Tls);
+    CheckEqual(l.KerberosDN, 'test.local');
+    l.TargetUri := 'ldaps://dc.test.local:389/test.local';
+    CheckEqual(l.TargetPort, LDAP_PORT, 'explicit port');
+    Check(l.Tls);
+    l.TargetUri := 'dc.test.local/test.local';
+    CheckEqual(l.TargetPort, LDAP_PORT, 'no scheme');
+    Check(not l.Tls);
   finally
     l.Free;
   end;

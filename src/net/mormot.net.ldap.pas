@@ -5862,9 +5862,15 @@ begin
   fTargetPort := LDAP_PORT;
   fKerberosDN := '';
   fTls := false;
-  if not u.From(uri, LDAP_PORT) then
+  if not u.From(uri) then
     exit;
-  if u.Scheme <> '' then
+  if u.Scheme = '' then
+    // no scheme:// means LDAP - force LDAPS on address:636
+    if u.Port = LDAP_TLS_PORT then
+      fTls := true
+    else
+      u.Port := LDAP_PORT
+  else
     case u.UriScheme of
       usLdap:
         fTls := false;
@@ -5872,9 +5878,7 @@ begin
         fTls := true;
     else
       exit; // unexpected scheme://
-    end
-  else if u.Port = LDAP_TLS_PORT then
-    fTls := true; // no scheme:// means LDAP - force LDAPS on address:636
+    end;
   fTargetHost := u.Server;
   fTargetPort := u.Port;
   fKerberosDN := u.Address;
