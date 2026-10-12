@@ -4134,6 +4134,8 @@ end;
 procedure TTestCoreCrypto.CatalogRunAsym(Context: TObject);
 var
   asy: TCryptAsym absolute Context;
+  pk: ICryptPublicKey;
+  sk: ICryptPrivateKey;
   pub, pub2, priv, priv2: RawUtf8;
   n, s: RawByteString;
   timer: TPrecisionTimer;
@@ -4165,6 +4167,14 @@ begin
   inc(n[1]);
   Check(not asy.Verify(n, pub, s));
   dec(n[1]);
+  // regression for #652: public/private keys must not be interchangeable
+  if asy.KeyAlgo = ckaEcc256 then
+  begin
+    pk := CryptPublicKey[ckaEcc256].Create;
+    Check(not pk.Load(ckaEcc256, priv), 'private as public');
+    sk := CryptPrivateKey[ckaEcc256].Create;
+    Check(not sk.Load(ckaEcc256, nil, pub, ''), 'public as private');
+  end;
 end;
 
 procedure TTestCoreCrypto.CatalogRunCert(Context: TObject);

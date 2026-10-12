@@ -10922,23 +10922,24 @@ end;
 
 function DerParse(P: PAnsiChar; buf: PByteArray; buflen: PtrInt): PAnsiChar;
 var
-  pos: PtrUInt;
+  pos: PtrInt;
 begin
   result := nil;
   FillZero(buf^, buflen);
   if (P = nil) or
-     (P[0] <> AnsiChar(ASN1_INT)) then
+     (P[0] <> AnsiChar(ASN1_INT)) or
+     (P[1] = #0) then
     exit;
   pos := buflen - ord(P[1]);
   inc(P, 2);
   if P^ = #0 then
   begin
-    inc(P); // negative number appended
+    inc(P); // positive INTEGER with leading zero
     inc(pos);
   end;
+  if pos < 0 then
+    exit; // INTEGER larger than destination buffer
   dec(buflen, pos);
-  if buflen < 0 then
-    exit; // avoid buffer overflow
   MoveFast(P^, buf[pos], buflen);
   result := P + buflen;
 end;

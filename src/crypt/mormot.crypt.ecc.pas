@@ -2297,7 +2297,7 @@ begin
       pub := PEccPublicKey(der)^
     else if not Ecc256r1CompressAsn1(SeqToEccPubKey(ckaEcc256, der), pub) then
       exit;
-  result := true; // accept key in raw, PEM or DER format
+  result := pub[0] in [2, 3]; // valid compressed point prefix
 end;
 
 function PemDerRawToEcc(const pem: RawUtf8; out sig: TEccSignature): boolean; overload;
