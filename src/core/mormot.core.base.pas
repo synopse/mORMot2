@@ -985,12 +985,12 @@ function StrRecNew(U: PPointer; sr: PStrRec; P: pointer; const len: PtrInt): PSt
 /// ensure the supplied variable will have a CP_UTF8 code page
 // - making it unique if needed
 procedure EnsureRawUtf8(var s: RawByteString); overload;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef HASSAFEINLINE}inline;{$endif}
 
 /// ensure the supplied variable will have a CP_UTF8 code page
 // - making it unique if needed
 procedure EnsureRawUtf8(var s: RawUtf8); overload;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef HASSAFEINLINE}inline;{$endif}
 
 /// internal function which could be used instead of SetLength() if RefCnt = 1
 procedure FakeLength(var s: RawUtf8; len: PtrInt); overload;
@@ -1018,7 +1018,7 @@ procedure FakeSetLength(var s: RawByteString; len: PtrInt); overload;
 // - warning: s should NOT be read-only (i.e. assigned from a constant), but
 // a just-allocated string with RefCnt = 1
 procedure FakeCodePage(var s: RawByteString; cp: cardinal);
-  {$ifdef HASINLINE} inline; {$endif}
+  {$ifdef HASSAFEINLINE} inline; {$endif}
 
 /// internal function which assign src to dest, force CP_UTF8 and set src to ''
 // - warning: calls FakeCodePage(CP_UTF8) so requires src to have a RefCnt of 1
@@ -4711,7 +4711,8 @@ type
     {$ifdef HASCODEPAGE}
     /// will ensure that the DataString storage is a RawUtf8 with CP_UTF8
     // - is called e.g. from TTextWriter.FlushFinal
-    procedure EnsureDataStringIsUtf8; inline;
+    procedure EnsureDataStringIsUtf8;
+      {$ifdef HASSAFEINLINE}inline;{$endif}
     {$endif HASCODEPAGE}
     /// direct low-level access to the internal RawByteString storage
     // - if no RawByteString was supplied in Create(), result will be CP_UTF8

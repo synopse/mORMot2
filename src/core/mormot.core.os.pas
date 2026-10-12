@@ -4842,7 +4842,7 @@ type
       {$ifdef HASINLINE} inline; {$endif}
     /// leave an OS lock
     procedure UnLock;
-      {$ifdef FPC_OR_DELPHIXE} inline; {$endif} // fail on Delphi 2006-2010
+      {$ifdef HASSAFEINLINE} inline; {$endif}
   end;
   POSLightLock = ^TOSLightLock;
 

@@ -266,7 +266,7 @@ type
     // - will use shared AcquireJsonWriter instance if available
     procedure GetJsonValue(Value: TOrm; withID: boolean; Occasion: TOrmOccasion;
       var Json: RawUtf8); overload;
-      {$ifdef FPC_OR_DELPHIXE} inline; {$endif} // avoid URW1111 on Delphi 2010
+      {$ifdef HASSAFEINLINE} inline; {$endif} // avoid URW1111 on Delphi 2010
     /// access to a thread-safe internal cached TJsonWriter instance
     // - with a TRawByteStringStream and 128KB of non-resizable working buffer
     // - sharing an instance make sense because it is likely to be needed

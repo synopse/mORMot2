@@ -670,7 +670,7 @@ type
   protected
     fCompressList: THttpSocketCompressList; // two pointers
     procedure HttpStateReset; // Http.Clear + exclude fBodyRetrieved
-      {$ifdef FPC_OR_DELPHIXE} inline; {$endif}
+      {$ifdef HASSAFEINLINE} inline; {$endif}
     procedure CompressDataAndWriteHeaders(const OutContentType: RawUtf8;
       var OutContent: RawByteString; OutStream: TStream);
   public

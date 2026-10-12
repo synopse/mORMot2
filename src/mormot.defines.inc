@@ -202,7 +202,7 @@
   {$define HASINLINE}
   {$define HASINLINEFPC}      // Delphi can't inline local constants
   {$define HASINLINEWINAPI}   // Delphi has troubles inlining Windows API calls
-  {$define HASSAFEINLINE}     // Delphi 2007-2009 have troubles inlining
+  {$define HASSAFEINLINE}     // Delphi 2007-2010 have troubles inlining
   {$define HASSAFEFPCINLINE}  // FPC 3.2.0 specific inlining troubles
   {$define NODELPHIASM}       // avoid e.g. low-level System.@LStrFromPCharLen
   {$define HASDYNARRAYTYPE}   // eltype2 field, used e.g. for T*ObjArray
@@ -219,8 +219,7 @@
   {$define USERECORDWITHMETHODS}   // use "object" only for Delphi 7/2007
   {$define USERECORDWITHMETHODSSAFE}
   {$define FPC_OR_UNICODE}
-  {$define FPC_OR_DELPHIXE}        // to circumvent Delphi internal errors
-  {$define FPC_OR_DELPHIXE4}
+  {$define FPC_OR_DELPHIXE4}       // circumvent Delphi < XE4 internal errors
 
   { warnings are defined below, after FPC versions identification }
 
@@ -701,9 +700,7 @@
     {$if CompilerVersion >= 21.0}
       {$define ISDELPHI2010}
       {$define USERECORDWITHMETHODSSAFE} // circumvent Delphi 2009 issue
-      {$define HASSAFEINLINE}     // Delphi 2007-2009 have troubles inlining :(
-      {$define HASSAFEFPCINLINE}  // FPC specific inlining troubles
-      {$define HASDYNARRAYTYPE}   // eltype2 field, used e.g. for T*ObjArray
+      {$define HASDYNARRAYTYPE}      // eltype2 field, used e.g. for T*ObjArray
       {$define HASEXTRECORDRTTI}     // Delphi 2010 extended RTTI for records
       {$define HASIMPLICITOPERATOR}  // Delphi 2010+ "implicit operator" is ok
       {$define ISDELPHI2010_OR_FPC_NEWRTTI}
@@ -718,10 +715,11 @@
       {$endif NEWRTTINOTUSED}
     {$ifend}
     {$if CompilerVersion >= 22.0} // = Delphi XE
-      {$define FPC_OR_DELPHIXE}   // Delphi 2007/2009/2010 inlining bugs
       {$define ISDELPHIXE}
       {$define HASGENERICS}       // somewhat unusable generics (?)
       {$define ORMGENERICS}
+      {$define HASSAFEINLINE}     // Delphi 2007-2010 have troubles inlining :(
+      {$define HASSAFEFPCINLINE}  // FPC specific inlining troubles
     {$ifend}
     {$if CompilerVersion >= 23.0} // = Delphi XE2
       {$define ISDELPHIXE2}
