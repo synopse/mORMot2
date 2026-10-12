@@ -1702,9 +1702,9 @@ begin
   // ensure 2^-112 error probability - see FIPS 186-5 appendix B.3 table B.1
   if bits >= 1536  then
     result := 4   // absolute allowed minimum, even with bits=8192
-  else if bits >= 1024 shr HALF_SHR then
+  else if bits >= 1024 then
     result := 5
-  else if bits >= 512 shr HALF_SHR then
+  else if bits >= 512 then
     result := 15  // not allowed by FIPS anyway
   else
     result := 51; // never used in practice for RSA
@@ -3161,7 +3161,7 @@ begin
     end;
   end;
   if (count = fModulusLen) or
-     (padding = 8) or
+     (padding < 8) or
      (p[count] <> 0) then
     exit; // invalid padding with ending zero
   inc(count);
@@ -3464,7 +3464,7 @@ begin
   hlen := HASH_SIZE[HashAlgo];
   if (Hash = nil) or
      (fModulusLen < hlen + 6) or
-     (cardinal(fModulusLen - SigLen) > 1) or
+     (SigLen <> fModulusLen) or
      not HasPublicKey then
     exit;
   // decrypt the signature with the RSA Public Key
