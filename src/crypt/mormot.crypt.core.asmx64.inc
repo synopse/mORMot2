@@ -2739,11 +2739,11 @@ function _xasmadd(Value, Adds: pointer; Carry: PtrUInt): PtrUInt;
         // rcx/rdi=Value rdx/rsi=Adds r8/rdx=Carry
         xor    eax, eax
         mov    r9, qword ptr [Adds]
-        add    r9, Carry
+        bt     Carry, 0 // inject incoming carry without overflowing r9
         mov    r8 , qword ptr [Adds + 8]
         mov    r10, qword ptr [Adds + 8 * 2]
         mov    r11, qword ptr [Adds + 8 * 3]
-        add    qword ptr [Value], r9
+        adc    qword ptr [Value], r9
         adc    qword ptr [Value + 8], r8
         adc    qword ptr [Value + 8 * 2], r10
         adc    qword ptr [Value + 8 * 3], r11
@@ -2780,11 +2780,11 @@ function _xasmsub(Value, Subs: pointer; Carry: PtrUInt): PtrUInt;
         // rcx/rdi=Value rdx/rsi=Subs r8/rdx=Carry
         xor    eax, eax
         mov    r9,  qword ptr [Subs]
-        add    r9, Carry
+        bt     Carry, 0 // inject incoming carry without overflowing r9
         mov    r8 , qword ptr [Subs + 8]
         mov    r10, qword ptr [Subs + 8 * 2]
         mov    r11, qword ptr [Subs + 8 * 3]
-        sub    qword ptr [Value], r9
+        sbb    qword ptr [Value], r9
         sbb    qword ptr [Value + 8], r8
         sbb    qword ptr [Value + 8 * 2], r10
         sbb    qword ptr [Value + 8 * 3], r11

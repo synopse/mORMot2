@@ -2091,11 +2091,11 @@ asm     // Value=eax Adds=edx Carry=ecx
         push   esi
         push   edi
         mov    ebx, dword ptr [edx]
-        add    ebx, ecx
+        bt     ecx, 0 // inject incoming carry without overflowing ebx
         mov    esi, dword ptr [edx + 4]
         mov    edi, dword ptr [edx + 4 * 2]
         mov    ecx, dword ptr [edx + 4 * 3]
-        add    dword ptr [eax], ebx
+        adc    dword ptr [eax], ebx
         adc    dword ptr [eax + 4], esi
         adc    dword ptr [eax + 4 * 2], edi
         adc    dword ptr [eax + 4 * 3], ecx
@@ -2138,11 +2138,11 @@ asm     // Value=eax Subs=edx Carry=ecx
         push   esi
         push   edi
         mov    ebx, dword ptr [edx]
-        add    ebx, ecx
+        bt     ecx, 0 // inject incoming carry without overflowing ebx
         mov    esi, dword ptr [edx + 4]
         mov    edi, dword ptr [edx + 4 * 2]
         mov    ecx, dword ptr [edx + 4 * 3]
-        sub    dword ptr [eax], ebx
+        sbb    dword ptr [eax], ebx
         sbb    dword ptr [eax + 4], esi
         sbb    dword ptr [eax + 4 * 2], edi
         sbb    dword ptr [eax + 4 * 3], ecx
