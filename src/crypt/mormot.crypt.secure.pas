@@ -7914,7 +7914,7 @@ end;
 
 destructor TBinaryCookieGenerator.Destroy;
 begin
-  FillCharFast(fContext, SizeOf(fContext), 0); // anti-forensic measures
+  FillZeroRtti(TypeInfo(TBinaryCookieContext), fContext); // anti-forensic
   fAes.Done;
   inherited Destroy;
 end;

@@ -4919,6 +4919,16 @@ begin
   finally
     gen.Free;
   end;
+  // exercise invalidation and subsequent generator destruction (#650)
+  gen := TBinaryCookieGenerator.Create('probe');
+  try
+    i := gen.Generate(bak, 60);
+    Check(i <> 0);
+    CheckEqual(gen.Validate(bak, nil, nil, nil, nil, true), i);
+    CheckEqual(gen.Validate(bak), 0);
+  finally
+    gen.Free;
+  end;
 end;
 
 procedure TTestCoreCrypto.Pkcs11;
