@@ -5839,6 +5839,10 @@ begin
   CheckEqual(CookieFromHeaders(HDR4, 'name 1'), 'value1');
   CheckEqual(CookieFromHeaders(HDR4, 'name 2'), 'value 2');
   CheckEqual(CookieFromHeaders(HDR4, 'name3'), 'value3');
+  hc.ParseServer('Cookie: other=1; __Secure-probe=abc'#13#10);
+  CheckEqual(hc.GetCookie('probe'), 'abc');
+  CheckEqual(CookieFromHeaders(
+    'Cookie: other=1; __Secure-probe=abc'#13#10, 'probe'), 'abc');
   // validate HttpRequestLength() and HttpRequestHash()
   h := HttpRequestLength(
     'Content-Length: 100'#13#10'content-range: bytes 100-199/3083'#13#10, @l);

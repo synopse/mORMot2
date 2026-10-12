@@ -10833,6 +10833,7 @@ begin
     Head := GotoNextLine(p + plen);
     // parse each line pairs
     repeat
+      p := GotoNextNotSpace(p);
       if IdemPChar(p, '__SECURE-') then
         inc(p, 9); // e.g. if rsoCookieSecure is in Server.Options
       new.NameLen := GetNextItemTrimedLineBuffer(p, '=', new.NameStart);
@@ -10892,6 +10893,7 @@ begin // same logic than THttpCookies.ParseServer above
         break;
       Headers := GotoNextLine(p + plen);
       repeat
+        p := GotoNextNotSpace(p);
         if IdemPChar(p, '__SECURE-') then
           inc(p, 9);
         l := GetNextItemTrimedLineBuffer(p, '=', n);
