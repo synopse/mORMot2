@@ -7806,7 +7806,7 @@ destructor TSqlDBConnectionPropertiesThreadSafe.Destroy;
 var
   i: PtrInt;
 begin
-  for i := fConnectionPoolMin to fConnectionPoolMax do
+  for i := 0 to high(fConnectionPool) do // no fConnectionPoolMax/Max here
     if fConnectionPool[i] <> nil then
       FreeAndNilSafe(fConnectionPool[i]);
   inherited Destroy; // do MainConnection.Free
