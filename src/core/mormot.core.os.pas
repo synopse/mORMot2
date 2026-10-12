@@ -1819,6 +1819,7 @@ var // raw UTF-8 cache storage for GetSystemEnv()
 /// efficiently return a system environment variable as UTF-8
 // - will maintain a cross-platform cache of allocated environment variables
 function GetSystemEnv(const name: RawUtf8): RawUtf8; overload;
+  {$ifdef HASSAFEINLINE} inline; {$endif}
 
 /// efficiently return a system environment variable as string/TFileName
 // - faster cross-platform implementation of RTL GetEnvironmentVariable()
@@ -6974,13 +6975,10 @@ end;
 // enumerates let compiler generate the smallest code
 // - all errors are cross-platform, e.g. when used in centralized servers
 
-const
-  NULL_STR: TShort1 = '';
-
 function _GetEnumNameRtti(Info: pointer; Value: integer): PShortString;
 begin
   // naive version - will properly be implemented in mormot.core.rtti.pas anyway
-  result := @NULL_STR;
+  result := @NULCHAR;
   // arm32 is overcomplex and would rather use typinfo and mormot.core.rtti
   {$ifndef FPC_REQUIRES_PROPER_ALIGNMENT}
   if Value < 0 then
@@ -8772,6 +8770,9 @@ begin
   AppendShortCharSafe('B', Dest);
 end;
 
+var
+  _OsFlags: set of (fRawExceptionIntercepted, fSystemEnvCached);
+
 {$ifndef NOEXCEPTIONINTERCEPT}
 
 {$ifndef KEEP_STACKFRAMES}
@@ -8838,9 +8839,6 @@ end;
 {$endif WITH_RAISEEXCEPTOBJPROC}
 {$endif WITH_RAISEPROC}
 
-var
-  RawExceptionIntercepted: boolean; // single global Exception interception
-
 // note that SynLogException() will use PerThreadInfo.ExceptionIgnore to avoid
 // recursive exception logging: global _RawLogException should not be set
 // temporarly to nil or exceptions on concurrent threads would not be logged
@@ -8851,10 +8849,10 @@ begin
   GlobalLock;
   try
     _RawLogException := Handler; // e.g. SynLogException() from mormot.core.log
-    if RawExceptionIntercepted or
+    if (fRawExceptionIntercepted in _OsFlags) or
        not Assigned(Handler) then
       exit;
-    RawExceptionIntercepted := true; // intercept once
+    include(_OsFlags, fRawExceptionIntercepted); // intercept once
     {$ifdef WITH_RAISEPROC} // FPC RTL redirection function
     if not Assigned(OldRaiseProc) then
     begin
@@ -10989,60 +10987,85 @@ begin
     _SystemPath[kind] := IncludeTrailingPathDelimiter(full);
 end;
 
+function EnsureSystemEnvCached: boolean;
+begin
+  if not (fSystemEnvCached in _OsFlags) then
+  begin
+    OSSafe.Lock;
+    if not (fSystemEnvCached in _OsFlags) then
+      _GetSystemEnv;
+    include(_OsFlags, fSystemEnvCached);
+    OSSafe.UnLock;
+  end;
+  result := _SystemEnvNames <> nil;
+end;
+
+function GetSystemEnvIndex(name: PUtf8Char; len: TStrLen): PtrInt;
+begin
+  if (name <> nil) and
+     (len > 0) and
+     EnsureSystemEnvCached then
+    result := {$ifdef OSPOSIX}FindNonVoidRawUtf8{$else}FindNonVoidRawUtf8I{$endif}(
+      pointer(_SystemEnvNames), name, len, length(_SystemEnvNames))
+  else
+    result := -1;
+end;
+
 function GetSystemEnv(name: PUtf8Char; len: TStrLen): pointer;
 var
   ndx: PtrInt;
 begin
-  result := nil;
-  if (name = nil) or
-     (len <= 0) then
-    exit;
-  if _SystemEnvNames = nil then
-  begin
-    OSSafe.Lock;
-    if _SystemEnvNames = nil then
-      _GetSystemEnv;
-    OSSafe.UnLock;
-    if _SystemEnvNames = nil then
-      exit;
-  end;
-  ndx := {$ifdef OSPOSIX}FindNonVoidRawUtf8{$else}FindNonVoidRawUtf8I{$endif}(
-    pointer(_SystemEnvNames), name, len, length(_SystemEnvNames));
+  ndx := GetSystemEnvIndex(name, len);
   if ndx >= 0 then
-    result := pointer(_SystemEnvValues[ndx]); // O(n) fast found in cache
-end;
-
-function GetSystemEnv(const name: RawUtf8): RawUtf8;
-begin
-  result := RawUtf8(GetSystemEnv(pointer(name), length(name)));
-end;
-
-function GetSystemEnvString(const name: RawUtf8): string;
-begin
-  result := string(GetSystemEnv(name)); // use the RTL
+    result := pointer(_SystemEnvValues[ndx]) // O(n) fast found in cache
+  else
+    result := nil; // not found
 end;
 
 function GetSystemEnv(const name: RawUtf8; var res: RawUtf8): boolean;
 var
-  p: pointer;
+  ndx: PtrInt;
 begin
-  p := GetSystemEnv(pointer(name), length(name));
   result := false;
-  if p = nil then
+  ndx := GetSystemEnvIndex(pointer(name), length(name));
+  if ndx < 0 then
     exit;
+  res := _SystemEnvValues[ndx];
   result := true;
-  res := RawUtf8(p);
+end;
+
+function GetSystemEnv(const name: RawUtf8): RawUtf8;
+begin
+  GetSystemEnv(name, result);
+end;
+
+function GetSystemEnvString(const name: RawUtf8): string;
+var
+  tmp: RawUtf8;
+begin
+  if GetSystemEnv(name, tmp) then
+    result := string(tmp) // use the RTL
+  else
+    result := '';
 end;
 
 function SetSystemEnv(const name, value: RawUtf8): boolean;
 begin
-  result := (GetSystemEnv(name) = value) or
-            _SetSystemEnv(name, value);
+  EnsureSystemEnvCached;
+  result :=  _SetSystemEnv(name, value);
 end;
 
 procedure ResetSystemEnv(const name: RawUtf8);
+var
+  ndx: PtrInt;
 begin
-  SetSystemEnv(name, GetSystemEnv(name));
+  if name = '' then
+    exit;
+  ndx := GetSystemEnvIndex(pointer(name), length(name));
+  if ndx >= 0 then
+    _SetSystemEnv(name, _SystemEnvValues[ndx])
+  else
+    _UnsetSystemEnv(name);
 end;
 
 function _GetExecutableLocation(aAddress: pointer): ShortString;
@@ -13586,7 +13609,7 @@ begin
   GlobalCriticalSection.Done;
   {$ifndef NOEXCEPTIONINTERCEPT}
   _RawLogException := nil;
-  RawExceptionIntercepted := true;
+  include(_OsFlags, fRawExceptionIntercepted); // too late
   {$endif NOEXCEPTIONINTERCEPT}
 end;
 

@@ -3151,10 +3151,21 @@ function _SetSystemEnv(const name, value: RawUtf8): boolean;
 var
   n, v: TSynTempBuffer;
 begin
-  result := SetEnvironmentVariableW(Utf8ToWin32PWideChar(name, n),
-                                    Utf8ToWin32PWideChar(value, v));
+  if value = '' then
+    PWideChar(v.InitOnStack)^ := #0 // void but not nil UTF-16 buffer
+  else
+    Utf8ToWin32PWideChar(value, v);
+ result := SetEnvironmentVariableW(Utf8ToWin32PWideChar(name, n), v.buf);
+ n.Done;
+ v.Done;
+end;
+
+function _UnsetSystemEnv(const name: RawUtf8): boolean;
+var
+  n: TSynTempBuffer;
+begin
+  result := SetEnvironmentVariableW(Utf8ToWin32PWideChar(name, n), nil);
   n.Done;
-  v.Done;
 end;
 
 function PatchProcess(Old, New: pointer; Size: PtrInt; Backup: pointer): boolean;

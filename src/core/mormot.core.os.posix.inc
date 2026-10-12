@@ -3043,10 +3043,22 @@ end;
 
 function setenv(name, value: PUtf8Char; replace: integer): integer;
   cdecl external clib name 'setenv';
+function unsetenv(name: PUtf8Char): integer;
+  cdecl external clib name 'unsetenv';
 
 function _SetSystemEnv(const name, value: RawUtf8): boolean;
+var
+  v: pointer;
 begin
-  result := setenv(pointer(name), pointer(value), {replace=}1) = 0;
+  v := pointer(value);
+  if v = nil then
+    v := @NULCHAR;
+  result := setenv(pointer(name), v, {replace=}1) = 0;
+end;
+
+function _UnsetSystemEnv(const name: RawUtf8): boolean;
+begin
+  result := unsetenv(pointer(name)) = 0;
 end;
 
 procedure GetUserHost(out User, Host: RawUtf8);
