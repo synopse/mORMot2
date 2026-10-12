@@ -7351,7 +7351,11 @@ begin
     if not DeleteFile(BackupFileName) then
       exit;
   // see https://bitbucket.org/egrange/sql3bak for proper parameters
-  Dest := TSqlDatabase.Create(BackupFileName,aPassword, 0, 1);
+  try
+    Dest := TSqlDatabase.Create(BackupFileName,aPassword, 0, 1);
+  except
+    exit; // keep result := false on write error
+  end;
   Dest.SetLockingMode(lmExclusive);
   Dest.SetSynchronous(smOff);
   Dest.ExecuteNoException('PRAGMA journal_mode=MEMORY');
