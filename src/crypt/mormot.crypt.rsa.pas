@@ -284,6 +284,8 @@ type
     fMod: TRsaModulos;
     /// contains the normalized storage
     fNormMod: TRsaModulos;
+    /// contains some pre-computed values for BarretReduce()
+    fBarrettMu: TRsaModulos;
   public
     /// the size of the sliding window
     Window: integer;
@@ -2207,25 +2209,84 @@ procedure TRsaContext.SetModulo(b: PBigInt; modulo: TRsaModulo);
 var
   d: HalfUInt;
   k: integer;
+  t: PBigInt;
 begin
   k := b^.Size;
   fMod[modulo] := b;
   d := RSA_RADIX div (PtrUInt(b^.Value[k - 1]) + 1);
   fNormMod[modulo] := b.IntMultiply(d).SetPermanent;
-end;
+  // precompute Barrett reciprocal: mu = floor(B^(2*k) / modulus)
+  if (b^.Value[k - 1] <> 0) and
+     not b^.IsZero then
+  begin
+    t := AllocateFrom(1).LeftShift(2 * k);
+    try
+      fBarrettMu[modulo] := t.Divide(b.Copy).SetPermanent;
+    finally
+      t.Release;
+    end;
+  end;end;
 
 procedure TRsaContext.ResetModulo(modulo: TRsaModulo);
 begin
   fMod[modulo].ResetPermanentAndRelease;
   fNormMod[modulo].ResetPermanentAndRelease;
+  fBarrettMu[modulo].ResetPermanentAndRelease;
 end;
 
-function TRsaContext.Reduce(b, m: PBigint): PBigInt;
+function BarrettReduce(x, modulus, mu: PBigInt): PBigInt;
+var
+  k: integer;
+  q, r, r2: PBigInt;
 begin
-  if m = nil then
-    result := b^.Divide(fMod[CurrentModulo], bidModNorm)
+  k := modulus^.Size;
+  // called only with x < B^(2*k) and a normalized, nonzero modulus
+  if x^.Compare(modulus) < 0 then
+  begin
+    result := x^.Clone;
+    exit;
+  end;
+  // q1 = floor(x / B^(k-1))
+  q := x^.Clone.RightShift(k - 1);
+  // q2 = q1 * mu  and  q3 = floor(q2 / B^(k+1))
+  q := q.Multiply(mu.Copy);
+  q.RightShift(k + 1);
+  // r2 = (q3 * modulus) mod B^(k+1)
+  r2 := q.Multiply(modulus.Copy);
+  if r2^.Size > k + 1 then
+    r2^.Size := k + 1;
+  // r1 = x mod B^(k+1)
+  r := x^.Clone;
+  if r^.Size > k + 1 then
+    r^.Size := k + 1;
+  // Important: preserve full k+1-limb width for the modular subtraction below
+  r^.Resize(k + 1);
+  // r = (r1 - r2) mod B^(k+1)
+  result := r.Substract(r2);
+  // at most two corrections for valid inputs
+  if result^.Compare(modulus) >= 0 then
+    result := result.Substract(modulus.Copy);
+  if result^.Compare(modulus) >= 0 then
+    result := result.Substract(modulus.Copy);
+end;
+
+function TRsaContext.Reduce(b, m: PBigInt): PBigInt;
+var
+  modvalue, mu: PBigInt;
+begin
+  if m = nil then // use pre-computed constants
+  begin
+    modvalue := fMod[CurrentModulo];
+    mu := fBarrettMu[CurrentModulo];
+    if (mu <> nil) and
+       (b^.Size <= 2 * modvalue^.Size) then
+      result := BarrettReduce(b, modvalue, mu)
+    else
+      result := b^.Divide(modvalue, bidModNorm);
+  end
   else
-    result := b^.Divide(m, bidMod); // custom modulo has no pre-computed const
+    // full slower modulo calculation of arbitrary modulus
+    result := b^.Divide(m, bidMod);
   b^.Release;
 end;
 
