@@ -5877,10 +5877,6 @@ begin
     fTls := true; // no scheme:// means LDAP - force LDAPS on address:636
   fTargetHost := u.Server;
   fTargetPort := u.Port;
-  if u.Address = '' then
-    exit;
-  if u.Address[1] = '/' then
-    delete(u.Address, 1, 1);
   fKerberosDN := u.Address;
 end;
 

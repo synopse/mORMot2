@@ -5287,42 +5287,46 @@ end;
 
 function FastNewString(len, codepage: PtrInt): pointer;
 var
-  rec: PStrRec;
+  sr: PStrRec;
 begin
   result := nil;
   if len <= 0 then
     exit;
   {$ifdef FPC}
-  rec := GetMem(len + (_STRRECSIZE + 4));
-  result := PAnsiChar(rec) + _STRRECSIZE;
+  sr := GetMem(len + (_STRRECSIZE + 4));
+  result := PAnsiChar(sr) + _STRRECSIZE;
   {$else}
   GetMem(result, len + (_STRRECSIZE + 4));
-  rec := result;
+  sr := result;
   inc(PStrRec(result));
   {$endif FPC}
   {$ifdef HASCODEPAGE} // also set elemSize := 1
   {$ifdef FPC}         // with constant propagation
-  rec^.codePageElemSize := codepage + (SizeOf(AnsiChar) shl 16);
+  sr^.codePageElemSize := codepage + (SizeOf(AnsiChar) shl 16);
   {$else}
-  PCardinal(@rec^.codePage)^ := codepage + (SizeOf(AnsiChar) shl 16);
+  PCardinal(@sr^.codePage)^ := codepage + (SizeOf(AnsiChar) shl 16);
   {$endif FPC}
   {$endif HASCODEPAGE}
-  rec^.refCnt := 1;
-  rec^.length := len;
-  PCardinal(PAnsiChar(rec) + len + _STRRECSIZE)^ := 0; // ends with four #0
+  sr^.refCnt := 1;
+  sr^.length := len;
+  PCardinal(PAnsiChar(sr) + len + _STRRECSIZE)^ := 0; // ends with four #0
 end;
 
 {$ifdef HASCODEPAGE}
 
 procedure EnsureRawUtf8(var s: RawByteString);
+var
+  sr: PStrRec;
 begin
-  if s <> '' then
-    with PStrRec(PAnsiChar(pointer(s)) - _STRRECSIZE)^ do
-      if CodePage <> CP_UTF8 then
-        if refCnt <> 1 then
-          FastSetString(RawUtf8(s), pointer(s), length) // make copy
-        else
-          CodePage := CP_UTF8; // just replace in-place
+  sr := pointer(s);
+  if sr = nil then
+    exit;
+  dec(sr);
+  if sr^.CodePage <> CP_UTF8 then
+    if sr^.refCnt <> 1 then
+      FastSetString(RawUtf8(s), pointer(s), sr^.length) // make copy
+    else
+      sr^.CodePage := CP_UTF8; // just replace in-place
 end;
 
 procedure EnsureRawUtf8(var s: RawUtf8);
@@ -5332,12 +5336,14 @@ end;
 
 procedure FakeCodePage(var s: RawByteString; cp: cardinal);
 var
-  p: PAnsiChar;
+  sr: PStrRec;
 begin
-  p := pointer(s);
-  if (p <> nil) and
-     (PStrRec(p - _STRRECSIZE)^.CodePage <> cp) then
-    PStrRec(p - _STRRECSIZE)^.CodePage := cp;
+  sr := pointer(s);
+  if sr = nil then
+    exit;
+  dec(sr);
+  if sr^.codePage <> cp then
+    sr^.codePage := cp;
 end;
 
 function GetCodePage(const s: RawByteString): cardinal;
@@ -5531,7 +5537,7 @@ end;
 {$ifdef HASVARUSTRING}
 procedure FastSynUnicode(var s: SynUnicode; p: pointer; len: PtrInt);
 var
-  rec: PStrRec; // same header than AnsiString, but elemSize=SizeOf(WideChar)=2
+  sr: PStrRec; // same header than AnsiString, but elemSize=SizeOf(WideChar)=2
 begin
   if pointer(s) <> nil then
     FastAssignNew(s); // works also for UnicodeString
@@ -5539,17 +5545,17 @@ begin
     exit;
   len := len * 2; // from WideChar count to bytes
   GetMem(pointer(s), len + (_STRRECSIZE + 4));
-  rec := pointer(s);
+  sr := pointer(s);
   {$ifdef FPC}
-  rec^.codePageElemSize := CP_UTF16 + (SizeOf(WideChar) shl 16);
+  sr^.codePageElemSize := CP_UTF16 + (SizeOf(WideChar) shl 16);
   {$else}
-  PCardinal(@rec^.codePage)^ := cardinal(CP_UTF16) + (SizeOf(WideChar) shl 16);
+  PCardinal(@sr^.codePage)^ := cardinal(CP_UTF16) + (SizeOf(WideChar) shl 16);
   {$endif FPC}
-  rec^.refCnt := 1;
-  rec^.length := len shr 1; // length as WideChar count
-  inc(rec);
-  pointer(s) := rec;
-  PCardinal(PAnsiChar(rec) + len)^ := 0; // ends with two WideChar #0
+  sr^.refCnt := 1;
+  sr^.length := len shr 1; // length as WideChar count
+  inc(sr);
+  pointer(s) := sr;
+  PCardinal(PAnsiChar(sr) + len)^ := 0; // ends with two WideChar #0
   if p <> nil then
     MoveFast(p^, pointer(s)^, len);
 end;
@@ -10382,12 +10388,15 @@ begin
 end;
 
 procedure FillZero(var secret: RawByteString);
+var
+  sr: PStrRec;
 begin
-  if secret = '' then
+  sr := pointer(secret);
+  if sr = nil then
     exit;
-  with PStrRec(pointer(PtrInt(secret) - _STRRECSIZE))^ do
-    if refCnt = 1 then // avoid GPF if const
-      FillCharFast(pointer(secret)^, length, 0);
+  dec(sr);
+  if sr^.refCnt = 1 then // avoid GPF if const
+    FillCharFast(pointer(secret)^, sr^.length, 0);
   FastAssignNew(secret); // dec refCnt
 end;
 
@@ -14506,14 +14515,14 @@ end;
 {$ifdef HASCODEPAGE}
 procedure TRawByteStringStream.EnsureDataStringIsUtf8;
 var
-  p: PStrRec;
+  sr: PStrRec;
 begin // faster than EnsureRawUtf8() since in most cases it is already CP_UTF8
-  p := pointer(fDataString);
-  if p = nil then
+  sr := pointer(fDataString);
+  if sr = nil then
     exit;
-  dec(p);
-  if p^.refCnt = 1 then
-    p^.CodePage := CP_UTF8; // just replace in-place (paranoid anyway)
+  dec(sr);
+  if sr^.refCnt = 1 then
+    sr^.CodePage := CP_UTF8; // just replace in-place (paranoid anyway)
 end;
 {$endif HASCODEPAGE}
 
