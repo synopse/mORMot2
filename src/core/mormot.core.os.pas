@@ -10835,7 +10835,7 @@ begin
       if not fRetrieved[clk][i] then
         if clk = clkArg then
           if i >= length(fDescArg) then
-            result := Join([result, 'Unexpected "', fRawParams[i], '" argument', fLineFeed])
+            result := Join([result, 'Unexpected "', fNames[clkArg][i], '" argument', fLineFeed])
           else
             result := Join([result, 'Missing <', fDescArg[i], '> argument', fLineFeed])
         else

@@ -3690,6 +3690,15 @@ begin
     CheckEqual(f, 'file.txt');
     Check(c.Get('t', t));
     CheckEqual(t, 1);
+    // regression for #654: positional argument after a parameter
+    c.Clear;
+    c.RawParams := CsvToRawUtf8DynArray(
+      '--run /config /opt/porter/x.config', ' ');
+    Check(c.Parse(#10, '-', '--'));
+    Check(c.Get('run', f));
+    CheckEqual(f, '/config');
+    CheckEqual(c.Args[0], '/opt/porter/x.config');
+    CheckEqual(c.DetectUnknown, 'Unexpected "/opt/porter/x.config" argument'#10);
   finally
     c.Free;
   end;
