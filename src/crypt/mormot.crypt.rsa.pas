@@ -1431,25 +1431,33 @@ begin
 end;
 
 function TBigInt.IntDivMod10: PtrUInt;
+const
+  {$ifdef CPU64} // use constant multiplication by reciprocal on all CPU
+  RECIPROCAL = PtrUInt($cccccccd);
+  RADIX_DIV10 = PtrUInt($19999999);
+  RECIPROCAL_SHIFT = 35;
+  {$else}
+  RECIPROCAL = PtrUInt($cccd);
+  RADIX_DIV10 = PtrUInt($1999);
+  RECIPROCAL_SHIFT = 19;
+  {$endif CPU64}
 var
-  d: PtrUInt;
+  v, d: PtrUInt;
   i: PtrInt;
 begin
-  i := Size - 1;
-  result := Value[i];
-  d := result div 10;
-  if d = 0 then
-    dec(Size); // auto trim
-  Value[i] := d;
-  dec(result, d * 10);
-  while i <> 0 do // 16-bit or 32-bit per iteration
-  begin
+  result := 0;
+  i := Size;
+  if i = 0 then
+    exit;
+  repeat
     dec(i);
-    result := (result shl HALF_BITS) + Value[i];
-    d := result div 10;  // fast multiplication by reciprocal on FPC
-    Value[i] := d;
-    dec(result, d * 10);
-  end;
+    v := PtrUInt(Value[i]) + result * 6;
+    d := (v * RECIPROCAL) shr RECIPROCAL_SHIFT;
+    Value[i] := HalfUInt(result * RADIX_DIV10 + d);
+    result := v - d * 10;
+  until i = 0;
+  if Value[Size - 1] = 0 then
+    dec(Size);
 end;
 
 function TBigInt.ModInverse(m: PBigInt): PBigInt;
