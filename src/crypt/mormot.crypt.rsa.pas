@@ -1434,16 +1434,6 @@ begin
 end;
 
 function TBigInt.IntDivMod10: PtrUInt;
-const
-  {$ifdef CPU64} // use constant multiplication by reciprocal on all CPU
-  RECIPROCAL = PtrUInt($cccccccd);
-  RADIX_DIV10 = PtrUInt($19999999);
-  RECIPROCAL_SHIFT = 35;
-  {$else}
-  RECIPROCAL = PtrUInt($cccd);
-  RADIX_DIV10 = PtrUInt($1999);
-  RECIPROCAL_SHIFT = 19;
-  {$endif CPU64}
 var
   v, d: PtrUInt;
   i: PtrInt;
@@ -1455,8 +1445,13 @@ begin
   repeat
     dec(i);
     v := PtrUInt(Value[i]) + result * 6;
-    d := (v * RECIPROCAL) shr RECIPROCAL_SHIFT;
-    Value[i] := HalfUInt(result * RADIX_DIV10 + d);
+    {$ifdef CPU32} // use constant multiplication by reciprocal on all CPUs
+    d := (v * PtrUInt($cccd)) shr 19;
+    Value[i] := HalfUInt(result * PtrUInt($1999) + d);
+    {$else}
+    d := (v * PtrUInt($cccccccd)) shr 35;
+    Value[i] := HalfUInt(result * PtrUInt($19999999) + d);
+    {$endif CPU32}
     result := v - d * 10;
   until i = 0;
   if Value[Size - 1] = 0 then
