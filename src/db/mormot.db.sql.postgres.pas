@@ -1229,9 +1229,15 @@ begin
 end;
 
 function TSqlDBPostgresStatement.ColumnInt(Col: integer): int64;
+var
+  v: PUtf8Char;
 begin
   CheckColAndRowset(Col);
-  result := GetInt64(PQ.GetValue(fRes, fCurrentRow, Col));
+  v := PQ.GetValue(fRes, fCurrentRow, Col);
+  if fColumns[Col].ColumnAttr = BOOLOID then // = PQ.ftype(fRes, Col)
+    result := ord((v <> nil) and (v^ = 't'))
+  else
+    result := GetInt64(v);
 end;
 
 function TSqlDBPostgresStatement.ColumnNull(Col: integer): boolean;
