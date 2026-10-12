@@ -204,6 +204,10 @@ type
     /// standard multiplication between two Big Integer values
     // - will eventually release both self and b instances
     function Multiply(b: PBigInt): PBigInt;
+    /// multiplication modulo RSA_RADIX^LimbCount
+    // - computes only the low LimbCount HalfUInt values (zero if LimbCount <= 0)
+    // - will eventually release both self and b instances, like Multiply()
+    function MultiplyLow(b: PBigInt; LimbCount: integer): PBigInt;
     /// standard multiplication by itself
     // - will allocate a new Big Integer value and release self
     function Square: PBigint;
@@ -2023,6 +2027,29 @@ begin
   result := r.Trim;
 end;
 
+function TBigInt.MultiplyLow(b: PBigInt; LimbCount: integer): PBigInt;
+var
+  r: PBigInt;
+  i, n: PtrInt;
+begin
+  if LimbCount <= 0 then
+    r := Owner.AllocateFrom(0)
+  else
+  begin
+    n := MinPtrInt(LimbCount, Size + b^.Size);
+    // RawMultiply writes one final carry: reserve a scratch limb even when
+    // the row ends at the truncation boundary, then discard that carry
+    r := Owner.Allocate(n + 1);
+    for i := 0 to MinPtrInt(b^.Size, n) - 1 do
+      RawMultiply(pointer(Value), @r^.Value[i],
+        MinPtrInt(Size, n - i), b^.Value[i]);
+    r^.Size := n;
+  end;
+  Release;
+  b.Release;
+  result := r.Trim;
+end;
+
 function TBigInt.Square: PBigint;
 begin
   result := Multiply(Copy);
@@ -2225,7 +2252,8 @@ begin
     finally
       t.Release;
     end;
-  end;end;
+  end;
+end;
 
 procedure TRsaContext.ResetModulo(modulo: TRsaModulo);
 begin
@@ -2252,9 +2280,7 @@ begin
   q := q.Multiply(mu.Copy);
   q.RightShift(k + 1);
   // r2 = (q3 * modulus) mod B^(k+1)
-  r2 := q.Multiply(modulus.Copy);
-  if r2^.Size > k + 1 then
-    r2^.Size := k + 1;
+  r2 := q.MultiplyLow(modulus.Copy, k + 1);
   // r1 = x mod B^(k+1)
   r := x^.Clone;
   if r^.Size > k + 1 then

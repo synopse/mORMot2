@@ -51,6 +51,7 @@ type
     procedure CatalogRunStore(Context: TObject);
     procedure RsaSlow(Context: TObject);
     procedure CrcSlow(Context: TObject); // 32-bit, 64-bit and 128-bit hash
+    procedure RsaBarrett;
     procedure Rfc(a: TSignAlgo; const P, S: RawUtf8; c, l: integer;
       const exp, msg: RawUtf8);
     procedure Kdf(a: TSignAlgo; const key, exp, msg: RawUtf8;
@@ -5007,6 +5008,8 @@ var
   bin, hash, signed, encrypted: RawByteString;
   timer: TPrecisionTimer;
 begin
+  // validate Barret Reduction algorithm
+  RsaBarrett;
   // validate RSA key generation - in a background thread for this slow process
   hash := HexToBin(_hash);
   CheckEqual(length(hash), SizeOf(TSha256Digest));
@@ -5054,6 +5057,153 @@ begin
     encrypted := c.Seal(bin); // bin is typically > 1KB long
     Check(encrypted <> '', 'Seal');
     Check(c.Open(encrypted) = bin, 'Open');
+  finally
+    c.Free;
+  end;
+end;
+
+procedure TTestCoreCrypto.RsaBarrett;
+const
+  SIZES: array[0..10] of integer = (1, 2, 3, 15, 16, 17, 31, 32, 33, 64, 128);
+var
+  c: TRsaContext;
+  a, b, m, full, expected, actual: PBigInt;
+  seed: cardinal;
+  si, sj, pattern, i, j, n, count: integer;
+  slot: TRsaModulo;
+
+  function Number(limbs, kind: integer): PBigInt;
+  var
+    l: integer;
+  begin
+    result := c.Allocate(limbs);
+    for l := 0 to limbs - 1 do
+      case kind of
+        0:
+          result^.Value[l] := high(HalfUInt);
+        1:
+          if l and 1 = 0 then
+            result^.Value[l] := high(HalfUInt);
+        2:
+          begin
+            seed := seed xor (seed shl 13);
+            seed := seed xor (seed shr 17);
+            seed := seed xor (seed shl 5);
+            result^.Value[l] := HalfUInt(seed);
+          end;
+      end;
+    result^.Trim;
+  end;
+
+  procedure CheckReduction(x: PBigInt);
+  var
+    e, r: PBigInt;
+  begin
+    e := x^.Divide(m^.Copy, bidMod);
+    r := c.Reduce(x, nil); // consumes x
+    CheckEqual(r^.Compare(e), 0, 'Barrett vs division');
+    Check(r^.Compare(m) < 0, 'canonical remainder');
+    r.Release;
+    e.Release;
+    CheckEqual(c.ActiveCount, 3, 'modulus and two cached constants');
+  end;
+
+begin
+  seed := $12345678;
+  c := TRsaContext.Create;
+  try
+    for si := 0 to high(SIZES) do
+      for sj := 0 to high(SIZES) do
+        for pattern := 0 to 3 do
+        begin
+          a := Number(SIZES[si], pattern);
+          b := Number(SIZES[sj], pattern);
+          full := a^.Copy.Multiply(b^.Copy);
+          for i := -1 to 7 do
+          begin
+            case i of
+              -1, 0, 1: count := i;
+              2: count := SIZES[si] - 1;
+              3: count := SIZES[si];
+              4: count := SIZES[si] + 1;
+              5: count := SIZES[sj];
+              6: count := a^.Size + b^.Size;
+            else
+              count := a^.Size + b^.Size + 1;
+            end;
+            expected := full^.Clone;
+            if count <= 0 then
+            begin
+              expected^.Size := 1;
+              expected^.Value[0] := 0;
+            end
+            else if expected^.Size > count then
+              expected^.Size := count;
+            expected^.Trim;
+            actual := a^.Copy.MultiplyLow(b^.Copy, count);
+            CheckEqual(actual^.Compare(expected), 0, 'MultiplyLow');
+            CheckEqual(a^.RefCnt, 1, 'left retained');
+            CheckEqual(b^.RefCnt, 1, 'right retained');
+            actual.Release;
+            expected.Release;
+          end;
+          full.Release;
+          // aliased operands and permanent operands must survive unchanged
+          expected := a^.Copy.Multiply(a^.Copy);
+          actual := a^.Copy.MultiplyLow(a^.Copy, 2 * a^.Size);
+          CheckEqual(actual^.Compare(expected), 0, 'MultiplyLow alias');
+          actual.Release;
+          expected.Release;
+          a^.SetPermanent;
+          actual := a^.MultiplyLow(b^.Copy, 1);
+          CheckEqual(a^.RefCnt, -1, 'permanent retained');
+          actual.Release;
+          a^.ResetPermanentAndRelease;
+          b.Release;
+          CheckEqual(c.ActiveCount, 0, 'MultiplyLow released');
+        end;
+    // carry/borrow entering a later assembly block whose first word is all ones
+    a := Number(128, 0);
+    expected := a^.Copy.IntMultiply(2);
+    actual := a^.Clone.Add(a^.Copy);
+    CheckEqual(actual^.Compare(expected), 0, 'carry across all-ones block');
+    actual.Release;
+    expected.Release;
+    actual := c.Allocate(128).Substract(a^.Copy);
+    CheckEqual(actual^.Compare(1), 0, 'borrow across all-ones block');
+    actual.Release;
+    a.Release;
+    CheckEqual(c.ActiveCount, 0, 'carry tests released');
+    for slot := low(TRsaModulo) to high(TRsaModulo) do
+      for si := 0 to high(SIZES) do
+        for pattern := 0 to 3 do
+        begin
+          n := SIZES[si];
+          case pattern of
+            0: m := c.AllocateFrom(1).LeftShift(n - 1);
+            1: m := c.AllocateFrom(1).LeftShift(n - 1).IntAdd(1);
+            2: m := Number(n, 0);
+          else
+            begin
+              m := Number(n, 2);
+              m^.Value[m^.Size - 1] := m^.Value[m^.Size - 1] or 1;
+            end;
+          end;
+          c.SetModulo(m^.SetPermanent, slot);
+          c.CurrentModulo := slot;
+          CheckReduction(c.AllocateFrom(0));
+          CheckReduction(m^.Clone.IntSub(1));
+          CheckReduction(m^.Clone);
+          CheckReduction(m^.Clone.IntAdd(1));
+          CheckReduction(m^.Copy.Multiply(m^.Copy).IntSub(1));
+          CheckReduction(Number(2 * n, 0));
+          // outside Barrett's input bound: exercise the division fallback
+          CheckReduction(c.AllocateFrom(1).LeftShift(2 * n));
+          for j := 1 to 20 do
+            CheckReduction(Number(2 * n, 2));
+          c.ResetModulo(slot);
+          CheckEqual(c.ActiveCount, 0, 'Barrett released');
+        end;
   finally
     c.Free;
   end;
