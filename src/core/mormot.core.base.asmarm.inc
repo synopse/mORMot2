@@ -2,28 +2,437 @@
   This file is a part of the Open Source Synopse mORMot framework 2,
   licensed under a MPL/GPL/LGPL three license - see LICENSE.md
 
-   AARCH64 and ARMv7 assembly used by mormot.core.base.pas
-}
-
-{
-  Locked*() implementation notes:
-  - FPC RTL InterlockedXXX() are plain LDXR/STXR loops on AARCH64, or
-    LDREX/STREX loops on ARMv7, with no memory barrier, whereas Locked*() are
-    expected to be full barriers, as the LOCK prefix on Intel - otherwise
-    TLightLock/TRWLock & co don't protect data
-  - on AARCH64, we use LDXR/STLXR loops followed by DMB ISH, which is how the
-    Linux kernel implements its "fully ordered" atomics on arm64 - about twice
-    faster than surrounding the RTL calls with two DMB ISH
-  - ARMv7 has no store-release STLEX, so we surround LDREX/STREX loops with two
-    DMB ISH, as the Linux kernel does on arm - about a third faster than
-    surrounding the RTL calls with two ReadWriteBarrier calls
-  - this ARMv7 asm requires CPUARM_HAS_DMB: older ARM CPUs use the RTL calls
-    with ReadWriteBarrier
-  - a failed compare-and-swap is a full barrier too, as LOCK CMPXCHG
-  - "dmb #11" is "dmb ish" - FPC 3.2 assembler does not know the ish operand
+   AARCH64 and ARMv7 assembly used by mormot.core.* and mormot.crypt.* units
 }
 
 {$ifdef FPC_CPUAARCH64}
+
+// Fixed-size RSA primitives: HalfUInt arrays, packed two limbs per X register.
+// Scalar LDR/STR accept 4-byte aligned buffers in normal user-space memory
+// with unaligned accesses enabled, including the shifted RawMultiply rows.
+// Exact Src = Dst / Value = Adds or Subs aliasing is supported. Partially
+// overlapping buffers are not supported. Only caller-saved X registers are
+// used; no stack frame, X18, SIMD or optional CPU extensions are required.
+
+// Process 1024 bits low to high; return carry/borrow as 0 or 1.
+function _xasmadd(Value, Adds: pointer; Carry: PtrUInt): PtrUInt;
+  assembler; nostackframe;
+asm
+  // x0 = Value, x1 = Adds, x2 = Carry (bit 0)
+  and   x2, x2, #1
+  cmp   x2, #1
+  ldr   x3, [x0, #0]
+  ldr   x4, [x1, #0]
+  adcs  x3, x3, x4
+  str   x3, [x0, #0]
+  ldr   x3, [x0, #8]
+  ldr   x4, [x1, #8]
+  adcs  x3, x3, x4
+  str   x3, [x0, #8]
+  ldr   x3, [x0, #16]
+  ldr   x4, [x1, #16]
+  adcs  x3, x3, x4
+  str   x3, [x0, #16]
+  ldr   x3, [x0, #24]
+  ldr   x4, [x1, #24]
+  adcs  x3, x3, x4
+  str   x3, [x0, #24]
+  ldr   x3, [x0, #32]
+  ldr   x4, [x1, #32]
+  adcs  x3, x3, x4
+  str   x3, [x0, #32]
+  ldr   x3, [x0, #40]
+  ldr   x4, [x1, #40]
+  adcs  x3, x3, x4
+  str   x3, [x0, #40]
+  ldr   x3, [x0, #48]
+  ldr   x4, [x1, #48]
+  adcs  x3, x3, x4
+  str   x3, [x0, #48]
+  ldr   x3, [x0, #56]
+  ldr   x4, [x1, #56]
+  adcs  x3, x3, x4
+  str   x3, [x0, #56]
+  ldr   x3, [x0, #64]
+  ldr   x4, [x1, #64]
+  adcs  x3, x3, x4
+  str   x3, [x0, #64]
+  ldr   x3, [x0, #72]
+  ldr   x4, [x1, #72]
+  adcs  x3, x3, x4
+  str   x3, [x0, #72]
+  ldr   x3, [x0, #80]
+  ldr   x4, [x1, #80]
+  adcs  x3, x3, x4
+  str   x3, [x0, #80]
+  ldr   x3, [x0, #88]
+  ldr   x4, [x1, #88]
+  adcs  x3, x3, x4
+  str   x3, [x0, #88]
+  ldr   x3, [x0, #96]
+  ldr   x4, [x1, #96]
+  adcs  x3, x3, x4
+  str   x3, [x0, #96]
+  ldr   x3, [x0, #104]
+  ldr   x4, [x1, #104]
+  adcs  x3, x3, x4
+  str   x3, [x0, #104]
+  ldr   x3, [x0, #112]
+  ldr   x4, [x1, #112]
+  adcs  x3, x3, x4
+  str   x3, [x0, #112]
+  ldr   x3, [x0, #120]
+  ldr   x4, [x1, #120]
+  adcs  x3, x3, x4
+  str   x3, [x0, #120]
+  cset  x0, hs
+end;
+
+// Process 1024 bits low to high; return carry/borrow as 0 or 1.
+function _xasmsub(Value, Subs: pointer; Carry: PtrUInt): PtrUInt;
+  assembler; nostackframe;
+asm
+  // x0 = Value, x1 = Subs, x2 = Carry (bit 0)
+  and   x2, x2, #1
+  cmp   xzr, x2
+  ldr   x3, [x0, #0]
+  ldr   x4, [x1, #0]
+  sbcs  x3, x3, x4
+  str   x3, [x0, #0]
+  ldr   x3, [x0, #8]
+  ldr   x4, [x1, #8]
+  sbcs  x3, x3, x4
+  str   x3, [x0, #8]
+  ldr   x3, [x0, #16]
+  ldr   x4, [x1, #16]
+  sbcs  x3, x3, x4
+  str   x3, [x0, #16]
+  ldr   x3, [x0, #24]
+  ldr   x4, [x1, #24]
+  sbcs  x3, x3, x4
+  str   x3, [x0, #24]
+  ldr   x3, [x0, #32]
+  ldr   x4, [x1, #32]
+  sbcs  x3, x3, x4
+  str   x3, [x0, #32]
+  ldr   x3, [x0, #40]
+  ldr   x4, [x1, #40]
+  sbcs  x3, x3, x4
+  str   x3, [x0, #40]
+  ldr   x3, [x0, #48]
+  ldr   x4, [x1, #48]
+  sbcs  x3, x3, x4
+  str   x3, [x0, #48]
+  ldr   x3, [x0, #56]
+  ldr   x4, [x1, #56]
+  sbcs  x3, x3, x4
+  str   x3, [x0, #56]
+  ldr   x3, [x0, #64]
+  ldr   x4, [x1, #64]
+  sbcs  x3, x3, x4
+  str   x3, [x0, #64]
+  ldr   x3, [x0, #72]
+  ldr   x4, [x1, #72]
+  sbcs  x3, x3, x4
+  str   x3, [x0, #72]
+  ldr   x3, [x0, #80]
+  ldr   x4, [x1, #80]
+  sbcs  x3, x3, x4
+  str   x3, [x0, #80]
+  ldr   x3, [x0, #88]
+  ldr   x4, [x1, #88]
+  sbcs  x3, x3, x4
+  str   x3, [x0, #88]
+  ldr   x3, [x0, #96]
+  ldr   x4, [x1, #96]
+  sbcs  x3, x3, x4
+  str   x3, [x0, #96]
+  ldr   x3, [x0, #104]
+  ldr   x4, [x1, #104]
+  sbcs  x3, x3, x4
+  str   x3, [x0, #104]
+  ldr   x3, [x0, #112]
+  ldr   x4, [x1, #112]
+  sbcs  x3, x3, x4
+  str   x3, [x0, #112]
+  ldr   x3, [x0, #120]
+  ldr   x4, [x1, #120]
+  sbcs  x3, x3, x4
+  str   x3, [x0, #120]
+  cset  x0, lo
+end;
+
+// Process 512 bits low to high using a 128-bit product.
+// Factor and Carry may occupy all 64 bits; return the high carry.
+function _xasmmul(Src, Dst: pointer; Factor, Carry: PtrUInt): PtrUInt;
+  assembler; nostackframe;
+asm
+  // x0 = Src, x1 = Dst, x2 = Factor, x3 = Carry
+  ldr   x4, [x0, #0]
+  mul   x5, x4, x2
+  umulh x6, x4, x2
+  adds  x5, x5, x3
+  adc   x3, x6, xzr
+  str   x5, [x1, #0]
+  ldr   x4, [x0, #8]
+  mul   x5, x4, x2
+  umulh x6, x4, x2
+  adds  x5, x5, x3
+  adc   x3, x6, xzr
+  str   x5, [x1, #8]
+  ldr   x4, [x0, #16]
+  mul   x5, x4, x2
+  umulh x6, x4, x2
+  adds  x5, x5, x3
+  adc   x3, x6, xzr
+  str   x5, [x1, #16]
+  ldr   x4, [x0, #24]
+  mul   x5, x4, x2
+  umulh x6, x4, x2
+  adds  x5, x5, x3
+  adc   x3, x6, xzr
+  str   x5, [x1, #24]
+  ldr   x4, [x0, #32]
+  mul   x5, x4, x2
+  umulh x6, x4, x2
+  adds  x5, x5, x3
+  adc   x3, x6, xzr
+  str   x5, [x1, #32]
+  ldr   x4, [x0, #40]
+  mul   x5, x4, x2
+  umulh x6, x4, x2
+  adds  x5, x5, x3
+  adc   x3, x6, xzr
+  str   x5, [x1, #40]
+  ldr   x4, [x0, #48]
+  mul   x5, x4, x2
+  umulh x6, x4, x2
+  adds  x5, x5, x3
+  adc   x3, x6, xzr
+  str   x5, [x1, #48]
+  ldr   x4, [x0, #56]
+  mul   x5, x4, x2
+  umulh x6, x4, x2
+  adds  x5, x5, x3
+  adc   x3, x6, xzr
+  str   x5, [x1, #56]
+  mov   x0, x3
+end;
+
+// Process 512 bits low to high using a 128-bit product.
+// Factor and Carry may occupy all 64 bits; return the high carry.
+function _xasmmuladd(Src, Dst: pointer; Factor, Carry: PtrUInt): PtrUInt;
+  assembler; nostackframe;
+asm
+  // x0 = Src, x1 = Dst, x2 = Factor, x3 = Carry
+  ldr   x4, [x0, #0]
+  mul   x5, x4, x2
+  umulh x6, x4, x2
+  adds  x5, x5, x3
+  adc   x3, x6, xzr
+  ldr   x7, [x1, #0]
+  adds  x5, x5, x7
+  adc   x3, x3, xzr
+  str   x5, [x1, #0]
+  ldr   x4, [x0, #8]
+  mul   x5, x4, x2
+  umulh x6, x4, x2
+  adds  x5, x5, x3
+  adc   x3, x6, xzr
+  ldr   x7, [x1, #8]
+  adds  x5, x5, x7
+  adc   x3, x3, xzr
+  str   x5, [x1, #8]
+  ldr   x4, [x0, #16]
+  mul   x5, x4, x2
+  umulh x6, x4, x2
+  adds  x5, x5, x3
+  adc   x3, x6, xzr
+  ldr   x7, [x1, #16]
+  adds  x5, x5, x7
+  adc   x3, x3, xzr
+  str   x5, [x1, #16]
+  ldr   x4, [x0, #24]
+  mul   x5, x4, x2
+  umulh x6, x4, x2
+  adds  x5, x5, x3
+  adc   x3, x6, xzr
+  ldr   x7, [x1, #24]
+  adds  x5, x5, x7
+  adc   x3, x3, xzr
+  str   x5, [x1, #24]
+  ldr   x4, [x0, #32]
+  mul   x5, x4, x2
+  umulh x6, x4, x2
+  adds  x5, x5, x3
+  adc   x3, x6, xzr
+  ldr   x7, [x1, #32]
+  adds  x5, x5, x7
+  adc   x3, x3, xzr
+  str   x5, [x1, #32]
+  ldr   x4, [x0, #40]
+  mul   x5, x4, x2
+  umulh x6, x4, x2
+  adds  x5, x5, x3
+  adc   x3, x6, xzr
+  ldr   x7, [x1, #40]
+  adds  x5, x5, x7
+  adc   x3, x3, xzr
+  str   x5, [x1, #40]
+  ldr   x4, [x0, #48]
+  mul   x5, x4, x2
+  umulh x6, x4, x2
+  adds  x5, x5, x3
+  adc   x3, x6, xzr
+  ldr   x7, [x1, #48]
+  adds  x5, x5, x7
+  adc   x3, x3, xzr
+  str   x5, [x1, #48]
+  ldr   x4, [x0, #56]
+  mul   x5, x4, x2
+  umulh x6, x4, x2
+  adds  x5, x5, x3
+  adc   x3, x6, xzr
+  ldr   x7, [x1, #56]
+  adds  x5, x5, x7
+  adc   x3, x3, xzr
+  str   x5, [x1, #56]
+  mov   x0, x3
+end;
+
+// Process 1024 bits high to low; return the remainder.
+// Requires Factor <> 0 and Carry < Factor, as for the Intel routines.
+function _xasmdiv(Value: pointer; Factor, Carry: PtrUInt): PtrUInt;
+  assembler; nostackframe;
+asm
+  // x0 = Value, x1 = Factor, x2 = incoming remainder
+  lsr   x3, x1, #32
+  cbnz  x3, .LxasmdivWide
+  // RSA fast path: nonzero 32-bit Factor, Carry < Factor.
+  // Four HalfUInt limbs per loop; 32 limbs (1024 bits) per call.
+  add   x0, x0, #128
+  mov   x7, #8
+.LxasmdivLoop:
+  sub   x0, x0, #16
+  ldr   w3, [x0, #12]
+  orr   x3, x3, x2, lsl #32
+  udiv  x4, x3, x1
+  msub  x2, x4, x1, x3
+  str   w4, [x0, #12]
+  ldr   w3, [x0, #8]
+  orr   x3, x3, x2, lsl #32
+  udiv  x4, x3, x1
+  msub  x2, x4, x1, x3
+  str   w4, [x0, #8]
+  ldr   w3, [x0, #4]
+  orr   x3, x3, x2, lsl #32
+  udiv  x4, x3, x1
+  msub  x2, x4, x1, x3
+  str   w4, [x0, #4]
+  ldr   w3, [x0, #0]
+  orr   x3, x3, x2, lsl #32
+  udiv  x4, x3, x1
+  msub  x2, x4, x1, x3
+  str   w4, [x0, #0]
+  subs  x7, x7, #1
+  b.ne  .LxasmdivLoop
+  mov   x0, x2
+  b     .LxasmdivDone
+.LxasmdivWide:
+  // Preserve the PtrUInt divisor interface for Factor >= 2^32.
+  // Restoring division: shift remainder with an explicit 65th bit.
+  // Fixed loop counts; no branches on the dividend or remainder.
+  add   x0, x0, #128
+  mov   x10, #16
+.LxasmdivWord:
+  sub   x0, x0, #8
+  ldr   x3, [x0]
+  mov   x5, #64
+  mov   x4, xzr
+.LxasmdivBit:
+  lsr   x6, x3, #63
+  lsl   x3, x3, #1
+  adds  x2, x2, x2
+  cset  x7, hs
+  orr   x2, x2, x6
+  subs  x8, x2, x1
+  cset  x9, hs
+  orr   x7, x7, x9
+  cmp   x7, #0
+  csel  x2, x8, x2, ne
+  lsl   x4, x4, #1
+  orr   x4, x4, x7
+  subs  x5, x5, #1
+  b.ne  .LxasmdivBit
+  str   x4, [x0]
+  subs  x10, x10, #1
+  b.ne  .LxasmdivWord
+  mov   x0, x2
+.LxasmdivDone:
+end;
+
+// Process 1024 bits high to low; return the remainder.
+// Requires Factor <> 0 and Carry < Factor, as for the Intel routines.
+function _xasmmod(Value: pointer; Factor, Carry: PtrUInt): PtrUInt;
+  assembler; nostackframe;
+asm
+  // x0 = Value, x1 = Factor, x2 = incoming remainder
+  lsr   x3, x1, #32
+  cbnz  x3, .LxasmmodWide
+  // RSA fast path: nonzero 32-bit Factor, Carry < Factor.
+  // Four HalfUInt limbs per loop; 32 limbs (1024 bits) per call.
+  add   x0, x0, #128
+  mov   x7, #8
+.LxasmmodLoop:
+  sub   x0, x0, #16
+  ldr   w3, [x0, #12]
+  orr   x3, x3, x2, lsl #32
+  udiv  x4, x3, x1
+  msub  x2, x4, x1, x3
+  ldr   w3, [x0, #8]
+  orr   x3, x3, x2, lsl #32
+  udiv  x4, x3, x1
+  msub  x2, x4, x1, x3
+  ldr   w3, [x0, #4]
+  orr   x3, x3, x2, lsl #32
+  udiv  x4, x3, x1
+  msub  x2, x4, x1, x3
+  ldr   w3, [x0, #0]
+  orr   x3, x3, x2, lsl #32
+  udiv  x4, x3, x1
+  msub  x2, x4, x1, x3
+  subs  x7, x7, #1
+  b.ne  .LxasmmodLoop
+  mov   x0, x2
+  b     .LxasmmodDone
+.LxasmmodWide:
+  // Preserve the PtrUInt divisor interface for Factor >= 2^32.
+  // Restoring division: shift remainder with an explicit 65th bit.
+  // Fixed loop counts; no branches on the dividend or remainder.
+  add   x0, x0, #128
+  mov   x10, #16
+.LxasmmodWord:
+  sub   x0, x0, #8
+  ldr   x3, [x0]
+  mov   x5, #64
+.LxasmmodBit:
+  lsr   x6, x3, #63
+  lsl   x3, x3, #1
+  adds  x2, x2, x2
+  cset  x7, hs
+  orr   x2, x2, x6
+  subs  x8, x2, x1
+  cset  x9, hs
+  orr   x7, x7, x9
+  cmp   x7, #0
+  csel  x2, x8, x2, ne
+  subs  x5, x5, #1
+  b.ne  .LxasmmodBit
+  subs  x10, x10, #1
+  b.ne  .LxasmmodWord
+  mov   x0, x2
+.LxasmmodDone:
+end;
 
 procedure mul64x64(const left, right: QWord; out product: THash128Rec);
   assembler; nostackframe;
@@ -458,6 +867,63 @@ asm
   sub   x0, x10, x0    // -1, 0, or 1
 end;
 
+{$else} // ARMv7 with CPUARM_HAS_DMB
+
+procedure mul64x64(constref left, right: QWord; out product: THash128Rec);
+  assembler; nostackframe;
+asm
+  // r0 = @left  r1 = @right  r2 = @product
+  push  {r4-r7}
+  // Load both 64-bit operands
+  ldr   r3, [r0, #4]     // left.H
+  ldr   r0, [r0]         // left.L
+  ldr   r12, [r1, #4]    // right.H
+  ldr   r1, [r1]         // right.L
+  // Low x Low
+  umull r4, r5, r0, r1
+  // Low x High
+  umull r6, r7, r0, r12
+  adds  r5, r5, r6
+  adc   r7, r7, #0
+  // High x Low
+  umull r0, r6, r3, r1
+  adds  r5, r5, r0
+  adcs  r7, r7, r6
+  // High x High
+  umull r0, r1, r3, r12
+  adc   r1, r1, #0
+  adds  r0, r0, r7
+  adc   r1, r1, #0
+  // Store 128-bit product
+  str   r4, [r2]
+  str   r5, [r2, #4]
+  str   r0, [r2, #8]
+  str   r1, [r2, #12]
+  pop   {r4-r7}
+end;
+
+{$endif FPC_CPUAARCH64}
+
+
+{
+  Locked*() implementation notes:
+  - FPC RTL InterlockedXXX() are plain LDXR/STXR loops on AARCH64, or
+    LDREX/STREX loops on ARMv7, with no memory barrier, whereas Locked*() are
+    expected to be full barriers, as the LOCK prefix on Intel - otherwise
+    TLightLock/TRWLock & co don't protect data
+  - on AARCH64, we use LDXR/STLXR loops followed by DMB ISH, which is how the
+    Linux kernel implements its "fully ordered" atomics on arm64 - about twice
+    faster than surrounding the RTL calls with two DMB ISH
+  - ARMv7 has no store-release STLEX, so we surround LDREX/STREX loops with two
+    DMB ISH, as the Linux kernel does on arm - about a third faster than
+    surrounding the RTL calls with two ReadWriteBarrier calls
+  - this ARMv7 asm requires CPUARM_HAS_DMB: older ARM CPUs use the RTL calls
+    with ReadWriteBarrier
+  - a failed compare-and-swap is a full barrier too, as LOCK CMPXCHG
+  - "dmb #11" is "dmb ish" - FPC 3.2 assembler does not know the ish operand
+}
+
+{$ifdef FPC_CPUAARCH64}
 
 procedure LockedInc32(int32: PInteger); assembler; nostackframe;
 asm
@@ -583,39 +1049,6 @@ asm
 end;
 
 {$else} // ARMv7 with CPUARM_HAS_DMB
-
-procedure mul64x64(constref left, right: QWord; out product: THash128Rec);
-  assembler; nostackframe;
-asm
-  // r0 = @left  r1 = @right  r2 = @product
-  push  {r4-r7}
-  // Load both 64-bit operands
-  ldr   r3, [r0, #4]     // left.H
-  ldr   r0, [r0]         // left.L
-  ldr   r12, [r1, #4]    // right.H
-  ldr   r1, [r1]         // right.L
-  // Low x Low
-  umull r4, r5, r0, r1
-  // Low x High
-  umull r6, r7, r0, r12
-  adds  r5, r5, r6
-  adc   r7, r7, #0
-  // High x Low
-  umull r0, r6, r3, r1
-  adds  r5, r5, r0
-  adcs  r7, r7, r6
-  // High x High
-  umull r0, r1, r3, r12
-  adc   r1, r1, #0
-  adds  r0, r0, r7
-  adc   r1, r1, #0
-  // Store 128-bit product
-  str   r4, [r2]
-  str   r5, [r2, #4]
-  str   r0, [r2, #8]
-  str   r1, [r2, #12]
-  pop   {r4-r7}
-end;
 
 procedure LockedInc32(int32: PInteger); assembler; nostackframe;
 asm
@@ -757,5 +1190,4 @@ asm
 end;
 
 {$endif FPC_CPUAARCH64}
-
 

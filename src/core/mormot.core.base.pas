@@ -2716,6 +2716,19 @@ function _cmp256(const Left, Right: THash256Rec): integer;
 procedure _mult128(constref l, r: THash128Rec; out product: THash256Rec);
 procedure _mult256(out Output: THash512Rec; const Left, Right: THash256Rec);
 procedure _mmodP(out Output: THash256Rec; var Product: THash512Rec);
+function _xasmadd(Value, Adds: pointer; Carry: PtrUInt): PtrUInt;
+function _xasmsub(Value, Subs: pointer; Carry: PtrUInt): PtrUInt;
+function _xasmmul(Src, Dst: pointer; Factor, Carry: PtrUInt): PtrUInt;
+function _xasmmuladd(Src, Dst: pointer; Factor, Carry: PtrUInt): PtrUInt;
+function _xasmdiv(Value: pointer; Factor, Carry: PtrUInt): PtrUInt;
+function _xasmmod(Value: pointer; Factor, Carry: PtrUInt): PtrUInt;
+const
+  _xasmaddn    = SizeOf(pointer) * 16; // 1024 bits per call on CPU64
+  _xasmsubn    = SizeOf(pointer) * 16;
+  _xasmmuln    = SizeOf(pointer) * 8;  // 512 bits per call on CPU64
+  _xasmmuladdn = SizeOf(pointer) * 8;
+  _xasmdivn    = SizeOf(pointer) * 16;
+  _xasmmodn    = SizeOf(pointer) * 16;
 {$endif ASMARM64}
 {$endif ASMINTEL}
 
@@ -4336,9 +4349,9 @@ type
   TSynVarData = packed record
     case integer of
       0: (
-        VType: cardinal;
+        VType: cardinal;{%H-}
         case padding: cardinal of // access the most used TVarData value members
-          varInteger:  (VInteger:  integer);
+          varInteger:  (VInteger:  integer);{%H-}
           varOleUInt:  (VCardinal: cardinal);
           varOleInt:   (VPtrInt:   PtrInt);
           varDouble:   (VDouble:   double);

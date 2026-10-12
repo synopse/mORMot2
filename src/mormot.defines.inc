@@ -387,6 +387,7 @@
       {$define CPUINTEL}
       {$define ASMINTEL}
       {$define ASMINTELARM}
+      {$define ASMINTELARM64}
       {$define ASMX64}
       {$define FPC_CODEALIGN}  // we can use {$CODEALIGN LOOP=16} conditional
       {$define FPC_CPUX64}
@@ -411,6 +412,7 @@
       {$define ASMARM}         // Locked*() in mormot.core.base.asmarm.inc
       {$define ASMARM64}
       {$define ASMINTELARM}
+      {$define ASMINTELARM64}
       {$ifdef OSWINDOWS}       // aarch64-win64 compatibility
         {$undef FPC_SINGLEABI}
         {$define DISPINVOKE_NO_OLESTR} // avoid late binding _ := 'constant'
@@ -424,6 +426,7 @@
       {$ASMMODE INTEL}         // as Delphi requires
       {$define ASMINTEL}
       {$define ASMINTELARM}
+      {$define ASMINTELARM64}
       {$define ASMX86}
       {$define CPUINTEL}
       {.$define FPC_CODEALIGN} // no need of {$CODEALIGN LOOP=16} conditional
@@ -957,6 +960,7 @@
     {$undef ASMARM}
     {$undef ASMARM64}
     {$undef ASMINTELARM}
+    {$undef ASMINTELARM64}
     {$undef ASMSSE2}
     {$undef ASMAESNI}
     {$undef ASMX86}
