@@ -211,7 +211,6 @@ type
     /// standard multiplication by itself
     // - will allocate a new Big Integer value and release self
     function Square: PBigint;
-      {$ifdef HASINLINE} inline; {$endif}
     /// add an unsigned integer value
     function IntAdd(b: HalfUInt): PBigInt;
     /// substract an unsigned integer value
@@ -2317,34 +2316,54 @@ end;
 
 function BarrettReduce(x, modulus, mu: PBigInt): PBigInt;
 var
-  k: integer;
+  k, qlen, n, i, first: PtrInt;
   q, r, r2: PBigInt;
 begin
   k := modulus^.Size;
-  // called only with x < B^(2*k) and a normalized, nonzero modulus
+  // x < B^(2*k), with B = RSA_RADIX
   if x^.Compare(modulus) < 0 then
   begin
     result := x^.Clone;
     exit;
   end;
   // q1 = floor(x / B^(k-1))
-  q := x^.Clone.RightShift(k - 1);
-  // q2 = q1 * mu  and  q3 = floor(q2 / B^(k+1))
-  q := q.Multiply(mu.Copy);
-  q.RightShift(k + 1);
+  qlen := x^.Size - k + 1;
+  // Compute only the upper portion of q1 * mu.
+  // Omit partial products at positions below k-1.
+  // The discarded part is < B^(k+1) for RSA limb sizes,
+  // so the resulting q3 may be at most one too small.
+  n := qlen + mu^.Size - k + 1;
+  q := x^.Owner.Allocate(n);
+  for i := 0 to mu^.Size - 1 do
+  begin
+    first := k - 1 - i;
+    if first < 0 then
+      first := 0;
+    if first < qlen then
+      RawMultiply(
+        @x^.Value[k - 1 + first],
+        @q^.Value[i + first - k + 1],
+        qlen - first, mu^.Value[i]);
+  end;
+  // q holds the partial product shifted by k-1 limbs.
+  // Two more limbs give floor(q1 * mu / B^(k+1)),
+  // possibly underestimated by one.
+  q.RightShift(2);
   // r2 = (q3 * modulus) mod B^(k+1)
   r2 := q.MultiplyLow(modulus.Copy, k + 1);
   // r1 = x mod B^(k+1)
-  r := x^.Clone;
-  if r^.Size > k + 1 then
-    r^.Size := k + 1;
-  // Important: preserve full k+1-limb width for the modular subtraction below
-  r^.Resize(k + 1);
+  // Copy only the needed low limbs, not all of x.
+  r := x^.Owner.Allocate(k + 1);
+  MoveFast(x^.Value[0], r^.Value[0], MinPtrInt(x^.Size, k + 1) * HALF_BYTES);
   // r = (r1 - r2) mod B^(k+1)
   result := r.Substract(r2);
-  // at most two corrections for valid inputs
-  if result^.Compare(modulus) >= 0 then
-    result := result.Substract(modulus.Copy);
+  // at most three corrections needed
+  if result^.Compare(modulus) < 0 then
+    exit;
+  result := result.Substract(modulus.Copy);
+  if result^.Compare(modulus) < 0 then
+    exit;
+  result := result.Substract(modulus.Copy);
   if result^.Compare(modulus) >= 0 then
     result := result.Substract(modulus.Copy);
 end;
