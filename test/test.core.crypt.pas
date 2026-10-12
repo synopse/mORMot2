@@ -3493,7 +3493,7 @@ begin
   end;
   for n := 1 to 32 do
   begin
-    Check(ctxt.Init(key, 128, false));
+    Check(ctxt.Init(key, 128));
     Check(ctxt.Reset(@hex32, n));
     Check(ctxt.Add_AAD(@hex32, n));
     Check(ctxt.Encrypt(@hex32, @buf, n));

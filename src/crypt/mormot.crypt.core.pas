@@ -477,7 +477,7 @@ type
     end;
     /// 4KB lookup table for fast Galois Finite Field multiplication
     // - is defined as last field of the object for better code generation
-    // - only first 256 bytes are used in flagAVX mode
+    // - only first 256 bytes and last 32 bytes are used in flagAVX mode
     gf_t4k: array[byte] of THash128Rec;
     /// build the gf_t4k[] internal table from current state.ghash_h
     procedure Make4K_Table;
@@ -489,12 +489,14 @@ type
     procedure internal_auth(ctp: PByte; ILen: PtrUInt;
       var ghv: TAesBlock; var gcnt: TQWordRec);
     {$ifdef USEGCMAVX}
+    function txt_pending: PAesBlock; inline; // = @gf_t4k[254]
+    function aad_pending: PAesBlock; inline; // = @gf_t4k[255]
     /// redirected from Encrypt() and Decrypt() in flagAVX mode
     procedure AvxProcess(BufIn, BufOut: PByte; Count: cardinal; Encrypt: boolean);
     {$endif USEGCMAVX}
   public
     /// initialize the AES-GCM structure for the supplied Key
-    function Init(const Key; KeyBits: PtrInt; AllowAvx: boolean): boolean;
+    function Init(const Key; KeyBits: PtrInt; AllowAvx: boolean = true): boolean;
     /// start AES-GCM encryption with a given Initialization Vector
     // - IV_len is in bytes use 12 for exact IV setting, otherwise the
     // supplied buffer will be hashed using gf_mul_h()
@@ -4710,38 +4712,103 @@ begin
 end;
 
 {$ifdef USEGCMAVX}
+function TAesGcmEngine.txt_pending: PAesBlock;
+begin
+  result := @gf_t4k[pred(high(gf_t4k))];
+end;
+
+function TAesGcmEngine.aad_pending: PAesBlock;
+begin
+  result := @gf_t4k[high(gf_t4k)];
+end;
+
 procedure TAesGcmEngine.AvxProcess(BufIn, BufOut: PByte; Count: cardinal;
   Encrypt: boolean);
 var
-  blocks, ctr, onepass: cardinal;
+  blocks, ctr, onepass, n, i, pos: cardinal;
+  txt, buf: PAesBlock;
 begin
-  // 8x interleaved aesni + pclmulqdq x86_64 asm
-  if Count and AesBlockMod <> 0 then
-    ESynCrypto.RaiseU('TAesGcm.Encrypt/Decrypt should use PKCS7');
+  if Count = 0 then
+    exit;
+  if state.atx_cnt.V = 0 then // AAD must precede ciphertext
+  begin
+    n := state.aad_cnt.L and AesBlockMod;
+    if n <> 0 then
+      GcmAvxAuth(@gf_t4k, aad_pending, n, @state.txt_ghv);
+  end;
+  txt := txt_pending;
+  buf := @TAesContext(aes).buf;
   inc(state.atx_cnt.V, Count);
-  repeat
-    // regroup GMAC + AES-CTR per 1MB chunks to fit in L2/L3 CPU cache
-    onepass := 1 shl 20;
-    if Count < onepass then
-      onepass := Count;
-    // GMAC done before decryption
+  if state.blen <> 0 then // continue partial CTR
+  begin
+    pos := state.blen;
+    n := SizeOf(TAesBlock) - pos;
+    if n > Count then
+      n := Count;
+    for i := 0 to n - 1 do
+    begin
+      if Encrypt then
+      begin
+        BufOut^ := BufIn^ xor buf^[pos + i];
+        txt^[pos + i] := BufOut^;
+      end
+      else
+      begin
+        txt^[pos + i] := BufIn^;
+        BufOut^ := BufIn^ xor buf^[pos + i];
+      end;
+      inc(BufIn);
+      inc(BufOut);
+    end;
+    inc(state.blen, n);
+    dec(Count, n);
+    if state.blen = SizeOf(TAesBlock) then // complete ciphertext GHASH block
+    begin
+      GcmAvxAuth(@gf_t4k, txt, SizeOf(TAesBlock), @state.txt_ghv);
+      state.blen := 0;
+    end;
+    if Count = 0 then
+      exit;
+  end;
+  while Count >= SizeOf(TAesBlock) do // // 8x interleaved aesni + pclmulqdq
+  begin
+    onepass := Count and not cardinal(AesBlockMod);
+    if onepass > 1 shl 20 then
+      onepass := 1 shl 20; // keep chunks <= 1 MB to fit in the CPU cache
     if not Encrypt then
-      GcmAvxAuth(@gf_t4k, BufIn, onepass, @state.txt_ghv);
+      GcmAvxAuth(@gf_t4k, BufIn, onepass, @state.txt_ghv); // decrypt: AAD first
     // AES-CTR using AES-NI and SSE4.1 over a 32-bit counter
     blocks := onepass shr AesBlockShift;
     ctr := bswap32(TAesContext(aes).iv.c3) + blocks;
-    GCM_IncCtr(TAesContext(aes).iv.b); // should be done before
+    GCM_IncCtr(TAesContext(aes).iv.b);
     AesNiEncryptCtrNist32(BufIn, BufOut, blocks, @aes, @TAesContext(aes).iv);
     TAesContext(aes).iv.c3 := bswap32(ctr);
-    // GMAC done after encryption
     if Encrypt then
-      GcmAvxAuth(@gf_t4k, BufOut, onepass, @state.txt_ghv);
+      GcmAvxAuth(@gf_t4k, BufOut, onepass, @state.txt_ghv); // encrypt: AAD last
     dec(Count, onepass);
-    if Count = 0 then
-      exit;
     inc(BufIn, onepass);
     inc(BufOut, onepass);
-  until false;
+  end;
+  if Count = 0 then // remaining 1..15 bytes
+    exit;
+  GCM_IncCtr(TAesContext(aes).iv.b);
+  aes.Encrypt(TAesContext(aes).iv.b, buf^);
+  for i := 0 to Count - 1 do
+  begin
+    if Encrypt then
+    begin
+      BufOut^ := BufIn^ xor buf^[i];
+      txt^[i] := BufOut^;
+    end
+    else
+    begin
+      txt^[i] := BufIn^;
+      BufOut^ := BufIn^ xor buf^[i];
+    end;
+    inc(BufIn);
+    inc(BufOut);
+  end;
+  state.blen := Count;
 end;
 
 function HasAesGcmAvx: boolean;
@@ -4749,7 +4816,6 @@ begin
   result := (cpuAESGCM in X64CpuFeatures) and
             not (daAesGcmAvx in DisabledAsm);
 end;
-
 {$else}
 function HasAesGcmAvx: boolean;
 begin
@@ -4971,6 +5037,10 @@ begin
 end;
 
 function TAesGcmEngine.Add_AAD(pAAD: pointer; aLen: PtrInt): boolean;
+{$ifdef USEGCMAVX}
+var
+  used, n, full: PtrInt;
+{$endif USEGCMAVX}
 begin
   if aLen > 0 then
   begin
@@ -4981,12 +5051,35 @@ begin
     {$ifdef USEGCMAVX}
     if flagAVX in state.flags then
     begin
+      if state.atx_cnt.V <> 0 then // too late: ciphertext has started
+        exit;
+      used := state.aad_cnt.L and AesBlockMod;
       inc(state.aad_cnt.V, aLen);
-      GcmAvxAuth(@gf_t4k, pAAD, aLen, @state.txt_ghv); // use txt_ghv for both
+      if used <> 0 then // complete partial AAD from earlier call
+      begin
+        n := SizeOf(TAesBlock) - used;
+        if n > aLen then
+          n := aLen;
+        MoveFast(pAAD^, aad_pending^[used], n);
+        inc(PByte(pAAD), n);
+        dec(aLen, n);
+        inc(used, n);
+        if used = SizeOf(TAesBlock) then
+          GcmAvxAuth(@gf_t4k, aad_pending, SizeOf(TAesBlock), @state.txt_ghv);
+      end;
+      if aLen >= SizeOf(TAesBlock) then // fast GHASH for complete AAD blocks
+      begin
+        full := aLen and not AesBlockMod;
+        GcmAvxAuth(@gf_t4k, pAAD, full, @state.txt_ghv);
+        inc(PByte(pAAD), full);
+        dec(aLen, full);
+      end;
+      if aLen <> 0 then
+        MoveFast(pAAD^, aad_pending^[0], aLen); // keep last partial AAD block
     end
     else
     {$endif USEGCMAVX}
-    internal_auth(pAAD, aLen, state.aad_ghv, state.aad_cnt);
+      internal_auth(pAAD, aLen, state.aad_ghv, state.aad_cnt);
   end;
   result := true;
 end;
@@ -5009,6 +5102,14 @@ begin
   {$ifdef USEGCMAVX}
   if flagAVX in state.flags then // x86_64 asm uses 256 bytes in gf_t4k[]
   begin
+    if state.atx_cnt.V = 0 then // AvxProcess() was never called
+    begin
+      ln := state.aad_cnt.L and AesBlockMod;
+      if ln <> 0 then
+        GcmAvxAuth(@gf_t4k, aad_pending, ln, @state.txt_ghv);
+    end;
+    if state.blen <> 0 then // include incomplete final ciphertext block
+      GcmAvxAuth(@gf_t4k, txt_pending, state.blen, @state.txt_ghv);
     GcmAvxGetTag(@gf_t4k, @e, @state.txt_ghv, state.atx_cnt.V, state.aad_cnt.V);
     tag := state.txt_ghv;
   end
@@ -5060,7 +5161,7 @@ function TAesGcmEngine.FullEncryptAndAuthenticate(const Key; KeyBits: PtrInt;
   pIV, pAAD, ptp, ctp: pointer; IV_len, aLen, pLen: PtrInt;
   out tag: TAesBlock; allowavx: boolean): boolean;
 begin // allowavx is set to false in test.core.crypt for testing purpose
-  result := Init(Key, KeyBits, allowavx and (pLen and AesBlockMod = 0)) and
+  result := Init(Key, KeyBits, allowavx) and
             Reset(pIV, IV_len) and
             Add_AAD(pAAD, aLen) and
             Encrypt(ptp, ctp, pLen) and
@@ -5072,7 +5173,7 @@ function TAesGcmEngine.FullDecryptAndVerify(const Key; KeyBits: PtrInt;
   pIV, pAAD, ctp, ptp, ptag: pointer; IV_len, aLen, pLen, tLen: PtrInt;
   allowavx: boolean): boolean;
 begin
-  result := Init(Key, KeyBits, allowavx and (pLen and AesBlockMod = 0)) and
+  result := Init(Key, KeyBits, allowavx) and
             Reset(pIV, IV_len) and
             Add_AAD(pAAD, aLen) and
             Decrypt(ctp, ptp, pLen, ptag, tlen);
