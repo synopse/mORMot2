@@ -2304,6 +2304,9 @@ begin
     l.TargetUri := 'dc.test.local/test.local';
     CheckEqual(l.TargetPort, LDAP_PORT, 'no scheme');
     Check(not l.Tls);
+    l.TargetUri := 'dc.test.local:1234/test.local';
+    CheckEqual(l.TargetPort, '1234', 'no scheme with port');
+    Check(not l.Tls);
   finally
     l.Free;
   end;

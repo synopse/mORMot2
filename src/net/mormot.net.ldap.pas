@@ -5865,11 +5865,13 @@ begin
   if not u.From(uri) then
     exit;
   if u.Scheme = '' then
+  begin
     // no scheme:// means LDAP - force LDAPS on address:636
     if u.Port = LDAP_TLS_PORT then
       fTls := true
-    else
-      u.Port := LDAP_PORT
+    else if u.Port = '80' then // no port and no scheme
+      u.Port := LDAP_PORT;
+  end
   else
     case u.UriScheme of
       usLdap:
