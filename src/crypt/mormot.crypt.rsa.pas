@@ -3483,34 +3483,23 @@ end;
 function TRsa.Verify(Hash, Sig: pointer; HashAlgo: THashAlgo;
   SigLen: integer): boolean;
 var
-  verif, digest, oid: RawByteString;
-  p: integer;
+  actual: RawByteString;
+  expected: TAsnObject;
 begin
   // this virtual method implements RSASSA-PKCS1-v1_5 signature scheme
-  // 1. decode the supplied value using the stored public key
   result := false;
-  if SigLen <> fModulusLen then
-    exit; // the signature is a RSA BigInt by definition
-  verif := Pkcs1Verify(Sig);
-  if verif = '' then
-    exit; // invalid decrypted signature or no public key
-  // 2. parse the ASN.1 sequence to extract the stored hash and its algo oid
-  p := 1;
-  if (AsnNext(p, verif) <> ASN1_SEQ) or  // DigestInfo
-     (AsnNext(p, verif) <> ASN1_SEQ) or  // AlgorithmIdentifier
-     (AsnNext(p, verif, @oid) <> ASN1_OBJID) or
-     (oid <> ASN1_OID_HASH[HashAlgo]) then
+  if (Hash = nil) or
+     (Sig = nil) or
+     (SigLen <> fModulusLen) then
     exit;
-  case AsnNextRaw(p, verif, digest) of
-    ASN1_NULL: // optional Algorithm Parameters
-      if AsnNextRaw(p, verif, digest) <> ASN1_OCTSTR then
-        exit;
-    ASN1_OCTSTR:
-      ;
-  else
+  // recover DigestInfo from EMSA-PKCS1-v1_5 encoding
+  actual := Pkcs1Verify(Sig);
+  if actual = '' then
     exit;
-  end;
-  result := CompareBuf(digest, Hash, HASH_SIZE[HashAlgo]) = 0;
+  // compute the exact expected DER DigestInfo
+  expected := RsaSignHashToDer(PHash512(Hash), HashAlgo);
+  // reject malformed, truncated, or extended encodings
+  result := actual = expected;
 end;
 
 function TRsa.Sign(Hash: PHash512; HashAlgo: THashAlgo): RawByteString;
@@ -3738,7 +3727,8 @@ begin
   fSafe.Lock;
   try
     dec := Load(pointer(encoded), len);
-    result := ChineseRemainderTheorem(dec).Save({andrelease=}true);
+    result := ChineseRemainderTheorem(dec).
+              SaveFixed(fModulusLen, {andrelease=}true);
   finally
     fSafe.UnLock;
   end;
