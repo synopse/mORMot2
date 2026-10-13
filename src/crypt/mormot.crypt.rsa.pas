@@ -3517,6 +3517,10 @@ begin
   seq := RsaSignHashToDer(Hash, HashAlgo);
   // 2. sign it using the stored private key
   result := Pkcs1Sign(pointer(seq), length(seq));
+  // 3. verify the signature (much faster than the previous Pkcs1Sign call)
+  if (result <> '') and
+     not Verify(Hash, HashAlgo, result) then
+    ERsaException.RaiseUtf8('%.Sign self-verification failed', [self]);
 end;
 
 function TRsa.Seal(const Message: RawByteString;
@@ -3713,7 +3717,7 @@ begin
      not HasPrivateKey then
     exit;
   if (ModulusBits + 7) shr 3 <> ModulusLen then
-    ERsaException.RaiseUtf8('%.DoPad: m=p*q is weak', [self]);
+    ERsaException.RaiseUtf8('%.Sign: m=p*q is weak', [self]);
   bits := ModulusBits - 1;
   len := (bits + 7) shr 3; // could be one less than ModulusLen
   // RFC 8017 9.1.1 encoding operation with saltlen = hashlen
@@ -3738,6 +3742,10 @@ begin
   finally
     fSafe.UnLock;
   end;
+  // verify the signature (much faster than the previous signature encryption)
+  if (result <> '') and
+     not Verify(Hash, HashAlgo, result) then
+    ERsaException.RaiseUtf8('%.Sign self-verification failed', [self]);
 end;
 
 
