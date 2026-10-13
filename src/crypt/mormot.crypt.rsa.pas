@@ -2908,6 +2908,7 @@ type
     NewPrime: RawByteString; // saved as binary
     constructor Create(aOwner: TRsa; aIterations: integer;
       aExtend: TBigIntSimplePrime; aEndTix: Int64); reintroduce;
+    destructor Destroy; override;
     procedure Execute; override;
   end;
 
@@ -2920,6 +2921,12 @@ begin
   Extend := aExtend;
   EndTix := aEndTix;
   inherited Create({suspended=}false);
+end;
+
+destructor TRsaPrimeWorker.Destroy;
+begin
+  FillZero(NewPrime);
+  inherited Destroy;
 end;
 
 procedure TRsaPrimeWorker.Execute;
@@ -2939,7 +2946,7 @@ begin
       // FIPS 186-4 B.3.1: ensure x mod e<>1 i.e. gcd(x-1,e)=1
       NewPrime := p.SaveFixed(PrimeBytes); // transfer bytes, not the instance
       if length(NewPrime) <> PrimeBytes then
-        FillZero(NewPrime);
+        FillZero(NewPrime); // paranoid
     finally
       p.Release;
       e.ResetPermanentAndRelease;
@@ -3029,7 +3036,6 @@ begin
           if length(wrk.NewPrime) <> bytes then
             exit;
           _p := Load(pointer(wrk.NewPrime), bytes);
-          FillZero(wrk.NewPrime);
         end;
       finally
         wrk.Free;
