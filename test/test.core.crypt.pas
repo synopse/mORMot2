@@ -964,26 +964,29 @@ begin
   Check(not IsEqual(b1, b2));
   Check(not CompareMem(@b1, @b2, SizeOf(b1)));
   // validate reusable MakeStrongPassWord() algorithm
-  Check(MakeStrongPassWord(spi));
+  Check(MakeStrongPassWord(spi, nil));
   spi := ' ';
-  Check(MakeStrongPassWord(spi));
+  Check(MakeStrongPassWord(spi, nil));
   CheckEqual(spi, 'G');
   spi := '  ';
-  Check(MakeStrongPassWord(spi));
+  Check(MakeStrongPassWord(spi, nil));
   CheckEqual(spi, 'GG');
   spi := '    ';
-  Check(MakeStrongPassWord(spi));
+  Check(MakeStrongPassWord(spi, nil));
   CheckEqual(spi, 'GGGG');
+  clo := 0;
   spi := '     ';
-  CheckNot(MakeStrongPassWord(spi));
+  CheckNot(MakeStrongPassWord(spi, @clo));
+  CheckEqual(clo, 1);
   CheckEqual(spi, 'GGGGG');
-  Check(not MakeStrongPassWord(spi));
+  Check(not MakeStrongPassWord(spi, nil));
   CheckEqual(spi, 'jjjjj');
   spi := '0123456789';
-  CheckNot(MakeStrongPassWord(spi));
+  CheckNot(MakeStrongPassWord(spi, nil));
   CheckEqual(spi, 'WXYZ012345');
-  Check(MakeStrongPassWord(spi));
+  Check(MakeStrongPassWord(spi, @clo));
   CheckEqual(spi, 'z+BCWXYZ01');
+  CheckEqual(clo, 1);
   // validate this PRNG class
   clo := 0;
   chi := 0;

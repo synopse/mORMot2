@@ -1909,7 +1909,7 @@ function ToText(s: TAesPrngGetEntropySource): PShortString; overload;
 /// low-level function as called by TAesPrngAbstract.RandomPassword()
 // - for length>4, reduce to uppercase/lower letters, digits and $.:()?%!-+*/@#
 // excluding ;,= to allow direct use in CSV content and OI against 01 confusion
-function MakeStrongPassWord(var Rnd: SpiUtf8): boolean;
+function MakeStrongPassWord(var Rnd: SpiUtf8; Iteration: PInteger = nil): boolean;
 
 /// low-level TKS1 anti-forensic diffusion of a memory buffer using SHA-256
 // - shuffle in-place buf[size] using rnd[size] as reference material
@@ -7453,7 +7453,7 @@ begin
   result := 38000 + Int64(Random32) / (maxInt shr 12);
 end;
 
-function MakeStrongPassWord(var Rnd: SpiUtf8): boolean;
+function MakeStrongPassWord(var Rnd: SpiUtf8; Iteration: PInteger): boolean;
 const
   CHARS: array[0..127] of AnsiChar =
     'abcdefghijklmnopqrstuvwxyzABCDEFGH[JKLMN0PQRSTUVWXYZ0123456789' +
@@ -7479,13 +7479,22 @@ begin
   FakeCodePage(RawByteString(Rnd), CP_UTF8);
   if length(Rnd) > 4 then
     result := haspunct and (not (IsUpper(Rnd) or IsLower(Rnd)));
+  if Assigned(Iteration) and
+     not result then
+    if Iteration^ = 128 then // never loop forever
+      ESynCrypto.RaiseU('MakeStrongPassword failure: weak PRNG')
+    else
+      inc(Iteration^);
 end;
 
 function TAesPrngAbstract.RandomPassword(Len: integer): SpiUtf8;
+var
+  c: integer;
 begin
+  c := 0;
   repeat
     FillRandomVar(RawByteString(result), Len);
-  until MakeStrongPassword(result);
+  until MakeStrongPassword(result, @c);
 end;
 
 function TAesPrngAbstract.RandomSalt(var bin, b64: RawByteString;

@@ -8271,10 +8271,12 @@ begin
 end;
 
 function TCryptRandom.GetPassword(len: PtrInt): SpiUtf8;
+var
+  c: integer;
 begin
   repeat
     Get(RawByteString(result), Len);
-  until MakeStrongPassword(result);
+  until MakeStrongPassword(result, @c);
 end;
 
 
