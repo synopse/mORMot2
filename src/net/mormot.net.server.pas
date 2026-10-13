@@ -3423,7 +3423,8 @@ begin
       else
         fRespStatus := HTTP_NOTFOUND
     else
-      fRespStatus := HTTP_RANGENOTSATISFIABLE
+      // the expected full size of the progressive file
+      fRespStatus := Context.RangeNotSatisfiable(Context.ContentLength)
   else if (not Assigned(fServer.OnSendFile)) or
           (not fServer.OnSendFile(self, fn)) then
   begin

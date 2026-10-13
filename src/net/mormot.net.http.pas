@@ -569,6 +569,15 @@ type
     /// check RangeOffset/RangeLength against ContentLength
     // - and update ResponseFlags and ContentLength properties
     function ValidateRange: boolean;
+    /// add a 'Content-Range: bytes */aSize' header to the ResponseHeaders
+    // - as RFC 9110 #15.5.17 states for a 416 response to a byte-range request:
+    // "the sender SHOULD generate a Content-Range header field specifying the
+    // current length of the selected representation"
+    // - also clears rfRange/rfWantRange, so that CompressContentAndFinalizeHead
+    // won't validate the range again against the error page sent instead, and
+    // add a second (wrong) Content-Range header
+    // - returns HTTP_RANGENOTSATISFIABLE, so can be used as a result
+    function RangeNotSatisfiable(aSize: Int64): integer;
     /// (re)initialize the HTTP Server state machine for ProcessRead/ProcessWrite
     procedure ProcessInit;
       {$ifdef HASINLINE} inline; {$endif}
@@ -3699,6 +3708,15 @@ begin
   end;
 end;
 
+function THttpRequestContext.RangeNotSatisfiable(aSize: Int64): integer;
+begin
+  AppendLine(ResponseHeaders, ['Content-Range: bytes */', aSize]);
+  // clear both flags, otherwise CompressContentAndFinalizeHead would
+  // validate the range once again, against the generated error page
+  ResponseFlags := ResponseFlags - [rfRange, rfWantRange];
+  result := HTTP_RANGENOTSATISFIABLE;
+end;
+
 procedure THttpRequestContext.ParseHeader(P: PUtf8Char; PLen: PtrInt;
   HeadersUnFiltered: boolean);
 var
@@ -4627,10 +4645,8 @@ begin
       result := HTTP_RANGENOTSATISFIABLE;
   if result <> HTTP_SUCCESS then
   begin
+    RangeNotSatisfiable(aLength); // also clears rfRange/rfWantRange
     ContentLength := 0;
-    // clear both flags, otherwise CompressContentAndFinalizeHead would
-    // validate the range once again, against the generated error page
-    ResponseFlags := ResponseFlags - [rfRange, rfWantRange];
     exit;
   end;
   if not (hosNoRange in aOptions) then
@@ -4675,7 +4691,7 @@ begin
   if rfWantRange in ResponseFlags then
     if not ValidateRange then
     begin
-      result := HTTP_RANGENOTSATISFIABLE;
+      result := RangeNotSatisfiable(ContentLength); // ContentLength = file size
       exit;
     end;
   include(ResponseFlags, rfAcceptRange);

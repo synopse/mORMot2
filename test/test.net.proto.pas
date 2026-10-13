@@ -90,7 +90,7 @@ type
     reqthree: boolean;
     reqfour: Int64;
     // for FileRange
-    rangefile: TFileName;
+    rangefile, rangesmall: TFileName;
     // for OutStream
     outdata: RawByteString;
     outkept: TRawByteStringStream; // supplied with aOwned=false
@@ -6330,8 +6330,12 @@ end;
 function TNetworkProtocols.DoRangeRequest(
   Ctxt: THttpServerRequestAbstract): cardinal;
 begin
-  result := Ctxt.SetOutFile(rangefile, {Handle304NotModified=}false,
-    BINARY_CONTENT_TYPE);
+  if Ctxt.Url = '/small' then
+    result := Ctxt.SetOutFile(rangesmall, {Handle304NotModified=}false,
+      BINARY_CONTENT_TYPE)
+  else
+    result := Ctxt.SetOutFile(rangefile, {Handle304NotModified=}false,
+      BINARY_CONTENT_TYPE);
 end;
 
 procedure TNetworkProtocols.DoHttpFileRange(Sender: TObject);
@@ -6344,10 +6348,12 @@ var
   hosthead: RawUtf8;
 
   procedure RawRange(const range, expected, context: RawUtf8;
-    expectedlength: Int64 = -1);
+    expectedlength: Int64 = -1; const expectedcontentrange: RawUtf8 = '';
+    const url: RawUtf8 = '/file');
   var
     raw: TCrtSocket;
-    cmd, len: RawUtf8;
+    cmd, len, contentrange: RawUtf8;
+    contentranges: integer;
   begin
     // THttpClientSocket.RangeStart is an Int64, so such an offset needs to be
     // sent from a raw socket - with a timeout, so that a regression of the
@@ -6355,7 +6361,7 @@ var
     raw := TCrtSocket.Open('127.0.0.1', srv.SockPort, nlTcp, 5000);
     try
       raw.CreateSockIn; // needed for proper SockRecvLn() below
-      raw.SockSend('GET /file HTTP/1.1');
+      raw.SockSend(['GET ', url, ' HTTP/1.1']);
       raw.SockSend(hosthead);
       raw.SockSend(['Range: bytes=', range]);
       raw.SockSend('Connection: close');
@@ -6364,18 +6370,35 @@ var
       cmd := '';
       raw.SockRecvLn(cmd);
       CheckUtf8(PosEx(expected, cmd) > 0, '% [%] got %', [context, range, cmd]);
-      if expectedlength < 0 then
+      if (expectedlength < 0) and
+         (expectedcontentrange = '') then
         exit;
-      // the announced body size should never exceed the actual file content
       len := '';
+      contentrange := '';
+      contentranges := 0;
       repeat
         cmd := '';
         raw.SockRecvLn(cmd);
         if IdemPChar(pointer(cmd), 'CONTENT-LENGTH: ') then
-          len := copy(cmd, 17, 30);
+          len := copy(cmd, 17, 30)
+        else if IdemPChar(pointer(cmd), 'CONTENT-RANGE: ') then
+        begin
+          contentrange := copy(cmd, 16, 100);
+          inc(contentranges);
+        end;
       until cmd = ''; // end of response headers
-      CheckUtf8(GetInt64(pointer(len)) = expectedlength,
-        '% [%] length=% expected=%', [context, range, len, expectedlength]);
+      // the announced body size should never exceed the actual file content
+      if expectedlength >= 0 then
+        CheckUtf8(GetInt64(pointer(len)) = expectedlength,
+          '% [%] length=% expected=%', [context, range, len, expectedlength]);
+      if expectedcontentrange <> '' then
+      begin
+        CheckUtf8(contentrange = expectedcontentrange,
+          '% [%] content-range=% expected=%',
+          [context, range, contentrange, expectedcontentrange]);
+        CheckUtf8(contentranges = 1, '% [%] % content-range headers',
+          [context, range, contentranges]);
+      end;
     finally
       raw.Free;
     end;
@@ -6393,6 +6416,9 @@ begin
   check(DirectoryExists(TempDir), 'tempdir5');
   rangefile := TempDir + 'range';
   Check(FileFromString(data, rangefile), 'range file');
+  // a file smaller than the error page which a 416 sends instead of it
+  rangesmall := TempDir + 'rangesmall';
+  Check(FileFromString('x', rangesmall), 'range small file');
   try
     for fam := 0 to 1 do
     begin
@@ -6411,6 +6437,13 @@ begin
         RawRange('99999999999999999999999999-', ' 416 ', 'above qword');
         // a plain out-of-range offset was already rejected, and still is
         RawRange('4194304-', ' 416 ', 'above size');
+        // RFC 9110 #15.5.17: a 416 SHOULD tell the current representation size
+        RawRange('4194304-', ' 416 ', 'above size range', -1,
+          'bytes */' + Int64ToUtf8(3 shl 20));
+        // the range should not be validated again against the error page:
+        // a 1 byte file would have its 'bytes=1-' range accepted by the HTML
+        // error body, with a second and wrong Content-Range: header
+        RawRange('1-', ' 416 ', 'small file', -1, 'bytes */1', '/small');
         // a huge END offset is valid: it should be truncated to the actual
         // file size, and not overflow the RangeOffset + RangeLength check
         RawRange('100-18446744073709551615', ' 206 ', 'huge end',
@@ -6436,6 +6469,7 @@ begin
     end;
   finally
     Check(DeleteFile(rangefile), 'range file deleted');
+    Check(DeleteFile(rangesmall), 'range small file deleted');
   end;
 end;
 
@@ -6670,6 +6704,8 @@ begin
           clt.RangeStart := 4 shl 20; // above the 3MB content
           clt.RangeEnd := (4 shl 20) + 10;
           CheckEqual(clt.Get('/ram'), HTTP_RANGENOTSATISFIABLE, 'range 416');
+          CheckEqual(clt.HeaderGetValue('CONTENT-RANGE'),
+            'bytes */' + Int64ToUtf8(length(outdata)), 'range 416 size');
           clt.RangeStart := 0; // Range: is only auto-reset on a 2xx status
           clt.RangeEnd := 0;
           WaitFreed(3, 'range 416 freed'); // 3 requests, 3 owned streams so far
@@ -6767,6 +6803,8 @@ begin
         CheckEqual(crc32cHash(body), crc32cHash(outdata), 'failrange body');
         status := RawGet('/failrange', '100-199', headers, @body);
         CheckUtf8(PosEx(' 416 ', status) > 0, 'failrange range %', [status]);
+        CheckEqual(HeaderValue(headers, 'CONTENT-RANGE:'),
+          'bytes */' + Int64ToUtf8(length(outdata)), 'failrange size');
         // the same stream with the hosNoRange option: no range is even tried,
         // so it is served sequentially with an 'Accept-Ranges: none' header
         status := RawGet('/norange', '', headers, @body);
