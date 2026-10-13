@@ -357,7 +357,8 @@ The reviewed design is **appropriate for an everyday CSPRNG under the standard a
 
 | Need | Recommended interface | Configuration |
 | --- | --- | --- |
-| Key/nonce/IV/random bytes in a normal mORMot application | `TAesPrng.Fill` or `TAesPrng.Main.FillRandom` | **None**. First-use seeding and periodic reseeding are automatic. |
+| Nonce/IV in a normal mORMot application | `Random128()` (unpredictable output) | **None**. First-use seeding and periodic reseeding are automatic. |
+| Key/random bytes in a normal mORMot application | `TAesPrng.Fill` or `TAesPrng.Main.FillRandom` | **None** |
 | Fresh seed for native RSA key generation | `TRsa.GenerateNew` (internally uses `FillRandomTrusted`) | **None** beyond choosing a key size if required. |
 | Exactly nonzero cryptographic octets | `FillRandomNotZero` on a `TAesPrngAbstract` instance | None. |
 | Direct OS random output and explicit OS-error reporting | `TSystemPrng.Main.FillRandom` or `GetEntropy(..., gesSystemOnly...)` | Only select if this API contract is specifically needed. |
