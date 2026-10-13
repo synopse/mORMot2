@@ -1686,7 +1686,7 @@ end;
 
 function TBigInt.PrimeAllowedFor65537: boolean;
 var
-  i, v, sum: PtrUInt;
+  i, v, sum: PtrInt; // could be negative
 begin
   // for e=65537, quickly reject p mod e = 1 (safe for keys up to 8192 bits)
   sum := 0;
