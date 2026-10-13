@@ -139,6 +139,7 @@ var
   /// decompress a secp256r1 curve public key
   // - could be used before calling Ecc256r1VerifyUncomp()
   // - direct low-level access to the our pascal version - no OpenSSL yet
+  // - returns Uncompressed buffer filled with 0 on failure
   Ecc256r1Uncompress: procedure(const Compressed: TEccPublicKey;
     out Uncompressed: TEccPublicKeyUncompressed);
 
@@ -234,6 +235,7 @@ function ecdsa_verify_uncompressed_pas(const PublicKey: TEccPublicKeyUncompresse
 /// uncompress a public key for ECC secp256r1 cryptography
 // - convert from its compressed form with its standard byte header
 // (33 bytes of memory) into uncompressed/flat form (64 bytes of memory)
+// - on failure - e.g. if the point is not in the curve - returns zeros
 procedure ecc_uncompress_key_pas(const Compressed: TEccPublicKey;
   out Uncompressed: TEccPublicKeyUncompressed);
 
@@ -1386,11 +1388,15 @@ begin
   FastAssignNew(result);
   if IsZero(Compressed) then
     exit;
-  SetLength(result, SizeOf({%H-}p^) + 1);
-  p := pointer(result);
+  p := FastNewRawByteString(result, SizeOf({%H-}p^) + 1);
   p.b[0] := $04; // ASN-1 uncompressed public key marker
   inc(PByte(p));
   Ecc256r1Uncompress(Compressed, PEccPublicKeyUncompressed(@u)^);
+  if IsZero(u.b) then
+  begin
+    FillZero(result); // invalid input
+    exit;
+  end;
   _bswap256(@p.l, @u.l);
   _bswap256(@p.h, @u.h);
 end;

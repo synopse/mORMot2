@@ -2544,7 +2544,10 @@ begin
   begin
     // OpenSSL Ecc256r1VerifyUncomp() is actually slower than Ecc256r1Verify()
     Ecc256r1Uncompress(fContent.Head.Signed.PublicKey, fUncompressed);
-    fUncompressedP := @fUncompressed;
+    if IsZero(THash512(fUncompressed)) then
+      result := false
+    else
+      fUncompressedP := @fUncompressed;
   end;
 end;
 
@@ -2863,6 +2866,8 @@ begin
     begin
        // OpenSSL Ecc256r1VerifyUncomp() is actually slower than Ecc256r1Verify()
       Ecc256r1Uncompress(fContent.Head.Signed.PublicKey, fUncompressed);
+      if IsZero(THash512(fUncompressed)) then
+        EEccException.RaiseUtf8('%.CreateNew: Uncompress?', [self]);
       fUncompressedP := @fUncompressed;
     end;
   end;

@@ -159,7 +159,7 @@ begin
   ecc_uncompress_key_pas(pub[0], pubunc[0]); // also validate our pascal code
   timer.Start;
   for i := 1 to ECC_COUNT - 1 do
-    Ecc256r1Uncompress(pub[i], pubunc[i]); // may be OpenSSL
+    Ecc256r1Uncompress(pub[i], pubunc[i]);   // only pascal
   NotifyTestSpeed('Ecc256r1Uncompress', ECC_COUNT - 1, 0, @timer);
   for i := 1 to ECC_COUNT - 1 do
   begin
