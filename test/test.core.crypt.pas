@@ -1025,6 +1025,14 @@ begin
         Check(not (IsUpper(s1) or IsLower(s1)), 'rndpass case');
       for j := 1 to i do
         check(s1[j] in [#33 .. #126]);
+      a1.FillRandomNotZero(pointer(s1), i);
+      a2.FillRandomNotZero(pointer(s2), i);
+      if i > 4 then
+        checkUtf8(s1 <> s2, 'prngzero len=%', [i]);
+      for j := 1 to i do
+        check(s1[j] <> #0);
+      for j := 1 to i do
+        check(s2[j] <> #0);
       // verify Random32 / RandomDouble / RandomDouble distribution
       c := a1.Random32;
       if c < cardinal(maxint) then

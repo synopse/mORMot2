@@ -1673,6 +1673,8 @@ type
     /// returns an hexa-encoded binary buffer filled with some pseudorandom data
     // - this method is thread-safe, and its AES process is non blocking
     function FillRandomHex(Len: integer): RawUtf8;
+    /// fill a binary buffer with some pseudorandom data but no zero byte
+    procedure FillRandomNotZero(Buffer: pointer; Len: PtrInt);
     /// compute a pseudorandom UUid value according to the RFC 4122
     // - RandomGuid() from this unit uses Random128() so is likely strong
     // - to derivate a Uuid from a name see IdentifierGuid()/DotNetIdentifierGuid()
@@ -7305,6 +7307,41 @@ begin
     result := nil;
   SetLength(result, Len);
   FillRandom(pointer(result), Len);
+end;
+
+procedure TAesPrngAbstract.FillRandomNotZero(Buffer: pointer; Len: PtrInt);
+var
+  rnd: TAesBlock;
+  rndavail, i, rounds: PtrInt;
+  p: PByte;
+begin
+  if (Buffer = nil) or
+     (Len <= 0) then
+    exit;
+  FillRandom(Buffer, Len);
+  rndavail := 0;
+  p := pointer(Buffer);
+  for i := 1 to Len do
+  begin
+    rounds := 0;
+    while p^ = 0 do
+    begin
+      if rndavail = 0 then
+      begin
+        FillRandom(rnd);
+        rndavail := 16;
+        inc(rounds);
+        if rounds = 5 then
+          break; // avoid infinite loops
+      end;
+      dec(rndavail);
+      p^ := rnd[rndavail];
+    end;
+    inc(p);
+  end;
+  FillZero(rnd);
+  if ByteScanIndex(Buffer, Len, 0) >= 0 then // paranoid
+    ESynCrypto.RaiseUtf8('%.FillRandomNotZero failure', [self]);
 end;
 
 function TAesPrngAbstract.FillRandomHex(Len: integer): RawUtf8;
