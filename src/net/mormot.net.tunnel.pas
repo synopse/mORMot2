@@ -283,21 +283,31 @@ type
     // - TransmitOptions will be amended to follow SignCert/VerifyCert properties
     // - TimeOutMS is the delay to receive an handshake answer from the other
     // end - this value will be used * 2 as TTunnelLocalThread.fTimeoutAcceptSecs
-    // - AppSecret is used during handshake (and toEncrypt with no toEcdhe), and
-    // should match on both sides
+    // - AppSecret is used during handshake authentication and encryption key
+    // derivation, and should match on both sides - it should be a confidential,
+    // cryptographically random value with at least 128 bits of entropy,
+    // provisioned independently of the relay - don't use a short obvious text
+    // or PIN number for this - a unique 128-bit random secret securely shared
+    // between both ends would provide mutual authentication without certificates
+    // - AppSecret may be permanent or generated for each session - a per-session
+    // secret provides better isolation, whereas a shared permanent secret only
+    // authenticates membership in the group of endpoints knowing this secret
     // - if Address has a port, will connect a socket to this address:port
     // - if Address has no port, will bound its address an an ephemeral port,
     // which is returned as result for proper client connection
     // - InfoNameValue are name/value pairs of some JSON fields which will be
     // included to ITunnelTransmit.TunnelInfo returned object (e.g. Host name)
     // - SignCert/VerifyCert should have [cuDigitalSignature] usage, and match
-    // VerifyCert/SignCert corresponding certificate on other side
-    // - raise ETunnel or return 0 on error; return the new local port on sucsess
+    // VerifyCert/SignCert corresponding certificate on other side - without
+    // VerifyCert, peer authentication relies on AppSecret being strong and
+    // confidential, and proves possession of this shared secret, not the
+    // identity of a specific endpoint
+    // - raise ETunnel or return 0 on error; return the new local port on success
     // - should be called only once per TTunnelLocal instance
     function Open(Sess: TTunnelSession; const Transmit: ITunnelTransmit;
-      TransmitOptions: TTunnelOptions; TimeOutMS: integer; const AppSecret, Address: RawUtf8;
-      const InfoNameValue: array of const; const SignCert: ICryptCert = nil;
-      const VerifyCert: ICryptCert = nil): TNetPort;
+      TransmitOptions: TTunnelOptions; TimeOutMS: integer;
+      const AppSecret, Address: RawUtf8; const InfoNameValue: array of const;
+      const SignCert: ICryptCert = nil; const VerifyCert: ICryptCert = nil): TNetPort;
     /// called e.g. by CallbackReleased() or by Destroy
     // - you could trigger it from your own UI if needed to abort the process
     procedure ClosePort(FromNotify: boolean = false);
@@ -720,6 +730,10 @@ implementation
 const
   TRAIL_SIZE = SizeOf(TTunnelSession);
 
+  // defensive limits against malformed or excessive tunnel frames
+  MAX_TUNNEL_FRAME_BYTES = 72 shl 10; // TransmitSock.RecvWait is 64KB max
+  MAX_TUNNEL_PENDING_FRAMES = 128;    // remote end could start transmitting
+
 function ToText(opt: TTunnelOptions): ShortString;
 begin
   GetSetNameShort(TypeInfo(TTunnelOptions), opt, result, {trim=}true);
@@ -947,7 +961,7 @@ begin
       while not Terminated do
       begin
         // wait for some data on the local loopback
-        res := TransmitSock.RecvWait(100, tmp, @Terminated);
+        res := TransmitSock.RecvWait(100, tmp, @Terminated); // max 64KB
         case res of
           nrRetry:
             continue;
@@ -1093,6 +1107,9 @@ begin
   // ITunnelTransmit method: when a Frame is received from the relay server
   if fVerboseLog then
     fLogClass.Add.Log(sllTrace, 'TunnelSend=%', [length(aFrame)]);
+  // reject unreasonably large incoming frames before queuing or decrypting
+  if length(aFrame) > MAX_TUNNEL_FRAME_BYTES then
+    ETunnel.RaiseUtf8('%.TunnelSend: oversized frame=%', [self, length(aFrame)]);
   fSafe.Lock; // protect fHandshake and fFlags
   try
     inc(fFramesIn);
@@ -1102,6 +1119,8 @@ begin
       fLogClass.Add.Log(sllTrace, 'TunnelSend: Handshake phase', self);
       if length(aFrame) <= TRAIL_SIZE then // received closure notification
         fFlags := fFlags + [fClosed, fClosePortNotified]
+      else if fHandshake.Count >= MAX_TUNNEL_PENDING_FRAMES then
+        ETunnel.RaiseUtf8('%.TunnelSend: handshake queue overflow', [self])
       else
         fHandshake.Push(aFrame); // during handshake phase - maybe before Open
       fHandshakeEvent.SetEvent;  // eventually wake the waiting thread
@@ -1408,6 +1427,7 @@ begin
         hmac.Init('705FC9676148405B91A66FFE7C3B54AA') // some minimal key
       else
         hmac.Init(AppSecret);
+      hmac.Update('Info'#0);
       hmac.Update(@loc.Info, KDF_SIZE); // no replay (sequential session)
       hmac2 := hmac; // use hmac2 to compute info KDF
       hmac2.Done(key.b);
