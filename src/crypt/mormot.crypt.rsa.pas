@@ -109,7 +109,7 @@ type
     function UsedBytes: integer;
     procedure Resize(n: integer; nozero: boolean = false);
     procedure XorStrongRandom(last32: PCardinal);
-    procedure FillMillerRabinWitness(Lecuyer: PLecuyer; W: PBigInt);
+    procedure FillMillerRabinWitness(Drbg: TAesPrngAbstract; W: PBigInt);
   public
     /// the associated Big Integer RSA context
     // - used to store modulo constants, and maintain an internal instance cache
@@ -243,9 +243,9 @@ type
     function MatchKnownPrime(Extend: TBigIntSimplePrime): boolean;
     /// check if the number is (likely to be) a prime following HAC 4.44
     // - can set a known simple primes Extend and Miller-Rabin tests Iterations
-    // - can reuse a TLecuyer instance between calls as probing random source
+    // - can reuse a DRBG instance between calls as probing random source
     function IsPrime(Extend: TBigIntSimplePrime = bspMost;
-      Iterations: integer = 10; Lecuyer: PLecuyer = nil): boolean;
+      Iterations: integer = 10; Drbg: TAesPrngAbstract = nil): boolean;
     /// guess a random prime number of the exact current size
     // - a secret is generated from audited sources (OS, cpu RdRand), then
     // looped over TAesPrng.Fill and IsPrime method within a timeout period
@@ -1644,18 +1644,18 @@ begin
   result := false;
 end;
 
-procedure TBigInt.FillMillerRabinWitness(Lecuyer: PLecuyer; W: PBigInt);
+procedure TBigInt.FillMillerRabinWitness(Drbg: TAesPrngAbstract; W: PBigInt);
 var
   c: cardinal;
 begin
-  for c := 1 to 16 do // safeguard against TLecuyer regression
+  for c := 1 to 16 do // safeguard against DRBG regression
   begin
     if W.Size = 1 then
-      Value[0] := Lecuyer^.Next(W.Value[0]) or 1 // odd a < w
+      Value[0] := Drbg.Random32(W.Value[0]) or 1 // odd a < w
     else
     begin
       Size := W.Size - 1; // ensure a < w
-      Lecuyer^.Fill(Value, Size * HALF_BYTES);
+      Drbg.FillRandom(Value, Size * HALF_BYTES);
       Value[0] := Value[0] or 1; // odd
       Trim; // needed for Compare() to work with new size
     end;
@@ -1663,7 +1663,7 @@ begin
        (Compare(W) < 0) then
       exit;
   end;
-  ERsaException.RaiseU('TBigInt.FillMillerRabinWitness failed');
+  ERsaException.RaiseUtf8('TBigInt.FillMillerRabinWitness failed with %', [Drbg]);
 end;
 
 function TBigInt.Is65537: boolean;
@@ -1673,7 +1673,7 @@ begin
 end;
 
 function TBigInt.IsPrime(Extend: TBigIntSimplePrime; Iterations: integer;
-  Lecuyer: PLecuyer): boolean;
+  Drbg: TAesPrngAbstract): boolean;
 var
   r, a, w, mu, t: PBigInt;
   s, bak, bit: integer;
@@ -1707,8 +1707,8 @@ begin
      MatchKnownPrime(Extend) then // detect most of the composite integers
     exit;
   // validate is a prime number using Miller-Rabin iterative tests (HAC 4.24)
-  if Lecuyer = nil then      // gsl_rng_taus2 CSPRNG 88-bit uniform distribution
-    Lecuyer := ThreadRandom; // if not supplied by caller
+  if Drbg = nil then       // NIST FIPS 186-5 requires an approved DRBG
+    Drbg := TAesPrng.Main; // if not supplied by caller
   bak := RefCnt;
   RefCnt := -1; // make permanent for use as modulo below
   w := nil;
@@ -1750,7 +1750,7 @@ begin
     begin
       dec(Iterations);
       // generate random 1 < a < value - 1
-      a.FillMillerRabinWitness(Lecuyer, w);
+      a.FillMillerRabinWitness(Drbg, w);
       // search if a is composite
       a := Owner.ModPower(a, r.Copy, @self, mu); // a = a^r mod value
       if not StrongWitness then
@@ -1814,7 +1814,7 @@ var
   min, bytes: integer;
   last32: PCardinal;
   rnd: RawByteString;
-  lecuyer: PLecuyer;
+  drbg: TAesPrngAbstract;
 begin
   // ensure it is worth searching (paranoid)
   if Size <= 2 then
@@ -1843,11 +1843,11 @@ begin
   XorStrongRandom(last32);
   FillZero(rnd); // anti-forensic counter measure
   // brute force search for the next prime starting at this point
-  lecuyer := ThreadRandom; // retrieve once
+  drbg := TAesPrng.Main; // retrieve once
   result := false; // timeout
   min := 0;
   repeat
-    if IsPrime(Extend, Iterations, lecuyer) then // small primes + Miller-Rabin
+    if IsPrime(Extend, Iterations, drbg) then // small primes + Miller-Rabin
     begin
       result := true; // we got lucky
       exit;
@@ -2878,7 +2878,7 @@ end;
 
 const
   // we force exponent = 65537 - FIPS 5.4 (e)
-  BIGINT_65537_BIN: RawByteString = #$01#$00#$01; // Size=2 on CPU32
+  BIGINT_65537_BIN: RawByteString = #$01#$00#$01; // Size=2 on CPU32, 1 on CPU64
 
 type
   TRsaPrimeWorker = class(TThread) // no need of mormot.core.threads
@@ -2978,6 +2978,11 @@ begin
       exit;
     // compute two p and q random primes as p>q in parallel
     repeat
+      if _p <> nil then // happens on FIPS conditions retry
+      begin
+        _p.Release;
+        _p := nil;
+      end;
       result := rgrTimeout;
       wrk := nil;
       try
