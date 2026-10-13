@@ -105,6 +105,7 @@ type
   {$endif USERECORDWITHMETHODS}
   private
     fNextFree: PBigInt; // next bigint in the Owner free instance cache
+    function Is65537: boolean; {$ifdef HASINLINE} inline; {$endif}
     function UsedBytes: integer;
     procedure Resize(n: integer; nozero: boolean = false);
     procedure XorStrongRandom(last32: PCardinal);
@@ -1659,6 +1660,12 @@ begin
   ERsaException.RaiseU('TBigInt.FillMillerRabinWitness failed');
 end;
 
+function TBigInt.Is65537: boolean;
+begin
+  result := (Size = (32 div HALF_BITS)) and
+            (PCardinal(Value)^ = 65537); // common Exponent from FIPS 5.4 (e)
+end;
+
 function TBigInt.IsPrime(Extend: TBigIntSimplePrime; Iterations: integer;
   Lecuyer: PLecuyer): boolean;
 var
@@ -1687,8 +1694,7 @@ var
 
 begin
   // first check if not a factor of a well-known small prime
-  result := (Size = (32 div HALF_BITS)) and
-            (PCardinal(Value)^ = 65537); // common Exponent from FIPS 5.4 (e)
+  result := Is65537;
   if result or // result = true for common 65537 prime > BIGINT_PRIMES[]
      IsZero or
      (Iterations <= 0) or
@@ -2455,24 +2461,20 @@ var
   bits, i, j, lo, w: PtrInt;
   powers: array[0 .. 7] of PBigInt; // base^1/3/5/7/9/11/13/15
 begin
-  result := AllocateFrom(1);
-  bits := exp.BitCount;
   base := Reduce(b, m, BarrettMu);
-  if (bits = 17) and
-     exp.BitIsSet(0) and
-     (exp.BitSetCount = 2) then
+  if exp.Is65537 then
   begin
     // fast path for most common public exponent e = 65537 = 2^16 + 1
-    result.Release;
     result := base.Copy;
     for j := 1 to 16 do
       result := Reduce(result.Square, m, BarrettMu);
-    result := Reduce(
-      result.Multiply(base.Copy), m, BarrettMu);
+    result := Reduce(result.Multiply(base.Copy), m, BarrettMu);
     base.Release;
     exp.Release;
     exit;
   end;
+  result := AllocateFrom(1);
+  bits := exp.BitCount;
   if bits < 256 then
   begin
     // simple binary exponentiation
@@ -2911,6 +2913,8 @@ begin
   fModulusBits := Bits;
   fModulusLen := Bits shr 3;
   _e := LoadPermanent(BIGINT_65537_BIN); // most common exponent = 65537
+  if not _e.Is65537 then
+    exit;
   _p := Allocate(ValuesSize(ModulusLen shr 1)); // p,q size = half Bits
   _q := Allocate(_p.Size);
   _d := nil;
