@@ -1781,7 +1781,8 @@ begin
     // need the original randomized Miller-Rabin algorithm
     a.Release;
     a := Owner.Allocate(Size, []);
-    Owner.Release([@t]);
+    t.Release;
+    t := nil;
     while Iterations > 0 do
     begin
       dec(Iterations);
@@ -2331,8 +2332,10 @@ var
 begin
   n := length(hex) shr 1;
   result := Allocate(n div HALF_BYTES, []);
-  if not HexDisplayToBin(pointer(hex), pointer(result^.Value), n) then
-    Release([@result]);
+  if HexDisplayToBin(pointer(hex), pointer(result^.Value), n) then
+    exit;
+  result.Release;
+  result := nil;
 end;
 
 const
