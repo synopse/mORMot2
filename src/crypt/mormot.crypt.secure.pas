@@ -8344,8 +8344,11 @@ type
 
 procedure TCryptRandomSysPrng.Get(dst: pointer; dstlen: PtrInt);
 begin
-  FillSystemRandom(dst, dstlen, {allowblocking=}length(fName) > 10);
+  if (dstlen > 0) and
+     not FillSystemRandom(dst, dstlen, {allowblocking=}length(fName) > 10) then
+    ECrypt.RaiseUtf8('%.Get(%): OS API failure', [self, dstlen]);
 end;
+
 
 { TCryptRandomLecuyerPrng }
 
@@ -8363,7 +8366,7 @@ end;
 
 function TCryptRandomLecuyerPrng.Get32: cardinal;
 begin
-  result := ThreadRandom.Next;
+  result := ThreadRandom.Next; // dedicated fast 32-bit generator
 end;
 
 { TCryptRandom32 }

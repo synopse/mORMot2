@@ -1904,6 +1904,8 @@ var
   /// global flag set by mormot.crypt.openssl when the OpenSSL engine is used
   HasOpenSsl: boolean;
 
+function ToText(s: TAesPrngGetEntropySource): PShortString; overload;
+
 /// low-level function as called by TAesPrngAbstract.RandomPassword()
 // - for length>4, reduce to uppercase/lower letters, digits and $.:()?%!-+*/@#
 // excluding ;,= to allow direct use in CSV content and OI against 01 confusion
@@ -7613,6 +7615,11 @@ begin
     GetEntropy(FastNewRawByteString(Buffer, Len), Len, Source, AppNonce);
 end;
 
+function ToText(s: TAesPrngGetEntropySource): PShortString;
+begin
+  result := GetEnumName(TypeInfo(TAesPrngGetEntropySource), ord(s));
+end;
+
 var
   _EntropyChainSafe: TLightLock;
   _EntropyChain: THash256Rec; // 256-bit secret chaining for forward security
@@ -7622,6 +7629,7 @@ class procedure TAesPrngAbstract.GetEntropy(Dest: pointer; Len: integer;
 var
   data: THash512Rec;
   sha3: TSha3;
+  fromsys: boolean;
   tmp: TSynTempBuffer; // for SHAKE-256 output
 begin
   if Len <= 0 then
@@ -7629,9 +7637,13 @@ begin
   // fill Dest with Len bytes of official "system" entropy
   if Source <> gesUserOnly then
   begin
-    FillSystemRandom(Dest, Len, Source = gesSystemOnlyMayBlock);
+    fromsys := FillSystemRandom(Dest, Len, Source = gesSystemOnlyMayBlock);
     if Source in [gesSystemOnly, gesSystemOnlyMayBlock] then
-      exit; // enough for some usecases
+      if fromsys then
+        exit // enough for some usecases
+      else
+        ESynCrypto.RaiseUtf8('%.GetEntropy(%) OS API failure',
+          [self, ToText(Source)^]);
   end;
   // XOR with Len bytes of "userland" entropy
   sha3.Init(SHAKE_256); // SHA-3 in XOF mode for variable-length output
@@ -7834,7 +7846,10 @@ end;
 
 procedure TSystemPrng.FillRandom(Buffer: pointer; Len: PtrInt);
 begin // calls mormot.core.os function
-  FillSystemRandom(Buffer, Len, {allowblocking=}false);
+  if Len <= 0 then
+    exit;
+  if not FillSystemRandom(Buffer, Len, {allowblocking=}false) then
+    ESynCrypto.RaiseUtf8('%.FillRandom(%): OS API failure', [self, Len]);
   inc(fTotalBytes, Len);
 end;
 

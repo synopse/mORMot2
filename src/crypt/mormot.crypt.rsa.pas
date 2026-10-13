@@ -1863,23 +1863,20 @@ begin
   if Iterations < min then // ensure at least FIPS recommendation
     Iterations := min;
   // compute a random number following FIPS 186-4 B.3.3 steps 4.4, 5.5
+  if Drbg = nil then
+    Drbg := TAesPrng.Main; // if none supplied
   bytes := Size * HALF_BYTES;
-  pointer(rnd) := FastNewString(bytes);
   // since randomness may be a weak point, consolidate several trusted sources
   // see https://ieeexplore.ieee.org/document/9014350
   // note that RSA-2048 requires only 128-bit of true cryptographic randomness
-  FillSystemRandom(pointer(rnd), bytes, {mayblock=}true); // official OS API
-  {$ifdef ASMINTEL} // claimed to be NIST SP 800-90A and FIPS 140-2 compliant
-  RdRand32(pointer(rnd), bytes shr 2);                    // xor HW CPU prng
-  {$endif ASMINTEL}
-  // compute initial trusted random Value = TKS1-sha-256(rnd)
-  AFDiffusion(pointer(Value), pointer(rnd), bytes);
+  rnd := Drbg.FillRandomTrusted(bytes);
+  if rnd = '' then
+    ESynCrypto.RaiseU('TBigInt.FillPrime: no compliant CSPRNG available');
+  AFDiffusion(pointer(Value), pointer(rnd), bytes); // = TKS1-sha-256(rnd)
+  FillZero(rnd);                                    // anti-forensic
   // xor Value original trusted sources with our CSPRNG until we get enough bits
   last32 := @Value[Size - 1 {$ifdef CPU32} - 1 {$endif}];
-  if Drbg = nil then
-    Drbg := TAesPrng.Main; // if none supplied
   XorStrongRandom(Drbg, last32);
-  FillZero(rnd); // anti-forensic counter measure
   // brute force search for the next prime starting at this point
   result := false; // timeout
   min := 0;
