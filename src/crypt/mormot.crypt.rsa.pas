@@ -3295,7 +3295,7 @@ end;
 
 function TRsa.Pkcs1UnPad(p: PByteArray; verify: boolean): RawByteString;
 var
-  count, padding: integer;
+  count, padding: PtrInt;
 begin
   // virtual method following RSASSA-PKCS1-v1_5 padding
   FastAssignNew(result); // error
@@ -3335,9 +3335,8 @@ end;
 
 function TRsa.Pkcs1Pad(p: pointer; n: integer; sign: boolean): RawByteString;
 var
-  padding: integer;
-  i: PtrInt;
-  r: PByteArray absolute result;
+  padding: PtrInt;
+  r: PByteArray;
 begin
   // virtual method following RSASSA-PKCS1-v1_5 padding
   FastAssignNew(result);
@@ -3346,7 +3345,7 @@ begin
      (padding < 8) or
      not HasPublicKey then
     exit;
-  SetLength(result, fModulusLen);
+  r := FastNewRawByteString(result, fModulusLen);
   r[0] := 0; // leading zero
   if sign then
   begin
@@ -3357,11 +3356,9 @@ begin
   else
   begin
     r[1] := 2; // block type 2
-    SharedRandom.Fill(@r[2], padding); // TLecuyer is enough for public padding
+    // EME-PKCS1-v1_5 requires non zero unpredictable random padding
+    GetDrbg.FillRandomNotZero(@r[2], padding); // our CSPRNG
     inc(padding, 2);
-    for i := 2 to padding - 1 do
-      if r[i] = 0 then
-        dec(r[i]); // non zero random padding
   end;
   r[padding] := 0; // padding ends with zero
   MoveFast(p^, r[padding + 1], n);
