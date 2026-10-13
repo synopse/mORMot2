@@ -2452,8 +2452,8 @@ end;
 function TRsaContext.ModPower(b, exp, m: PBigInt; BarrettMu: PBigInt): PBigInt;
 var
   base, exponent, base2: PBigInt;
-  powers: array[0..3] of PBigInt; // base^1, base^3, base^5, base^7
   bits, i, j, lo, w: PtrInt;
+  powers: array[0 .. 7] of PBigInt; // base^1/3/5/7/9/11/13/15
 begin
   result := AllocateFrom(1);
   bits := exp.BitCount;
@@ -2491,7 +2491,7 @@ begin
     exponent.Release;
     exit;
   end;
-  // 3-bit sliding window: precompute odd powers once
+  // 4-bit sliding window: precompute odd powers once
   powers[0] := base;
   base2 := Reduce(base.Copy.Square, m, BarrettMu);
   for j := 1 to high(powers) do
@@ -2506,9 +2506,9 @@ begin
     end
     else
     begin
-      lo := MaxPtrInt(0, i - 2);
+      lo := MaxPtrInt(0, i - 3);
       while not exp.BitIsSet(lo) do
-        inc(lo); // choose an odd w of up to 3 bits
+        inc(lo); // choose an odd w of up to 4 bits
       w := 0;
       for j := i downto lo do
         w := (w shl 1) or ord(exp.BitIsSet(j));
