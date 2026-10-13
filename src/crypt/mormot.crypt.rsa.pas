@@ -643,6 +643,7 @@ type
     function ChineseRemainderTheorem(b: PBigInt): PBigInt;
     function Pkcs1UnPad(p: PByteArray; verify: boolean): RawByteString;
     function Pkcs1Pad(p: pointer; n: integer; sign: boolean): RawByteString;
+    function GetDrbg: TAesPrngAbstract;
   public
     /// initialize the RSA key context
     constructor Create; override;
@@ -797,11 +798,12 @@ type
     /// RSA Private key CRT coefficient satisfying q * qInv == 1 (mod p)
     property QInv: PBigInt
       read fQInv;
-    /// override the PRNG used for padding/witness
-    // - fallback to TAesPrng.Main CSPRNG if default nil is kept
-    // - generation seed will always use trusted OS sources for its keys
+    /// the PRNG used by this instance for its padding/witness process
+    // - fallback to TAesPrng.Main CSPRNG by default
+    // - generation seed will always use trusted OS sources for its keys, not
+    // this TAesPrngAbstract
     property Drbg: TAesPrngAbstract
-      read fDrbg write fDrbg;
+      read GetDrbg write fDrbg;
   published
     /// RSA modulus size in bits
     property ModulusBits: integer
@@ -2806,6 +2808,13 @@ begin
   inherited Destroy;
 end;
 
+function TRsa.GetDrbg: TAesPrngAbstract;
+begin
+  if fDrbg = nil then
+    fDrbg := TAesPrng.Main;
+  result := fDrbg;
+end;
+
 function TRsa.HasPublicKey: boolean;
 begin
   result := (self <> nil) and
@@ -3562,9 +3571,7 @@ begin
   // generate the ephemeral secret key and IV within the corresponding header
   Random128(@head.iv); // unpredictable
   try
-    if fDrbg = nil then
-      fDrbg := TAesPrng.Main;
-    fDrbg.FillRandom(key); // use strong CSPRNG for the private secret
+    GetDrbg.FillRandom(key); // use strong CSPRNG for the private secret
     // encrypt the ephemeral secret using the current RSA public key
     enckey := Pkcs1Encrypt(@key, AesBits shr 3);
     head.encryptedkeylen := length(enckey);
@@ -3718,9 +3725,7 @@ begin
   bits := ModulusBits - 1;
   len := (bits + 7) shr 3; // could be one less than ModulusLen
   // RFC 8017 9.1.1 encoding operation with saltlen = hashlen
-  if fDrbg = nil then
-    fDrbg := TAesPrng.Main;
-  fDrbg.Fill(@salt, hlen); // public salt requires unpredictable CSPRNG
+  GetDrbg.FillRandom(@salt, hlen); // public salt requires unpredictable CSPRNG
   RsaPssComputeSaltedHash(Hash, @salt, HashAlgo, hlen, h);
   pslen := len - (hlen * 2 + 2);
   if pslen < 0 then
