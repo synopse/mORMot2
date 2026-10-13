@@ -5079,7 +5079,6 @@ const
 var
   c: TRsaContext;
   m, t, mu, e, a, b: PBigInt;
-  rnd: TLecuyer;
   slot: TRsaModulo;
   i, j, bak, active: integer;
   hex: RawUtf8;
@@ -5130,8 +5129,7 @@ begin
         end;
         bak := m^.RefCnt;
         active := c.ActiveCount;
-        rnd.SeedGenerator(123456789);
-        Check(m^.IsPrime(bspFast, 10, @rnd) = PRIME[i], 'Miller-Rabin prime');
+        Check(m^.IsPrime(bspFast, 10) = PRIME[i], 'Miller-Rabin prime');
         CheckEqual(m^.RefCnt, bak, 'candidate references preserved');
         CheckEqual(m^.ToHexa, hex, 'candidate value preserved');
         CheckEqual(c.ActiveCount, active, 'Miller-Rabin temporaries released');

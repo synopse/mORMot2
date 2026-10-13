@@ -1646,22 +1646,25 @@ end;
 
 procedure TBigInt.FillMillerRabinWitness(Drbg: TAesPrngAbstract; W: PBigInt);
 var
-  c: cardinal;
+  c, bits, bytes, last, tail: integer;
 begin
-  for c := 1 to 16 do // safeguard against DRBG regression
+  // witness selection as described in FIPS 186-5 B.3.1
+  bits := W.BitCount;
+  bytes := (bits + 7) shr 3;
+  last := bits and (HALF_BITS - 1);
+  for c := 1 to 128 do // safeguard against a failing DRBG
   begin
-    if W.Size = 1 then
-      Value[0] := Drbg.Random32(W.Value[0]) or 1 // odd a < w
-    else
-    begin
-      Size := W.Size - 1; // ensure a < w
-      Drbg.FillRandom(Value, Size * HALF_BYTES);
-      Value[0] := Value[0] or 1; // odd
-      Trim; // needed for Compare() to work with new size
-    end;
-    if (Compare(1) > 0) and // expects 1 < a < w
+    Resize(W.Size, {nozero=}true); // reuse existing Value[] array
+    Drbg.FillRandom(Value, bytes);
+    tail := Size * HALF_BYTES - bytes;
+    if tail <> 0 then
+      FillCharFast(PAnsiChar(Value)[bytes], tail, 0);
+    if last <> 0 then // truncate
+      Value[Size - 1] := Value[Size - 1] and (high(HalfUInt) shr (HALF_BITS - last));
+    Trim; // required by Compare()
+    if (Compare(1) > 0) and
        (Compare(W) < 0) then
-      exit;
+      exit; // uniform rejection sampling: 2 <= a <= candidate - 2
   end;
   ERsaException.RaiseUtf8('TBigInt.FillMillerRabinWitness failed with %', [Drbg]);
 end;
