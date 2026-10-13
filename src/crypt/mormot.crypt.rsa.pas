@@ -679,6 +679,7 @@ type
     // - searching for proper random primes may take a lot of time on low-end
     // CPU so a timeout period can be supplied (default 10 secs)
     // - if Iterations value is too low, the FIPS recommendation will be forced
+    // - creates a temporary background thread for parallel p/q prime computation
     // - on a slow CPU or with a huge number of Bits, you can increase TimeOutMS
     // - hint: consider using the TRsa.GenerateNew factory , which would properly
     // handle rgrWeakBitsMayRetry result
@@ -1624,7 +1625,12 @@ var
 begin
   {$ifndef NOCOMPRESSEDTABLE}
   if BIGINT_PRIMES[high(BIGINT_PRIMES)] = 0 then // should equal 17989
-    ComputeAllPrimes; // delayed initialization - thread safe by design
+  begin
+    GlobalLock;
+    if BIGINT_PRIMES[high(BIGINT_PRIMES)] = 0 then
+      ComputeAllPrimes; // delayed thread safe initialization
+    GlobalUnLock;
+  end;
   {$endif NOCOMPRESSEDTABLE}
   if not IsZero then
   begin
@@ -2874,27 +2880,77 @@ const
   // we force exponent = 65537 - FIPS 5.4 (e)
   BIGINT_65537_BIN: RawByteString = #$01#$00#$01; // Size=2 on CPU32
 
+type
+  TRsaPrimeWorker = class(TThread) // no need of mormot.core.threads
+  public
+    PrimeBytes, Iterations: integer;
+    EndTix: Int64;
+    Extend: TBigIntSimplePrime;
+    NewPrime: RawByteString; // saved as binary
+    constructor Create(aPrimeBytes, aIterations: integer;
+      aExtend: TBigIntSimplePrime; aEndTix: Int64); reintroduce;
+    procedure Execute; override;
+  end;
+
+constructor TRsaPrimeWorker.Create(aPrimeBytes, aIterations: integer;
+  aExtend: TBigIntSimplePrime; aEndTix: Int64);
+begin
+  PrimeBytes := aPrimeBytes;
+  Iterations := aIterations;
+  Extend := aExtend;
+  EndTix := aEndTix;
+  inherited Create({suspended=}false);
+end;
+
+procedure TRsaPrimeWorker.Execute;
+var
+  c: TRsaContext;
+  e, p: PBigInt;
+begin
+  c := TRsaContext.Create; // each thread needs its own memory context
+  try
+    e := c.LoadPermanent(BIGINT_65537_BIN); // most common exponent = 65537
+    p := c.Allocate(ValuesSize(PrimeBytes));
+    try
+      repeat
+        if not p.FillPrime(Extend, Iterations, EndTix) then
+          exit; // timed out
+      until p.Modulo(e).Compare(1, {andrelease=}true) <> 0;
+      // FIPS 186-4 B.3.1: ensure x mod e<>1 i.e. gcd(x-1,e)=1
+      NewPrime := p.SaveFixed(PrimeBytes); // transfer bytes, not the instance
+      if length(NewPrime) <> PrimeBytes then
+        FillZero(NewPrime);
+    finally
+      p.Release;
+      e.ResetPermanentAndRelease;
+    end;
+  finally
+    c.Free;
+  end;
+end;
+
 // see https://www.di-mgt.com.au/rsa_alg.html as reference
 
 function TRsa.Generate(Bits: integer; Extend: TBigIntSimplePrime;
   Iterations, TimeOutMS: integer): TRsaGenerateResult;
 var
   _e, _p, _q, _d, _h, _tmp: PBigInt;
-  comp: integer;
+  comp, bytes: integer;
+  wrk: TRsaPrimeWorker;
   endtix: Int64;
 begin
   // ensure we can actually generate such a RSA key
   result := rgrIncorrectParams;
   if HasPublicKey or
      HasPrivateKey or
-     ((Bits <> 512) and    // broken with average CPU power
-      (Bits <> 1024) and   // considered weak, and rejected by browsers and NIST
-      (Bits <> 2048) and   // 112-bit of security = RSA_DEFAULT_GENERATION_BITS
-      (Bits <> 3072) and   // 128-bit of security (as ECC256): secure until 2030
-      (Bits <> 4096) and   // not worth it
-      (Bits <> 7680) and   // REALLY slow for only 192-bit of security
+     ((Bits <> 512) and   // broken with average CPU power
+      (Bits <> 1024) and  // considered weak, and rejected by browsers and NIST
+      (Bits <> 2048) and  // 112-bit of security = RSA_DEFAULT_GENERATION_BITS
+      (Bits <> 3072) and  // 128-bit of security (as ECC256): secure until 2030
+      (Bits <> 4096) and  // not worth it
+      (Bits <> 7680) and  // REALLY slow for only 192-bit of security
       (Bits <> 8192)) then
-    exit;                  // see https://stackoverflow.com/a/589850/458259
+    exit;                 // see https://stackoverflow.com/a/589850/458259
   // setup the timeout period
   if {$ifdef OSWINDOWS}
      (wsPrism in WindowsSpecs) or // relax for PRISM translation layer
@@ -2912,30 +2968,50 @@ begin
   // setup local variables
   fModulusBits := Bits;
   fModulusLen := Bits shr 3;
+  bytes := fModulusLen shr 1;            // p,q size = half Bits
   _e := LoadPermanent(BIGINT_65537_BIN); // most common exponent = 65537
-  if not _e.Is65537 then
-    exit;
-  _p := Allocate(ValuesSize(ModulusLen shr 1)); // p,q size = half Bits
-  _q := Allocate(_p.Size);
+  _p := nil;                             // computed in TRsaPrimeWorker
+  _q := Allocate(ValuesSize(bytes));     // p,q size = half Bits
   _d := nil;
   try
-    // compute two p and q random primes
+    if not _e.Is65537 then // paranoid
+      exit;
+    // compute two p and q random primes as p>q in parallel
     repeat
-      // FIPS 186-4 B.3.1: ensure x mod e<>1 i.e. gcd(x-1,e)=1
       result := rgrTimeout;
-      repeat
-        if not _p.FillPrime(Extend, Iterations, endtix) then
-          exit; // timed out
-      until _p.Modulo(_e).Compare(1, {andrelease=}true) <> 0;
-      repeat
-        if not _q.FillPrime(Extend, Iterations, endtix) then
-          exit;
-      until _q.Modulo(_e).Compare(1, {andrelease=}true) <> 0;
+      wrk := nil;
+      try
+        if SystemInfo.dwNumberOfProcessors < 2 then // not enough CPU cores
+        begin
+          _p := Allocate(_q.Size); // sequential work
+          repeat
+            if not _p.FillPrime(Extend, Iterations, endtix) then
+              exit; // timed out
+          until _p.Modulo(_e).Compare(1, {andrelease=}true) <> 0
+          // FIPS 186-4 B.3.1: ensure x mod e<>1 i.e. gcd(x-1,e)=1
+        end
+        else
+          wrk := TRsaPrimeWorker.Create(bytes, Iterations, Extend, endtix);
+        repeat
+          if not _q.FillPrime(Extend, Iterations, endtix) then
+            exit;
+        until _q.Modulo(_e).Compare(1, {andrelease=}true) <> 0;
+        if wrk <> nil then
+        begin
+          wrk.WaitFor; // join the threads
+          if wrk.NewPrime = '' then
+            exit;
+          _p := Load(pointer(wrk.NewPrime), length(wrk.NewPrime));
+          FillZero(wrk.NewPrime);
+        end;
+      finally
+        wrk.Free;
+      end;
       result := rgrRandomGeneratorFailure;
       comp := _p.Compare(_q);
       if comp = 0 then
-        exit // random generator is clearly wrong if p=q
-      else if comp < 0 then
+        exit; // random generator is clearly wrong if p=q
+      if comp < 0 then
         ExchgPointer(@_p, @_q); // ensure p>q for ChineseRemainderTheorem
       // FIPS 186-4 B.3.3 step 5.4: ensure enough bits are set in difference
       _tmp := _p.Clone.Substract(_q.Copy);
