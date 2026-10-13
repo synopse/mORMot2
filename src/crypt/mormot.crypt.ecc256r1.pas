@@ -1205,16 +1205,67 @@ begin
   _mv(a, result);
 end;
 
-procedure EccPointDecompress(out Point: TEccPoint; const Compressed: TEccPublicKey);
+
+// Validate an affine P-256 point before using it for ECC operations
+// P-256 has cofactor 1, so curve membership is sufficient here
+function EccPointIsValid(const Point: TEccPoint): boolean;
+var
+  rhs, y2: THash256Rec;
 begin
-  _bswap256(@Point.x, @Compressed[1]);
-  _modSquareP(Point.y, Point.x);           // y = x^2
-  _modSubP(Point.y, Point.y, P_3);          // y = x^2 - 3
-  _modMultP(Point.y, Point.y, Point.x);    // y = x^3 - 3x
-  _modAddP(Point.y, Point.y, Curve_B_32);  // y = x^3 - 3x + b
-  ModSqrt(Point.y);
-  if (Point.y.C[0] and 1) <> (cardinal(Compressed[0]) and 1) then
-    _sub256(Point.y, Curve_P_32, Point.y);
+  result := false;
+  // both coordinates must be canonical field elements
+  if (_cmp256(Point.x, Curve_P_32) >= 0) or
+     (_cmp256(Point.y, Curve_P_32) >= 0) then
+    exit;
+  // Verify y^2 = x^3 - 3*x + b (mod p)
+  _modSquareP(y2, Point.y);
+  _modSquareP(rhs, Point.x);
+  _modSubP(rhs, rhs, P_3);
+  _modMultP(rhs, rhs, Point.x);
+  _modAddP(rhs, rhs, Curve_B_32);
+  result := _equals(y2, rhs);
+end;
+
+// Decode and validate a compressed P-256 public key
+// Return false and set Point=0 for malformed encodings or off-curve points
+function EccPointDecompress(out Point: TEccPoint;
+  const Compressed: TEccPublicKey): boolean;
+var
+  p: TEccPoint;
+  rhs, y2: THash256Rec;
+begin
+  result := false;
+  FillCharFast(Point, SizeOf(Point), 0);
+  // Only standard compressed point encodings are supported
+  if not (Compressed[0] in [$02, $03]) then
+    exit;
+  _bswap256(@p.x, @Compressed[1]);
+  // Reject non-canonical X coordinates
+  if _cmp256(p.x, Curve_P_32) >= 0 then
+    exit;
+  // rhs = x^3 - 3*x + b (mod p)
+  _modSquareP(p.y, p.x);
+  _modSubP(p.y, p.y, P_3);
+  _modMultP(p.y, p.y, p.x);
+  _modAddP(p.y, p.y, Curve_B_32);
+  _mv(rhs, p.y);
+  // Compute a candidate square root
+  ModSqrt(p.y);
+  // Non-residue has no square root in Fp - ModSqrt alone doesn't detect this
+  _modSquareP(y2, p.y);
+  if not _equals(y2, rhs) then
+    exit;
+  // Select the root matching the compressed prefix
+  if (p.y.C[0] and 1) <>
+     (cardinal(Compressed[0]) and 1) then
+  begin
+    // Negating zero would produce non-canonical y = p
+    if _isZero(p.y) then
+      exit;
+    _sub256(p.y, Curve_P_32, p.y);
+  end;
+  Point := p;
+  result := true;
 end;
 
 var
@@ -1361,22 +1412,39 @@ begin
   result := true;
 end;
 
-function ecdh_shared_secret_uncompressed_pas(
-  const PublicPoint: TEccPublicKeyUncompressed;
+
+function ecdh_shared_secret_uncompressed_pas(const PublicPoint: TEccPublicKeyUncompressed;
   const PrivateKey: TEccPrivateKey; out Secret: TEccSecretKey): boolean;
 var
   priv: THash256Rec;
   product: TEccPoint;
-  rnd: THash256Rec; // random lambda element in projective form to protect priv
+  rnd: THash256Rec;
 begin
-  result := _RandomPoint(rnd);
-  if not result then
+  FillZero(Secret);
+  result := false;
+  // Validate the peer point BEFORE scalar multiplication
+  if not EccPointIsValid(TEccPoint(PublicPoint)) then
     exit;
   _bswap256(@priv, @PrivateKey);
+  // Private scalar must be in [1, n-1]
+  if _isZero(priv) or
+     (_cmp256(priv, Curve_N_32) >= 0) then
+  begin
+    FillZero(priv.b);
+    exit;
+  end;
+  // Random projective coordinate
+  if not _RandomPoint(rnd) then
+  begin
+    FillZero(priv.b);
+    exit;
+  end;
   EccPointMult(product, TEccPoint(PublicPoint), priv, @rnd);
-  _bswap256(@Secret, @product.x);
-  result := not (_isZero(product.x) and _isZero(product.y));
-  FillZero(priv.b); // erase sensitive information from stack
+  result := not (_isZero(product.x) and
+                 _isZero(product.y));
+  if result then
+    _bswap256(@Secret, @product.x);
+  FillZero(priv.b);
   FillZero(rnd.b);
   FillZero(THash512(product));
 end;
@@ -1384,7 +1452,8 @@ end;
 procedure ecc_uncompress_key_pas(const Compressed: TEccPublicKey;
   out Uncompressed: TEccPublicKeyUncompressed);
 begin
-  EccPointDecompress(TEccPoint(Uncompressed), Compressed);
+  if not EccPointDecompress(TEccPoint(Uncompressed), Compressed) then
+    FillCharFast(Uncompressed, SizeOf(Uncompressed), 0);
 end;
 
 function ecdh_shared_secret_pas(const PublicKey: TEccPublicKey;
@@ -1392,8 +1461,11 @@ function ecdh_shared_secret_pas(const PublicKey: TEccPublicKey;
 var
   pub: TEccPublicKeyUncompressed;
 begin
-  EccPointDecompress(TEccPoint(pub), PublicKey);
-  result := ecdh_shared_secret_uncompressed_pas(pub, PrivateKey, Secret);
+  FillZero(Secret);
+  result := EccPointDecompress(TEccPoint(pub), PublicKey);
+  if result then
+    result := ecdh_shared_secret_uncompressed_pas(
+      pub, PrivateKey, Secret);
 end;
 
 {$ifdef HASQWORD} // circumvent Delphi 7/2007 compiler restriction
@@ -1573,6 +1645,9 @@ var
   rx, ry, tx, ty, tz, l_r, l_s, u1, u2, z: THash256Rec;
 begin
   result := false;
+  // never perform ECDSA verification using an off-curve key
+  if not EccPointIsValid(pub) then
+    exit;
   _bswap256(@l_r, @Signature);
   _bswap256(@l_s, @Signature[ECC_BYTES]);
   if _isZero(l_r) or
@@ -1581,18 +1656,18 @@ begin
      (_cmp256(Curve_N_32, l_s) <= 0) then
     exit; // r, s must be <> 0 and < n
   // calculate u1 and u2
-  _modInv(z, l_s, Curve_N_32);      // Z = s^-1
+  _modInv(z, l_s, Curve_N_32);         // Z = s^-1
   _bswap256(@u1, @Hash);
-  _modMultN(u1, u1, z);             // u1 = e/s
-  _modMultN(u2, l_r, z);            // u2 = r/s
+  _modMultN(u1, u1, z);                // u1 = e/s
+  _modMultN(u2, l_r, z);               // u2 = r/s
   // calculate l_sum = G + Q
   _mv(sumpt.x, pub.x);
   _mv(sumpt.y, pub.y);
   _mv(tx, Curve_G_32.x);
   _mv(ty, Curve_G_32.y);
-  _modSubP(z, sumpt.x, tx);               // Z = x2 - x1
+  _modSubP(z, sumpt.x, tx);            // Z = x2 - x1
   _XYcZ_add(tx, ty, sumpt.x, sumpt.y);
-  _modInv(z, z, Curve_P_32);              // Z = 1/Z
+  _modInv(z, z, Curve_P_32);           // Z = 1/Z
   _apply_z(sumpt.x, sumpt.y, z);
   // use Shamir's trick to calculate u1*G + u2*Q
   pts[0] := nil;
@@ -1620,7 +1695,7 @@ begin
       _mv(tx, pt^.x);
       _mv(ty, pt^.y);
       _apply_z(tx, ty, z);
-      _modSubP(tz, rx, tx); // Z = x2 - x1
+      _modSubP(tz, rx, tx);  // Z = x2 - x1
       _XYcZ_add(tx, ty, rx, ry);
       _modMultP(z, z, tz);
     end;
@@ -1638,8 +1713,8 @@ function ecdsa_verify_pas(const PublicKey: TEccPublicKey; const Hash: TEccHash;
 var
   pub: TEccPublicKeyUncompressed;
 begin
-  EccPointDecompress(TEccPoint(pub), PublicKey);
-  result := ecdsa_verify_uncompressed_pas(pub, Hash, Signature);
+  result := EccPointDecompress(TEccPoint(pub), PublicKey) and
+            ecdsa_verify_uncompressed_pas(pub, Hash, Signature);
 end;
 
 
@@ -1656,7 +1731,8 @@ end;
 constructor TEcc256r1VerifyPas.Create(const pub: TEccPublicKey);
 begin
   inherited Create(pub);
-  EccPointDecompress(TEccPoint(fPub), pub);
+  if not EccPointDecompress(TEccPoint(fPub), pub) then
+    FillCharFast(fPub, SizeOf(fPub), 0);
 end;
 
 destructor TEcc256r1VerifyPas.Destroy;
