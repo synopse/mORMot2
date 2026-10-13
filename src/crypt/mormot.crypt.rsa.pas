@@ -1851,12 +1851,10 @@ begin
   // xor Value original trusted sources with our CSPRNG until we get enough bits
   last32 := @Value[Size - 1 {$ifdef CPU32} - 1 {$endif}];
   if Drbg = nil then
-    Drbg := TAesPrng.Main;
+    Drbg := TAesPrng.Main; // if none supplied
   XorStrongRandom(Drbg, last32);
   FillZero(rnd); // anti-forensic counter measure
   // brute force search for the next prime starting at this point
-  if Drbg = nil then
-    Drbg := TAesPrng.Main; // retrieve once
   result := false; // timeout
   min := 0;
   repeat
@@ -2959,6 +2957,7 @@ var
   _e, _p, _q, _d, _h, _tmp: PBigInt;
   comp, bytes: integer;
   wrk: TRsaPrimeWorker;
+  rnd: TAesPrngAbstract;
   endtix: Int64;
 begin
   // ensure we can actually generate such a RSA key
@@ -2995,6 +2994,7 @@ begin
   _p := nil;                             // computed in TRsaPrimeWorker
   _q := Allocate(ValuesSize(bytes));     // p,q size = half Bits
   _d := nil;
+  rnd := GetDrbg; // also ensure fDrbg field is set
   try
     if not _e.Is65537 then // paranoid
       exit;
@@ -3012,7 +3012,7 @@ begin
         begin
           _p := Allocate(_q.Size); // sequential work
           repeat
-            if not _p.FillPrime(Extend, Iterations, endtix, fDrbg) then
+            if not _p.FillPrime(Extend, Iterations, endtix, rnd) then
               exit; // timed out
           until _p.Modulo(_e).Compare(1, {andrelease=}true) <> 0
           // FIPS 186-4 B.3.1: ensure x mod e<>1 i.e. gcd(x-1,e)=1
@@ -3020,7 +3020,7 @@ begin
         else
           wrk := TRsaPrimeWorker.Create(self, Iterations, Extend, endtix);
         repeat
-          if not _q.FillPrime(Extend, Iterations, endtix, fDrbg) then
+          if not _q.FillPrime(Extend, Iterations, endtix, rnd) then
             exit;
         until _q.Modulo(_e).Compare(1, {andrelease=}true) <> 0;
         if wrk <> nil then
