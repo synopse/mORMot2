@@ -1400,7 +1400,6 @@ begin
       SharedRandom.Fill(@loc.Ecdh.pub, SizeOf(loc.Ecdh.pub)); // some padding
     TunnelHandshakeCrc(loc, AppSecret, loc.Info.crc);
     FastSetRawByteString(frame, @loc, SizeOf(loc));
-    FrameSign(frame); // optional digital signature
     // append (and potentially encrypt) the info JSON payload
     info := JsonEncode(InfoNameValue);
     if toEncrypted * fOptions <> [] then // toEncrypt or toEcdhe
@@ -1418,9 +1417,12 @@ begin
     end;
     li := length(info);
     if li > 65535 then
-      ETunnel.RaiseUtf8('Open: too much info (len=%)', [li]);
-    // actually send the frame ending with its session ID
-    Append(frame, [info, 'lisess']); // li:W sess:U32 = SUFFIX_SIZE
+      ETunnel.RaiseUtf8('%.Open: too much info (len=%)', [self, li]);
+    // sign the whole handshake INCLUDING the JSON ciphertext
+    Append(frame, info);
+    FrameSign(frame); // optional digital signature over handshake + JSON
+    // append the unsigned length/session trailer
+    Append(frame, 'lisess'); // li:W sess:U32 = SUFFIX_SIZE
     l := length(frame);
     PWord(@PByteArray(frame)^[l - SUFFIX_SIZE])^ := li;
     PTunnelSession(@PByteArray(frame)^[l - TRAIL_SIZE])^ := fSession;
@@ -1429,37 +1431,49 @@ begin
       log.Log(sllTrace, 'Open: sent % - wait for answer', [length(frame)], self);
     // this method will wait until both sides sent a valid signed header
     if not fHandshake.WaitPop(TimeOutMS, nil, remote) then
-      ETunnel.RaiseUtf8('Open: handshake %ms timeout on port %', [TimeOutMS, result]);
+      ETunnel.RaiseUtf8('%.Open: handshake %ms timeout on port %',
+        [self, TimeOutMS, result]);
     if Assigned(log) then
       log.Log(sllTrace, 'Open: received len=%', [length(remote)], self);
+    // ensure a valid minimum frame size before accessing its content
+    if length(remote) < SizeOf(loc) + SUFFIX_SIZE then
+      ETunnel.RaiseUtf8('%.Open: wrong handshake size=% on port %',
+        [self, length(remote), result]);
     // ensure the returned frame is for this session
     if FrameSession(remote) <> fSession then
-      ETunnel.RaiseUtf8('Open: wrong handshake trailer on port %', [result]);
-    // extract (and potentially decrypt) the associated JSON info payload
+      ETunnel.RaiseUtf8('%.Open: wrong handshake trailer on port %',
+        [self, result]);
+    // extract the JSON size from the trailing unsigned word
+    // frame layout:
+    // [handshake][JSON][signature][JSON size:W][session:U32]
     l := length(remote) - SUFFIX_SIZE;
-    if l >= 0 then
-    begin
-      li := PWord(@PByteArray(remote)^[l])^; // JSON size
-      dec(l, li);
-    end;
-    if l < SizeOf(loc) then
-      ETunnel.RaiseUtf8('Open: wrong handshake size=% on port %', [l, result]);
-    FastSetRawByteString(info, @PByteArray(remote)^[l], li);
+    li := PWord(@PByteArray(remote)^[l])^; // JSON size
+    // ensure JSON is fully inside the received frame
+    if li > l - SizeOf(loc) then
+      ETunnel.RaiseUtf8('%.Open: wrong handshake JSON size=% on port %',
+        [self, li, result]);
+    // verify the signature over BOTH the handshake and JSON ciphertext
+    // l is the end of the signature (excluding the trailing suffix)
+    // SizeOf(loc) + li is the signed payload length
+    if not FrameVerify(pointer(remote), l, SizeOf(loc) + li) then
+      ETunnel.RaiseUtf8('%.Open: handshake failed on port %', [self, result]);
+    // validate the authenticated handshake header
+    if not CompareMemSmall(@rem.Info, @loc.Info, KDF_SIZE) then
+      ETunnel.RaiseUtf8('%.Open: unexpected handshake on port %', [self, result]);
+    TunnelHandshakeCrc(rem^, AppSecret, key.Lo);
+    if not IsEqual(rem^.Info.crc, key.Lo) then
+      ETunnel.RaiseUtf8('%.Open: invalid handshake signature on port %',
+        [self, result]);
+    if IsEqual(loc.Info.crc, rem^.Info.crc) then
+      ETunnel.RaiseUtf8('%.Open: identical handshake CRCs on port %',
+        [self, result]);
+    // extract and decrypt JSON only AFTER signature verification
+    FastSetRawByteString(info, @PByteArray(remote)^[SizeOf(loc)], li);
     if infoaes <> nil then
       info := infoaes.DecryptPkcs7(info, {ivatbeg=}false);
     if fInfo.InitJsonInPlace(pointer(info), JSON_FAST) = nil then
-      ETunnel.RaiseUtf8('Open: invalid JSON info on port %', [result]);
+      ETunnel.RaiseUtf8('%.Open: invalid JSON info on port %', [self, result]);
     FillZero(info);
-    // check the digital signature, maybe using the certificate
-    if not CompareMemSmall(@rem.Info, @loc.Info, KDF_SIZE) then
-      ETunnel.RaiseUtf8('Open: unexpected handshake on port %', [result]);
-    TunnelHandshakeCrc(rem^, AppSecret, key.Lo);
-    if not IsEqual(rem^.Info.crc, key.Lo) then
-      ETunnel.RaiseUtf8('Open: invalid handshake signature on port %', [result]);
-    if not FrameVerify(pointer(remote), l, SizeOf(loc)) then
-      ETunnel.RaiseUtf8('Open: handshake failed on port %', [result]);
-    if IsEqual(loc.Info.crc, rem^.Info.crc) then
-      ETunnel.RaiseUtf8('Open: identical handshake CRCs on port %', [result]);
     fRemotePort := rem^.Info.port;
     // optional encryption - maybe with ECDHE ephemeral keys
     FillZero(key.b);
