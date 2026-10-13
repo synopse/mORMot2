@@ -296,7 +296,8 @@ type
     // - if Address has no port, will bound its address an an ephemeral port,
     // which is returned as result for proper client connection
     // - InfoNameValue are name/value pairs of some JSON fields which will be
-    // included to ITunnelTransmit.TunnelInfo returned object (e.g. Host name)
+    // included to ITunnelTransmit.TunnelInfo returned object (e.g. Host name) -
+    // is obfuscated using AppSecret but should not contain sensitive data
     // - SignCert/VerifyCert should have [cuDigitalSignature] usage, and match
     // VerifyCert/SignCert corresponding certificate on other side - without
     // VerifyCert, peer authentication relies on AppSecret being strong and
