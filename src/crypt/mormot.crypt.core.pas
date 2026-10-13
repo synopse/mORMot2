@@ -1675,6 +1675,13 @@ type
     function FillRandomHex(Len: integer): RawUtf8;
     /// fill a binary buffer with some pseudorandom data but no zero byte
     procedure FillRandomNotZero(Buffer: pointer; Len: PtrInt);
+    /// fill a binary buffer combining available external CSPRNG sources
+    // - first call FillSystemRandom(), potentially blocking: keep Len small
+    // - on Intel/AMD with cfRAND available, XORs with hardware RDRAND output
+    // - returns '' if both the OS source and the RDRAND opcode are not available
+    // - intended for RSA prime candidate generation and cryptographic seeding
+    // - does not claim NIST SP 800-90A approval or FIPS 140 validation
+    function FillRandomTrusted(Len: PtrInt): RawByteString;
     /// compute a pseudorandom UUid value according to the RFC 4122
     // - RandomGuid() from this unit uses Random128() so is likely strong
     // - to derivate a Uuid from a name see IdentifierGuid()/DotNetIdentifierGuid()
@@ -7342,6 +7349,28 @@ begin
   FillZero(rnd);
   if ByteScanIndex(Buffer, Len, 0) >= 0 then // paranoid
     ESynCrypto.RaiseUtf8('%.FillRandomNotZero failure', [self]);
+end;
+
+function TAesPrngAbstract.FillRandomTrusted(Len: PtrInt): RawByteString;
+var
+  p: pointer;
+  fromsys: boolean;
+begin
+  p := FastNewRawByteString(result, Len);
+  if Len <= 0 then
+    exit;
+  fromsys := FillSystemRandom(p, Len, {mayblock=}true);
+  {$ifdef ASMINTEL} // claims to be NIST SP 800-90A and FIPS 140-2 compliant
+  if cfRAND in CpuFeatures then
+  begin
+    if not fromsys then
+      FillRandom(p, Len);   // fallback to our CSPRNG as padding
+    RdRand32(p, Len shr 2); // xor compliant HW CPU rdrand
+    exit;                   // we estimate we got enough randomness
+  end;
+  {$endif ASMINTEL}
+  if not fromsys then
+    FillZero(result);        // no strong enough CSPRNG available
 end;
 
 function TAesPrngAbstract.FillRandomHex(Len: integer): RawUtf8;

@@ -4117,7 +4117,8 @@ procedure XorOSEntropy(var e: THash512Rec);
 // may consider that the output Buffer is always filled with randomness
 // - AllowBlocking=false would try /dev/random if /dev/urandom did fail
 // - you should not have to call this low-level procedure, but faster and broader
-// TAesPrng from mormot.crypt.core - also consider the TSystemPrng class
+// TAesPrng from mormot.crypt.core - also consider the TSystemPrng class or
+// TAesPrng.FillRandomTrusted() wrapper method if you require an audited source
 // - if you need some entropy source, consider TAesPrng.GetEntropy() instead
 function FillSystemRandom(Buffer: PByteArray; Len: integer; AllowBlocking: boolean): boolean;
 
