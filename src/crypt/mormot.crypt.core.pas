@@ -7372,6 +7372,7 @@ begin
     n := MinPtrInt(SizeOf(tmp), Len);
     FillRandom(@tmp, n);
     XorMemory(Buffer, @tmp, n);
+    inc(PByte(Buffer), n);
     dec(Len, n);
   end;
   FillCharFast(tmp, wipe, 0); // avoid leaking the secret on the stack
