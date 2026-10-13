@@ -110,6 +110,7 @@ type
     procedure Resize(n: integer; nozero: boolean = false);
     procedure XorStrongRandom(Drbg: TAesPrngAbstract; last32: PCardinal);
     procedure FillMillerRabinWitness(Drbg: TAesPrngAbstract; W: PBigInt);
+    function PrimeAllowedFor65537: boolean;
   public
     /// the associated Big Integer RSA context
     // - used to store modulo constants, and maintain an internal instance cache
@@ -1683,6 +1684,30 @@ begin
             (PCardinal(Value)^ = 65537); // common Exponent from FIPS 5.4 (e)
 end;
 
+function TBigInt.PrimeAllowedFor65537: boolean;
+var
+  i, v, sum: PtrUInt;
+begin
+  // for e=65537, quickly reject p mod e = 1 (safe for keys up to 8192 bits)
+  sum := 0;
+  for i := 0 to Size - 1 do
+  begin
+    // CPU32: 2^16 = -1 (mod 65537), CPU64: 2^32 = 1 (mod 65537)
+    v := Value[i];
+    {$ifdef CPU32}
+    if Odd(i) then
+      dec(sum, v)
+    else
+      inc(sum, v);
+    {$else}
+    inc(sum, v and $ffff);
+    dec(sum, v shr 16);
+    {$endif CPU32}
+  end;
+  // test divisibility of sum-1, including negative sums
+  result := ((sum - 1) mod 65537) <> 0;
+end;
+
 function TBigInt.IsPrime(Extend: TBigIntSimplePrime; Iterations: integer;
   Drbg: TAesPrngAbstract): boolean;
 var
@@ -2942,7 +2967,7 @@ begin
       repeat
         if not p.FillPrime(Extend, Iterations, EndTix, Owner.fDrbg) then
           exit; // timed out
-      until p.Modulo(e).Compare(1, {andrelease=}true) <> 0;
+      until p.PrimeAllowedFor65537;
       // FIPS 186-4 B.3.1: ensure x mod e<>1 i.e. gcd(x-1,e)=1
       NewPrime := p.SaveFixed(PrimeBytes); // transfer bytes, not the instance
       if length(NewPrime) <> PrimeBytes then
@@ -3021,7 +3046,7 @@ begin
           repeat
             if not _p.FillPrime(Extend, Iterations, endtix, rnd) then
               exit; // timed out
-          until _p.Modulo(_e).Compare(1, {andrelease=}true) <> 0
+          until _p.PrimeAllowedFor65537
           // FIPS 186-4 B.3.1: ensure x mod e<>1 i.e. gcd(x-1,e)=1
         end
         else
@@ -3029,7 +3054,7 @@ begin
         repeat
           if not _q.FillPrime(Extend, Iterations, endtix, rnd) then
             exit;
-        until _q.Modulo(_e).Compare(1, {andrelease=}true) <> 0;
+        until _q.PrimeAllowedFor65537;
         if wrk <> nil then
         begin
           wrk.WaitFor; // join the threads
