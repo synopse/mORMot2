@@ -40,7 +40,7 @@ uses
   - new pure pascal OOP design of BigInt computation optimized for RSA process
   - garbage collection of BigInt instances, with proper anti-forensic wiping
   - use half-registers (HalfUInt) for efficient computation on all CPUs
-  - dedicated x86_64/i386 asm for core computation routines (noticeable speedup)
+  - dedicated x86_64/i386/aarch64 asm for the core computation routines
   - slower than OpenSSL, but likely the fastest FPC or Delphi native RSA library
   - includes FIPS-level RSA keypair validation and generation
   - features both RSASSA-PKCS1-v1_5 and RSASSA-PSS signature schemes
@@ -1663,7 +1663,28 @@ function TBigInt.IsPrime(Extend: TBigIntSimplePrime; Iterations: integer;
   Lecuyer: PLecuyer): boolean;
 var
   r, a, w, mu, t: PBigInt;
-  s, n, bak: integer;
+  s, bak, bit: integer;
+
+  function StrongWitness: boolean;
+  var
+    j: integer;
+  begin
+    // a already contains witness^r mod self
+    result := true;
+    if (a.Compare(1) = 0) or
+       (a.Compare(w) = 0) then
+      exit;
+    for j := 1 to s - 1 do
+    begin
+      a := Owner.Reduce(a.Square, @self, mu);
+      if a.Compare(w) = 0 then
+        exit;
+      if a.Compare(1) = 0 then
+        break;
+    end;
+    result := false;
+  end;
+
 begin
   // first check if not a factor of a well-known small prime
   result := (Size = (32 div HALF_BITS)) and
@@ -1686,7 +1707,6 @@ begin
   try
     w := Clone.IntSub(1); // w = value - 1
     r := w.Clone;
-    a := Owner.Allocate(Size, []);
     // compute s = lsb(w) and r = w shr s
     s := r.FindMinBit;
     r.ShrBits(s);
@@ -1694,6 +1714,25 @@ begin
     // keep it local: IsPrime may run on an already initialized RSA context
     t := Owner.AllocateFrom(1).LeftShift(2 * Size);
     mu := t.Divide(@self);
+    // fast strong probable-prime test for base 2
+    a := Owner.AllocateFrom(2);
+    // compute 2^r mod self - highest exponent bit is represented by a = 2
+    for bit := r.BitCount - 2 downto 0 do
+    begin
+      a := Owner.Reduce(a.Square, @self, mu);
+      if r.BitIsSet(bit) then
+      begin
+        // a = 2*a mod self, since 0 <= a < self
+        a.ShlBits(1);
+        if a.Compare(@self) >= 0 then
+          a.Substract(Clone);
+      end;
+    end;
+    if not StrongWitness then
+      exit; // composite
+    // need the original randomized Miller-Rabin algorithm
+    a.Release;
+    a := Owner.Allocate(Size, []);
     Owner.Release([@t]);
     while Iterations > 0 do
     begin
@@ -1702,19 +1741,8 @@ begin
       a.FillMillerRabinWitness(Lecuyer, w);
       // search if a is composite
       a := Owner.ModPower(a, r.Copy, @self, mu); // a = a^r mod value
-      if (a.Compare(1) = 0) or
-         (a.Compare(w) = 0) then
-        continue; // this random is related: try outside the family
-      for n := 1 to s - 1 do
-      begin
-        a := Owner.Reduce(a.Square, @self, mu); // a = (a*a) mod value
-        if (a.Compare(w) = 0) or
-           (a.Compare(1) = 0) then
-          break;
-      end;
-      if (a.Compare(w) <> 0) or
-         (a.Compare(1) = 0) then
-        exit; // not a prime
+      if not StrongWitness then
+        exit; // composite
     end;
     result := true;
   finally
