@@ -1981,13 +1981,22 @@ function CryptDataWithSecret(const Data: RawByteString;
 { ****************** SHA-2 SHA-3 Secure Hashing }
 
 const
-  /// hide TSha1/TSha256 complex code by storing the SHA-1/SHA-2 context as buffer
-  SHA_CONTEXT_SIZE = 108;
-
   /// hide TSha3Context complex code by storing the Keccak/SHA-3 Sponge as buffer
   SHA3_CONTEXT_SIZE = 410;
 
 type
+  /// shared SHA-1/SHA-2 context as used by both TSha1 and TSha256
+  TShaContext = record
+    /// current hash state (TSha256/224.Init expect this field to be the first)
+    Hash: THash256Rec;
+    /// 64-bit msg length
+    MLen: QWord;
+    /// 512-bit block buffer
+    Buffer: THash512;
+    /// current position in Buffer[0..63]
+    Index: integer;
+  end;
+
   /// 224-bit (24 bytes) memory block for SHA-224 hash digest storage
   TSha224Digest = THash224;
   PSha224Digest = ^TSha224Digest;
@@ -2016,7 +2025,7 @@ type
   TSha256 = object
   {$endif USERECORDWITHMETHODS}
   private
-    Context: packed array[1..SHA_CONTEXT_SIZE] of byte; // 108 bytes
+    Data: TShaContext;
   public
     /// initialize SHA-256 context for hashing
     procedure Init;
@@ -2431,7 +2440,7 @@ type
   TSha1 = object
   {$endif USERECORDWITHMETHODS}
   private
-    Context: packed array[1..SHA_CONTEXT_SIZE] of byte;
+    Data: TShaContext;
   public
     /// initialize SHA-1 context for hashing
     procedure Init;
@@ -2840,23 +2849,6 @@ implementation
 { ****************** Include Tuned INTEL/AMD Assembly }
 
 { we need to define now some shared types and constants used also from asm }
-
-type
-  TShaHash = record
-    // will use A..E with TSha1, A..H with TSha256
-    A, B, C, D, E, F, G, H: cardinal;
-  end;
-
-  TShaContext = packed record
-    // current hash state (TSha256/224.Init expect this field to be the first)
-    Hash: TShaHash;
-    // 64-bit msg length
-    MLen: QWord;
-    // 512-bit block buffer
-    Buffer: THash512;
-    // current position in Buffer[0..63]
-    Index: integer;
-  end;
 
 const
   // used by SHA-256
@@ -7980,6 +7972,12 @@ end;
 
 { --------- SHA-2 Hashing }
 
+type
+  TShaHash = record
+    // will use A..E with TSha1, A..H with TSha256
+    A, B, C, D, E, F, G, H: cardinal;
+  end;
+
 // under Win32, with a Core i7 CPU: pure pascal: 152ms - x86: 112ms
 // under Win64, with a Core i7 CPU: pure pascal: 202ms - SSE4: 78ms
 
@@ -8140,16 +8138,12 @@ const
     $ffc00b31, $68581511, $64f98fa7, $befa4fa4);
 
 procedure TSha256.Init;
-var
-  Data: TShaContext absolute Context;
 begin
   MoveFast(SHA256_INIT, Data.Hash, SizeOf(Data.Hash));
   FillcharFast(Data.MLen, SizeOf(Data) - SizeOf(Data.Hash), 0);
 end;
 
 procedure TSha256.Init224;
-var
-  Data: TShaContext absolute Context;
 begin
   MoveFast(SHA224_INIT, Data.Hash, SizeOf(Data.Hash));
   FillcharFast(Data.MLen, SizeOf(Data) - SizeOf(Data.Hash), 0);
@@ -8157,7 +8151,6 @@ end;
 
 procedure TSha256.Update(Buffer: pointer; Len: integer);
 var
-  Data: TShaContext absolute Context;
   bytes: integer;
 begin
   if (Buffer = nil) or
@@ -8186,7 +8179,7 @@ begin
           bytes := Len and (not 63); // all whole blocks have been added
         end
         else
-          Sha256CompressPas(Data.Hash, Buffer); // process on old CPU
+          Sha256CompressPas(TShaHash(Data.Hash), Buffer); // process on old CPU
         {$else}
         RawSha256Compress(Data.Hash, Buffer); // may be AARCH64 version
         {$endif ASMX64NOTPIC}
@@ -8215,8 +8208,6 @@ end;
 
 procedure TSha256.Final(out Digest: TSha256Digest; NoInit: boolean);
 // finalize SHA-256 calculation, clear context
-var
-  Data: TShaContext absolute Context;
 begin
   // append bit '1' after Buffer
   Data.Buffer[Data.Index] := $80;
@@ -10123,8 +10114,6 @@ begin
 end;
 
 procedure TSha1.Final(out Digest: TSha1Digest; NoInit: boolean);
-var
-  Data: TShaContext absolute Context;
 begin
   // 1. append bit '1' after Buffer
   Data.Buffer[Data.Index] := $80;
@@ -10144,7 +10133,7 @@ begin
     Sha1ni(Data.Buffer, Data.Hash, 64)     // Intel SHA HW opcodes
   else
   {$endif ASMX64NOTPIC}
-    Sha1CompressPas(Data.Hash, @Data.Buffer); // regular code
+    Sha1CompressPas(TShaHash(Data.Hash), @Data.Buffer); // regular code
   // Hash -> Digest to little endian format
   bswap160(@Data.Hash, @Digest);
   // Clear Data
@@ -10165,20 +10154,17 @@ begin
 end;
 
 procedure TSha1.Init;
-var
-  Data: TShaContext absolute Context;
 begin
-  Data.Hash.A := $67452301;
-  Data.Hash.B := $EFCDAB89;
-  Data.Hash.C := $98BADCFE;
-  Data.Hash.D := $10325476;
-  Data.Hash.E := $C3D2E1F0;
+  Data.Hash.c[0] := $67452301;
+  Data.Hash.c[1] := $EFCDAB89;
+  Data.Hash.c[2] := $98BADCFE;
+  Data.Hash.c[3] := $10325476;
+  Data.Hash.c[4] := $C3D2E1F0;
   FillcharFast(Data.MLen, SizeOf(Data) - SizeOf(Data.Hash), 0);
 end;
 
 procedure TSha1.Update(Buffer: pointer; Len: integer);
 var
-  Data: TShaContext absolute Context;
   aLen: integer;
 begin
   if Buffer = nil then
@@ -10205,7 +10191,7 @@ begin
         end
         else
         {$endif ASMX64NOTPIC}
-          Sha1CompressPas(Data.Hash, Buffer); // regular code
+          Sha1CompressPas(TShaHash(Data.Hash), Buffer); // regular code
       dec(Len, aLen);
       inc(PByte(Buffer), aLen);
     end
@@ -10871,7 +10857,6 @@ begin
   {$endif USEARMCRYPTO}
   assert(SizeOf(TMd5Buf) = SizeOf(TMd5Digest));
   assert(SizeOf(TAes) <= 300); // lib/static/libsqlite3/sqlite3mc.c KEYLENGTH
-  assert(SizeOf(TShaContext) = SHA_CONTEXT_SIZE);
   assert(SizeOf(TSha3Context) = SHA3_CONTEXT_SIZE);
   assert(1 shl AES_SHIFT = SizeOf(TAesBlock));
   assert(SizeOf(TSha256) = SizeOf(TSha1));

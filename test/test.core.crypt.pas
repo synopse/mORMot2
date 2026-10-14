@@ -2926,8 +2926,8 @@ begin
   {$ifndef PUREMORMOT2}
   CheckEqual(SizeOf(TAesFullHeader), SizeOf(TAesBlock));
   {$endif PUREMORMOT2}
-  CheckEqual(SizeOf(TSha1), SHA_CONTEXT_SIZE);
-  CheckEqual(SizeOf(TSha256), SHA_CONTEXT_SIZE);
+  CheckEqual(SizeOf(TSha1), SizeOf(TShaContext));
+  CheckEqual(SizeOf(TSha256), SizeOf(TShaContext));
   CheckEqual(SizeOf(TSha256), SizeOf(TSha1));
   CheckEqual(SizeOf(TSha3), SHA3_CONTEXT_SIZE);
   Check(SizeOf(TSha512) > SizeOf(TSha256));
