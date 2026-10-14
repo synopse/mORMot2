@@ -4366,7 +4366,7 @@ asm
         mov     r8, res
         mov     edx, Y
         mov     dword ptr [r8].TDiv100Rec.M,edx
-        mov     eax, DIV100_INV
+        mov     eax, DIV100_INV // Y div 100 = (QWord(Y) * DIV100_INV) shr 37
         mul     edx
         shr     edx, 5
         mov     dword ptr [r8].TDiv100Rec.D, edx

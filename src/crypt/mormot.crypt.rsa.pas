@@ -1489,7 +1489,7 @@ begin
     d := (v * PtrUInt($cccd)) shr 19;
     Value[i] := HalfUInt(result * PtrUInt($1999) + d);
     {$else}
-    d := (v * PtrUInt($cccccccd)) shr 35;
+    d := (v * DIV10_INV) shr 35;
     Value[i] := HalfUInt(result * PtrUInt($19999999) + d);
     {$endif CPU32}
     result := v - d * 10;

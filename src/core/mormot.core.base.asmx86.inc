@@ -620,7 +620,7 @@ asm
         cmp     eax, 100
         jb      @2
         mov     ecx, eax
-        mov     edx, DIV100_INV
+        mov     edx, DIV100_INV // val div 100 = (QWord(val)*DIV100_INV) shr 37
         mul     edx
         shr     edx, 5          // now edx=eax div 100
         mov     eax, edx
@@ -667,9 +667,9 @@ asm
         cmp     eax, 100
         jb      @2
         mov     ecx, eax
-        mov     edx, DIV100_INV
+        mov     edx, DIV100_INV // val div 100 = (QWord(val)*DIV100_INV) shr 37
         mul     edx
-        shr     edx, 5 // now edx=eax div 100
+        shr     edx, 5          // now edx=eax div 100
         mov     eax, edx
         imul    edx, -200
         movzx   edx, word ptr [TwoDigitLookup + ecx * 2 + edx]
@@ -698,9 +698,9 @@ asm
         // eax=Y, edx=P
         push    edx
         mov     ecx, eax
-        mov     edx, DIV100_INV
+        mov     edx, DIV100_INV // Y div 100 = (QWord(Y) * DIV100_INV) shr 37
         mul     edx
-        shr     edx, 5 // now edx=Y div 100
+        shr     edx, 5          // now edx=Y div 100
         movzx   eax, word ptr [TwoDigitLookup + edx * 2]
         imul    edx, -200
         movzx   edx, word ptr [TwoDigitLookup + ecx * 2 + edx]
@@ -2797,7 +2797,7 @@ asm
         mov     dword ptr [edx].TDiv100Rec.M, eax
         mov     ecx, edx
         mov     edx, eax
-        mov     eax, DIV100_INV
+        mov     eax, DIV100_INV // Y div 100 = (QWord(Y) * DIV100_INV) shr 37
         mul     edx
         shr     edx, 5
         mov     dword ptr [ecx].TDiv100Rec.D, edx

@@ -1274,8 +1274,10 @@ const
      '70', '71', '72', '73', '74', '75', '76', '77', '78', '79',
      '80', '81', '82', '83', '84', '85', '86', '87', '88', '89',
      '90', '91', '92', '93', '94', '95', '96', '97', '98', '99');
-  /// 1 mod 2^32 reciprocal for unsigned div 100
+  /// 1 mod 2^32 reciprocal for unsigned div 100 in 32-bit range [0..4908534098]
   DIV100_INV = $51eb851f;
+  /// 1 mod 2^32 reciprocal for unsigned div 10 in 32-bit range [0..4294967295]
+  DIV10_INV = $cccccccd;
 
 var
   /// fast lookup table for converting any decimal number from
@@ -13432,11 +13434,11 @@ var
   tab: PWordArray;
 begin
   tab := @TwoDigitLookupW;
-  {$ifdef WIN64DELPHI}
+  {$ifdef CPU64}
   d100 := (QWord(Y) * DIV100_INV) shr 37; // we can avoid div on Delphi Win64
   {$else}
   d100 := Y div 100; // FPC will use fast reciprocal (and x86 has its own asm)
-  {$endif WIN64DELPHI}
+  {$endif CPU64}
   PCardinal(P)^ := tab[d100];
   PWordArray(P)[1] := tab[Y - (d100 * 100)];
 end;
