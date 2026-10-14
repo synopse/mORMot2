@@ -323,6 +323,7 @@ type
     // - linger = 0 aborts immediately and discards pending data
     // - linger > 0 waits up to the given number of seconds on close
     // - on POSIX, linger > 0 will also set SO_REUSEADDR/SO_REUSEPORT
+    // - linger <= 0 is likely to be run at shutdown so won't raise any exception
     procedure SetLinger(linger: integer);
     /// allow to disable the Nagle's algorithm and send packets without delay
     procedure SetNoDelay(nodelay: boolean);
@@ -3483,7 +3484,7 @@ begin
     // bind, or no timeout specified: just call the OS bind() or connect()
     if dobind then
     begin
-      // bound Socket should remain open for 5 seconds after a closesocket()
+      // let bound Socket remain open for 5 seconds after a closesocket()
       if layer <> nlUdp then
         sock.SetLinger(5);
       if (layer in [nlTcp, nlUdp]) and
