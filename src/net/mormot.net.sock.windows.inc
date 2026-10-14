@@ -2034,7 +2034,7 @@ end;
 
 procedure TWinIocp.AcceptSocketCloseAndUnlock;
 begin
-  // AcceptEx did not start: no completion will own this socket.
+  // AcceptEx did not start: no completion will own this socket
   if fAcceptSocket <> nil then
   begin
     fAcceptSocket.Close;
@@ -2051,6 +2051,7 @@ var
   lsock: TSocket;
 begin
   result := false;
+  Socket := nil;
   if (self = nil) or
      (one = nil) or
      fTerminated then
@@ -2062,8 +2063,9 @@ begin
      not Assigned(getacceptexsockaddrs) then
   begin
     if Assigned(fOnLog) then
-      fOnLog(sllWarning, 'GetNextAccept(%)=false',
-        [pointer(one^.socket)], self);
+      fOnLog(sllWarning, 'GetNextAccept(%)=false', [pointer(one^.socket)], self);
+    if fAcceptExUsed.IsLocked then
+      AcceptSocketCloseAndUnlock;
     exit;
   end;
   l := nil;
@@ -2075,16 +2077,20 @@ begin
   if (r = nil) or
      (rlen = 0) or
      (rlen > SizeOf(Remote)) then
+  begin
+    if Assigned(fOnLog) then
+      fOnLog(sllWarning, 'GetNextAccept: getacceptexsockaddrs rlen=%',
+        [rlen], self);
+    AcceptSocketCloseAndUnlock;
     exit;
+  end;
   MoveFast(r^, Remote, rlen);
-  Socket := fAcceptSocket;
-  fAcceptSocket := nil;
   // AcceptEx() sockets need SO_UPDATE_ACCEPT_CONTEXT to inherit the listening
   // socket properties, and before shutdown() getsockname() getpeername() are
   // used - otherwise shutdown(SD_SEND) in Unsubscribe() fails with WSAENOTCONN
   // and no FIN is ever sent to the client on a server-side close
   lsock := TSocket(one^.socket);
-  if setsockopt(TSocket(Socket), SOL_SOCKET, SO_UPDATE_ACCEPT_CONTEXT,
+  if setsockopt(TSocket(fAcceptSocket), SOL_SOCKET, SO_UPDATE_ACCEPT_CONTEXT,
         @lsock, SizeOf(lsock)) <> NO_ERROR then
   begin
     if Assigned(fOnLog) then
@@ -2094,6 +2100,8 @@ begin
     exit;
   end;
   Socket.SetLinger(-1); // ensure client socket won't inherit timed linger
+  Socket := fAcceptSocket;
+  fAcceptSocket := nil;
   fAcceptExUsed.UnLock;
   result := true;
   if Assigned(fOnLog) then
