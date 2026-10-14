@@ -595,9 +595,9 @@ procedure TNetSocketWrap.SetLinger(linger: integer);
 var
   v: TLinger;
 begin
-  v.l_linger := linger;
+  v.l_linger := MinPtrInt(high(word), MaxPtrInt(0, linger)); // 16-bit field
   v.l_onoff := 0; // don't wait - ord(linger >= 0) would wait
-  // https://docs.microsoft.com/en-us/windows/win32/api/winsock/nf-winsock-closesocket
+  // best effort (no exception): may be called during socket shutdown
   setsockopt(TSocket(@self), SOL_SOCKET, SO_LINGER, @v, SizeOf(v));
 end;
 
@@ -858,6 +858,34 @@ begin
        (NetLastError(NO_ERROR, loerr) = nrRetry) then
       exit;
   result := false; // e.g. neError or neClosed with no neRead
+end;
+
+function TNetSocketWrap.Close: TNetResult;
+var
+  sock: TSocket;
+  err: integer;
+  v: TLinger;
+begin
+  result := nrNoSocket;
+  sock := TSocket(@self);
+  if sock = 0 then
+    exit;
+  result := nrOk;
+  if closesocket(sock) = NO_ERROR then
+    exit;
+  err := RawSocketErrNo;
+  if err = WSAEWOULDBLOCK then
+  begin
+    // non-blocking socket with positive SO_LINGER:
+    // disable linger and retry an asynchronous graceful close
+    v.l_onoff := 0;
+    v.l_linger := 0;
+    if setsockopt(sock, SOL_SOCKET, SO_LINGER, @v, SizeOf(v)) = NO_ERROR then
+      if closesocket(sock) = NO_ERROR then
+        exit;
+    err := RawSocketErrNo;
+  end;
+  result := NetErrorFromSystem(err, NO_ERROR);
 end;
 
 

@@ -3906,17 +3906,6 @@ begin
   end;
 end;
 
-function TNetSocketWrap.Close: TNetResult;
-begin
-  if @self = nil then
-    result := nrNoSocket
-  else
-  begin
-    closesocket(TSocket(@self)); // SO_LINGER usually set to 5 or 10 seconds
-    result := nrOk;
-  end;
-end;
-
 function TNetSocketWrap.Socket: PtrInt;
 begin
   result := TSocket(@self);

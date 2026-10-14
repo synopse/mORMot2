@@ -824,11 +824,16 @@ begin
 end;
 
 procedure TNetSocketWrap.SetLinger(linger: integer);
+{$ifdef OSDARWIN}
+const
+  SO_LINGER = $1080; // = specific SO_LINGER_SECONDS - SO_LINGER is in ticks
+{$endif OSDARWIN}
 var
   v: TLinger;
 begin
   v.l_linger := MaxPtrInt(0, linger);
   v.l_onoff := ord(linger >= 0);
+  // best effort (no exception): may be called during socket shutdown
   setsockopt(TSocket(@self), SOL_SOCKET, SO_LINGER, @v, SizeOf(v));
   if linger > 0 then
     SetReuseAddrPort;
@@ -939,6 +944,17 @@ begin
       exit;
   end;
   result := false; // e.g. neError or neClosed with no neRead
+end;
+
+function TNetSocketWrap.Close: TNetResult;
+begin
+  if @self = nil then
+    result := nrNoSocket
+  else if closesocket(TSocket(@self)) = NO_ERROR then
+    result := nrOk
+  else
+    // don't retry close() after EINTR: the descriptor may be released
+    result := NetLastError;
 end;
 
 
