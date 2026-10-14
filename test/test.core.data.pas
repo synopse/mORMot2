@@ -11761,7 +11761,7 @@ begin
     FastSetRawByteString(s, pointer(t), length(t)); // =UniqueString
     Check(CompressSynLZ(s, true) = 'synlz');
     Check(CompressSynLZ(s, false) = 'synlz');
-    Check(s = t);
+    CheckEqual(s, t);
     Check(AlgoSynLZ.Decompress(AlgoSynLZ.Compress(s)) = t);
     SetLength(comp2, AlgoSynLZ.Compressdestlen(length(s)));
     complen2 := SynLZCompress1pas(Pointer(s), length(s), pointer(comp2));

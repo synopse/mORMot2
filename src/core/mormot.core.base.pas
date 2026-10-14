@@ -12145,15 +12145,88 @@ begin
     result := (result and $7fff) or (integer(PWord(in_p + 2)^) shl 15);
 end;
 
+type
+  TSynLzContext = record
+    src, srcend, srcendmatch, dst: PAnsiChar;
+    cwpoint: PCardinal;
+    cwmask: cardinal;
+    offset: ^TOffsets;
+    cache: PCardinalArray;
+  end;
+
+procedure SynLZcompress1passub(var ctx: TSynLzContext);
+var
+  src, dst, o: PAnsiChar;
+  v, cached, cwmask: cardinal;
+  h, t, tmax: PtrUInt;
+begin
+  cwmask := 1;
+  src := ctx.src;
+  dst := ctx.dst;
+  repeat
+    v := PCardinal(src)^;
+    h := ((v shr 12) xor v) and 4095;
+    o := ctx.offset[h];
+    ctx.offset[h] := src;
+    cached := v xor ctx.cache[h]; // o=nil if cache[h] is uninitialized
+    ctx.cache[h] := v;
+    if (cached and $00ffffff = 0) and
+       (o <> nil) and
+       (src - o > 2) then
+    begin
+      ctx.cwpoint^ := ctx.cwpoint^ or cwmask;
+      inc(src, 2);
+      inc(o, 2);
+      t := 1;
+      tmax := ctx.srcend - src - 1;
+      if tmax >= (255 + 16) then
+        tmax := (255 + 16);
+      while (o[t] = src[t]) and
+            (t < tmax) do
+        inc(t);
+      inc(src, t);
+      h := h shl 4;
+      // here we have always t>0
+      if t <= 15 then
+      begin
+        // mark 2 to 17 bytes -> size=1..15
+        PInteger(dst)^ := integer(t or h);
+        inc(dst, 2);
+      end
+      else
+      begin
+        // mark 18 to (255+16) bytes -> size=0, next byte=t
+        dec(t, 16);
+        PInteger(dst)^ := h; // size=0
+        dst[2] := ansichar(t);
+        inc(dst, 3);
+      end;
+    end
+    else
+    begin
+      dst^ := src^;
+      inc(src);
+      inc(dst);
+    end;
+    cwmask := cwmask shl 1;
+    if cwmask = 0 then
+    begin
+      ctx.cwpoint := pointer(dst);
+      PCardinal(dst)^ := 0;
+      inc(PCardinal(dst));
+      cwmask := 1;
+    end;
+  until src > ctx.srcendmatch;
+  ctx.src := src; // store end position
+  ctx.dst := dst;
+  ctx.cwmask := cwmask
+end;
+
 function SynLZcompress1pas(src: PAnsiChar; size: integer; dst: PAnsiChar): integer;
 var
-  dstbeg,          // initial dst value
-  srcend,          // real last byte available in src
-  srcendmatch,     // last byte to try for hashing
-  o: PAnsiChar;
-  cwbit: byte;
-  cwpoint: PCardinal;
-  v, h, cached, t, tmax: PtrUInt;
+  cwmask: cardinal;
+  ctx: TSynLzContext;
+  dstbeg: PAnsiChar;
   offset: TOffsets;
   cache: array[0..4095] of cardinal; // 16KB+16KB=32KB on stack (48KB for cpu64)
 begin
@@ -12176,107 +12249,39 @@ begin
     inc(dst, 2);
   end;
   // 2. compress
-  srcend := src + size;
-  srcendmatch := srcend - (6 + 5);
-  cwbit := 0;
-  cwpoint := pointer(dst);
+  ctx.srcend := src + size;
+  ctx.srcendmatch := ctx.srcend - (6 + 5);
+  ctx.cwpoint := pointer(dst);
   PCardinal(dst)^ := 0;
-  inc(dst, SizeOf(cwpoint^));
-  // 1. main loop to search using hash[]
-  if src <= srcendmatch then
+  inc(PCardinal(dst));
+  if src <= ctx.srcendmatch then
   begin
     FillCharFast(offset, SizeOf(offset), 0); // fast 16KB/32KB reset to 0
-    repeat
-      v := PCardinal(src)^;
-      h := ((v shr 12) xor v) and 4095;
-      o := offset[h];
-      offset[h] := src;
-      cached := v xor {%H-}cache[h]; // o=nil if cache[h] is uninitialized
-      cache[h] := v;
-      if (cached and $00ffffff = 0) and
-         (o <> nil) and
-         (src - o > 2) then
-      begin
-        cwpoint^ := cwpoint^ or (cardinal(1) shl cwbit);
-        inc(src, 2);
-        inc(o, 2);
-        t := 1;
-        tmax := srcend - src - 1;
-        if tmax >= (255 + 16) then
-          tmax := (255 + 16);
-        while (o[t] = src[t]) and
-              (t < tmax) do
-          inc(t);
-        inc(src, t);
-        h := h shl 4;
-        // here we have always t>0
-        if t <= 15 then
-        begin
-          // mark 2 to 17 bytes -> size=1..15
-          PWord(dst)^ := integer(t or h);
-          inc(dst, 2);
-        end
-        else
-        begin
-          // mark 18 to (255+16) bytes -> size=0, next byte=t
-          dec(t, 16);
-          PWord(dst)^ := h; // size=0
-          dst[2] := ansichar(t);
-          inc(dst, 3);
-        end;
-      end
-      else
-      begin
-        dst^ := src^;
-        inc(src);
-        inc(dst);
-      end;
-      if cwbit < 31 then
-      begin
-        inc(cwbit);
-        if src <= srcendmatch then
-          continue
-        else
-          break;
-      end
-      else
-      begin
-        cwpoint := pointer(dst);
-        PCardinal(dst)^ := 0;
-        inc(dst, SizeOf(cwpoint^));
-        cwbit := 0;
-        if src <= srcendmatch then
-          continue
-        else
-          break;
-      end;
-    until false;
+    ctx.src := src;
+    ctx.dst := dst;
+    ctx.offset := @offset;
+    ctx.cache := @cache;
+    SynLZcompress1passub(ctx);
+    src := ctx.src;
+    dst := ctx.dst;
+    cwmask := ctx.cwmask;
+  end
+  else
+    cwmask := 1;
+  while src < ctx.srcend do // remaining bytes
+  begin
+    dst^ := src^;
+    inc(src);
+    inc(dst);
+    cwmask := cwmask shl 1;
+    if cwmask = 0 then
+    begin
+      ctx.cwpoint := pointer(dst);
+      PCardinal(dst)^ := 0;
+      inc(PCardinal(dst));
+      cwmask := 1;
+    end;
   end;
-  // 2. store remaining bytes
-  if src < srcend then
-    repeat
-      dst^ := src^;
-      inc(src);
-      inc(dst);
-      if cwbit < 31 then
-      begin
-        inc(cwbit);
-        if src < srcend then
-          continue
-        else
-          break;
-      end
-      else
-      begin
-        PCardinal(dst)^ := 0;
-        inc(dst, 4);
-        cwbit := 0;
-        if src < srcend then
-          continue
-        else
-          break;
-      end;
-    until false;
   result := dst - dstbeg;
 end;
 
