@@ -2208,7 +2208,7 @@ begin
   // compute off-diagonal products as r = sum(a[i] * a[j] * B^(i+j)), for j < i
   for i := 0 to n - 2 do
     RawMultiply(@Value[i + 1], @r^.Value[2 * i + 1], n - i - 1, Value[i]);
-  // double all off-diagonal products
+  // double off-diagonal products and add diagonal squares in a single pass
   _xasmsquarediagonal(pointer(Value), pointer(r^.Value), n);
   Release;
   result := r.Trim;

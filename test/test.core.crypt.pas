@@ -52,6 +52,7 @@ type
     procedure RsaSlow(Context: TObject);
     procedure CrcSlow(Context: TObject); // 32-bit, 64-bit and 128-bit hash
     procedure RsaBarrett;
+    procedure RsaSquare;
     procedure RsaMillerRabin;
     procedure Rfc(a: TSignAlgo; const P, S: RawUtf8; c, l: integer;
       const exp, msg: RawUtf8);
@@ -5020,8 +5021,9 @@ var
   bin, hash, signed, encrypted: RawByteString;
   timer: TPrecisionTimer;
 begin
-  // validate Barret Reduction algorithm
+  // validate Barret Reduction, Square and Miller-Rabin algorithms
   RsaBarrett;
+  RsaSquare;
   RsaMillerRabin;
   // validate RSA key generation - in a background thread for this slow process
   hash := HexToBin(_hash);
@@ -5307,6 +5309,96 @@ begin
           c.ResetModulo(slot);
           CheckEqual(c.ActiveCount, 0, 'Barrett released');
         end;
+  finally
+    c.Free;
+  end;
+end;
+
+procedure TTestCoreCrypto.RsaSquare;
+const
+  SIZES: array[0 .. 26] of integer = (1, 2, 3, 7, 8, 9, 15, 16, 17, 31, 32, 33,
+    47, 48, 49, 63, 64, 65, 95, 96, 97, 127, 128, 129, 255, 256, 257);
+var
+  c: TRsaContext;
+  a, expected, actual: PBigInt;
+  hex: RawUtf8;
+  seed: cardinal;
+  v: PHalfUInt;
+  si, kind, i, n: integer;
+begin
+  c := TRsaContext.Create;
+  seed := $a5a55a5a;
+  try
+    for si := 0 to high(SIZES) do
+      for kind := 0 to 105 do
+      begin
+        n := SIZES[si];
+        a := c.Allocate(n);
+        if kind <> 0 then // kind=0: all zero, even with untrimmed leading limbs
+        begin
+          v := pointer(a^.Value);
+          for i := 0 to n - 1 do
+          begin
+            case kind of
+              1:
+                v^ := high(HalfUInt);   // maximal carry chains
+              2:
+                if i and 1 = 0 then
+                  v^ := high(HalfUInt); // odd
+              3:
+                if i = n - 1 then
+                  v^ := high(HalfUInt); // last
+              4:
+                if i = 0 then
+                  v^ := high(HalfUInt) // first
+                else
+                  break;
+              5:
+                v^ := HalfUInt(1) shl (HALF_BITS - 1);
+            else
+              begin
+                seed := seed xor (seed shl 13); // some random diffusion
+                seed := seed xor (seed shr 17);
+                seed := seed xor (seed shl 5);
+                v^ := seed;
+              end;
+            end;
+            inc(v);
+          end;
+        end;
+        hex := a^.ToHexa;
+        expected := a^.Copy.Multiply(a^.Copy);
+        actual := a^.Copy.Square;
+        CheckEqual(actual^.Compare(expected), 0, 'Square vs Multiply');
+        CheckEqual(a^.ToHexa, hex, 'Square source preserved');
+        CheckEqual(a^.RefCnt, 1, 'Square shared source retained');
+        actual.Release;
+        // squaring a permanent operand must leave its value and ownership intact
+        a^.SetPermanent;
+        actual := a^.Square;
+        CheckEqual(actual^.Compare(expected), 0, 'Square permanent');
+        CheckEqual(a^.RefCnt, -1, 'Square permanent source retained');
+        CheckEqual(a^.ToHexa, hex, 'Square permanent value preserved');
+        actual.Release;
+        expected.Release;
+        a^.ResetPermanentAndRelease;
+        CheckEqual(c.ActiveCount, 0, 'Square temporaries released');
+      end;
+    // empty storage must not enter the positive-count diagonal loop
+    a := c.Allocate(0);
+    expected := a^.Copy.Multiply(a^.Copy);
+    actual := a^.Square;
+    CheckEqual(actual^.Compare(expected), 0, 'Square empty');
+    actual.Release;
+    expected.Release;
+    CheckEqual(c.ActiveCount, 0, 'Square empty released');
+    // an unshared input is consumed by Square
+    a := c.AllocateFrom(123);
+    actual := a^.Square;
+    CheckEqual(actual^.Compare(15129), 0, 'Square unshared');
+    CheckEqual(c.ActiveCount, 1, 'Square consumes unshared source');
+    actual.Release;
+    CheckEqual(c.ActiveCount, 0, 'Square unshared result released');
   finally
     c.Free;
   end;
