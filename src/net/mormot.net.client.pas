@@ -6418,8 +6418,8 @@ begin
   fTls.PassPhrase := aPassPhrase;
 end;
 
-function CurlWriteLastResponseHeader(buffer: PAnsiChar; size, nitems: integer;
-  opaque: pointer): integer; cdecl;
+function CurlWriteLastResponseHeader(buffer: PAnsiChar; size, nitems: PtrUInt;
+  opaque: pointer): PtrUInt; cdecl;
 var
   headers: PRawByteString absolute opaque;
 begin
@@ -6528,7 +6528,7 @@ begin
   curl.easy_setopt(fHandle, coUserName, pointer(AuthUserName));
   curl.easy_setopt(fHandle, coPassword, pointer(AuthPassword));
   curl.easy_setopt(fHandle, coXOAuth2Bearer, pointer(AuthToken));
-  curl.easy_setopt(fHandle, coHttpAuth, integer(WRA2CAU[AuthScheme]));
+  curl.easy_setopt(fHandle, coHttpAuth, WRA2CAU[AuthScheme]);
   // 2. main request options
   // the only verb which do not expect body in answer is HEAD - OPTIONS could
   curl.easy_setopt(fHandle, coNoBody, ord(IsHead(fIn.Method)));
@@ -6580,7 +6580,7 @@ var
   P: PUtf8Char;
   s: RawUtf8;
   i: integer;
-  rc: PtrInt; // needed on Linux x86-64
+  rc: TCurlLong; // CURLINFO_RESPONSE_CODE writes C long
 begin
   if Assigned(OnUploadProgress) or
      Assigned(OnDownloadProgress) then
@@ -6603,7 +6603,7 @@ begin
     raise ECurlHttp.Create(res, 'libcurl error %d (%s) on %s %s',
       [ord(res), curl.easy_strerror(res), fIn.Method, fIn.URL]);
   rc := 0;
-  curl.easy_getinfo(fHandle, ciResponseCode, rc);
+  curl.easy_getinfo_long(fHandle, ciResponseCode, rc);
   result := rc;
   Header := fOut.Header;
   RemoveHeadInHeaders(Header); // trim 'HTTP/1.1 200 OK' first line

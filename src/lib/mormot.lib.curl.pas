@@ -42,6 +42,13 @@ type
   /// low-level exception raised during libcurl library access
   ECurl = class(ExceptionWithProps);
 
+  /// C long used by libcurl - 32-bit on Win64 (LLP64), pointer-sized on POSIX
+  {$ifdef OSWINDOWS}
+  TCurlLong = LongInt;
+  {$else}
+  TCurlLong = PtrInt;
+  {$endif}
+
   /// low-level access to the libcurl CURLOPTTYPE_BLOB options
   TCurlBlob = record
     data: pointer;
@@ -685,12 +692,10 @@ type
   );
 
   /// low-level initialization option for libcurl library API
-  // - currently, only giSsl is set, since giWin32 is redundant with WinHttp
+  // - by default LibCurlInitialize() will use giAll constant
   TCurlGlobalInit = set of (
-    giNone,
     giSsl,
-    giWin32,
-    giAll
+    giWin32
   );
 
   /// low-level message state for libcurl library API
@@ -869,16 +874,16 @@ type
     /// pointer to allocated name
     name: PAnsiChar;
     /// length of name length
-    namelength: integer;
+    namelength: PtrUInt;
     /// pointer to allocated data contents
     contents: PAnsiChar;
     /// length of contents field
     // - see also CURL_HTTPPOST_LARGE / 64-bit contentlen
-    contentslength: integer;
+    contentslength: PtrUInt;
     /// pointer to allocated buffer contents
     buffer: PAnsiChar;
     /// length of buffer field
-    bufferlength: integer;
+    bufferlength: PtrUInt;
     /// Content-Type text
     contenttype: PAnsiChar;
     /// list of extra headers for this form
@@ -927,12 +932,12 @@ type
   PCurlWaitFD = ^TCurlWaitFD;
 
   /// low-level write callback function signature for libcurl library API
-  curl_write_callback = function (buffer: PAnsiChar; size,nitems: integer;
-    outstream: pointer): integer; cdecl;
+  curl_write_callback = function (buffer: PAnsiChar; size,nitems: PtrUInt;
+    outstream: pointer): PtrUInt; cdecl;
 
   /// low-level read callback function signature for libcurl library API
-  curl_read_callback = function (buffer: PAnsiChar; size,nitems: integer;
-    instream: pointer): integer; cdecl;
+  curl_read_callback = function (buffer: PAnsiChar; size,nitems: PtrUInt;
+    instream: pointer): PtrUInt; cdecl;
 
   curl_lock_data = (
     CURL_LOCK_DATA_NONE = 0,
@@ -1047,11 +1052,10 @@ type
     /// global TCurlShare object, created by CurlEnableGlobalShare
     globalShare: TCurlShare;
     /// initialize the library
-    global_init: function(flags: TCurlGlobalInit): TCurlResult; cdecl;
+    global_init: function(flags: TCurlLong): TCurlResult; cdecl;
     /// initialize the library and specify a memory manager
     // - set malloc, free, realloc, strdup and calloc functions
-    global_init_mem: function(flags: TCurlGlobalInit;
-      m, f, r, s, c: pointer): TCurlResult; cdecl;
+    global_init_mem: function(flags: TCurlLong; m, f, r, s, c: pointer): TCurlResult; cdecl;
     /// finalize the library
     global_cleanup: procedure; cdecl;
     /// returns run-time libcurl version info
@@ -1059,8 +1063,8 @@ type
 
     // start a libcurl easy session
     easy_init: function: pointer; cdecl;
-    /// set options for a curl easy handle
-    easy_setopt: function(curl: TCurl; option: TCurlOption): TCurlResult; cdecl varargs;
+    /// set options for a curl easy handle - not used directly
+    _easy_setopt: function(curl: TCurl; option: TCurlOption): TCurlResult; cdecl varargs;
     /// perform a blocking file transfer
     easy_perform: function(curl: TCurl): TCurlResult; cdecl;
     /// end a libcurl easy handle
@@ -1088,8 +1092,8 @@ type
     share_init: function: pointer; cdecl;
     /// clean up a shared object
     share_cleanup: function(share_handle: TCurlShare): TCurlShareResult; cdecl;
-    /// set options for a shared object
-    share_setopt: function(share: TCurlShare; option: TCurlShareOption): TCurlShareResult; cdecl varargs;
+    /// set options for a shared object - not used directly
+    _share_setopt: function(share: TCurlShare; option: TCurlShareOption): TCurlShareResult; cdecl varargs;
     /// return the text description of an error code
     share_strerror: function(code: TCurlShareResult): PAnsiChar; cdecl;
 
@@ -1101,7 +1105,7 @@ type
     /// append a new empty part to the given mime context and return a handle to the created part
     mime_addpart: function(mime: TCurlMime): TCurlMimePart; cdecl;
     /// set mime/form part data
-    mime_data: function(part: TCurlMimePart; data: PAnsiChar; size: integer): TCurlResult; cdecl;
+    mime_data: function(part: TCurlMimePart; data: PAnsiChar; size: PtrUInt): TCurlResult; cdecl;
     /// sets a mime part name
     mime_name: function(part: TCurlMimePart; name: PAnsiChar): TCurlResult; cdecl;
     /// sets a mime part content type
@@ -1124,8 +1128,8 @@ type
     multi_perform: function(mcurl: TCurlMulti; out runningh: integer): TCurlMultiCode; cdecl;
     /// remove an easy handle from a multi session
     multi_remove_handle: function(mcurl: TCurlMulti; curl: TCurl): TCurlMultiCode; cdecl;
-    /// set options for a curl multi handle
-    multi_setopt: function(mcurl: TCurlMulti; option: TCurlMultiOption): TCurlMultiCode; cdecl varargs;
+    /// set options for a curl multi handle - not used directly
+    _multi_setopt: function(mcurl: TCurlMulti; option: TCurlMultiOption): TCurlMultiCode; cdecl varargs;
     /// reads/writes available data given an action
     multi_socket_action: function(mcurl: TCurlMulti; socket: TCurlSocket; mask: integer; out runningh: integer): TCurlMultiCode; cdecl;
     /// reads/writes available data - deprecated call
@@ -1133,7 +1137,7 @@ type
     /// return string describing error code
     multi_strerror: function(code: TCurlMultiCode): PAnsiChar; cdecl;
     /// retrieve how long to wait for action before proceeding
-    multi_timeout: function(mcurl: TCurlMulti; out ms: integer): TCurlMultiCode; cdecl;
+    multi_timeout: function(mcurl: TCurlMulti; out ms: TCurlLong): TCurlMultiCode; cdecl;
     /// polls on all easy handles in a multi handle
     multi_wait: function(mcurl: TCurlMulti; fds: PCurlWaitFD; fdscount: cardinal; ms: integer; out ret: integer): TCurlMultiCode; cdecl;
     {$endif LIBCURLMULTI}
@@ -1145,6 +1149,37 @@ type
     info: PCurlVersionInfo;
     /// contains textual information about the initialized libcurl instance
     infoText: string;
+
+    /// overload for proper curl.easy_setopt(...) varargs at all call sites
+    function easy_setopt(handle: TCurl; option: TCurlOption;
+      value: TCurlLong): TCurlResult; overload;
+    /// overload for proper curl.easy_setopt(...) varargs at all call sites
+    function easy_setopt(handle: TCurl; option: TCurlOption;
+      value: pointer): TCurlResult; overload;
+    /// overload for proper curl.easy_setopt(...) varargs at all call sites
+    function easy_setopt(handle: TCurl; option: TCurlOption;
+      value: TCurlAuths): TCurlResult; overload;
+    /// CURLOPTTYPE_OFF_T always requires curl_off_t (signed 64-bit).
+    function easy_setopt_off_t(handle: TCurl; option: TCurlOption;
+      value: Int64): TCurlResult;
+    /// CURLINFO_LONG outputs are long*, not integer*.
+    function easy_getinfo_long(handle: TCurl; info: TCurlInfo;
+      out value: TCurlLong): TCurlResult;
+    /// CURLSHOPT_SHARE/UNSHARE require a C enum (int), not C long.
+    function share_setopt(handle: TCurlShare; option: TCurlShareOption;
+      value: curl_lock_data): TCurlShareResult; overload;
+    /// CURLSHOPT_SHARE/UNSHARE require a C enum (int), not C long.
+    function share_setopt(handle: TCurlShare; option: TCurlShareOption;
+      value: pointer): TCurlShareResult; overload;
+    {$ifdef LIBCURLMULTI}
+    /// overloads for proper curl.multi_setopt(...) varargs at all call sites
+    function multi_setopt(handle: TCurlMulti; option: TCurlMultiOption;
+      value: TCurlLong): TCurlMultiCode; overload;
+    function multi_setopt(handle: TCurlMulti; option: TCurlMultiOption;
+      value: pointer): TCurlMultiCode; overload;
+    function multi_setopt_off_t(handle: TCurlMulti; option: TCurlMultiOption;
+      value: Int64): TCurlMultiCode;
+    {$endif LIBCURLMULTI}
 
     {$ifndef LIBCURLSTATIC}
     /// finalize the library
@@ -1158,13 +1193,17 @@ var
   // setup this global instance before using any of its internal functions
   curl: TLibCurl;
 
+const
+  /// match CURL_GLOBAL_ALL = CURL_GLOBAL_SSL or CURL_GLOBAL_WIN32
+  giAll = [giSsl, giWin32];
+
 /// initialize the libcurl API, accessible via the curl global variable
 // - do nothing if the library has already been loaded
 // - will raise ECurl exception on any loading issue
 // - you can specify the libcurl library name to load
 // - this method is not thread safe and should be executed e.g. at startup or
 // within GlobalLock/GlobalUnlock - or via CurlIsAvailable wrapper
-procedure LibCurlInitialize(engines: TCurlGlobalInit = [giAll];
+procedure LibCurlInitialize(engines: TCurlGlobalInit = giAll;
   const dllname: TFileName = LIBCURL_DLL);
 
 /// return TRUE if a curl library is available
@@ -1179,8 +1218,8 @@ function CurlIsAvailable: boolean;
 // ! curl.easy_setopt(curlHandle, coWriteData, @curlRespBody);
 // where curlRespBody should be a generic AnsiString/RawByteString, i.e.
 // in practice a RawUtf8 or a RawByteString
-function CurlWriteRawByteString(buffer: PAnsiChar; size, nitems: integer;
-  opaque: pointer): integer; cdecl;
+function CurlWriteRawByteString(buffer: PAnsiChar; size, nitems: PtrUInt;
+  opaque: pointer): PtrUInt; cdecl;
 
 type
   /// structure which may be passed to CurlReadRawByteString()
@@ -1193,8 +1232,8 @@ type
   PCurlReadState = ^TCurlReadState;
 
 /// Callback used by libcurl to read data, e.g. when uploading a resource
-function CurlReadRawByteString(buffer: PAnsiChar; size, nitems: integer;
-  opaque: pointer): integer; cdecl;
+function CurlReadRawByteString(buffer: PAnsiChar; size, nitems: PtrUInt;
+  opaque: pointer): PtrUInt; cdecl;
 
 /// enable libcurl multiple easy handles to share data
 // - is called automatically during libcurl initialization
@@ -1232,6 +1271,72 @@ end;
 
 { ************ CURL Functions API }
 
+{ typed libcurl overload wrappers - for proper C varargs cross-platform calls
+  - our enums are 32-bit whereas the parameter may be clong on some targets }
+
+function TLibCurl.easy_setopt(handle: TCurl; option: TCurlOption;
+  value: TCurlLong): TCurlResult;
+begin
+  result := _easy_setopt(handle, option, value);
+end;
+
+function TLibCurl.easy_setopt(handle: TCurl; option: TCurlOption;
+  value: pointer): TCurlResult;
+begin
+  result := _easy_setopt(handle, option, value);
+end;
+
+function TLibCurl.easy_setopt(handle: TCurl; option: TCurlOption;
+  value: TCurlAuths): TCurlResult;
+begin
+  // CURLAUTH_* is a bit mask; zero-extend rather than sign-extend bit 31.
+  result := _easy_setopt(handle, option, TCurlLong(Cardinal(value)));
+end;
+
+function TLibCurl.easy_setopt_off_t(handle: TCurl; option: TCurlOption;
+  value: Int64): TCurlResult;
+begin
+  result := _easy_setopt(handle, option, value);
+end;
+
+function TLibCurl.easy_getinfo_long(handle: TCurl; info: TCurlInfo;
+  out value: TCurlLong): TCurlResult;
+begin
+  result := easy_getinfo(handle, info, value);
+end;
+
+function TLibCurl.share_setopt(handle: TCurlShare; option: TCurlShareOption;
+  value: curl_lock_data): TCurlShareResult;
+begin
+  result := _share_setopt(handle, option, integer(ord(value)));
+end;
+
+function TLibCurl.share_setopt(handle: TCurlShare; option: TCurlShareOption;
+  value: pointer): TCurlShareResult;
+begin
+  result := _share_setopt(handle, option, value);
+end;
+
+{$ifdef LIBCURLMULTI}
+function TLibCurl.multi_setopt(handle: TCurlMulti; option: TCurlMultiOption;
+  value: TCurlLong): TCurlMultiCode;
+begin
+  result := _multi_setopt(handle, option, value);
+end;
+
+function TLibCurl.multi_setopt(handle: TCurlMulti; option: TCurlMultiOption;
+  value: pointer): TCurlMultiCode;
+begin
+  result := _multi_setopt(handle, option, value);
+end;
+
+function TLibCurl.multi_setopt_off_t(handle: TCurlMulti; option: TCurlMultiOption;
+  value: Int64): TCurlMultiCode;
+begin
+  result := _multi_setopt(handle, option, value);
+end;
+{$endif LIBCURLMULTI}
+
 {$ifdef LIBCURLSTATIC}
 
 {$ifdef FPC}
@@ -1248,9 +1353,9 @@ end;
   {$endif OSANDROID}
 
   /// initialize the library
-  function curl_global_init(flags: TCurlGlobalInit): TCurlResult; cdecl; external;
+  function curl_global_init(flags: TCurlLong): TCurlResult; cdecl; external;
   /// initialize the library with a custom memory manager
-  function curl_global_init_mem(flags: TCurlGlobalInit;
+  function curl_global_init_mem(flags: TCurlLong;
     m, f, r, s, c: pointer): TCurlResult; cdecl; external;
   /// finalize the library
   procedure curl_global_cleanup cdecl; external;
@@ -1297,7 +1402,7 @@ end;
   /// creates and appends a new empty part to the given mime structure
   function curl_mime_addpart(mime: TCurlMime): TCurlMimePart; cdecl; external;
   /// sets a mime part's body content from memory data
-  function curl_mime_data(part: TCurlMimePart; data: PAnsiChar; size: integer): TCurlResult; cdecl; external;
+  function curl_mime_data(part: TCurlMimePart; data: PAnsiChar; size: PtrUInt): TCurlResult; cdecl; external;
   /// sets a mime part's name
   function curl_mime_name(part: TCurlMimePart; name: PAnsiChar): TCurlResult; cdecl; external;
   /// sets a mime part's content type
@@ -1329,7 +1434,7 @@ end;
   /// return string describing error code
   function curl_multi_strerror(code: TCurlMultiCode): PAnsiChar; cdecl; external;
   /// retrieve how long to wait for action before proceeding
-  function curl_multi_timeout(mcurl: TCurlMulti; out ms: integer): TCurlMultiCode; cdecl; external;
+  function curl_multi_timeout(mcurl: TCurlMulti; out ms: TCurlLong): TCurlMultiCode; cdecl; external;
   /// polls on all easy handles in a multi handle
   function curl_multi_wait(mcurl: TCurlMulti; fds: PCurlWaitFD; fdscount: cardinal; ms: integer; out ret: integer): TCurlMultiCode; cdecl; external;
   {$endif LIBCURLMULTI}
@@ -1338,40 +1443,45 @@ end;
 
 {$endif LIBCURLSTATIC}
 
-function CurlWriteRawByteString(buffer: PAnsiChar; size, nitems: integer;
-  opaque: pointer): integer;
+function CurlWriteRawByteString(buffer: PAnsiChar; size, nitems: PtrUInt;
+  opaque: pointer): PtrUInt;
 var
   storage: PRawByteString absolute opaque;
-  n: integer;
+  n: PtrInt;
 begin
-  if storage = nil then
-    result := 0
-  else
+  result := 0;
+  if (storage = nil) or
+     (size = 0) or
+     (nitems = 0) or
+     (nitems > high(PtrUInt) div size) then
+    exit;
+  n := length(storage^);
+  result := size * nitems;
+  if result > PtrUInt(high(PtrInt) - n) then
   begin
-    n := length(storage^);
-    result := size * nitems;
-    SetLength(storage^, n + result);
-    MoveFast(buffer^, PByteArray(storage^)[n], result);
+    result := 0; // abort: string would exceed its addressable size
+    exit;
   end;
+  SetLength(storage^, n + PtrInt(result));
+  MoveFast(buffer^, PByteArray(storage^)[n], PtrInt(result));
 end;
 
-function CurlReadRawByteString(buffer: PAnsiChar; size, nitems: integer;
-  opaque: pointer): integer;
+function CurlReadRawByteString(buffer: PAnsiChar; size, nitems: PtrUInt;
+  opaque: pointer): PtrUInt;
 var
   upload: PCurlReadState absolute opaque;
-  available: integer;
+  available: PtrInt;
 begin
+  result := 0;
   available := upload.size - upload.uploaded;
-  if available = 0 then
-    result := 0
-  else
-  begin
-    result := size * nitems;
-    if result > available then
-      result := available;
-    MoveFast(upload.buf[upload.uploaded], buffer^, result);
-    inc(upload.uploaded, result);
-  end;
+  if (available <= 0) or
+     (size = 0) or
+     (nitems = 0) or
+     (nitems > high(PtrUInt) div size) then
+    exit;
+  result := MinPtrUInt(available, size * nitems);
+  MoveFast(upload.buf[upload.uploaded], buffer^, PtrInt(result));
+  inc(upload.uploaded, PtrInt(result));
 end;
 
 var
@@ -1476,17 +1586,17 @@ const
 procedure LibCurlInitialize(engines: TCurlGlobalInit; const dllname: TFileName);
 var
   res: TCurlResult;
+  flags: TCurlLong;
 begin
   if curl_initialized <> lsAvailable then
   try // set it once, but can retry with specific alternate libnames
     {$ifdef LIBCURLSTATIC}
-
     curl.global_init := @curl_global_init;
     curl.global_init_mem := @curl_global_init_mem;
     curl.global_cleanup := @curl_global_cleanup;
     curl.version_info := @curl_version_info;
     curl.easy_init := @curl_easy_init;
-    curl.easy_setopt := @curl_easy_setopt;
+    curl._easy_setopt := @curl_easy_setopt;
     curl.easy_perform := @curl_easy_perform;
     curl.easy_cleanup := @curl_easy_cleanup;
     curl.easy_getinfo := @curl_easy_getinfo;
@@ -1499,7 +1609,7 @@ begin
     curl.formfree := @curl_formfree;
     curl.share_init := @curl_share_init;
     curl.share_cleanup := @curl_share_cleanup;
-    curl.share_setopt := @curl_share_setopt;
+    curl._share_setopt := @curl_share_setopt;
     curl.share_strerror := @curl_share_strerror;
     curl.mime_init := @curl_mime_init; // may be nil e.g. on MacOS
     curl.mime_free := @curl_mime_free;
@@ -1516,7 +1626,7 @@ begin
     curl.multi_init := @curl_multi_init;
     curl.multi_perform := @curl_multi_perform;
     curl.multi_remove_handle := @curl_multi_remove_handle;
-    curl.multi_setopt := @curl_multi_setopt;
+    curl._multi_setopt := @curl_multi_setopt;
     curl.multi_socket_action := @curl_multi_socket_action;
     curl.multi_socket_all := @curl_multi_socket_all;
     curl.multi_strerror := @curl_multi_strerror;
@@ -1550,7 +1660,8 @@ begin
     {$endif LIBCURLSTATIC}
 
     // if we reached here, the library has been successfully loaded
-    res := curl.global_init_mem(engines,
+    flags := byte(engines);  // convert pascal set into clong bitset
+    res := curl.global_init_mem(flags,
       @curl_malloc_callback, @curl_free_callback,
       @curl_realloc_callback, @curl_strdup_callback, @curl_calloc_callback);
     if res <> crOK then
@@ -1638,6 +1749,7 @@ function CurlPerform(const uri: RawUtf8; out data: RawByteString;
   timeoutMs: integer; responseCode: PInteger; tftpBlockSize: integer): TCurlResult;
 var
   h: pointer;
+  rc: TCurlLong;
 begin
   if responseCode <> nil then
     responseCode^ := 0;
@@ -1659,8 +1771,10 @@ begin
   if tftpBlockSize <> 512 then
     curl.easy_setopt(h, coTFtpBlkSize, tftpBlockSize);
   result := curl.easy_perform(h);
+  rc := 0;
   if responseCode <> nil then
-    curl.easy_getinfo(h, ciResponseCode, responseCode^); // e.g. for HTTP
+    if curl.easy_getinfo_long(h, ciResponseCode, rc) = crOK then
+      responseCode^ := integer(rc); // C writes a long (8 bytes on LP64)
   curl.easy_cleanup(h);
 end;
 
