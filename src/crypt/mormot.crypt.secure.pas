@@ -7948,7 +7948,7 @@ begin
        (PRecordTypeInfo <> nil) then
     begin
       BinarySave(PRecordData, tmp, PRecordTypeInfo, rkRecordTypes);
-      pad := tmp.len and AesBlockMod;
+      pad := tmp.len and AES_MOD;
       if pad <> 0 then // AES-CTR is easier if padded on 16 bytes
         inc(tmp.len, 16 - pad);
       if tmp.len > SizeOf(cc.data) then
@@ -8054,7 +8054,7 @@ begin
       exit; // expects a record, but no associated data
     ccend := PAnsiChar(@cc.data) + len;
     if PtrUInt(ccend - BinaryLoad(PRecordData, @cc.data, PRecordTypeInfo, nil,
-         ccend, rkRecordTypes)) > AesBlockMod then
+         ccend, rkRecordTypes)) > AES_MOD then
       exit;
   end;
   result := cc.head.session;

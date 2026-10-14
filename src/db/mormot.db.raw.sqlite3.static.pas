@@ -589,7 +589,7 @@ var
     then IV=(pagenum32||nonce64) and
          MAC=trunc64(AES-GCM TAG) and AAD=pagenum
     (alternative: MAC=trunc64(HMACSHA256(macKey,pagenum||nonce||ciphtertext) but
-                  macKey from userPassword could be stored in TAesContext.buf)
+                  macKey from userPassword could be stored in TAes.buf)
     (note: a 64-bit nonce is enough since P(collision)=npagerewrites^2/2^65)
  3) enable BCrypt and SCrypt as additional hashing algorithms
 
@@ -636,7 +636,7 @@ var
   plain: Int64;    // bytes 16..23 should always be unencrypted
   iv: THash128Rec; // is genuine and AES-protected (since not random)
 begin
-  if (len and AesBlockMod <> 0) or
+  if (len and AES_MOD <> 0) or
      (len <= 0) or
      (integer(page) <= 0) then
     ESqlite3Exception.RaiseUtf8(
@@ -647,7 +647,7 @@ begin
   iv.c3 := page * 3266489917;
   if not ForceSQLite3LegacyAes then
     aes^.Encrypt(iv.b); // avoid potential brute force attack
-  len := len shr AesBlockShift;
+  len := len shr AES_SHIFT;
   if page = 1 then
     // ensure header bytes 16..23 are stored unencrypted in the first page
     if (PInt64(data)^ = SQLITE_FILE_HEADER128.lo) and
@@ -747,7 +747,7 @@ begin
     pagesize := cardinal(head.b[16]) shl 8 + head.b[17];
     pagecount := size div pagesize;
     if (pagesize < 1024) or
-       (pagesize and AesBlockMod <> 0) or
+       (pagesize and AES_MOD <> 0) or
        (pagesize > bufsize) or
        (QWord(pagecount) * pagesize <> size) or
        (head.d0 <> SQLITE_FILE_HEADER128.Lo) or

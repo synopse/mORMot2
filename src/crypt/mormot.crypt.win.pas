@@ -419,7 +419,7 @@ begin
        [fInternalMode, self]);
   if BufOut <> BufIn then
     MoveFast(BufIn^, BufOut^, Count);
-  n := Count and not AesBlockMod;
+  n := Count and not AES_MOD;
   if DoEncrypt then
   begin
     if not CryptoApi.Encrypt(fKeyCryptoApi, nil, false, 0, BufOut, n, Count) then

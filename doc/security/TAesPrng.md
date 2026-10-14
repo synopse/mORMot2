@@ -31,7 +31,7 @@ Its optimization goals are low overhead for short random values, scalable throug
 | `TSystemPrng` | Direct wrapper around operating-system random acquisition | `FillRandom` -> `FillSystemRandom` |
 | `TSha3` | SHAKE256 absorb/squeeze operation | `Init(SHAKE_256)`, `Update`, `Final` |
 | `_EntropyChain` | Process-global state propagated across conditioned entropy requests | `_EntropyChainSafe`, `_EntropyChain` |
-| `TAesContext` | AES key schedule, IV/counter, and accelerated block processing | `DoRndBlock`, `DoRnd`, `AesNiEncryptCtrNist` |
+| `TAes` | AES key schedule, IV/counter, and accelerated block processing | `DoRndBlock`, `DoRnd`, `AesNiEncryptCtrNist` |
 | `mormot.core.os` | OS entropy access and explicit fallback behavior | `FillSystemRandom`, `XorOSEntropy` |
 
 The implementation presumes a trusted native process, secure compiler/runtime, secrecy of AES keys and entropy-chain state, and an OS random source that succeeds whenever cryptographic unpredictability is required. Physical observation, malicious code in-process, memory disclosure, process cloning/snapshot restoration, and attacker control of system entropy are separate threats requiring additional measures.

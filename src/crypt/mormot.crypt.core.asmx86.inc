@@ -20,7 +20,7 @@
 
 // those functions use global variables, so are not PIC-compatible
 
-procedure AesEncryptAsm(const ctxt: TAesContext; bi, bo: PBlock128);
+procedure AesEncryptAsm(const ctxt: TAes; bi, bo: PBlock128);
   {$ifdef FPC}nostackframe; assembler;{$endif}
 asm // rolled optimized encryption asm version by A. Bouchez
         push    ebx
@@ -30,7 +30,7 @@ asm // rolled optimized encryption asm version by A. Bouchez
         add     esp, - 24
         mov     [esp + 4], ecx
         mov     ecx, eax // ecx=pk
-        movzx   eax, byte ptr [eax].TAesContext.Rounds
+        movzx   eax, byte ptr [eax].TAes.Rounds
         dec     eax
         mov     [esp + 20], eax
         mov     ebx, [edx]
@@ -195,7 +195,7 @@ asm // rolled optimized encryption asm version by A. Bouchez
         pop     ebx
 end;
 
-procedure aesdecrypt386(const ctxt: TAesContext; bi, bo: PBlock128);
+procedure aesdecrypt386(const ctxt: TAes; bi, bo: PBlock128);
   {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
         push    ebx
@@ -204,7 +204,7 @@ asm
         push    ebp
         add     esp, - 20
         mov     [esp], ecx
-        movzx   ecx, byte ptr [eax].TAesContext.Rounds
+        movzx   ecx, byte ptr [eax].TAes.Rounds
         lea     esi, [4 * ecx]
         lea     ecx, [ecx - 1]
         lea     eax, [eax + 4 * esi] // eax=@ctx.rk[ctx.rounds]=pk
@@ -2810,9 +2810,9 @@ end;
 
 procedure AesNiTrailer; // = TAesAbstractSyn.EncryptTrailer from AES-NI procs
   {$ifdef FPC}nostackframe; assembler;{$endif}
-asm // eax=TAesContext ecx=len xmm7=IV esi=BufIn edi=BufOut
-        call   dword ptr [eax].TAesContext.AesNi32 // = AES.Encrypt(fIV,fIV)
-        lea    edx, [eax].TAesContext.buf // used as temporary buffer
+asm // eax=TAes ecx=len xmm7=IV esi=BufIn edi=BufOut
+        call   dword ptr [eax].TAes.AesNi32 // = AES.Encrypt(fIV,fIV)
+        lea    edx, [eax].TAes.buf // used as temporary buffer
         movups [edx], xmm7
         cld
 @s:     lodsb
@@ -2972,7 +2972,7 @@ end;
 
 procedure AesNiEncryptXmm7_128;
   {$ifdef FPC}nostackframe; assembler;{$endif}
-asm // input: eax=TAesContext, xmm7=data; output: eax=TAesContext, xmm7=data
+asm // input: eax=TAes, xmm7=data; output: eax=TAes, xmm7=data
         movups  xmm0, [eax + $00]
         movups  xmm1, [eax + $10]
         movups  xmm2, [eax + $20]
@@ -3049,7 +3049,7 @@ end;
 
 procedure AesNiEncryptXmm7_192;
   {$ifdef FPC}nostackframe; assembler;{$endif}
-asm // input: eax=TAesContext, xmm7=data; output: eax=TAesContext, xmm7=data
+asm // input: eax=TAes, xmm7=data; output: eax=TAes, xmm7=data
         movups  xmm0, [eax + $00]
         movups  xmm1, [eax + $10]
         movups  xmm2, [eax + $20]
@@ -3106,7 +3106,7 @@ end;
 
 procedure AesNiEncryptXmm7_256;
   {$ifdef FPC}nostackframe; assembler;{$endif}
-asm // input: eax=TAesContext, xmm7=data; output: eax=TAesContext, xmm7=data
+asm // input: eax=TAes, xmm7=data; output: eax=TAes, xmm7=data
         movups  xmm0, [eax + $00]
         movups  xmm1, [eax + $10]
         movups  xmm2, [eax + $20]
@@ -3369,10 +3369,10 @@ asm
         movups  xmm7, dqword ptr [eax].TAesCfb.fIV
         lea     eax, [eax].TAesCfb.fAes
         push    ecx
-        shr     ecx, AesBlockShift
+        shr     ecx, AES_SHIFT
         jz      @z
         {$ifdef FPC} align 16 {$endif}
-@s:     call    dword ptr [eax].TAesContext.AesNi32 // AES.Encrypt(fIV,fIV)
+@s:     call    dword ptr [eax].TAes.AesNi32 // AES.Encrypt(fIV,fIV)
         movups  xmm0, dqword ptr [esi]
         movaps  xmm1, xmm0
         pxor    xmm0, xmm7
@@ -3402,10 +3402,10 @@ asm
         movups  xmm7, dqword ptr [eax].TAesCfb.fIV
         lea     eax, [eax].TAesCfb.fAes
         push    ecx
-        shr     ecx, AesBlockShift
+        shr     ecx, AES_SHIFT
         jz      @z
         {$ifdef FPC} align 16 {$endif}
-@s:     call    dword ptr [eax].TAesContext.AesNi32 // AES.Encrypt(fIV,fIV)
+@s:     call    dword ptr [eax].TAes.AesNi32 // AES.Encrypt(fIV,fIV)
         movups  xmm0, dqword ptr [esi]
         pxor    xmm7, xmm0
         movups  dqword ptr [edi], xmm7  // fOut := fIn xor fIV
@@ -3436,7 +3436,7 @@ asm
         mov     edx, esi
         call    crcblock // using SSE4.2 or fast tables
         lea     eax, [ebx].TAesCfc.fAes
-        call    dword ptr [eax].TAesContext.AesNi32 // AES.Encrypt(fIV,fIV)
+        call    dword ptr [eax].TAes.AesNi32 // AES.Encrypt(fIV,fIV)
         movups  xmm0, dqword ptr [esi]
         movaps  xmm1, xmm0
         pxor    xmm0, xmm7
@@ -3470,7 +3470,7 @@ asm
         mov     edx, esi
         call    crcblock
         lea     eax, [ebx].TAesCfc.fAes
-        call    dword ptr [eax].TAesContext.AesNi32 // AES.Encrypt(fIV,fIV)
+        call    dword ptr [eax].TAes.AesNi32 // AES.Encrypt(fIV,fIV)
         movups  xmm0, dqword ptr [esi]
         pxor    xmm7, xmm0
         movups  dqword ptr [edi], xmm7  // fOut := fIn xor fIV  +  fIV := fOut^
@@ -3501,7 +3501,7 @@ asm
         mov     edx, esi
         call    crcblock
         lea     eax, [ebx].TAesOfc.fAes
-        call    dword ptr [eax].TAesContext.AesNi32 // AES.Encrypt(fIV,fIV)
+        call    dword ptr [eax].TAes.AesNi32 // AES.Encrypt(fIV,fIV)
         movups  xmm0, dqword ptr [esi]
         pxor    xmm0, xmm7
         movups  dqword ptr [edi], xmm0  // fOut := fIn xor fIV
@@ -3532,7 +3532,7 @@ asm
         call    crcblock // it is actually slower when inlining the crc32c
         lea     eax, [ebx].TAesCtc.fAes
         movups  xmm7, dqword ptr [ebx].TAesCtc.fIV
-        call    dword ptr [eax].TAesContext.AesNi32 // AES.Encrypt(fIV,tmp)
+        call    dword ptr [eax].TAes.AesNi32 // AES.Encrypt(fIV,tmp)
         movups  xmm0, dqword ptr [esi]
         inc     byte ptr [ebx + 15].TAesCtc.fIV
         jnz     @nov
@@ -3566,10 +3566,10 @@ asm
         movups  xmm7, dqword ptr [eax].TAesOfb.fIV
         lea     eax, [eax].TAesOfb.fAes
         push    ecx
-        shr     ecx, AesBlockShift
+        shr     ecx, AES_SHIFT
         jz      @z
         {$ifdef FPC} align 16 {$endif}
-@s:     call    dword ptr [eax].TAesContext.AesNi32 // AES.Encrypt(fIV,fIV)
+@s:     call    dword ptr [eax].TAes.AesNi32 // AES.Encrypt(fIV,fIV)
         movups  xmm0, dqword ptr [esi]
         pxor    xmm0, xmm7
         movups  dqword ptr [edi], xmm0  // fOut := fIn xor fIV
@@ -3595,14 +3595,14 @@ asm     // called from TAesC64.Encrypt
         mov     edi, BufOut
         mov     ecx, Count
         push    ecx
-        shr     ecx, AesBlockShift
+        shr     ecx, AES_SHIFT
         jz      @z
         mov     ebx, eax
         lea     eax, [eax].TAesC64.fAes
         {$ifdef FPC} align 16 {$endif}
 @s:     movups  xmm7, dqword ptr [ebx].TAesC64.fIV
         mov     edx, dword ptr [ebx].TAesC64.fCTROffset
-        call    dword ptr [eax].TAesContext.AesNi32 // AES.Encrypt(fIV,tmp)
+        call    dword ptr [eax].TAes.AesNi32 // AES.Encrypt(fIV,tmp)
         movups  xmm0, dqword ptr [esi]
         inc     byte ptr [ebx + edx].TAesC64.fIV
         jnz     @nov
@@ -3630,22 +3630,22 @@ end;
 
 {$ifdef USEAESNICTR}
 
-// use TAesContext.buf as state machine: c0=src c1=dst c2=iv c3=blocks
+// use TAes.buf as state machine: c0=src c1=dst c2=iv c3=blocks
 
 // AES-CTR over a 32-bit counter - handle a few blocks until 4x alignment
-procedure AesNiEncryptCtrNist32By1(ctxt: PAesContext);
+procedure AesNiEncryptCtrNist32By1(ctxt: PAes);
   {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
         push    esi
         push    edi
-        mov     esi, [eax].TAesContext.buf.c0  // esi=src
-        mov     edi, [eax].TAesContext.buf.c1  // edi=dst
-        mov     edx, [eax].TAesContext.buf.c2  // edx=iv
+        mov     esi, [eax].TAes.buf.c0  // esi=src
+        mov     edi, [eax].TAes.buf.c1  // edi=dst
+        mov     edx, [eax].TAes.buf.c2  // edx=iv
         mov     ecx, [edx].THash128Rec.c3      // ecx=ctr
         {$ifdef FPC} align 8 {$endif}
 @by1:   movups  xmm7, [edx]
         bswap   ecx
-        call    dword ptr [eax].TAesContext.AesNi32 // AES.Encrypt(xmm7)
+        call    dword ptr [eax].TAes.AesNi32 // AES.Encrypt(xmm7)
         add     ecx, 1
         movups  xmm0, [esi]
         lea     esi, dword ptr [esi + 16]
@@ -3654,22 +3654,22 @@ asm
         movups  [edi], xmm0
         lea     edi, dword ptr [edi + 16]
         mov     [edx].THash128Rec.c3, ecx
-        dec     dword ptr [eax].TAesContext.buf.c3 // blocks
+        dec     dword ptr [eax].TAes.buf.c3 // blocks
         jnz     @by1
-        mov     [eax].TAesContext.buf.c0, esi
-        mov     [eax].TAesContext.buf.c1, edi
+        mov     [eax].TAes.buf.c0, esi
+        mov     [eax].TAes.buf.c1, edi
 @done:  pop     edi
         pop     esi
 end;
 
 // AES-CTR with 4x AES-NI interleave factor and SSE 4.1 over a 32-bit counter
-procedure AesNiEncryptCtrNist32By4(ctxt: PAesContext);
+procedure AesNiEncryptCtrNist32By4(ctxt: PAes);
   {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
         push    esi
         push    edi
         push    ebx
-        mov     edx, [eax].TAesContext.buf.c2  // edx=iv
+        mov     edx, [eax].TAes.buf.c2  // edx=iv
         lea     eax, dword ptr [eax + $70] // for smaller codegen
         // prepare ecx = 32-bit ctr
         mov     ecx, [edx].THash128Rec.c3
@@ -3694,9 +3694,9 @@ asm
         bswap   ecx
         lea     ecx, [ecx + 4]
         // 4x interleaved AES process
-        mov     esi, [eax - $70].TAesContext.buf.c0  // esi=src
-        mov     edi, [eax - $70].TAesContext.buf.c1  // edi=dst
-        mov     bl, byte ptr [eax - $70].TAesContext.Rounds
+        mov     esi, [eax - $70].TAes.buf.c0  // esi=src
+        mov     edi, [eax - $70].TAes.buf.c1  // edi=dst
+        mov     bl, byte ptr [eax - $70].TAes.Rounds
         movups  xmm4, [eax + $00 - $70]
         movups  xmm5, [eax + $10 - $70]
         movups  xmm6, [eax + $20 - $70]
@@ -3761,18 +3761,18 @@ asm
         movups  xmm6, [esi + $20]
         movups  xmm7, [esi + $30]
         lea     esi, dword ptr [esi + $40]
-        mov     [eax - $70].TAesContext.buf.c0, esi
+        mov     [eax - $70].TAes.buf.c0, esi
         pxor    xmm4, xmm0
         pxor    xmm5, xmm1
         pxor    xmm6, xmm2
         pxor    xmm7, xmm3
         lea     esi, dword ptr [edi + $40]
-        mov     [eax - $70].TAesContext.buf.c1, esi
+        mov     [eax - $70].TAes.buf.c1, esi
         movups  [edi + $00], xmm4
         movups  [edi + $10], xmm5
         movups  [edi + $20], xmm6
         movups  [edi + $30], xmm7
-        dec     dword ptr [eax - $70].TAesContext.buf.c3 // 4x blocks
+        dec     dword ptr [eax - $70].TAes.buf.c3 // 4x blocks
         jnz     @by4
 @done:  pop     ebx
         pop     edi
@@ -3840,9 +3840,9 @@ end;
 
 // AES-NI + SSE 4.1 asm with 4x interleave factor
 procedure AesNiEncryptCtrNist32(
-  src, dst: pointer; blocks: PtrUInt; ctxt: PAesContext; iv: PHash128Rec); inline;
+  src, dst: pointer; blocks: PtrUInt; ctxt: PAes; iv: PHash128Rec); inline;
 var
-  state: PHash128Rec; // = TAesContext.buf
+  state: PHash128Rec; // = TAes.buf
 begin
   if blocks = 0 then
     exit;

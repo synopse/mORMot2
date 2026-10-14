@@ -16,9 +16,9 @@
 
 {$ifdef ASMX64NOTPIC} // some asm with global variables access
 
-procedure AesEncryptAsm(const ctxt: TAesContext; bi, bo: PBlock128);
+procedure AesEncryptAsm(const ctxt: TAes; bi, bo: PBlock128);
 {$ifdef FPC} nostackframe; assembler; asm {$else}
-asm     // input: rcx/rdi=TAesContext, rdx/rsi=source, r8/rdx=dest
+asm     // input: rcx/rdi=TAes, rdx/rsi=source, r8/rdx=dest
         .noframe
 {$endif}
         // rolled optimized encryption asm version by A. Bouchez
@@ -38,7 +38,7 @@ asm     // input: rcx/rdi=TAesContext, rdx/rsi=source, r8/rdx=dest
         mov     rdx,  rsi
         mov     r12,  rdi
         {$endif ABIWINX64}
-        movzx   r13,  byte ptr [r12].TAesContext.Rounds
+        movzx   r13,  byte ptr [r12].TAes.Rounds
         mov     eax,  dword ptr [rdx]
         mov     ebx,  dword ptr [rdx + 4H]
         mov     ecx,  dword ptr [rdx + 8H]
@@ -4110,7 +4110,7 @@ end;
 
 {$ifdef USEAESNI}
 
-procedure AesNiEncryptXmm0; // rax=TAesContext+$70 xmm0=input/output
+procedure AesNiEncryptXmm0; // rax=TAes+$70 xmm0=input/output
 {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
       movups  xmm1,  dqword ptr [rax + $00 - $70]
       movups  xmm2,  dqword ptr [rax + $10 - $70]
@@ -4133,7 +4133,7 @@ procedure AesNiEncryptXmm0; // rax=TAesContext+$70 xmm0=input/output
       aesenc  xmm0,  xmm2
       aesenc  xmm0,  xmm3
       aesenc  xmm0,  xmm4
-      cmp     byte ptr [rax - $70].TAesContext.Rounds, 12
+      cmp     byte ptr [rax - $70].TAes.Rounds, 12
       je      @192
       ja      @256
       aesenclast xmm0, xmm5
@@ -4936,7 +4936,7 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
       	cmp    rdx, $1
       	jne    @big
         // handle single block without allocating any stack frame
-        mov   al, byte ptr [rcx].TAesContext.Rounds
+        mov   al, byte ptr [rcx].TAes.Rounds
       	movups xmm2, dqword ptr [r8]
       	movups xmm0, dqword ptr [rcx]
       	movups xmm3, dqword ptr [rcx + $10]
@@ -5017,7 +5017,7 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         xor    eax, ebp
         bswap  r10d
         pinsrd xmm5, eax, $3
-        movzx  eax, byte ptr [rcx].TAesContext.Rounds
+        movzx  eax, byte ptr [rcx].TAes.Rounds
         xor    r10d, ebp
         movaps dqword ptr [rsp + $30], xmm5
         lea    r9, [r8 + $5]
@@ -5448,7 +5448,7 @@ procedure AesNiEncryptCtrNist32Small;
         aesenc  xmm0,  xmm2
         aesenc  xmm0,  xmm3
         aesenc  xmm0,  xmm4
-        cmp     byte ptr [rax - $70].TAesContext.Rounds, 12
+        cmp     byte ptr [rax - $70].TAes.Rounds, 12
         je      @192
         ja      @256
         aesenclast xmm0, xmm5
@@ -5546,7 +5546,7 @@ procedure AesNiEncryptCtrNist32Fast(var ctx: TAesNiCtr);
         bswap   ecx
         lea     rcx, [rcx + 4]
         // 4x interleaved AES process
-        mov     dl, byte ptr [rax - $70].TAesContext.Rounds
+        mov     dl, byte ptr [rax - $70].TAes.Rounds
         movups  xmm4, [rax + $00 - $70]
         movups  xmm5, [rax + $10 - $70]
         movups  xmm6, [rax + $20 - $70]
@@ -5734,7 +5734,7 @@ procedure AesNiEncryptCtrNist32Fast(var ctx: TAesNiCtr);
         bswap   ecx
         lea     rcx, [rcx + 4]
         // 8x interleaved AES process
-        mov     dl, byte ptr [rax - $70].TAesContext.Rounds
+        mov     dl, byte ptr [rax - $70].TAes.Rounds
         movups  xmm8,  [rax + $00 - $70]
         movups  xmm9,  [rax + $10 - $70]
         movups  xmm10, [rax + $20 - $70]
@@ -5933,7 +5933,7 @@ end;
 {$endif USEAESNICTRBY4}
 
 procedure AesNiEncryptCtrNist32(src, dst: pointer; blocks: PtrUInt;
-  ctxt: PAesContext; iv: PHash128Rec); inline;
+  ctxt: PAes; iv: PHash128Rec); inline;
 var
   params: TAesNiCtr;
 begin
@@ -5979,7 +5979,7 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         lea    rcx, [rcx].TAesCtc.fAes
         mov    r10d, 16
         call   @crc // MAC plain block
-      	mov    al, byte ptr [rcx].TAesContext.Rounds
+      	mov    al, byte ptr [rcx].TAes.Rounds
       	movups xmm0, dqword ptr [rcx]
       	movups xmm3, dqword ptr [rcx + $10]
       	movups xmm4, dqword ptr [rcx + $20]
@@ -6080,7 +6080,7 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         xor    eax, ebp
         bswap  r10d
         pinsrd xmm5, eax, $3
-        movzx  eax, byte ptr [rcx].TAesContext.Rounds
+        movzx  eax, byte ptr [rcx].TAes.Rounds
         xor    r10d, ebp
         movaps dqword ptr [rsp + $30], xmm5
         lea    r9, [r8 + $5]
@@ -6578,7 +6578,7 @@ var
 begin
   ctr := bswap32(PCardinal(@ctxt.fIV[12])^);
   repeat
-    blocks := len shr AesBlockShift;
+    blocks := len shr AES_SHIFT;
     inc(ctr, blocks);
     if ctr < blocks then
     begin
@@ -6590,7 +6590,7 @@ begin
     PCardinal(@ctxt.fIV[12])^ := bswap32(ctr);
     if ctr = 0 then
       CtrNistCarry12(@ctxt.fIV); // propagate carry
-    blocks := blocks shl AesBlockShift;
+    blocks := blocks shl AES_SHIFT;
     inc(src, blocks);
     inc(dest, blocks);
     dec(len, blocks);

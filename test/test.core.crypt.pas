@@ -2843,11 +2843,11 @@ procedure TTestCoreCrypto._AES;
     Check(plain <> '');
     Check((length(iv) = 16) or
           (iv = ''));
-    CheckEqual(length(plain) and AesBlockMod, 0);
+    CheckEqual(length(plain) and AES_MOD, 0);
     k := mormot.core.text.HexToBin(Key);
     Check(length(k) in [16, 24, 32]);
     e := mormot.core.text.HexToBin(expected);
-    CheckEqual(length(e) and AesBlockMod, 0);
+    CheckEqual(length(e) and AES_MOD, 0);
     CheckEqual(length(k) shl 3, ks);
     SetLength(c, length(plain));
     SetLength(d, length(plain));
@@ -2921,9 +2921,8 @@ begin
   backup := CpuFeatures;
   {$endif ASMINTEL}
   CheckEqual(SizeOf(TMd5Buf), SizeOf(TMd5Digest));
-  CheckEqual(1 shl AesBlockShift, SizeOf(TAesBlock));
-  CheckEqual(SizeOf(TAes), AES_CONTEXT_SIZE);
-  Check(AES_CONTEXT_SIZE <= 300); // lib/static/libsqlite3/sqlite3mc.c KEYLENGTH
+  CheckEqual(1 shl AES_SHIFT, SizeOf(TAesBlock));
+  Check(SizeOf(TAes) <= 300, 'lib/static/libsqlite3/sqlite3mc.c KEYLENGTH');
   {$ifndef PUREMORMOT2}
   CheckEqual(SizeOf(TAesFullHeader), SizeOf(TAesBlock));
   {$endif PUREMORMOT2}

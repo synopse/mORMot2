@@ -3112,7 +3112,7 @@ begin
     dec(Len, 16);
     inc(PHash128(Data));
   end; // may exist with NoHeader=true (e.g. SaveToSource)
-  if Len and AesBlockMod <> 0 then
+  if Len and AES_MOD <> 0 then
     exit;
   FastSetRawByteString(salt, Data, PRIVKEY_SALTSIZE);
   inc(PByte(Data), PRIVKEY_SALTSIZE);
