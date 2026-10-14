@@ -8816,6 +8816,14 @@ begin
   CheckEqual(tmp, '0002-00-00');
   CheckEqual(DateTimeToIso8601Text(Iso8601ToDateTime('1492-10-12T16:00:00')),
     '1492-10-12T16:00:00');
+  CheckEqual(DateTimeToIso8601(Iso8601ToDateTime('2026-01-01T12:00:23.1Z'),
+      true, 'T', true), '2026-01-01T12:00:23.100');
+  CheckEqual(DateTimeToIso8601(Iso8601ToDateTime('2026-01-01T12:00:23.13Z'),
+      true, 'T', true), '2026-01-01T12:00:23.130');
+  CheckEqual(DateTimeToIso8601(Iso8601ToDateTime('2026-01-01T12:00:23.123Z'),
+      true, 'T', true), '2026-01-01T12:00:23.123');
+  CheckEqual(DateTimeToIso8601(Iso8601ToDateTime('2026-01-01T12:00:23.123456Z'),
+      true, 'T', true), '2026-01-01T12:00:23.123');
 end;
 
 {$R ..\src\mormot.tz.res} // validate our Win11-generated resource file

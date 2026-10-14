@@ -1744,12 +1744,36 @@ begin
   result := tmp;
 end;
 
+function Iso8601FractionToMS(P: PUtf8Char; L: PtrInt): cardinal;
+  {$ifdef HASINLINE} inline; {$endif}
+begin
+  result := 0;
+  if L <= 0 then
+    exit;
+  if not (P[0] in ['0'..'9']) then
+    exit;
+  result := (ord(P[0]) - 48) * 100;
+  if L < 2 then
+    exit;
+  if not (P[1] in ['0'..'9']) then
+    exit;
+  inc(result, (ord(P[1]) - 48) * 10);
+  if L < 3 then
+    exit;
+  if P[2] in ['0'..'9'] then
+    inc(result, ord(P[2]) - 48);
+end;
+
 procedure Iso8601ToDateTimePUtf8CharVar(P: PUtf8Char; L: PtrInt;
   var result: TDateTime);
 var
   b, y, m, d, h, mi, ss, ms: cardinal;
   time: TDateTime;
+  {$ifdef FPC}
+  y100: cardinal;
+  {$else}
   d100: TDiv100Rec;
+  {$endif FPC}
   {$ifdef CPUX86NOTPIC}
   tab: TNormTableByte absolute ConvertHexToBin;
   {$else}
@@ -1851,10 +1875,17 @@ begin
     end;
     if y > 9999 then
       exit; // avoid integer overflow e.g. if '0000' is an invalid date
-    Div100(y, d100{%H-});
-    unaligned(result) := cardinal(cardinal(D1 * d100.d) shr 2) +
-                         cardinal(cardinal(D0 * d100.m) shr 2) +
+    {$ifdef FPC}
+    y100 := y div 100; // FPC will use fast reciprocal
+    unaligned(result) := cardinal(cardinal(D1 * y100) shr 2) +
+                         cardinal(cardinal(D0 * (y - y100 * 100)) shr 2) +
                          cardinal(cardinal(D2 * m + 2) div 5) + d;
+    {$else}
+    Div100(y, d100{%H-});
+    result := cardinal(cardinal(D1 * d100.d) shr 2) +
+              cardinal(cardinal(D0 * d100.m) shr 2) +
+              cardinal(cardinal(D2 * m + 2) div 5) + d;
+    {$endif FPC}
     unaligned(result) := unaligned(result) - D1899; // avoid sign issue
     if L < 15 then
       exit; // not enough space to retrieve the time
@@ -1874,16 +1905,8 @@ begin
   ss := ord(P[13]) * 10 + ord(P[14]) - (48 + 480);
   if (L > 16) and
      (P[15] = '.') then
-  begin
     // one or more digits representing a decimal fraction of a second
-    ms := ord(P[16]) * 100 - 4800;
-    if L > 17 then
-      ms := ms {%H-}+ byte(P[17]) * 10 - 480;
-    if L > 18 then
-      ms := ms + byte(P[18]) - 48;
-    if ms > MilliSecsPerSec then
-      ms := 0;
-  end
+    ms := Iso8601FractionToMS(@P[16], L - 16)
   else
     ms := 0;
   if (h >= 24) or
@@ -1989,14 +2012,12 @@ begin
   S := ord(P[4]) * 10 + ord(P[5]) - (48 + 480);
   if (L > 6) and
      (P[6] = '.') then
-  begin
     // one or more digits representing a decimal fraction of a second
-    MS := ord(P[7]) * 100 - 4800;
-    if L > 7 then
-      MS := MS {%H-}+ ord(P[8]) * 10 - 480;
-    if L > 8 then
-      MS := MS + ord(P[9]) - 48;
-  end
+    if (L > 7) and
+       (P[7] in ['0'..'9']) then
+      MS := Iso8601FractionToMS(@P[7], L - 7)
+    else
+      exit
   else
     MS := 0;
   if (H < 24) and
