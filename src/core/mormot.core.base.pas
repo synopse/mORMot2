@@ -12159,14 +12159,14 @@ var
   src, dst, o: PAnsiChar;
   v, cached, cwmask: cardinal;
   h, t, tmax: PtrUInt;
-begin
+begin // better code generation with sub-functions for raw encoding
   cwmask := 1;
   src := ctx.src;
   dst := ctx.dst;
   repeat
     v := PCardinal(src)^;
     h := ((v shr 12) xor v) and 4095;
-    o := ctx.offset[h];
+    o := ctx.offset[h];           // not faster with a transient pointer
     ctx.offset[h] := src;
     cached := v xor ctx.cache[h]; // o=nil if cache[h] is uninitialized
     ctx.cache[h] := v;
@@ -12190,15 +12190,15 @@ begin
       if t <= 15 then
       begin
         // mark 2 to 17 bytes -> size=1..15
-        PInteger(dst)^ := integer(t or h);
+        PWord(dst)^ := integer(t or h);
         inc(dst, 2);
       end
       else
       begin
         // mark 18 to (255+16) bytes -> size=0, next byte=t
         dec(t, 16);
-        PInteger(dst)^ := h; // size=0
-        dst[2] := ansichar(t);
+        PWord(dst)^ := h; // size=0
+        dst[2] := AnsiChar(t);
         inc(dst, 3);
       end;
     end
@@ -12212,9 +12212,9 @@ begin
     if cwmask = 0 then
     begin
       ctx.cwpoint := pointer(dst);
-      PCardinal(dst)^ := 0;
+      PCardinal(dst)^ := cwmask;
       inc(PCardinal(dst));
-      cwmask := 1;
+      inc(cwmask);
     end;
   until src > ctx.srcendmatch;
   ctx.src := src; // store end position
@@ -12240,7 +12240,7 @@ begin
   end
   else
   begin
-    PCardinal(dst)^ := size; // size<32768 -> stored as word
+    PWord(dst)^ := size; // size<32768 -> stored as word
     if size = 0 then
     begin
       result := 2;
@@ -12277,9 +12277,9 @@ begin
     if cwmask = 0 then
     begin
       ctx.cwpoint := pointer(dst);
-      PCardinal(dst)^ := 0;
+      PCardinal(dst)^ := cwmask;
       inc(PCardinal(dst));
-      cwmask := 1;
+      inc(cwmask);
     end;
   end;
   result := dst - dstbeg;
@@ -12298,13 +12298,12 @@ begin
   until i = max; // this loop pattern is faster than -count + inc(count) on RISC
 end;
 
-// better code generation with sub-functions for raw decoding
 procedure SynLZdecompress1passub(src, src_end, dst: PAnsiChar; var offset: TOffsets);
 var
   last_hashed, o: PAnsiChar;
   cw, cwbit, v: cardinal;
   t: PtrUInt;
-begin
+begin // better code generation with sub-functions for raw decoding
   last_hashed := dst - 1;
   cw := PCardinal(src)^;
   inc(src, 4);
@@ -12363,7 +12362,7 @@ begin
       end;
       cw := PCardinal(src)^;
       inc(src, 4);
-      cwbit := 1;
+      inc(cwbit); // = 1
     until false;
 end;
 
