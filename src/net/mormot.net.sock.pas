@@ -1703,6 +1703,7 @@ type
     fAcceptExUsed: TLightLock; // can track only a single AcceptEx()
     fAcceptSocket: TNetSocket;
     fAcceptExBuf: TBytes;
+    procedure AcceptSocketCloseAndUnlock;
   public
     /// initialize this IOCP queue for a number of processing thread
     constructor Create(processing: integer = 1; options: TWinIocpOptions = []);
