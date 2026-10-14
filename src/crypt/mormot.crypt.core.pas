@@ -1980,10 +1980,6 @@ function CryptDataWithSecret(const Data: RawByteString;
 
 { ****************** SHA-2 SHA-3 Secure Hashing }
 
-const
-  /// hide TSha3Context complex code by storing the Keccak/SHA-3 Sponge as buffer
-  SHA3_CONTEXT_SIZE = 410;
-
 type
   /// shared SHA-1/SHA-2 context as used by both TSha1 and TSha256
   TShaContext = record
@@ -2229,6 +2225,13 @@ type
   /// points to SHA-512 hashing instance
   PSha512 = ^TSha512;
 
+const
+  cKeccakNumberOfRounds   = 24;
+  cKeccakMaximumRateBits  = 1536;
+  cKeccakPermutationBits  = 1600;
+  cKeccakMaximumRateBytes = cKeccakMaximumRateBits div 8;
+  cKeccakPermutationQWord = cKeccakPermutationBits div 64;
+
 type
   /// SHA-3, SHAKE and original Keccak instances
   // - SHA3_224..SHA3_512 output 224, 256, 384 and 512 bits of cryptographic hash
@@ -2242,6 +2245,32 @@ type
     SHAKE_128,
     SHAKE_256,
     KECCAK_256);
+
+  /// raw SHA-3 / Keccak state engine as used by the TSha3 high-level wrapper
+  {$ifdef USERECORDWITHMETHODS}
+  TSha3Context = record
+  {$else}
+  TSha3Context = object
+  {$endif USERECORDWITHMETHODS}
+  public
+    State: array[0 .. cKeccakPermutationQWord - 1] of QWord;
+    DataQueue: array[0 .. cKeccakMaximumRateBytes - 1] of byte;
+    Rate: integer;
+    Capacity: integer;
+    BitsInQueue: integer;
+    BitsAvailableForSqueezing: integer;
+    Algo: TSha3Algo;
+    Squeezing: boolean;
+    procedure Init(aAlgo: TSha3Algo);
+    procedure AbsorbQueue;
+    procedure Absorb(Data: PByteArray; databitlen: integer);
+    procedure AbsorbFinal(Data: PByteArray; databitlen: integer);
+    procedure PadAndSwitchToSqueezingPhase;
+    procedure Squeeze(output: PByteArray; outputLength: PtrInt);
+    procedure FinalBit_LSB(bits: byte; bitlen: integer; hashval: pointer;
+      numbits: integer);
+  end;
+  PSha3Context = ^TSha3Context;
 
   /// implements SHA-3 (Keccak) hashing
   // - Keccak was the winner of the NIST hashing competition for a new hashing
@@ -2260,7 +2289,7 @@ type
   TSha3 = object
   {$endif USERECORDWITHMETHODS}
   private
-    Context: packed array[1..SHA3_CONTEXT_SIZE] of byte;
+    Data: TSha3Context;
   public
     /// initialize SHA-3 context for hashing
     // - in practice, you may use SHA3_256 or SHA3_512 to return THash256
@@ -2849,6 +2878,12 @@ implementation
 { ****************** Include Tuned INTEL/AMD Assembly }
 
 { we need to define now some shared types and constants used also from asm }
+
+type
+  TShaHash = record
+    // will use A..E with TSha1, A..H with TSha256
+    A, B, C, D, E, F, G, H: cardinal;
+  end;
 
 const
   // used by SHA-256
@@ -7972,12 +8007,6 @@ end;
 
 { --------- SHA-2 Hashing }
 
-type
-  TShaHash = record
-    // will use A..E with TSha1, A..H with TSha256
-    A, B, C, D, E, F, G, H: cardinal;
-  end;
-
 // under Win32, with a Core i7 CPU: pure pascal: 152ms - x86: 112ms
 // under Win64, with a Core i7 CPU: pure pascal: 202ms - SSE4: 78ms
 
@@ -8629,12 +8658,6 @@ end;
  3. This notice may not be removed or altered from any source distribution. }
 
 const
-  cKeccakNumberOfRounds   = 24;
-  cKeccakMaximumRateBits  = 1536;
-  cKeccakPermutationBits  = 1600;
-  cKeccakMaximumRateBytes = cKeccakMaximumRateBits div 8;
-  cKeccakPermutationQWord = cKeccakPermutationBits div 64;
-
   cRoundConstants: array[0 .. cKeccakNumberOfRounds - 1] of QWord = (
     QWord($0000000000000001), QWord($0000000000008082), QWord($800000000000808A),
     QWord($8000000080008000), QWord($000000000000808B), QWord($0000000080000001),
@@ -8840,34 +8863,6 @@ end;
 
 { TSha3Context }
 
-type
-  {$A-}
-  {$ifdef USERECORDWITHMETHODS}
-  TSha3Context = record
-  {$else}
-  TSha3Context = object
-  {$endif USERECORDWITHMETHODS}
-  public
-    State: packed array[0..cKeccakPermutationQWord - 1] of QWord;
-    DataQueue: packed array[0..cKeccakMaximumRateBytes - 1] of byte;
-    Rate: integer;
-    Capacity: integer;
-    BitsInQueue: integer;
-    BitsAvailableForSqueezing: integer;
-    Algo: TSha3Algo;
-    Squeezing: boolean;
-    procedure Init(aAlgo: TSha3Algo);
-    procedure AbsorbQueue;
-    procedure Absorb(Data: PByteArray; databitlen: integer);
-    procedure AbsorbFinal(Data: PByteArray; databitlen: integer);
-    procedure PadAndSwitchToSqueezingPhase;
-    procedure Squeeze(output: PByteArray; outputLength: PtrInt);
-    procedure FinalBit_LSB(bits: byte; bitlen: integer; hashval: pointer;
-      numbits: integer);
-  end;
-  PSha3Context = ^TSha3Context;
-  {$A+}
-
 const
   SHA3_DEF_LEN: array[TSha3Algo] of integer = (
     224, 256, 384, 512, 256, 512, 256);
@@ -9066,12 +9061,12 @@ end;
 
 procedure TSha3.Init(Algo: TSha3Algo);
 begin
-  PSha3Context(@Context)^.Init(Algo);
+  Data.Init(Algo);
 end;
 
 function TSha3.Algorithm: TSha3Algo;
 begin
-  result := PSha3Context(@Context)^.algo;
+  result := Data.algo;
 end;
 
 procedure TSha3.Update(const Buffer: RawByteString);
@@ -9082,7 +9077,7 @@ end;
 procedure TSha3.Update(Buffer: pointer; Len: integer);
 begin
   if Len > 0 then
-    PSha3Context(@Context)^.Absorb(Buffer, Len shl 3);
+    Data.Absorb(Buffer, Len shl 3);
 end;
 
 procedure TSha3.Final(out Digest: THash256; NoInit: boolean);
@@ -9098,13 +9093,13 @@ end;
 procedure TSha3.Final(Digest: pointer; DigestBits: integer; NoInit: boolean);
 begin
   if DigestBits = 0 then
-    DigestBits := SHA3_DEF_LEN[TSha3Context(Context).Algo];
-  if TSha3Context(Context).Squeezing then // used as Extendable-Output Function
-    PSha3Context(@Context)^.Squeeze(Digest, DigestBits)
+    DigestBits := SHA3_DEF_LEN[Data.Algo];
+  if Data.Squeezing then // used as Extendable-Output Function
+    Data.Squeeze(Digest, DigestBits)
   else
-    PSha3Context(@Context)^.FinalBit_LSB(0, 0, Digest, DigestBits);
+    Data.FinalBit_LSB(0, 0, Digest, DigestBits);
   if not NoInit then
-    FillCharFast(Context, SizeOf(Context), 0);
+    FillCharFast(Data, SizeOf(Data), 0);
 end;
 
 function TSha3.Final256(NoInit: boolean): THash256;
@@ -9174,7 +9169,7 @@ procedure TSha3.InitCypher(Key: pointer; KeyLen: integer; Algo: TSha3Algo);
 begin
   Init(Algo);
   Update(Key, KeyLen);
-  PSha3Context(@Context)^.FinalBit_LSB(0, 0, nil, 0);
+  Data.FinalBit_LSB(0, 0, nil, 0);
 end;
 
 procedure TSha3.InitCypher(const Key: RawByteString; Algo: TSha3Algo);
@@ -10857,7 +10852,7 @@ begin
   {$endif USEARMCRYPTO}
   assert(SizeOf(TMd5Buf) = SizeOf(TMd5Digest));
   assert(SizeOf(TAes) <= 300); // lib/static/libsqlite3/sqlite3mc.c KEYLENGTH
-  assert(SizeOf(TSha3Context) = SHA3_CONTEXT_SIZE);
+  assert(SizeOf(TSha3Context) = SizeOf(TSha3));
   assert(1 shl AES_SHIFT = SizeOf(TAesBlock));
   assert(SizeOf(TSha256) = SizeOf(TSha1));
   assert(SizeOf(TSha512) > SizeOf(TSha256));

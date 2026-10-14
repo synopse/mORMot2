@@ -2929,7 +2929,7 @@ begin
   CheckEqual(SizeOf(TSha1), SizeOf(TShaContext));
   CheckEqual(SizeOf(TSha256), SizeOf(TShaContext));
   CheckEqual(SizeOf(TSha256), SizeOf(TSha1));
-  CheckEqual(SizeOf(TSha3), SHA3_CONTEXT_SIZE);
+  CheckEqual(SizeOf(TSha3), SizeOf(TSha3Context));
   Check(SizeOf(TSha512) > SizeOf(TSha256));
   Check(SizeOf(TSha3) > SizeOf(TSha512));
   CheckEqual(SizeOf(TSha384), SizeOf(TSha384512));
