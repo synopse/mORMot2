@@ -1255,9 +1255,12 @@ type
   /// store THttpProxyUrl.Settings options for a given URI
   THttpProxyUrlOptions = set of THttpProxyUrlOption;
 
+  THttpProxyUrlSettings = class;
+
   /// callback function prototype for THttpProxyServerSettings.AddEvent()
   TOnHttpProxyServerRequest = function(Ctxt: THttpServerRequestAbstract;
-    const Uri: TUriMatchName; Met: TUriRouterMethod): cardinal of object;
+    const Uri: TUriMatchName; Met: TUriRouterMethod;
+    ProxyUrl: THttpProxyUrl): cardinal of object;
 
   /// define one URL content / THttpProxyUrl setting for THttpProxyServer
   THttpProxyUrlSettings = class(TSynAutoCreateFields)
@@ -6570,7 +6573,10 @@ begin
       PtrArrayAdd(fUrl, one);
       // validate source as local file folder or remote http(s) server
       hps := hpsUndefined;
-      if s.Source <> '' then
+      if Assigned(s.OnRequest) then
+        // execute a callback event
+        hps := hpsEvent
+      else if s.Source <> '' then
         if IsHttp(s.Source) then
         begin
           // detects also 'http://unix:/path/to/socket.sock:/url/path'
@@ -6586,10 +6592,7 @@ begin
             s.fLocalFolder := IncludeTrailingPathDelimiter(s.fLocalFolder);
             hps := hpsLocalFolder;
           end;
-        end
-      else if Assigned(s.OnRequest) then
-        // execute a callback event
-        hps := hpsEvent;
+        end;
       one.fSource := hps;
       if hps = hpsUndefined then
       begin
@@ -6906,38 +6909,34 @@ var
   uri: TUriMatchName;
   met: TUriRouterMethod;
 begin
-  result := HTTP_NOTFOUND; // 404 by default
   // retrieve O(1) execution context
+  result := HTTP_NOTFOUND; // 404 by default
   one := Ctxt.RouteOpaque;
   if (one = nil) or
      one.Settings.Disabled or
      (one.Source = hpsUndefined) then
     exit;
   // validate the request method
+  result := HTTP_NOTALLOWED; // 405 Method Not Allowed
   if not (UriMethod(Ctxt.Method, met) and
           (met in one.Settings.Methods)) then
-  begin
-    result := HTTP_NOTALLOWED; // 405 Method Not Allowed
     exit;
-  end;
   // retrieve path and resource/file name from URI
   Ctxt.RouteAt(0, uri.Path);
   if uri.Path.Len > 512 then // obviously invalid
     exit;
   uri.ParsePath; // compute uri.Name for file-level TUriMatch
   // ensure was not marked as rejected
+  result := HTTP_FORBIDDEN; // 403
   if (one.Settings.RejectCsv <> '') and
      one.fReject.Check(one.Settings.RejectCsv, uri, PathCaseInsensitive) then
-  begin
-    result := HTTP_FORBIDDEN; // 403
     exit;
-  end;
   // actual request processing
   result := HTTP_NOTALLOWED; // 405 Method Not Allowed
   case one.Source of
     hpsEvent:
-      result := one.Settings.OnRequest(Ctxt, uri, met);
-      // no cache for callback methods (by design)
+      result := one.Settings.OnRequest(Ctxt, uri, met, one);
+      // no cache nor method filtering for callback (by design)
   else
     case met of
       urmGet,
