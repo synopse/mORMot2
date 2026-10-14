@@ -596,7 +596,7 @@ var
   v: TLinger;
 begin
   v.l_linger := MinPtrInt(high(word), MaxPtrInt(0, linger)); // 16-bit field
-  v.l_onoff := 0; // don't wait - ord(linger >= 0) would wait
+  v.l_onoff := ord(linger = 0);
   // best effort (no exception): may be called during socket shutdown
   setsockopt(TSocket(@self), SOL_SOCKET, SO_LINGER, @v, SizeOf(v));
 end;

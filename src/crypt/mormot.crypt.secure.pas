@@ -593,7 +593,7 @@ type
   TSynHasher = object
   {$endif USERECORDWITHMETHODS}
   private
-    ctxt: array[1 .. SizeOf(TSha3)] of byte; // enough space for all algorithms
+    ctxt: TSha3;      // enough space for all algorithms
     fAlgo: THashAlgo; // ctxt is better aligned if put first
     procedure CopyTo(out aHasher: TSynHasher); {$ifdef FPC} inline; {$endif}
     procedure Clear;                           {$ifdef FPC} inline; {$endif}

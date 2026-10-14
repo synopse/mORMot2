@@ -46,6 +46,7 @@ uses
   mormot.core.log,
   mormot.core.zip,
   mormot.net.sock,
+  mormot.net.http,
   mormot.net.client,
   mormot.net.server,
   mormot.crypt.secure,
@@ -66,7 +67,6 @@ var
   c: TExecutableCommandLine;
   mac: TMacAddress;
   logfolder: TFileName;
-  dest: RawUtf8;
   port: integer;
 begin
   // some good enough general default values
@@ -91,9 +91,8 @@ begin
   result := gpWithUrl;
   if c.Option(['P', 'prompt'], 'run in prompt mode (end on void input)') then
     result := gpPromptMode;
-  dest := MakePath([GetCurrentDir, ExtractResourceName(url{%H-})]);
-  p.DestFile := c.ParamS('&output',
-    'destination #filename or existing foldername', dest);
+  p.DestFile := c.ParamS('&output', 'destination #filename or existing foldername',
+    MakePath([GetCurrentDir, ExtractResourceName(url{%H-})]));
   p.Silent := c.Option('&silent', 'generate no console output');
   p.NoResume := c.Option('&noresume',
      'disable auto-resume of interrupted partial download');

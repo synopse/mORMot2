@@ -1206,7 +1206,7 @@ type
 
   /// thread-specific internal threadvar definition used for fast process
   // - consumes 484/512 bytes + 256+64 per thread on CPU32/CPU64
-  TSynLogThreadInfo = {$ifndef CPUINTEL} packed {$endif} record
+  TSynLogThreadInfo = {$ifdef CPUINTEL} packed {$endif} record
     /// number of recursive calls currently stored in Recursion[]
     // - nothing logged above MAX_SYNLOGRECURSION (53) to keep this record small
     RecursionCount: byte;
