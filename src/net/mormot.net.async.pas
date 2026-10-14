@@ -3227,8 +3227,7 @@ begin
     exit;             // use this counter to avoid duplicated calls
   inc(fFlag1);
   {$ifdef USE_WINIOCP}
-  fIocpAccept.Unsubscribe(fIocpAcceptSub);
-  fIocpAccept.Terminate;
+  fIocpAccept.Terminate;  // notify the IOCP queue - no Unsubscribe(fIocpAcceptSub)
   {$endif USE_WINIOCP}
   if fSockets <> nil then
     fSockets.fTerminated := true; // shutdown ASAP
@@ -4430,36 +4429,32 @@ begin
           DoLog(sllCustom1, 'Execute: Accept(%) retry', [fServer.Port], self);}
         if res = nrRetry then // timeout
           continue;
-        // check if the remote IP is banned
-        if (res = nrOk) and
-           fBanned.IsBanned(sin) then // IP filtering from blacklist
-        begin
-          if acoVerboseLog in fOptions then
-            DoLog(sllTrace, 'Execute: ban=%', [CardinalToHexShort(sin.IP4)], self);
-          len := ord(HTTP_BANIP_RESPONSE[0]);
-          client.Send(@HTTP_BANIP_RESPONSE[1], len); // 418 I'm a teapot
-          client.ShutdownAndClose({rdwr=}false);    // reject before TLS setup
-          continue;
-        end;
-        // ensure we don't have too many connections on this server instance
-        {$ifdef USE_WINIOCP}
-        if fSockets.fIocpRecvSend.Count > fMaxConnections then
-        {$else}
-        if (fSockets.fRead.Count > fMaxConnections) or
-           (fSockets.fRead.PendingCount > fMaxPending) then
-           // map THttpAsyncServer.HttpQueueLength property value
-        {$endif USE_WINIOCP}
-        begin
-          client.ShutdownAndClose({rdwr=}false); // e.g. for load balancing
-          res := nrTooManyConnections;
-        end;
+        if res = nrOk then
+          // check if the remote IP is banned
+          if fBanned.IsBanned(sin) then // IP filtering from blacklist
+          begin
+            if acoVerboseLog in fOptions then
+              DoLog(sllTrace, 'Execute: ban=%', [CardinalToHexShort(sin.IP4)], self);
+            len := ord(HTTP_BANIP_RESPONSE[0]);
+            client.Send(@HTTP_BANIP_RESPONSE[1], len); // 418 I'm a teapot
+            client.ShutdownAndClose({rdwr=}false);    // reject before TLS setup
+            continue;
+          end
+          // ensure we don't have too many connections on this server instance
+          {$ifdef USE_WINIOCP}
+          else if fSockets.fIocpRecvSend.Count > fMaxConnections then
+          {$else}
+          else if (fSockets.fRead.Count > fMaxConnections) or
+                  (fSockets.fRead.PendingCount > fMaxPending) then
+             // map THttpAsyncServer.HttpQueueLength property value
+          {$endif USE_WINIOCP}
+          begin
+            client.ShutdownAndClose({rdwr=}false); // e.g. for load balancing
+            if Terminated then
+              break;
+            res := nrTooManyConnections;
+          end;
         // handle any socket error in fServer.Sock.Accept()
-        if Terminated then
-        begin
-          if res = nrOk then
-            client.ShutdownAndClose({rdwr=}false);
-          break;
-        end;
         if res <> nrOK then
         begin
           // failure (too many clients?) -> wait and retry
