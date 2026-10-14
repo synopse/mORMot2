@@ -434,6 +434,24 @@ asm
 .LxasmmodDone:
 end;
 
+procedure _xasmsquarediagonal(Src, Dst: pointer; Count: PtrUInt);
+  assembler; nostackframe;
+asm
+  // x0=Src x1=Dst x2=Count
+  mov    x7, xzr
+.LsquarePair:
+  ldr    w3, [x0], #4
+  umaddl x3, w3, w3, x7
+  ldr    x4, [x1]
+  lsl    x5, x4, #1
+  lsr    x7, x4, #63
+  adds   x5, x5, x3
+  adc    x7, x7, xzr
+  str    x5, [x1], #8
+  subs   x2, x2, #1
+  b.ne   .LsquarePair
+end;
+
 procedure mul64x64(const left, right: QWord; out product: THash128Rec);
   assembler; nostackframe;
 asm
@@ -447,8 +465,8 @@ procedure _mult128(constref l, r: THash128Rec; out product: THash256Rec);
   assembler; nostackframe;
 asm
   // x0 = @l, x1 = @r, x2 = @product
-  ldp   x3, x4, [x0]       // l0, l1
-  ldp   x5, x6, [x1]       // r0, r1
+  ldp   x3, x4, [x0]      // l0, l1
+  ldp   x5, x6, [x1]      // r0, r1
   mul   x7, x3, x5        // low(l0*r0)
   umulh x8, x3, x5        // high(l0*r0)
   str   x7, [x2]
@@ -900,6 +918,27 @@ asm
   str   r0, [r2, #8]
   str   r1, [r2, #12]
   pop   {r4-r7}
+end;
+
+procedure _xasmsquarediagonal(Src, Dst: pointer; Count: PtrUInt);
+  assembler; nostackframe;
+asm
+  // r0=Src r1=Dst r2=Count
+  push  {r4-r5}
+  mov   r4, #0
+.LsquarePair32:
+  ldrh  r3, [r0], #2
+  mla   r3, r3, r3, r4
+  ldr   r12, [r1]
+  adds  r12, r12, r12
+  mov   r4, #0
+  adc   r4, r4, #0
+  adds  r12, r12, r3
+  adc   r4, r4, #0
+  str   r12, [r1], #4
+  subs  r2, r2, #1
+  bne   .LsquarePair32
+  pop   {r4-r5}
 end;
 
 {$endif FPC_CPUAARCH64}

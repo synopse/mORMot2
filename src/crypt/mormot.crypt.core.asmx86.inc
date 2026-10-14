@@ -2421,6 +2421,34 @@ asm     // Src=eax Dst=edx Factor=ecx Carry=[ebp]
         pop    ebx
 end;
 
+procedure _xasmsquarediagonal(Src, Dst: pointer; Count: PtrUInt);
+  {$ifdef FPC} nostackframe; assembler; {$endif}
+asm
+        push    ebx
+        push    esi
+        push    edi
+        mov     esi, eax        // esi=Src
+        mov     edi, edx        // edi=Dst
+        xor     ebx, ebx        // ebx=carry
+@s:     movzx   eax, word ptr [esi]
+        imul    eax, eax
+        lea     eax, [eax + ebx]
+        mov     edx, dword ptr [edi]
+        xor     ebx, ebx
+        add     edx, edx
+        adc     ebx, 0
+        add     edx, eax
+        adc     ebx, 0
+        mov     dword ptr [edi], edx
+        add     esi, 2
+        add     edi, 4
+        dec     ecx             // ecx=Count
+        jnz     @s
+        pop     edi
+        pop     esi
+        pop     ebx
+end;
+
 procedure _mmodP(out Output: THash256Rec; var Product: THash512Rec);
   {$ifdef FPC}nostackframe; assembler;{$endif}
 asm

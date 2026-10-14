@@ -3074,6 +3074,25 @@ function _xasmmuladd(Src, Dst: pointer; Factor, Carry: PtrUInt): PtrUInt;
         {$endif ABIWINX64}
 end;
 
+procedure _xasmsquarediagonal(Src, Dst: pointer; Count: PtrUInt);
+{$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
+        xor     r10d, r10d       // carry
+@s:     mov     eax, dword ptr [Src]
+        imul    rax, rax
+        lea     rax, [rax + r10] // square + carry cannot overflow
+        mov     r9, qword ptr [Dst]
+        xor     r10d, r10d
+        add     r9, r9
+        adc     r10, 0
+        add     r9, rax
+        adc     r10, 0
+        mov     qword ptr [Dst], r9
+        add     Src, 4
+        add     Dst, 8
+        dec     Count
+        jnz     @s
+end;
+
 procedure Xor512(dst, src: PPtrIntArray);
 {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
         movups  xmm0, dqword ptr [dst]

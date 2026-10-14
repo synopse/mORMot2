@@ -302,6 +302,9 @@ function _xasmdiv(Value: pointer; Factor, Carry: PtrUInt): PtrUInt;
 /// mod-by-integer of a TBigInt 512/1024-bit buffer - as used by mormot.crypt.rsa
 function _xasmmod(Value: pointer; Factor, Carry: PtrUInt): PtrUInt;
 
+/// fast diagonal mul-and-add helper as used by TBitInt.Square
+procedure _xasmsquarediagonal(Src, Dst: pointer; Count: PtrUInt);
+
 const
   _xasmaddn    = SizeOf(pointer) * 16; // 512/1024 bits per call
   _xasmsubn    = SizeOf(pointer) * 16; // 512/1024 bits per call

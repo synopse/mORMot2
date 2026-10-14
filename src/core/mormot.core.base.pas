@@ -2707,6 +2707,9 @@ procedure mul64x64(const left, right: QWord; out product: THash128Rec);
 procedure mul64x64({$ifdef FPC_32}constref{$else}const{$endif} left, right: QWord;
   out product: THash128Rec); {$ifndef ASMARM} inline; {$endif}
 
+{$ifdef ASMARM}
+procedure _xasmsquarediagonal(Src, Dst: pointer; Count: PtrUInt);
+{$endif ASMARM}
 {$ifdef ASMARM64} // unrolled ARMv8 64-bit asm used by mormot.crypt.* units
 function _add256(out Output: THash256Rec; const Left, Right: THash256Rec): PtrUInt;
 function _inc256(var Value: THash256Rec; const Added: THash256Rec): PtrUInt;

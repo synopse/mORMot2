@@ -2171,11 +2171,32 @@ begin
   result := r.Trim;
 end;
 
+{$ifndef ASMINTELARM} // pure pascal fallback
+procedure _xasmsquarediagonal(Src, Dst: PHalfUInt; Count: PtrUInt);
+var
+  square, carry: PtrUInt;
+begin
+  carry := 0;
+  repeat
+    square := PtrUInt(Src^) * PtrUInt(Src^);
+    inc(carry, (PtrUInt(Dst^) shl 1) + HalfUInt(square));
+    Dst^ := carry;
+    inc(Dst);
+    carry := (carry shr HALF_BITS) + (PtrUInt(Dst^) shl 1) +
+             (square shr HALF_BITS);
+    Dst^ := carry;
+    carry := carry shr HALF_BITS;
+    inc(Dst);
+    inc(Src);
+    dec(Count);
+  until Count = 0;
+end;
+{$endif ASMINTELARM}
+
 function TBigInt.Square: PBigInt;
 var
   r: PBigInt;
-  i, j, n: PtrInt;
-  v, carry: PtrUInt;
+  n, i: PtrInt;
 begin
   n := Size;
   if n <= 2 then
@@ -2185,28 +2206,10 @@ begin
   end;
   r := Owner.Allocate(n shl 1); // zeroed 2*n-limb result
   // compute off-diagonal products as r = sum(a[i] * a[j] * B^(i+j)), for j < i
-  for i := 1 to n - 1 do
-    RawMultiply(pointer(Value), @r^.Value[i], i, Value[i]);
+  for i := 0 to n - 2 do
+    RawMultiply(@Value[i + 1], @r^.Value[2 * i + 1], n - i - 1, Value[i]);
   // double all off-diagonal products
-  carry := 0;
-  for i := 0 to (n shl 1) - 1 do
-  begin
-    v := (PtrUInt(r^.Value[i]) shl 1) + carry;
-    r^.Value[i] := v;
-    carry := v shr HALF_BITS;
-  end;
-  // add diagonal products a[i]^2 at positions 2*i, propagating the carry
-  carry := 0;
-  for i := 0 to n - 1 do
-  begin
-    j := i shl 1;
-    v := PtrUInt(Value[i]) * Value[i] +
-         r^.Value[j] + carry;
-    r^.Value[j] := v;
-    v := (v shr HALF_BITS) + r^.Value[j + 1];
-    r^.Value[j + 1] := v;
-    carry := v shr HALF_BITS;
-  end;
+  _xasmsquarediagonal(pointer(Value), pointer(r^.Value), n);
   Release;
   result := r.Trim;
 end;
