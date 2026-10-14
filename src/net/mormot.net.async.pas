@@ -4351,24 +4351,48 @@ begin
       res := nrFatalError;
       case e of
         wieAccept:
-          if fIocpAccept.GetNextAccept(sub, client, sin) then
           begin
-            if acoEnableTls in fOptions then
-              res := nrOk
-            else
-              res := client.MakeAsync;
-            if res = nrOk then
+            client := nil;
+            // retrieve the completed accept
+            if fIocpAccept.GetNextAccept(sub, client, sin) then
+              res := nrOk;
+            // always re-arm AcceptEx after consuming its completion
+            if not Terminated then
             begin
               s := nil; // allocate in PrepareNext()
               {$ifdef IOCP_ACCEPT_PREALLOCATE_SOCKETS}
               if socketsalloc <= high(sockets) then
               begin
-                s := sockets[socketsalloc]; // provide one pre-allocated socket
+                s := sockets[socketsalloc];
                 inc(socketsalloc);
               end;
               {$endif IOCP_ACCEPT_PREALLOCATE_SOCKETS}
-              if not fIocpAccept.PrepareNext('next', sub, wieAccept, nil, 0, s) then
-                res := nrFatalError;
+              try
+                if not fIocpAccept.PrepareNext(
+                         'next', sub, wieAccept, nil, 0, s) then
+                  raise EWinIocp.Create(
+                    'TAsyncServer.Execute: rearming AcceptEx failed');
+              except
+                // cannot continue accepting: release any client socket
+                if client <> nil then
+                begin
+                  client.Close;
+                  client := nil;
+                end;
+                raise;
+              end;
+            end;
+            // Prepare the accepted client only if initialization succeeded.
+            // TLS connections remain blocking until TLS setup is finished.
+            if (res = nrOk) and
+               not (acoEnableTls in fOptions) then
+            begin
+              res := client.MakeAsync;
+              if res <> nrOk then
+              begin
+                client.Close;
+                client := nil;
+              end;
             end;
           end;
         wieSend:

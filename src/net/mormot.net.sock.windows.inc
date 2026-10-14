@@ -2034,7 +2034,7 @@ end;
 
 procedure TWinIocp.AcceptSocketCloseAndUnlock;
 begin
-  // AcceptEx did not start: no completion will own this socket
+  // release the accept socket and lock on failure
   if fAcceptSocket <> nil then
   begin
     fAcceptSocket.Close;
@@ -2099,7 +2099,7 @@ begin
     AcceptSocketCloseAndUnlock;
     exit;
   end;
-  Socket.SetLinger(-1); // ensure client socket won't inherit timed linger
+  fAcceptSocket.SetLinger(-1); // disable inherited timed linger
   Socket := fAcceptSocket;
   fAcceptSocket := nil;
   fAcceptExUsed.UnLock;
