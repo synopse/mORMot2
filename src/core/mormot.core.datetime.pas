@@ -1746,22 +1746,27 @@ end;
 
 function Iso8601FractionToMS(P: PUtf8Char; L: PtrInt): cardinal;
   {$ifdef HASINLINE} inline; {$endif}
+var
+  c: cardinal;
 begin
   result := 0;
   if L <= 0 then
     exit;
-  if not (P[0] in ['0'..'9']) then
+  c := ord(P[0]) - 48;
+  if c > 9 then
     exit;
-  result := (ord(P[0]) - 48) * 100;
+  result := c * 100;
   if L < 2 then
     exit;
-  if not (P[1] in ['0'..'9']) then
+  c := ord(P[1]) - 48;
+  if c > 9 then
     exit;
-  inc(result, (ord(P[1]) - 48) * 10);
+  inc(result, c * 10);
   if L < 3 then
     exit;
-  if P[2] in ['0'..'9'] then
-    inc(result, ord(P[2]) - 48);
+  c := ord(P[2]) - 48;
+  if c <= 9 then
+    inc(result, c);
 end;
 
 procedure Iso8601ToDateTimePUtf8CharVar(P: PUtf8Char; L: PtrInt;
