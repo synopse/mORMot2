@@ -14252,44 +14252,50 @@ end;
 {$if not defined(ASMX64AVX0) and not defined(ASMX86)} // fallback if no asm
 
 procedure DynArrayHashTableAdjust(P: PIntegerArray; deleted: integer; count: PtrInt);
+var
+  v: integer; // a temporary variable seems better especially on ARM
 begin
   repeat
     dec(count, 8);
-    dec(P[0], ord(P[0] > deleted)); // branchless code is 10x faster than if :)
-    dec(P[1], ord(P[1] > deleted));
-    dec(P[2], ord(P[2] > deleted));
-    dec(P[3], ord(P[3] > deleted));
-    dec(P[4], ord(P[4] > deleted));
-    dec(P[5], ord(P[5] > deleted));
-    dec(P[6], ord(P[6] > deleted));
-    dec(P[7], ord(P[7] > deleted));
+    v := P[0]; P[0] := v - ord(v > deleted);
+    v := P[1]; P[1] := v - ord(v > deleted);
+    v := P[2]; P[2] := v - ord(v > deleted);
+    v := P[3]; P[3] := v - ord(v > deleted);
+    v := P[4]; P[4] := v - ord(v > deleted);
+    v := P[5]; P[5] := v - ord(v > deleted);
+    v := P[6]; P[6] := v - ord(v > deleted);
+    v := P[7]; P[7] := v - ord(v > deleted);
     P := @P[8];
   until count < 8;
   while count > 0 do
   begin
     dec(count);
-    dec(P[count], ord(P[count] > deleted));
+    v := P[count];
+    P[count] := v - ord(v > deleted);
   end;
 end;
 
 procedure DynArrayHashTableAdjust16(P: PWordArray; deleted: cardinal; count: PtrInt);
+var
+  v: cardinal; // a temporary variable seems better especially on ARM
 begin
-  repeat // branchless code is 10x faster than if :)
+  repeat
     dec(count, 8);
-    dec(P[0], cardinal(P[0] > deleted));
-    dec(P[1], cardinal(P[1] > deleted));
-    dec(P[2], cardinal(P[2] > deleted));
-    dec(P[3], cardinal(P[3] > deleted));
-    dec(P[4], cardinal(P[4] > deleted));
-    dec(P[5], cardinal(P[5] > deleted));
-    dec(P[6], cardinal(P[6] > deleted));
-    dec(P[7], cardinal(P[7] > deleted));
+    v := P[0]; P[0] := v - cardinal(v > deleted);
+    v := P[1]; P[1] := v - cardinal(v > deleted);
+    v := P[2]; P[2] := v - cardinal(v > deleted);
+    v := P[3]; P[3] := v - cardinal(v > deleted);
+    v := P[4]; P[4] := v - cardinal(v > deleted);
+    v := P[5]; P[5] := v - cardinal(v > deleted);
+    v := P[6]; P[6] := v - cardinal(v > deleted);
+    v := P[7]; P[7] := v - cardinal(v > deleted);
     P := @P[8];
   until count < 8;
   while count > 0 do
   begin
     dec(count);
-    dec(P[count], cardinal(P[count] > deleted));
+    v := P[count];
+    P[count] := v - cardinal(v > deleted);
   end;
 end;
 
