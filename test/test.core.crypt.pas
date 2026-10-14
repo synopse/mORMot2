@@ -5399,6 +5399,15 @@ begin
     CheckEqual(c.ActiveCount, 1, 'Square consumes unshared source');
     actual.Release;
     CheckEqual(c.ActiveCount, 0, 'Square unshared result released');
+    // three-limb case to test consumption by the optimized path
+    a := c.AllocateFrom(1).LeftShift(2).IntAdd(123);
+    expected := a^.Copy.Multiply(a^.Copy);
+    actual := a^.Square;
+    CheckEqual(actual^.Compare(expected), 0, 'Square unshared large');
+    CheckEqual(c.ActiveCount, 2, 'unshared source consumed');
+    actual.Release;
+    expected.Release;
+    CheckEqual(c.ActiveCount, 0, 'Square unshared large released');
   finally
     c.Free;
   end;

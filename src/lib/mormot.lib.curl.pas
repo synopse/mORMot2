@@ -44,7 +44,7 @@ type
 
   /// C long used by libcurl - 32-bit on Win64 (LLP64), pointer-sized on POSIX
   {$ifdef OSWINDOWS}
-  TCurlLong = LongInt;
+  TCurlLong = integer;
   {$else}
   TCurlLong = PtrInt;
   {$endif}
@@ -874,16 +874,16 @@ type
     /// pointer to allocated name
     name: PAnsiChar;
     /// length of name length
-    namelength: PtrUInt;
+    namelength: TCurlLong;
     /// pointer to allocated data contents
     contents: PAnsiChar;
     /// length of contents field
     // - see also CURL_HTTPPOST_LARGE / 64-bit contentlen
-    contentslength: PtrUInt;
+    contentslength: TCurlLong;
     /// pointer to allocated buffer contents
     buffer: PAnsiChar;
     /// length of buffer field
-    bufferlength: PtrUInt;
+    bufferlength: TCurlLong;
     /// Content-Type text
     contenttype: PAnsiChar;
     /// list of extra headers for this form
@@ -891,7 +891,7 @@ type
     /// if one field name has more than one file, this link should link to following files
     more: PCurlHttpPost;
     /// some associated flags
-    flags: integer;
+    flags: TCurlLong;
     /// file name to show. If not set, the actual file name will be used (if this is a file part)
     showfilename: PAnsiChar;
     /// custom pointer used for HTTPPOST_CALLBACK posts
