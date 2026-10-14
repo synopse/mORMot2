@@ -12182,9 +12182,10 @@ begin
   cwpoint := pointer(dst);
   PCardinal(dst)^ := 0;
   inc(dst, SizeOf(cwpoint^));
-  FillCharFast(offset, SizeOf(offset), 0); // fast 16KB/32KB reset to 0
   // 1. main loop to search using hash[]
   if src <= srcendmatch then
+  begin
+    FillCharFast(offset, SizeOf(offset), 0); // fast 16KB/32KB reset to 0
     repeat
       v := PCardinal(src)^;
       h := ((v shr 12) xor v) and 4095;
@@ -12250,6 +12251,7 @@ begin
           break;
       end;
     until false;
+  end;
   // 2. store remaining bytes
   if src < srcend then
     repeat
@@ -12278,20 +12280,27 @@ begin
   result := dst - dstbeg;
 end;
 
+procedure MoveByPtr(src, dst: PPtrUIntArray; max: PtrUInt); inline;
+var
+  i, c: PtrUInt; // RISC targets are likely to have more registers
+begin
+  max := max shr POINTERSHR;
+  i := 0;
+  repeat
+    c := src[i];
+    dst[i] := c;
+    inc(i);
+  until i = max; // this loop pattern is faster than -count + inc(count) on RISC
+end;
+
 // better code generation with sub-functions for raw decoding
 procedure SynLZdecompress1passub(src, src_end, dst: PAnsiChar; var offset: TOffsets);
 var
-  last_hashed: PAnsiChar; // initial src and dst value
-  {$ifdef CPU64}
-  o: PAnsiChar;
-  {$endif CPU64}
-  cw, cwbit: cardinal;
-  v, t, h: PtrUInt;
-label
-  nextCW;
+  last_hashed, o: PAnsiChar;
+  cw, cwbit, v: cardinal;
+  t: PtrUInt;
 begin
   last_hashed := dst - 1;
-nextCW:
   cw := PCardinal(src)^;
   inc(src, 4);
   cwbit := 1;
@@ -12312,37 +12321,27 @@ nextCW:
         end;
         cwbit := cwbit shl 1;
         if cwbit <> 0 then
-          continue
-        else
-          goto nextCW;
+          continue;
       end
       else
       begin
-        h := PWord(src)^;
+        t := (PtrUInt(PByte(src)^) and 15) + 2;
+        o := offset[PWord(src)^ shr 4];
         inc(src, 2);
-        t := (h and 15) + 2;
         if t = 2 then
         begin
           t := ord(src^) + (16 + 2);
           inc(src);
         end;
-        h := h shr 4;
-        {$ifdef CPU64}
-        o := offset[h];
         if PtrUInt(dst - o) < t then // overlap -> move byte-by-byte
           MoveByOne(o, dst, t)
         else if t <= 8 then
-          PInt64(dst)^ := PInt64(o)^ // much faster in practice
+          PInt64(dst)^ := PInt64(o)^ // safe since src_endmatch := src_end-(6+5)
         else
-          MoveFast(o^, dst^, t);     // safe since src_endmatch := src_end-(6+5)
-        {$else}
-        if PtrUInt(dst - offset[h]) < t then
-          MoveByOne(offset[h], dst, t)
-        else if t > 8 then
-          MoveFast(offset[h]^, dst^, t)
-        else
-          PInt64(dst)^ := PInt64(offset[h])^;
-        {$endif CPU64}
+        begin
+          MoveByPtr(pointer(o), pointer(dst), t - 1);
+          PPtrUInt(dst + t - SizeOf(o))^ := PPtrUInt(o + t - SizeOf(o))^;
+        end;
         if src >= src_end then
           break;
         if last_hashed < dst then
@@ -12355,16 +12354,17 @@ nextCW:
         last_hashed := dst - 1;
         cwbit := cwbit shl 1;
         if cwbit <> 0 then
-          continue
-        else
-          goto nextCW;
+          continue;
       end;
+      cw := PCardinal(src)^;
+      inc(src, 4);
+      cwbit := 1;
     until false;
 end;
 
 function SynLZdecompress1pas(src: PAnsiChar; size: integer; dst: PAnsiChar): integer;
 var
-  offset: TOffsets;
+  offset: TOffsets; // stack-allocated working buffer
   srcend: PAnsiChar;
 begin
   srcend := src + size;
@@ -12383,17 +12383,11 @@ end;
 procedure SynLZdecompress1partialsub(src, dst, src_end, dst_end: PAnsiChar;
   var offset: TOffsets);
 var
-  lasthashed: PAnsiChar; // initial src and dst value
-  cwbit, cw: integer;
-  v, t, h: PtrUInt;
-  {$ifdef CPU64}
-  o: PAnsiChar;
-  {$endif CPU64}
-label
-  nextCW;
+  lasthashed, o: PAnsiChar;
+  cwbit, cw, v: cardinal;
+  t: PtrUInt;
 begin
   lasthashed := dst - 1;
-nextCW:
   cw := PCardinal(src)^;
   inc(src, 4);
   cwbit := 1;
@@ -12415,41 +12409,32 @@ nextCW:
         end;
         cwbit := cwbit shl 1;
         if cwbit <> 0 then
-          continue
-        else
-          goto nextCW;
+          continue;
       end
       else
       begin
-        h := PWord(src)^;
+        t := (PtrUInt(PByte(src)^) and 15) + 2;
+        o := offset[PWord(src)^ shr 4];
         inc(src, 2);
-        t := (h and 15) + 2;
-        h := h shr 4;
         if t = 2 then
         begin
           t := ord(src^) + (16 + 2);
           inc(src);
         end;
-        if dst + t >= dst_end then
+        if dst + t >= dst_end then // avoid buffer overflow by all means
         begin
-          // avoid buffer overflow by all means
-          MoveByOne(offset[h], dst, dst_end - dst);
+          MoveByOne(o, dst, dst_end - dst);
           break;
         end;
-        {$ifdef CPU64}
-        o := offset[h];
-        if (t <= 8) or
-           (PtrUInt(dst - o) < t) then
+        if PtrUInt(dst - o) < t then // overlap -> move byte-by-byte
           MoveByOne(o, dst, t)
+        else if t <= 8 then
+          PInt64(dst)^ := PInt64(o)^ // safe since src_endmatch := src_end-(6+5)
         else
-          MoveFast(o^, dst^, t);
-        {$else}
-        if (t <= 8) or
-           (PtrUInt(dst - offset[h]) < t) then
-          MoveByOne(offset[h], dst, t)
-        else
-          MoveFast(offset[h]^, dst^, t);
-        {$endif CPU64}
+        begin
+          MoveByPtr(pointer(o), pointer(dst), t - 1);
+          PPtrUInt(dst + t - SizeOf(o))^ := PPtrUInt(o + t - SizeOf(o))^;
+        end;
         if src >= src_end then
           break;
         if lasthashed < dst then
@@ -12462,10 +12447,11 @@ nextCW:
         lasthashed := dst - 1;
         cwbit := cwbit shl 1;
         if cwbit <> 0 then
-          continue
-        else
-          goto nextCW;
+          continue;
       end;
+      cw := PCardinal(src)^;
+      inc(src, 4);
+      cwbit := 1;
     until false;
 end;
 
