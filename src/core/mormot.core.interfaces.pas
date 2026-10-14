@@ -6579,7 +6579,7 @@ begin
 end;
 
 type
-  TInterfaceStubExecutesToLog = packed record
+  TInterfaceStubExecutesToLog = record
     Log: TSynLogClass;
     LogLevel: TSynLogLevel;
     Kind: TInterfaceMethodParamsDocVariantKind;

@@ -2908,11 +2908,8 @@ end;
 
 type
   // some (MacOs) tools store 0 in local header, and append FLAG_DATADESCRIPTOR
-  TDataDescriptor = packed record
-    signature: cardinal;
-    crc32:     cardinal;
-    zipSize:   cardinal;
-    fullSize:  cardinal;
+  TDataDescriptor = record
+    signature, crc32, zipSize, fullSize:  cardinal;
   end;
 
 function TZipRead.RetrieveFileInfo(Index: integer;

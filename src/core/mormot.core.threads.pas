@@ -473,7 +473,7 @@ type
 
 type
   /// internal item definition, used by TPendingTaskList storage
-  TPendingTaskListItem = packed record
+  TPendingTaskListItem = record
     /// the task should be executed when TPendingTaskList.GetTimestamp reaches
     // this value
     Timestamp: Int64;

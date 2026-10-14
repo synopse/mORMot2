@@ -1206,7 +1206,7 @@ type
 
   /// thread-specific internal threadvar definition used for fast process
   // - consumes 484/512 bytes + 256+64 per thread on CPU32/CPU64
-  TSynLogThreadInfo = packed record
+  TSynLogThreadInfo = {$ifndef CPUINTEL} packed {$endif} record
     /// number of recursive calls currently stored in Recursion[]
     // - nothing logged above MAX_SYNLOGRECURSION (53) to keep this record small
     RecursionCount: byte;
@@ -9180,8 +9180,7 @@ begin
   destbuffer^ := '<';
   destbuffer := AppendUInt32ToBuffer(destbuffer + 1,
     ord(severity) + ord(facility) shl 3);
-  PInteger(destbuffer)^ :=
-    ord('>') + ord('1') shl 8 + ord(' ') shl 16; // VERSION=1
+  PInteger(destbuffer)^ := ord('>') + ord('1') shl 8 + ord(' ') shl 16; // VERSION=1
   inc(destbuffer, 3);
   FromGlobalTime(st, {local=}false);
   DateToIso8601PChar(destbuffer, true, st.Year, st.Month, st.Day);
@@ -9210,7 +9209,7 @@ begin
     exit; // nothing to send
   if not IsAnsiCompatible(P, len) then
   begin
-    PInteger(destbuffer)^ := BOM_UTF8; // weird enough behavior on POSIX :(
+    PInteger(destbuffer)^ := BOM_UTF8; // weird enough behavior for POSIX :(
     inc(destbuffer, 3);
   end;
   MoveFast(P^, destbuffer^, len);

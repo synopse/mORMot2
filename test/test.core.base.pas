@@ -4734,6 +4734,10 @@ var
   c: integer;
   timer: TPrecisionTimer;
 begin
+  CheckEqual(SizeOf(cardinal), SizeOf(TDWordRec), 'TDWordRec');
+  CheckEqual(SizeOf(Int64), SizeOf(Int64Rec), 'Int64Rec');
+  CheckEqual(SizeOf(QWord), SizeOf(TQWordRec), 'TQWordRec');
+  CheckEqual(SizeOf(TFileTime), SizeOf(TQWordRec), 'TFileTime');
   CheckEqual(9007199254740991, MAX_SAFE_JS_INTEGER);
   Check(IsPowerOfTwo(0));
   Check(IsPowerOfTwo(1));
