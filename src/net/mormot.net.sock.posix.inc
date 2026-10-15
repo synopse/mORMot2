@@ -1695,6 +1695,7 @@ begin
         else if fd < 0 then
           // found a void entry
           new := i;
+        inc(p);
       end;
   if new < 0 then
   begin
