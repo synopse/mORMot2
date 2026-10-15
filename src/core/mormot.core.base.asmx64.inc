@@ -4236,7 +4236,7 @@ asm
         jnz     @ms
         jmp     @mok
 @m3:    mov     rbx, qword ptr [r13]
-        mov     qword ptr [r8], rbx    // same 8-byte fast path as Pascal
+        mov     qword ptr [r8], rbx    // same 8-byte fast path as Pascal PInt64
         jmp     @mok
 @m2:    xor     edx, edx               // forward byte copy for overlap
 @mb:    mov     bl, byte ptr [r13 + rdx]
