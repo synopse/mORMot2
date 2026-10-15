@@ -193,9 +193,11 @@ type
     procedure RTSPOverHTTPBufferedWrite;
     /// validate IP processing functions
     procedure IPAddresses;
-    /// validate mormot.net.openapi unit
     /// MIME e-mail builder, as in mormot.net.mail
     procedure MimeMail;
+    /// SMTP client and SendEmail(), as in mormot.net.mail, over a local server
+    procedure SmtpClient;
+    /// validate mormot.net.openapi unit
     procedure OpenAPI;
     {$ifdef SCHANNEL_VERIFY}
     /// validate SChannel mTLS HTTPS server using a plain OpenSSL client
@@ -224,6 +226,29 @@ type
   public
     procedure AddTestConnection(Connection: TTftpConnectionThread);
     procedure TerminateAndWaitFinished(TimeOutMs: integer = 5000); override;
+  end;
+
+  /// minimal fake SMTP server, serving a single connection in its own thread
+  TFakeSmtpServer = class(TThread)
+  protected
+    fListen: TNetSocket;
+    fAuthLoginOnly: boolean;
+    fPort: RawUtf8;
+    fTranscript: RawUtf8;
+    fData: RawUtf8;
+    procedure Execute; override;
+  public
+    constructor Create(AuthLoginOnly: boolean); reintroduce;
+    destructor Destroy; override;
+    /// the bound port on 127.0.0.1
+    property Port: RawUtf8
+      read fPort;
+    /// all received command lines, separated by LF
+    property Transcript: RawUtf8
+      read fTranscript;
+    /// the DATA content, as received over the wire (i.e. dot-stuffed)
+    property Data: RawUtf8
+      read fData;
   end;
 
   {$ifdef USEWININET}
@@ -687,7 +712,7 @@ begin
   // whole message
   msg := TMailMessage.Create;
   try
-    msg.SetFrom('me@example.com', 'M' + ue + 'ller');
+    msg.SetFrom('me@example.com', Utf8ToString('M' + ue + 'ller')); // string
     msg.AddTo('to@example.com');
     msg.AddCc('cc@example.com');
     msg.AddBcc('bcc@example.com');
@@ -695,7 +720,7 @@ begin
     msg.PlainTextUtf8 := 'plain ' + ae;
     msg.HtmlUtf8 := '<p>html</p>';
     msg.AddInlineData('PNG', 'logo.png', 'logo@id');
-    msg.AddAttachmentData('hello', 'r' + ae + 'port.txt');
+    msg.AddAttachmentData('hello', Utf8ToString('r' + ae + 'port.txt'));
     msg.Priority := mpHigh;
     eml := msg.Build;
     env := msg.Envelope;
@@ -720,6 +745,205 @@ begin
     msg.Free;
   end;
 end;
+
+{ TFakeSmtpServer }
+
+constructor TFakeSmtpServer.Create(AuthLoginOnly: boolean);
+var
+  addr: TNetAddr;
+  res: TNetResult;
+begin
+  fAuthLoginOnly := AuthLoginOnly;
+  res := NewSocket(cLocalhost, '0', nlTcp, {bind=}true,
+    5000, 5000, 5000, {retry=}0, fListen, @addr);
+  if res <> nrOk then
+    ESmtpClient.RaiseUtf8('TFakeSmtpServer: bind error %', [_NR[res]]);
+  fPort := UInt32ToUtf8(addr.Port);
+  inherited Create({suspended=}false);
+end;
+
+destructor TFakeSmtpServer.Destroy;
+begin
+  Terminate;
+  if fListen <> nil then
+    fListen.ShutdownAndClose({rdwr=}true); // abort any pending Accept()
+  inherited Destroy; // wait for Execute to finish
+end;
+
+procedure TFakeSmtpServer.Execute;
+var
+  client: TNetSocket;
+  addr: TNetAddr;
+  sock: TCrtSocket;
+  line: RawUtf8;
+  login: integer;
+
+  procedure Reply(const Text: RawUtf8);
+  begin
+    sock.SockSend(Text); // append CRLF
+    sock.SockSendFlush;
+  end;
+
+begin
+  if fListen.Accept(client, addr, {async=}false) <> nrOk then
+    exit;
+  sock := TCrtSocket.Create(5000);
+  try
+    try
+      sock.AcceptRequest(client, @addr);
+      sock.CreateSockIn;
+      Reply('220 fake.smtp ESMTP');
+      login := 0;
+      repeat
+        sock.SockRecvLn(line);
+        Append(fTranscript, line, #10);
+        if login = 1 then
+        begin
+          login := 2;
+          Reply('334 UGFzc3dvcmQ6'); // 'Password:'
+        end
+        else if login = 2 then
+        begin
+          login := 0;
+          Reply('235 2.7.0 Authentication successful');
+        end
+        else if IdemPChar(pointer(line), 'EHLO ') then
+          if fAuthLoginOnly then
+            Reply('250-fake.smtp'#13#10'250-AUTH LOGIN'#13#10'250 8BITMIME')
+          else
+            Reply('250-fake.smtp'#13#10'250-AUTH PLAIN LOGIN'#13#10'250 8BITMIME')
+        else if IdemPChar(pointer(line), 'AUTH LOGIN') then
+        begin
+          login := 1;
+          Reply('334 VXNlcm5hbWU6'); // 'Username:'
+        end
+        else if IdemPChar(pointer(line), 'AUTH PLAIN ') then
+          Reply('235 2.7.0 Authentication successful')
+        else if IdemPChar(pointer(line), 'RCPT TO:<REJECT') then
+          Reply('550 5.1.1 Recipient rejected')
+        else if IdemPChar(pointer(line), 'MAIL FROM:') or
+                IdemPChar(pointer(line), 'RCPT TO:') or
+                IdemPChar(pointer(line), 'RSET') then
+          Reply('250 2.0.0 Ok')
+        else if IdemPChar(pointer(line), 'DATA') then
+        begin
+          Reply('354 End data with <CR><LF>.<CR><LF>');
+          repeat
+            sock.SockRecvLn(line);
+            if line = '.' then
+              break;
+            Append(fData, line, #13#10);
+          until false;
+          Reply('250 2.0.0 Ok: queued as 12345');
+        end
+        else if IdemPChar(pointer(line), 'QUIT') then
+        begin
+          Reply('221 2.0.0 Bye');
+          break;
+        end
+        else
+          Reply('500 5.5.2 Unknown command');
+      until Terminated;
+    except
+      // client disconnected or test aborted: just stop serving
+    end;
+  finally
+    sock.Free;
+  end;
+end;
+
+procedure TNetworkProtocols.SmtpClient;
+var
+  srv: TFakeSmtpServer;
+  smtp: TSmtpClient;
+  msg: TMailMessage;
+  conn: TSmtpConnection;
+  port: RawUtf8;
+  raised: boolean;
+begin
+  // TSmtpClient + TMailMessage with AUTH PLAIN, dot-stuffing and RSET
+  srv := TFakeSmtpServer.Create({authloginonly=}false);
+  try
+    smtp := TSmtpClient.Create(cLocalhost, srv.Port, 'user', 'pass');
+    msg := TMailMessage.Create;
+    try
+      smtp.Security := smtpNone;
+      msg.SetFrom('me@example.com');
+      msg.AddTo('to@example.com');
+      msg.AddBcc('bcc@example.com');
+      msg.SubjectUtf8 := 'Hello';
+      msg.PlainTextUtf8 := 'some text';
+      smtp.Send(msg);
+      Check(smtp.Connected);
+      Check(not smtp.TlsActive);
+      CheckEqual(smtp.LastCode, 250);
+      Check(PosEx('AUTH PLAIN', smtp.Capabilities) > 0);
+      smtp.SendRaw('me@example.com', ['to@example.com'],
+        'Subject: raw'#10#10'.hidden line'#10'end');
+      raised := false;
+      try
+        smtp.SendRaw('me@example.com', ['reject@example.com'], 'x');
+      except
+        on E: ESmtpClient do
+          raised := PosEx('550', E.Message) > 0;
+      end;
+      Check(raised, 'rejected RCPT');
+      Check(smtp.Connected, 'RSET keeps the connection');
+      smtp.Disconnect;
+      Check(not smtp.Connected);
+    finally
+      msg.Free;
+      smtp.Free;
+    end;
+    srv.WaitFor;
+    Check(PosEx('EHLO ', srv.Transcript) = 1);
+    Check(PosEx(#10'AUTH PLAIN ' + BinToBase64(#0'user'#0'pass') + #10,
+      srv.Transcript) > 0, 'AUTH PLAIN');
+    Check(PosEx(#10'MAIL FROM:<me@example.com>'#10, srv.Transcript) > 0);
+    Check(PosEx(#10'RCPT TO:<to@example.com>'#10, srv.Transcript) > 0);
+    Check(PosEx(#10'RCPT TO:<bcc@example.com>'#10, srv.Transcript) > 0, 'Bcc');
+    Check(PosEx(#10'RSET'#10, srv.Transcript) > 0, 'RSET after error');
+    Check(PosEx(#10'QUIT'#10, srv.Transcript) > 0);
+    Check(PosEx('Subject: Hello'#13#10, srv.Data) > 0);
+    Check(PosEx('Bcc', srv.Data) = 0);
+    Check(PosEx(#13#10'..hidden line'#13#10'end'#13#10, srv.Data) > 0,
+      'dot-stuffing');
+  finally
+    srv.Free;
+  end;
+  // backward compatible SendEmail() with AUTH LOGIN, as in mormot.net.client
+  srv := TFakeSmtpServer.Create({authloginonly=}true);
+  try
+    port := srv.Port;
+    Check(conn.FromText('user:pass@' + cLocalhost + ':' + port));
+    CheckEqual(conn.Host, cLocalhost);
+    CheckEqual(conn.Port, port);
+    CheckEqual(conn.User, 'user');
+    CheckEqual(conn.Pass, 'pass');
+    Check(SendEmail(conn, 'me@example.com', 'a@example.com, Name <b@example.com>',
+      SendEmailSubject('Subject'), 'line 1'#13#10'.line 2', 'X-Custom: 1'));
+    srv.WaitFor;
+    Check(PosEx(#10'AUTH LOGIN'#10 + BinToBase64('user') + #10 +
+      BinToBase64('pass') + #10, srv.Transcript) > 0, 'AUTH LOGIN');
+    Check(PosEx(#10'MAIL FROM:<me@example.com>'#10, srv.Transcript) > 0);
+    Check(PosEx(#10'RCPT TO:<a@example.com>'#10, srv.Transcript) > 0);
+    Check(PosEx(#10'RCPT TO:<b@example.com>'#10, srv.Transcript) > 0);
+    Check(PosEx(#10'QUIT'#10, srv.Transcript) > 0);
+    Check(PosEx('Subject: Subject'#13#10'From: me@example.com'#13#10 +
+      'To: <a@example.com>, Name <b@example.com>'#13#10, srv.Data) = 1);
+    Check(PosEx('Content-Type: text/plain;charset=ISO-8859-1'#13#10,
+      srv.Data) > 0);
+    Check(PosEx('X-Custom: 1'#13#10#13#10'line 1'#13#10'..line 2'#13#10,
+      srv.Data) > 0);
+  finally
+    srv.Free;
+  end;
+  // SendEmail() returns false if the server is not reachable
+  Check(not SendEmail(cLocalhost, 'me@example.com', 'a@example.com', 's', 't',
+    '', '', '', port));
+  Check(not SendEmail(cLocalhost, 'me@example.com', '', 's', 't'), 'no dest');
+end;
+
 procedure TNetworkProtocols.OpenAPI;
 var
   i: PtrInt;
