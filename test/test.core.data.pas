@@ -11800,7 +11800,15 @@ begin
   Check(CompressSynLZ(s, true) = 'synlz');
   Check(Length(s) < Length(Data), 'exelen');
   Check(CompressSynLZ(s, false) = 'synlz');
-  Check(s = Data);
+  CheckEqual(s, Data);
+  s := HumanHexToBin('0A000000000041');
+  CheckEqual(SynLZDecompressdestlen(pointer(s)), 10);
+  dec1[0] := 0;
+  CheckEqual(SynLZDecompress1partial(pointer(s), length(s), Pointer(dec1), length(dec1)), 1);
+  CheckEqual(dec1[0], $41, 'truncated');
+  dec1[0] := 0;
+  CheckEqual(SynLZDecompress1partial(pointer(s), length(s), Pointer(dec1), 0), 0);
+  CheckEqual(dec1[0], 0, 'partial0');
 end;
 
 procedure TTestCoreCompression._TAlgoCompress;

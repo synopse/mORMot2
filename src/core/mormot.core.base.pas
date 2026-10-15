@@ -4223,6 +4223,7 @@ function SynLZdecompress1pas(src: PAnsiChar; size: integer; dst: PAnsiChar): int
 // - it will also check for dst buffer overflow and detect invalid input
 // - so will be more secure than other functions, which expect the content to be
 // from a trusted source and verified ahead of time e.g. via a CRC/GMAC
+// - returns the number of bytes <= maxDst successfully uncompressed into dst[]
 function SynLZdecompress1partial(src: PAnsiChar; size: integer; dst: PAnsiChar;
   maxDst: integer): integer;
 
@@ -12134,7 +12135,7 @@ begin
     result := (result and $7fff) or (integer(PWord(in_p + 2)^) shl 15);
 end;
 
-type
+type // state machine used by SynLZ[de]compress1pas[partial]sub() functions
   TSynLzContext = record
     src, srcend, srcendmatch, dst, dstend: PAnsiChar;
     cwpoint: PCardinal;
@@ -12420,7 +12421,7 @@ begin
   SynLZdecompress1passub(ctx);
 end;
 
-procedure SynLZdecompress1partialsub(var ctx: TSynLzContext);
+function SynLZdecompress1partialsub(var ctx: TSynLzContext): PtrInt;
 var
   src, dst, o, hashed: PAnsiChar;
   cw: cardinal;
@@ -12466,7 +12467,7 @@ begin
       continue;
     end;
     // match token: first register all preceding literal positions
-    if src + 2 >= ctx.srcend then
+    if src + 2 > ctx.srcend then
       break;
     hashed := SynLzHash(hashed, dst - 3, ctx.offset^);
     run := (PtrUInt(PByte(src)^) and 15) + 2;
@@ -12476,7 +12477,7 @@ begin
     inc(src, 2);
     if run = 2 then
     begin
-      if src + 1 >= ctx.srcend then
+      if src >= ctx.srcend then
         break;
       run := ord(src^) + 18;
       inc(src);
@@ -12485,6 +12486,7 @@ begin
     if run >= t then // avoid buffer overflow by all means
     begin
       MoveByOne(o, dst, t);
+      inc(dst, t);
       break;
     end
     else if (t < 8) or
@@ -12497,16 +12499,17 @@ begin
       PPtrUInt(dst + run - SizeOf(o))^ := PPtrUInt(o + run - SizeOf(o))^;
       MoveByPtr(pointer(o), pointer(dst), run - 1);
     end;
+    inc(dst, run);
     if src >= ctx.srcend then
       break;
     // need post-match hash synchronization
-    SynLzHash(hashed, dst, ctx.offset^);
-    inc(dst, run);
+    SynLzHash(hashed, dst - run, ctx.offset^);
     hashed := dst - 1;
     // consume the single match bit
     cw := cw shr 1;
     dec(bits);
   end;
+  result := dst - ctx.dst;
 end;
 
 function SynLZdecompress1partial(src: PAnsiChar; size: integer; dst: PAnsiChar;
@@ -12519,28 +12522,20 @@ begin
   if (maxDst <= 0) or
      (size < 2) then
     exit;
-  result := PWord(src)^;
-  if result = 0 then
-    exit;
   ctx.srcend := src + size;
-  inc(src, 2);
-  if result and $8000 <> 0 then
-  begin
+  if PWord(src)^ and $8000 <> 0 then // actual stored length is just skipped
     if size < 4 then
-      exit;
-    result := (result and $7fff) or (integer(PWord(src)^) shl 15);
+      exit
+    else
+      inc(src, 4)
+  else
     inc(src, 2);
-  end;
-  if maxDst < result then
-    result := maxDst;
-  if result <= 0 then
-    exit;
   FillCharFast(offset, SizeOf(offset), 0); // reset to 0 to detect invalid input
   ctx.src := src;
   ctx.dst := dst;
-  ctx.dstend := dst + result;
+  ctx.dstend := dst + maxDst;
   ctx.offset := @offset;
-  SynLZdecompress1partialsub(ctx);
+  result := SynLZdecompress1partialsub(ctx); // returns bytes written in dst[]
 end;
 
 function CompressSynLZ(var Data: RawByteString; Compress: boolean): RawUtf8;
