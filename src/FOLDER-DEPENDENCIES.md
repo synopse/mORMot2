@@ -178,6 +178,7 @@ mORMot2 follows a **strict layered architecture** with 14 source folders organiz
   - `mormot.net.ws.server` - WebSocket server
   - `mormot.net.ws.async` - Async WebSocket
   - `mormot.net.dns` - DNS resolution
+  - `mormot.net.mail` - MIME e-mail builder and SMTP client
   - `mormot.net.ldap` - LDAP client
   - `mormot.net.acme` - ACME protocol (Let's Encrypt)
   - `mormot.net.relay` - Network relay/proxy

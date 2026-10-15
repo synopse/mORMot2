@@ -36,6 +36,7 @@ uses
   mormot.core.zip,
   mormot.net.http,
   mormot.net.client,
+  mormot.net.mail,
   mormot.app.console,
   mormot.app.daemon;
 
