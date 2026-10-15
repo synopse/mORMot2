@@ -11736,7 +11736,7 @@ procedure TTestCoreCompression._SynLZ;
 
 var
   s, t: RawByteString;
-  i, j, complen2: integer;
+  i, j, k, n, complen2: integer;
   comp2, dec1: array of byte;
   {$ifdef ASMINTEL}
   comp1, dec2: array of byte;
@@ -11787,8 +11787,14 @@ begin
   for j := 0 to length(t) - 1 do
   begin
     FillCharFast(pointer(dec1)^, length(t), 0);
-    Check(SynLZDecompress1partial(pointer(comp2), complen2, Pointer(dec1), j) = j);
+    CheckEqual(SynLZDecompress1partial(pointer(comp2), complen2, Pointer(dec1), j), j);
     Check(CompareMem(pointer(dec1), pointer(t), j));
+    CheckEqual(StrLen(pointer(dec1)), j, 'underflow');
+    n := 0;
+    for k := j to length(t) - 1 do
+      if dec1[k] <> 0 then
+        inc(n);
+    CheckEqual(n, 0, 'overflow');
   end;
   s := Data;
   Check(CompressSynLZ(s, true) = 'synlz');
