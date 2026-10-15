@@ -12135,7 +12135,7 @@ end;
 
 type
   TSynLzContext = record
-    src, srcend, srcendmatch, dst: PAnsiChar;
+    src, srcend, srcendmatch, dst, dstend: PAnsiChar;
     cwpoint: PCardinal;
     cwmask: cardinal;
     offset: ^TOffsets;
@@ -12273,7 +12273,8 @@ begin
   result := dst - dstbeg;
 end;
 
-procedure MoveByPtr(src, dst: PPtrUIntArray; max: PtrUInt); inline;
+procedure MoveByPtr(src, dst: PPtrUIntArray; max: PtrUInt);
+  {$ifdef HASINLINE} inline; {$endif}
 var
   i, c: PtrUInt; // RISC targets are likely to have more registers
 begin
@@ -12286,177 +12287,230 @@ begin
   until i = max; // this loop pattern is faster than -count + inc(count) on RISC
 end;
 
-procedure SynLZdecompress1passub(src, src_end, dst: PAnsiChar; var offset: TOffsets);
+procedure MoveSynLzLiterals(src, dst: PAnsiChar; n: PtrUInt);
+  {$ifdef HASINLINE} inline; {$endif}
 var
-  last_hashed, o: PAnsiChar;
-  cw, cwbit, v: cardinal;
-  t: PtrUInt;
-begin // better code generation with sub-functions for raw decoding
-  last_hashed := dst - 1;
-  cw := PCardinal(src)^;
-  inc(src, 4);
-  cwbit := 1;
-  if src < src_end then
+  c: PtrUInt;
+begin
+  if n < SizeOf(c) then
+  begin
     repeat
-      if cw and cwbit = 0 then
-      begin
-        dst^ := src^;
-        inc(src);
-        inc(dst);
-        if src >= src_end then
-          break;
-        if last_hashed < dst - 3 then
-        begin
-          inc(last_hashed);
-          v := PCardinal(last_hashed)^;
-          offset[((v shr 12) xor v) and 4095] := last_hashed;
-        end;
-        cwbit := cwbit shl 1;
-        if cwbit <> 0 then
-          continue;
-      end
-      else
-      begin
-        t := (PtrUInt(PByte(src)^) and 15) + 2;
-        o := offset[PWord(src)^ shr 4];
-        inc(src, 2);
-        if t = 2 then
-        begin
-          t := ord(src^) + (16 + 2);
-          inc(src);
-        end;
-        if PtrUInt(dst - o) < t then // overlap -> move byte-by-byte
-          MoveByOne(o, dst, t)
-        else if t <= 8 then
-          PInt64(dst)^ := PInt64(o)^ // safe since src_endmatch := src_end-(6+5)
-        else
-        begin
-          MoveByPtr(pointer(o), pointer(dst), t - 1);
-          PPtrUInt(dst + t - SizeOf(o))^ := PPtrUInt(o + t - SizeOf(o))^;
-        end;
-        if src >= src_end then
-          break;
-        if last_hashed < dst then
-          repeat // decompressed bytes should update the hash table
-            inc(last_hashed);
-            v := PCardinal(last_hashed)^;
-            offset[((v shr 12) xor v) and 4095] := last_hashed;
-          until last_hashed >= dst;
-        inc(dst, t);
-        last_hashed := dst - 1;
-        cwbit := cwbit shl 1;
-        if cwbit <> 0 then
-          continue;
-      end;
+      dec(n);
+      dst[n] := src[n];
+    until n = 0;
+    exit;
+  end;
+  c := PPtrUInt(src + n - SizeOf(c))^;
+  PPtrUInt(dst + n - SizeOf(c))^ := c;
+  n := (n - 1) shr POINTERSHR;
+  while n <> 0 do
+  begin
+    dec(n);
+    c := PPtrUIntArray(src)[n];
+    PPtrUIntArray(dst)[n] := c;
+  end;
+end;
+
+function SynLzHash(last, dst: PAnsiChar; var offset: TOffsets): PAnsiChar;
+  {$ifdef HASINLINE} inline; {$endif}
+var
+  v: cardinal;
+begin
+  if last < dst then
+    repeat
+      inc(last);
+      v := PCardinal(last)^;
+      offset[((v shr 12) xor v) and 4095] := last;
+    until last >= dst;
+  result := last;
+end;
+
+procedure SynLZdecompress1passub(var ctx: TSynLzContext);
+var
+  src, dst, o, hashed: PAnsiChar;
+  cw: cardinal;
+  bits, run, t: PtrUInt;
+begin
+  src := ctx.src;
+  dst := ctx.dst;
+  hashed := dst - 1;
+  cw := 0;
+  bits := 0;
+  while src < ctx.srcend do
+  begin
+    // read a control word once exhausting its 32 bits
+    if bits = 0 then
+    begin
       cw := PCardinal(src)^;
       inc(src, 4);
-      inc(cwbit); // = 1
-    until false;
+      bits := 32;
+      if src >= ctx.srcend then
+        break;
+    end;
+    if cw and 1 = 0 then
+    begin
+      // compute the number of consecutive literal bits before the next match
+      run := bits;
+      if cw <> 0 then
+        run := {$ifdef FPC} BsfDWord {$else} CountTrailingZeros32 {$endif}(cw);
+      // the last control word may be only partially used
+      t := ctx.srcend - src;
+      if run > t then
+        run := t;
+      // move all litterals at once - don't hash them yet
+      MoveSynLzLiterals(pointer(src), pointer(dst), run);
+      inc(src, run);
+      inc(dst, run);
+      dec(bits, run);
+      cw := cw shr run;
+      if src >= ctx.srcend then
+        break;
+      continue;
+    end;
+    // match token: first register all preceding literal positions
+    hashed := SynLzHash(hashed, dst - 3, ctx.offset^);
+    t := (PtrUInt(PByte(src)^) and 15) + 2;
+    o := ctx.offset^[PWord(src)^ shr 4];
+    inc(src, 2);
+    if t = 2 then
+    begin
+      t := ord(src^) + 18;
+      inc(src);
+    end;
+    if PtrUInt(dst - o) < t then
+      MoveByOne(o, dst, t)
+    else if t <= 8 then
+      PInt64(dst)^ := PInt64(o)^
+    else
+    begin
+      PPtrUInt(dst + t - SizeOf(o))^ := PPtrUInt(o + t - SizeOf(o))^;
+      MoveByPtr(pointer(o), pointer(dst), t - 1);
+    end;
+    if src >= ctx.srcend then
+      break;
+    // need post-match hash synchronization
+    SynLzHash(hashed, dst, ctx.offset^);
+    inc(dst, t);
+    hashed := dst - 1;
+    // consume the single match bit
+    cw := cw shr 1;
+    dec(bits);
+  end;
 end;
 
 function SynLZdecompress1pas(src: PAnsiChar; size: integer; dst: PAnsiChar): integer;
 var
+  ctx: TSynLzContext;
   offset: TOffsets; // stack-allocated working buffer
-  srcend: PAnsiChar;
 begin
-  srcend := src + size;
   result := PWord(src)^;
   if result = 0 then
     exit;
+  ctx.srcend := src + size;
   inc(src, 2);
   if result and $8000 <> 0 then
   begin
     result := (result and $7fff) or (integer(PWord(src)^) shl 15);
     inc(src, 2);
   end;
-  SynLZdecompress1passub(src, srcend, dst, offset);
+  ctx.src := src;
+  ctx.dst := dst;
+  ctx.offset := @offset;
+  SynLZdecompress1passub(ctx);
 end;
 
-procedure SynLZdecompress1partialsub(src, dst, src_end, dst_end: PAnsiChar;
-  var offset: TOffsets);
+procedure SynLZdecompress1partialsub(var ctx: TSynLzContext);
 var
-  lasthashed, o: PAnsiChar;
-  cwbit, cw, v: cardinal;
-  t: PtrUInt;
+  src, dst, o, hashed: PAnsiChar;
+  cw: cardinal;
+  bits, run, t: PtrUInt;
 begin
-  lasthashed := dst - 1;
-  cw := PCardinal(src)^;
-  inc(src, 4);
-  cwbit := 1;
-  if src < src_end then
-    repeat
-      if cw and cwbit = 0 then
-      begin
-        dst^ := src^;
-        inc(src);
-        inc(dst);
-        if (src >= src_end) or
-           (dst >= dst_end) then
-          break;
-        if lasthashed < dst - 3 then
-        begin
-          inc(lasthashed);
-          v := PCardinal(lasthashed)^;
-          offset[((v shr 12) xor v) and 4095] := lasthashed;
-        end;
-        cwbit := cwbit shl 1;
-        if cwbit <> 0 then
-          continue;
-      end
-      else
-      begin
-        t := (PtrUInt(PByte(src)^) and 15) + 2;
-        o := offset[PWord(src)^ shr 4];
-        inc(src, 2);
-        if t = 2 then
-        begin
-          t := ord(src^) + (16 + 2);
-          inc(src);
-        end;
-        if dst + t >= dst_end then // avoid buffer overflow by all means
-        begin
-          MoveByOne(o, dst, dst_end - dst);
-          break;
-        end;
-        if PtrUInt(dst - o) < t then // overlap -> move byte-by-byte
-          MoveByOne(o, dst, t)
-        else if t <= 8 then
-          PInt64(dst)^ := PInt64(o)^ // safe since src_endmatch := src_end-(6+5)
-        else
-        begin
-          MoveByPtr(pointer(o), pointer(dst), t - 1);
-          PPtrUInt(dst + t - SizeOf(o))^ := PPtrUInt(o + t - SizeOf(o))^;
-        end;
-        if src >= src_end then
-          break;
-        if lasthashed < dst then
-          repeat
-            inc(lasthashed);
-            v := PCardinal(lasthashed)^;
-            offset[((v shr 12) xor v) and 4095] := lasthashed;
-          until lasthashed >= dst;
-        inc(dst, t);
-        lasthashed := dst - 1;
-        cwbit := cwbit shl 1;
-        if cwbit <> 0 then
-          continue;
-      end;
+  src := ctx.src;
+  dst := ctx.dst;
+  hashed := dst - 1;
+  cw := 0;
+  bits := 0;
+  while src < ctx.srcend do
+  begin
+    // read a control word once exhausting its 32 bits
+    if bits = 0 then
+    begin
       cw := PCardinal(src)^;
       inc(src, 4);
-      cwbit := 1;
-    until false;
+      bits := 32;
+      if src >= ctx.srcend then
+        break;
+    end;
+    if cw and 1 = 0 then
+    begin
+      // compute the number of consecutive literal bits before the next match
+      run := bits;
+      if cw <> 0 then
+        run := {$ifdef FPC} BsfDWord {$else} CountTrailingZeros32 {$endif}(cw);
+      // the last control word may be only partially used or we may reach dstend
+      t := ctx.srcend - src;
+      if run > t then
+        run := t;
+      t := ctx.dstend - dst;
+      if run > t then
+        run := t;
+      // move all litterals at once - don't hash them yet
+      MoveSynLzLiterals(pointer(src), pointer(dst), run);
+      inc(src, run);
+      inc(dst, run);
+      dec(bits, run);
+      cw := cw shr run;
+      if (src >= ctx.srcend) or
+         (dst >= ctx.dstend) then
+        break;
+      continue;
+    end;
+    // match token: first register all preceding literal positions
+    hashed := SynLzHash(hashed, dst - 3, ctx.offset^);
+    run := (PtrUInt(PByte(src)^) and 15) + 2;
+    o := ctx.offset^[PWord(src)^ shr 4];
+    inc(src, 2);
+    if run = 2 then
+    begin
+      run := ord(src^) + 18;
+      inc(src);
+    end;
+    t := ctx.dstend - dst;
+    if run >= t then // avoid buffer overflow by all means
+    begin
+      MoveByOne(o, dst, t);
+      break;
+    end;
+    if (run <= 8) or
+       (PtrUInt(dst - o) < run) then
+      MoveByOne(o, dst, run)
+    else
+    begin
+      PPtrUInt(dst + run - SizeOf(o))^ := PPtrUInt(o + run - SizeOf(o))^;
+      MoveByPtr(pointer(o), pointer(dst), run - 1);
+    end;
+    if src >= ctx.srcend then
+      break;
+    // need post-match hash synchronization
+    SynLzHash(hashed, dst, ctx.offset^);
+    inc(dst, run);
+    hashed := dst - 1;
+    // consume the single match bit
+    cw := cw shr 1;
+    dec(bits);
+  end;
 end;
 
 function SynLZdecompress1partial(src: PAnsiChar; size: integer; dst: PAnsiChar;
   maxDst: integer): integer;
 var
   offset: TOffsets;
-  srcend: PAnsiChar;
+  ctx: TSynLzContext;
 begin
-  srcend := src + size;
   result := PWord(src)^;
   if result = 0 then
     exit;
+  ctx.srcend := src + size;
   inc(src, 2);
   if result and $8000 <> 0 then
   begin
@@ -12465,8 +12519,13 @@ begin
   end;
   if maxDst < result then
     result := maxDst;
-  if result > 0 then
-    SynLZdecompress1partialsub(src, dst, srcend, dst + result, offset);
+  if result <= 0 then
+    exit;
+  ctx.src := src;
+  ctx.dst := dst;
+  ctx.dstend := dst + result;
+  ctx.offset := @offset;
+  SynLZdecompress1partialsub(ctx);
 end;
 
 function CompressSynLZ(var Data: RawByteString; Compress: boolean): RawUtf8;

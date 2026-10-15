@@ -4358,6 +4358,12 @@ asm
         mov     eax, 255
 @nz:
 end;
+
+function CountTrailingZeros32(c: cardinal): PtrUInt;
+asm
+        // called internally from SynLZdecompress1pas on oldest Delphi
+        bsf     eax, eax
+end;
 {$endif HASBITINTRINSICS}
 
 // FPC will properly inline multiplication by reciprocal

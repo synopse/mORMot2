@@ -2827,6 +2827,12 @@ asm
 @high:  add     eax, 32
 @done:
 end;
+
+function CountTrailingZeros32(c: cardinal): PtrUInt;
+asm
+        // called internally from SynLZdecompress1pas on oldest Delphi
+        bsf     eax, eax
+end;
 {$endif HASBITINTRINSICS}
 
 {$ifndef ISDELPHIXE2}
