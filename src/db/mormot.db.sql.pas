@@ -72,6 +72,7 @@ type
   /// used to define a field/column layout in a table schema
   // - for TSqlDBConnectionProperties.SqlCreate to describe the new table
   // - for TSqlDBConnectionProperties.GetFields to retrieve the table layout
+  // - defined as "packed" for binary serialization over mormot.db.proxy
   TSqlDBColumnDefine = packed record
     /// the Column name
     ColumnName: RawUtf8;
@@ -83,14 +84,14 @@ type
     /// the Column default width (in chars or bytes) of ftUtf8 or ftBlob
     // - can be set to value <0 for CLOB or BLOB column type, i.e. for
     // a value without any maximal length
-    ColumnLength: PtrInt;
+    ColumnLength: integer;
     /// the Column data precision
     // - used e.g. for numerical values
-    ColumnPrecision: PtrInt;
+    ColumnPrecision: integer;
     /// the Column data scale
     // - used e.g. for numerical values
     // - may be -1 if the metadata SQL statement returned NULL
-    ColumnScale: PtrInt;
+    ColumnScale: integer;
     /// the Column type, as recognized by our mormot.db.sql classes
     // - should not be ftUnknown nor ftNull
     ColumnType: TSqlDBFieldType;
@@ -103,6 +104,7 @@ type
   TSqlDBColumnDefineDynArray = array of TSqlDBColumnDefine;
 
   /// used to describe extended Index definition of a table schema
+  // - defined as "packed" for binary serialization over mormot.db.proxy
   TSqlDBIndexDefine = packed record
     /// name of the index
     IndexName: RawUtf8;
@@ -147,14 +149,14 @@ type
     /// the Column default width (in chars or bytes) of ftUtf8 or ftBlob
     // - can be set to value <0 for CLOB or BLOB column type, i.e. for
     // a value without any maximal length
-    ColumnLength: PtrInt;
+    ColumnLength: integer;
     /// the Column data precision
     // - used e.g. for numerical values
-    ColumnPrecision: PtrInt;
+    ColumnPrecision: integer;
     /// the Column data scale
     // - used e.g. for numerical values
     // - may be -1 if the metadata SQL statement returned NULL
-    ColumnScale: PtrInt;
+    ColumnScale: integer;
     /// the Column type, as recognized by our mormot.db.sql classes
     // - should not be ftUnknown nor ftNull
     ColumnType: TSqlDBFieldType;
@@ -8500,13 +8502,17 @@ end;
 const
   // used e.g. by TRestStorageExternal.LogFields() to log external columns info
   __TSqlDBColumnDefine = 'ColumnName,ColumnTypeNative:RawUtf8 ' +
-    'ColumnLength,ColumnPrecision,ColumnScale:PtrInt ' +
+    'ColumnLength,ColumnPrecision,ColumnScale:integer ' +
     'ColumnType:TSqlDBFieldType ColumnIndexed:boolean';
+  __TSqlDBIndexDefine = 'IndexName,TypeDesc,Filter,KeyColumns,IncludedColumns:RawUtf8 ' +
+    'IsUnique,IsPrimaryKey,IsUniqueConstraint:boolean';
 
 initialization
   assert(SizeOf(TSqlDBColumnProperty) = SizeOf(PtrUInt) * 2 + 20);
   Rtti.RegisterType(TypeInfo(TSqlDBFieldType));
-  Rtti.RegisterFromText(TypeInfo(TSqlDBColumnDefine), __TSqlDBColumnDefine);
+  Rtti.RegisterFromText([
+    TypeInfo(TSqlDBColumnDefine), __TSqlDBColumnDefine,
+    TypeInfo(TSqlDBIndexDefine),  __TSqlDBIndexDefine]);
 
 end.
 
