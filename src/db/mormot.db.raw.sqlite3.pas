@@ -4512,7 +4512,7 @@ type
     // - Close is always called internally
     // - raise an ESqlite3Exception on any error
     procedure Execute(aDB: TSqlite3DB; const aSql: RawUtf8;
-      out aValue: RawUtf8); overload;
+      var aValue: RawUtf8); overload;
     /// Execute a SQL statement to return TEXT from the aSql UTF-8 encoded string
     // - Execute the first statement in aSql
     // - this statement must get (at least) one field/column result of TEXT
@@ -4916,7 +4916,6 @@ type
     fFileDefaultCacheSize: integer;
     fIsMemory: boolean;
     fPassword: SpiUtf8;
-    fTransactionActive: boolean;
     /// if not nil, cache is used - see UseCache property
     fCache: TSynCache;
     fInternalState: PCardinal;
@@ -4926,8 +4925,8 @@ type
     fBackupBackgroundLastTime: RawUtf8;
     fBackupBackgroundLastFileName: TFileName;
     fUseCacheSize: integer;
-    fStatementMaxMemory: PtrUInt;
     fLogResultMaximumSize: integer;
+    fStatementMaxMemory: PtrUInt;
     fLog: TSynLogClass;
     /// store TSqlDataBaseSQLFunction instances
     fSqlFunctions: TSynObjectList;
@@ -4955,6 +4954,9 @@ type
     function GetBackupBackgroundInProcess: boolean;
     function SqlShouldBeLogged(const aSql: RawUtf8): boolean;
     function GetSqlite3Library: TSqlite3Library; // class function = bug in D2005
+    function LockedGetTransactionActive: boolean;
+    function GetTransactionActive: boolean;
+    procedure LockedExecute(const aSql: RawUtf8);
   public
     /// enter the internal mutex: called before any DB access
     // - provide the SQL statement about to be executed: handle proper caching
@@ -5071,7 +5073,7 @@ type
     // - this statement must get a one field/column result of TEXT in aValue
     // - raise an ESqlite3Exception on any error
     procedure Execute(const aSql: RawUtf8;
-      out aValue: RawUtf8; NoLog: boolean = false); overload;
+      var aValue: RawUtf8; NoLog: boolean = false); overload;
     /// Execute one SQL statements in aSql UTF-8 encoded string
     // - can be prepared with TransactionBegin()
     // - raise no Exception on error, but returns FALSE in such case
@@ -5322,9 +5324,11 @@ type
     // - default is 16MB
     property UseCacheSize: integer
       read fUseCacheSize write fUseCacheSize;
-    /// return TRUE if a Transaction begun
+    /// TRUE if SQLite has an active transaction on this connection
+    // - reflects the actual SQLite state, even after SQL errors
+    // - also detects transactions started with direct SQL
     property TransactionActive: boolean
-      read fTransactionActive;
+      read GetTransactionActive;
     /// sets a busy handler that sleeps for a specified amount of time
     // (in milliseconds) when a table is locked, before returning an error
     // - let SQLite3 intercept SQLITE_BUSY errors using busy_timeout() handler
@@ -6731,62 +6735,6 @@ end;
 
 { TSqlDataBase }
 
-function TSqlDataBase.Blob(const DBName, TableName, ColumnName: RawUtf8;
-  RowID: Int64; ReadWrite: boolean): TSqlBlobStream;
-begin
-  if self = nil then
-  begin
-    result := nil;
-    exit; // avoid GPF in case of call from a static-only server
-  end;
-  Lock;
-  try
-    if RowID = 0 then
-      RowID := sqlite3.last_insert_rowid(DB); // warning: not multi-thread safe
-    result := TSqlBlobStream.Create(DB, DBName, TableName, ColumnName, RowID, ReadWrite);
-  finally
-    UnLock;
-  end;
-end;
-
-procedure TSqlDataBase.RollBack;
-begin
-  if (self = nil) or
-     not fTransactionActive then
-    exit;
-  Execute('ROLLBACK TRANSACTION;');
-  fTransactionActive := false;
-end;
-
-procedure TSqlDataBase.TransactionBegin(aBehavior: TSqlDataBaseTransactionBehaviour);
-const
-  TBTOKENS: array[TSqlDataBaseTransactionBehaviour] of RawUtf8 = (
-    // see http://www.sqlite.org/lang_transaction.html
-    '', 'IMMEDIATE ', 'EXCLUSIVE ');
-begin
-  if self = nil then
-    exit; // avoid GPF in case of call from a static-only server
-  if fTransactionActive then
-  try
-    Execute('ROLLBACK TRANSACTION;');
-  finally
-    fTransactionActive := false;
-  end;
-  Execute('BEGIN ' + TBTOKENS[aBehavior] + 'TRANSACTION;');
-  fTransactionActive := true;
-end;
-
-procedure TSqlDataBase.Commit;
-begin
-  if (Self <> nil) and
-     fTransactionActive then
-  try
-    Execute('COMMIT TRANSACTION;');
-  finally
-    fTransactionActive := false;
-  end;
-end;
-
 constructor TSqlDataBase.Create(
   const aFileName: TFileName; const aPassword: SpiUtf8;
   aOpenV2Flags, aDefaultCacheSize, aDefaultPageSize: integer);
@@ -6862,6 +6810,70 @@ begin
   inherited Destroy;
 end;
 
+function TSqlDataBase.Blob(const DBName, TableName, ColumnName: RawUtf8;
+  RowID: Int64; ReadWrite: boolean): TSqlBlobStream;
+begin
+  if self = nil then
+  begin
+    result := nil;
+    exit; // avoid GPF in case of call from a static-only server
+  end;
+  Lock;
+  try
+    if RowID = 0 then
+      RowID := sqlite3.last_insert_rowid(DB); // warning: not multi-thread safe
+    result := TSqlBlobStream.Create(DB, DBName, TableName, ColumnName, RowID, ReadWrite);
+  finally
+    UnLock;
+  end;
+end;
+
+procedure TSqlDataBase.RollBack;
+begin
+  if self = nil then
+    exit;
+  LockAndFlushCache;
+  try
+    if LockedGetTransactionActive then
+      LockedExecute('ROLLBACK TRANSACTION;');
+  finally
+    UnLock;
+  end;
+end;
+
+procedure TSqlDataBase.TransactionBegin(
+  aBehavior: TSqlDataBaseTransactionBehaviour);
+const
+  TB_TOKENS: array[TSqlDataBaseTransactionBehaviour] of RawUtf8 = (
+    // see http://www.sqlite.org/lang_transaction.html
+    '', 'IMMEDIATE ', 'EXCLUSIVE ');
+begin
+  if self = nil then
+    exit;
+  LockAndFlushCache;
+  try
+    // regular mORMot behavior: discard any previous unfinished transaction
+    if LockedGetTransactionActive then
+      LockedExecute('ROLLBACK TRANSACTION;');
+    LockedExecute(Join(['BEGIN ', TB_TOKENS[aBehavior], 'TRANSACTION;']));
+  finally
+    UnLock;
+  end;
+end;
+
+procedure TSqlDataBase.Commit;
+begin
+  if self = nil then
+    exit;
+  LockAndFlushCache;
+  try
+    if LockedGetTransactionActive then
+      LockedExecute('COMMIT TRANSACTION;');
+  finally
+    UnLock;
+  end;
+end;
+
 function TSqlDataBase.SqlShouldBeLogged(const aSql: RawUtf8): boolean;
 begin
   result := fLog.HasLevel([sllSQL]) and
@@ -6887,7 +6899,7 @@ begin
   end;
 end;
 
-procedure TSqlDataBase.Execute(const aSql: RawUtf8);
+procedure TSqlDataBase.LockedExecute(const aSql: RawUtf8);
 var
   R: TSqlRequest;
   start: Int64;
@@ -6895,13 +6907,19 @@ begin
   if self = nil then
     exit; // avoid GPF in case of call from a static-only server
   QueryPerformanceMicroSeconds(start);
+  R.Execute(DB, aSql);
+  fLog.Add.Log(sllSQL, '% % %', [MicroSecFrom(start), FileNameWithoutPath, aSql], self);
+end;
+
+procedure TSqlDataBase.Execute(const aSql: RawUtf8);
+begin
+  if self = nil then
+    exit; // avoid GPF in case of call from a static-only server
   Lock(aSql); // run one statement -> we can trust IsSelect()
   try
-    R.Execute(DB, aSql);
+    LockedExecute(aSql);
   finally
     UnLock;
-    fLog.Add.Log(sllSQL, '% % %',
-      [MicroSecFrom(start), FileNameWithoutPath, aSql], self);
   end;
 end;
 
@@ -6949,11 +6967,12 @@ begin
 end;
 
 procedure TSqlDataBase.Execute(const aSql: RawUtf8;
-  out aValue: RawUtf8; NoLog: boolean);
+  var aValue: RawUtf8; NoLog: boolean);
 var
   R: TSqlRequest;
   start: Int64;
 begin
+  FastAssignNew(aValue);
   if self = nil then
     exit; // avoid GPF in case of call from a static-only server
   if not NoLog then
@@ -6991,28 +7010,24 @@ end;
 
 function TSqlDataBase.ExecuteNoExceptionInt64(const aSql: RawUtf8): Int64;
 begin
-  if (self = nil) or
-     (DB = 0) then
-    result := 0
-  else
-  try
-    Execute(aSql, result, true);
-  except
-    result := 0;
-  end;
+  result := 0;
+  if (self <> nil) and
+     (DB <> 0) then
+    try
+      Execute(aSql, result, true);
+    except
+    end;
 end;
 
 function TSqlDataBase.ExecuteNoExceptionUtf8(const aSql: RawUtf8): RawUtf8;
 begin
-  if (self = nil) or
-     (DB = 0) then
-    FastAssignNew(result)
-  else
-  try
-    Execute(aSql, result, true);
-  except
-    FastAssignNew(result);
-  end;
+  FastAssignNew(result);
+  if (self <> nil) and
+     (DB <> 0) then
+    try
+      Execute(aSql, result, true);
+    except
+    end;
 end;
 
 function TSqlDataBase.ExecuteJson(const aSql: RawUtf8; Expand: boolean;
@@ -7189,6 +7204,25 @@ begin
         fCache := TSynCache.Create(fUseCacheSize, true)
       else
         FreeAndNil(fCache);
+end;
+
+function TSqlDataBase.LockedGetTransactionActive: boolean;
+begin
+  result := (fDB <> 0) and
+            (sqlite3.get_autocommit(fDB) = 0);
+end;
+
+function TSqlDataBase.GetTransactionActive: boolean;
+begin
+  result := false;
+  if self = nil then
+    exit;
+  fSafe.Lock;
+  try
+    result := LockedGetTransactionActive;
+  finally
+    fSafe.UnLock;
+  end;
 end;
 
 function IsCacheable(const aSql: RawUtf8): boolean;
@@ -8174,8 +8208,9 @@ begin
 end;
 
 procedure TSqlRequest.Execute(aDB: TSqlite3DB; const aSql: RawUtf8;
-  out aValue: RawUtf8);
+  var aValue: RawUtf8);
 begin
+  FastAssignNew(aValue);
   try
     Prepare(aDB, aSql); // will raise an ESqlite3Exception on error
     if FieldCount > 0 then
