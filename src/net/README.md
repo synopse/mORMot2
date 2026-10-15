@@ -147,6 +147,13 @@ Automatic Certificate Management Environment (ACME v2) Client
 - Let's Encrypt - ZeroSSL TLS / HTTPS Encryption Certificates Support
 - HTTP-01 Let's Encrypt - ZeroSSL Challenges HTTP Server on port 80
 
+### mormot.net.mail
+
+MIME E-Mail Message Builder and SMTP Client
+- RFC 5322 / RFC 2047 / RFC 2231 address and header encoding
+- TMailMessage: text, HTML, attachments and inline images as MIME multipart
+- TSmtpClient: SMTP/ESMTP with STARTTLS, implicit TLS, PLAIN, LOGIN and XOAUTH2
+
 ### mormot.net.ldap
 
 Simple LDAP Protocol Client

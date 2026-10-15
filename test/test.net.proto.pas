@@ -54,6 +54,7 @@ uses
   mormot.crypt.openssl,
   {$endif SCHANNEL_VERIFY}
   mormot.net.client,
+  mormot.net.mail,
   mormot.net.server,
   mormot.net.async,
   mormot.net.ws.core,
@@ -193,6 +194,8 @@ type
     /// validate IP processing functions
     procedure IPAddresses;
     /// validate mormot.net.openapi unit
+    /// MIME e-mail builder, as in mormot.net.mail
+    procedure MimeMail;
     procedure OpenAPI;
     {$ifdef SCHANNEL_VERIFY}
     /// validate SChannel mTLS HTTPS server using a plain OpenSSL client
@@ -637,6 +640,86 @@ const
     'VAS',     // https://platform-api-staging.vas.com/api/v1/swagger.json
     'JTL');    // https://developer.jtl-software.com/_spec/products/erpapi/@1.1-onprem/openapi.json?download
 
+procedure TNetworkProtocols.MimeMail;
+var
+  a: TMailAddress;
+  list: TMailAddressDynArray;
+  msg: TMailMessage;
+  eml: RawUtf8;
+  env: TRawUtf8DynArray;
+  ae, ue, ss: RawUtf8; // UTF-8 encoded umlauts, whatever the source encoding is
+  i: PtrInt;
+begin
+  ae := RawUtf8(HexToBin('C3A4'));
+  ue := RawUtf8(HexToBin('C3BC'));
+  ss := RawUtf8(HexToBin('C39F'));
+  // addresses
+  Check(MailAddressParse('Jim <jim@example.com>', a));
+  CheckEqual(a.Name, 'Jim');
+  CheckEqual(a.Address, 'jim@example.com');
+  Check(MailAddressParse('"Last, First" <lf@example.com>', a));
+  CheckEqual(a.Name, 'Last, First');
+  Check(not MailAddressParse('no-at-sign', a));
+  Check(not MailAddressParse('a b@example.com', a));
+  CheckEqual(MailAddressListAdd(list, 'a@b.de, "X, Y" <c@d.de>; e@f.de'), 3);
+  CheckEqual(length(list), 3);
+  CheckEqual(list[1].Name, 'X, Y');
+  CheckEqual(MailAddressEncode(list[1]), '"X, Y" <c@d.de>');
+  // header encoding, with no header injection
+  CheckEqual(MailHeaderEncode('Hello'), 'Hello');
+  CheckEqual(MailHeaderEncode('a'#13#10'Bcc: x'), 'a  Bcc: x');
+  CheckEqual(MailHeaderEncode(ae), '=?UTF-8?B?w6Q=?=');
+  eml := '';
+  for i := 1 to 100 do
+    Append(eml, ae);
+  eml := MailHeaderEncode(eml); // folded, never split
+  Check(PosEx(#13#10' =?UTF-8?B?', eml) > 0);
+  Check(IsValidUtf8(Base64ToBin(Copy(eml, 11, 60))));
+  // quoted-printable
+  CheckEqual(QuotedPrintableEncode('a=b'), 'a=3Db');
+  CheckEqual(QuotedPrintableEncode('x'#10'y '#13#10'z'), 'x'#13#10'y=20'#13#10'z');
+  CheckEqual(QuotedPrintableEncode(ae), '=C3=A4');
+  CheckEqual(QuotedPrintableEncode('.dot'), '=2Edot');
+  eml := QuotedPrintableEncode(StringOfChar('a', 200));
+  Check(PosEx('=' + #13#10, eml) = 76, 'soft line break');
+  // SMTP transparency
+  CheckEqual(SmtpDotStuff('a'#10'.b'#13#10'..c'), 'a'#13#10'..b'#13#10'...c'#13#10'.'#13#10);
+  // whole message
+  msg := TMailMessage.Create;
+  try
+    msg.SetFrom('me@example.com', 'M' + ue + 'ller');
+    msg.AddTo('to@example.com');
+    msg.AddCc('cc@example.com');
+    msg.AddBcc('bcc@example.com');
+    msg.SubjectUtf8 := 'Gr' + ue + ss + 'e';
+    msg.PlainTextUtf8 := 'plain ' + ae;
+    msg.HtmlUtf8 := '<p>html</p>';
+    msg.AddInlineData('PNG', 'logo.png', 'logo@id');
+    msg.AddAttachmentData('hello', 'r' + ae + 'port.txt');
+    msg.Priority := mpHigh;
+    eml := msg.Build;
+    env := msg.Envelope;
+    CheckEqual(length(env), 3);
+    CheckEqual(msg.EnvelopeFrom, 'me@example.com');
+    Check(PosEx('Bcc', eml) = 0, 'Bcc is never in the headers');
+    Check(PosEx('Subject: =?UTF-8?B?', eml) > 0);
+    Check(PosEx('From: =?UTF-8?B?', eml) > 0);
+    Check(PosEx('Content-Type: multipart/mixed;', eml) > 0);
+    Check(PosEx('Content-Type: multipart/related;', eml) > 0);
+    Check(PosEx('Content-Type: multipart/alternative;', eml) > 0);
+    Check(PosEx('Content-ID: <logo@id>', eml) > 0);
+    Check(PosEx('filename*=UTF-8''''r%C3%A4port.txt', eml) > 0);
+    Check(PosEx('X-Priority: 2 (High)', eml) > 0);
+    for i := 1 to length(eml) do
+      if eml[i] = #10 then
+        Check((i > 1) and (eml[i - 1] = #13), 'CRLF line ends only');
+    msg.Clear;
+    CheckEqual(length(msg.Envelope), 0);
+    Check(msg.Attachments = nil);
+  finally
+    msg.Free;
+  end;
+end;
 procedure TNetworkProtocols.OpenAPI;
 var
   i: PtrInt;
