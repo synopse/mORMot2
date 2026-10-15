@@ -406,6 +406,14 @@ type
     // - this overriden method will return the integer value returned by
     // cExecute command
     function UpdateCount: integer; override;
+    /// release the result buffer received by ExecutePrepared
+    // - this overriden method will release the binary rows data and the
+    // columns description, so that this instance could be executed again
+    procedure ReleaseRows; override;
+    /// reset the statement, to be executed again with new bound parameters
+    // - allow the usual Bind() + ExecutePrepared + Step() + Reset loop on
+    // the same TSqlDBProxyStatement instance, as with the other providers
+    procedure Reset; override;
     /// force no UpdateCount method call on server side
     // - may be needed to reduce server load, if this information is not needed
     property ForceNoUpdateCount: boolean
@@ -1762,6 +1770,28 @@ end;
 function TSqlDBProxyStatement.UpdateCount: integer;
 begin
   result := fUpdateCount;
+end;
+
+procedure TSqlDBProxyStatement.ReleaseRows;
+begin
+  // release the binary buffer and its columns - otherwise ParamsToCommand
+  // would raise 'Invalid ExecutePrepared* call' on the next execution
+  fDataInternalCopy := '';
+  fDataRowCount := 0;
+  fDataRowReaderOrigin := nil;
+  fDataRowReader := nil;
+  fDataCurrentRowValuesStart := nil;
+  fCurrentRow := 0;
+  ClearColumns;
+  fColumnCount := 0;
+  inherited ReleaseRows;
+end;
+
+procedure TSqlDBProxyStatement.Reset;
+begin
+  ReleaseRows;
+  fUpdateCount := 0;
+  inherited Reset;
 end;
 
 procedure TSqlDBProxyStatement.ExecutePreparedAndFetchAllAsJson(
