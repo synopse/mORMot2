@@ -1,5 +1,5 @@
 /// small stand-alone tool to test SMTP email sending (plain / implicit TLS / STARTTLS)
-// - by default, uses the SendEmail() function of mormot.net.client
+// - by default, uses the SendEmail() function of mormot.net.mail
 // - with --native, uses the mormot.net.mail TMailMessage MIME builder and
 // TSmtpClient: HTML body, attachments, inline images, Cc/Bcc, priority...
 // - part of the Open Source Synopse mORMot framework 2 examples
@@ -28,8 +28,7 @@ uses
   mormot.core.log,
   mormot.net.sock,
   mormot.net.http,   // for MimeHeaderEncode()
-  mormot.net.client,
-  mormot.net.mail;   // TMailMessage + TSmtpClient
+  mormot.net.mail;   // SendEmail() + TMailMessage + TSmtpClient
 
 type
   /// command line options of this tool
@@ -52,7 +51,7 @@ begin
   cmd := Executable.Command;
   cmd.Parse(CRLF, '-', '--');
   cmd.ExeDescription := 'Send a test e-mail via SMTP (plain, implicit TLS or ' +
-    'STARTTLS).'#13#10'By default SendEmail() from mormot.net.client is used; ' +
+    'STARTTLS).'#13#10'By default SendEmail() from mormot.net.mail is used; ' +
     'with --native, the MIME features of mormot.net.mail are available. ' +
     'In native mode, \n in the body is converted to a line feed.';
   // main arguments
