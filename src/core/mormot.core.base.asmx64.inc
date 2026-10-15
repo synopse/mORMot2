@@ -4121,123 +4121,152 @@ end;
 
 function SynLZdecompress1(src: PAnsiChar; size: integer; dst: PAnsiChar): integer;
 var
-  off: TOffsets; // pointers are faster and use only 32KB on stack
-asm     // rcx=src, edx=size, r8=dest
-        {$ifdef ABIWINX64} // additional registers to preserve
+  off: TOffsets; // 4096 pointers, allocated on the stack
+asm
+        {$ifdef ABIWINX64}
         push    rsi
         push    rdi
-        {$else} // Linux 64-bit ABI
-        mov     r8, rdx
-        mov     rdx, rsi
-        mov     rcx, rdi
+        mov     rsi, rcx               // rsi = src
+        {$else} // System V x86-64: rdi=src, esi=size, rdx=dst
+        mov     r8, rdx                // r8 = dst
+        mov     edx, esi               // edx = compressed size
+        mov     rsi, rdi               // rsi = src
         {$endif ABIWINX64}
         push    rbx
         push    r12
         push    r13
-        movzx   eax, word ptr [rcx]    // rcx=src   eax=result
-        lea     r9, [rcx + rdx]        // r9=src_end
+        movzx   eax, word ptr [rsi]    // uncompressed size header
+        lea     r9, [rsi + rdx]        // r9 = src_end
         test    eax, eax
-        je      @36
-        add     rcx, 2
-        mov     r10d, eax
-        and     r10d, $8000
-        jz      @21                   // dest size < 32768
-        movzx   ebx, word ptr [rcx]
+        jz      @empty
+        add     rsi, 2
+        test    eax, $8000
+        jz      @size
+        movzx   ebx, word ptr [rsi]
         shl     ebx, 15
         and     eax, $7fff
         or      eax, ebx
-        add     rcx, 2
-@21:    push    rax                    // save result for function exit
-        lea     rax, [r8 - 1]          // rax=last_hashed  r8=dest
-@22:    mov     edi, dword ptr [rcx]   // edi=CW
-        add     rcx, 4
-        mov     r10d, 1                // r10d=CWBit
-        cmp     rcx, r9
-        jnc     @35
+        add     rsi, 2
+@size:  push    rax                    // save return value
+        lea     rax, [r8 - 1]          // rax = last_hashed
+        xor     r10d, r10d             // remaining control bits = 0
+@main:  cmp     rsi, r9
+        jae     @done
+        test    r10d, r10d
+        jnz     @token
+        mov     edi, dword ptr [rsi]   // shifted control word
+        add     rsi, 4
+        mov     r10d, 32
+        cmp     rsi, r9
+        jae     @done
         {$ifdef FPC} align 16 {$else} .align 16 {$endif}
-@23:    test    r10d, edi
-        jnz     @25
-        mov     bl, byte ptr [rcx]    // CWBit was not set: copy byte and hash
-        mov     byte ptr [r8], bl
-        add     rcx, 1
-        lea     rbx, [r8 - 2]
-        add     r8, 1
-        cmp     rcx, r9
-        jnc     @35
-        cmp     rbx, rax
-        jbe     @24
-        add     rax, 1
-        mov     esi, dword ptr [rax]
-        mov     ebx, esi
-        shr     esi, 12
-        xor     ebx, esi
-        and     ebx, 4095
-        mov     qword ptr [off + rbx * 8], rax
-@24:    shl     r10d, 1
-        jnz     @23
-        jmp     @22
-@25:    movzx   rbx, word ptr [rcx] // CWBit was set: copy bytes from offset
-        add     rcx, 2
-        mov     r11, rbx
-        shr     ebx, 4                 // ebx=h
-        and     r11, 0FH               // r11=t
-        lea     r11, [r11 + 2]
-        jnz     @26
-        movzx   r11, byte ptr [rcx]
-        add     rcx, 1
-        lea     r11, [r11 + (16 + 2)]
-@26:    mov     r13, qword ptr [off + rbx * 8] // r13=o
-        mov     rbx, r8
-        xor     rsi, rsi
-        sub     rbx, r13
+@token: test    edi, 1
+        jnz     @match
+        mov     r11d, r10d             // run = remaining bits
+        test    edi, edi
+        jz      @litcnt                // entire remaining word is literals
+        bsf     r11d, edi              // edi <> 0: run = trailing zeros
+@litcnt:mov     rbx, r9
+        sub     rbx, rsi               // bytes left in compressed input
+        cmp     r11, rbx
+        cmova   r11, rbx               // cap last (partial) control word
+        cmp     r11, 8
+        jae     @litby8
         mov     r12, r11
-        cmp     rbx, r11
-        jc      @29       // PtrUInt(dst - o) < t overlap -> MoveByOne
-        mov     rbx, qword ptr [r13]
-        mov     qword ptr [r8], rbx
-        sub     r12, 8
-        jbe     @31       // 1..8 bytes
-        mov     rbx, qword ptr [r13 + r12] // last 8 bytes (may overlap)
-        mov     qword ptr [r8 + r12], rbx
-        cmp     r12, 8
-        jbe     @31      // 9..16 bytes
+        {$ifdef FPC} align 16 {$else} .align 16 {$endif}
+@litby1:dec     r12
+        mov     bl, byte ptr [rsi + r12]
+        mov     byte ptr [r8 + r12], bl
+        jnz     @litby1
+        jmp     @litok
+        {$ifdef FPC} align 16 {$else} .align 16 {$endif}
+@litby8:mov     rbx, qword ptr [rsi + r11 - 8]
+        mov     qword ptr [r8 + r11 - 8], rbx
+        lea     r12, [r11 - 1]
         shr     r12, 3
-@27:    add     rsi, 8
-        mov     rbx, qword ptr [r13 + rsi] // inlined move by 8 bytes
-        mov     qword ptr [r8 + rsi], rbx
-        sub     r12, 1
-        jnz     @27
-@31:    cmp     rcx, r9
-        jz      @35
-        cmp     rax, r8
-        jnc     @34
+        jz      @litok
+@lit8s: dec     r12
+        mov     rbx, qword ptr [rsi + r12 * 8]
+        mov     qword ptr [r8 + r12 * 8], rbx
+        jnz     @lit8s
+@litok: add     rsi, r11
+        add     r8, r11
+        sub     r10, r11
+        mov     ecx, r11d
+        shr     edi, cl                // shift by 32 is harmless if bits=0
+        jmp     @main
+@match: lea     rbx, [r8 - 3]          // hash literals lazily
+        cmp     rax, rbx
+        jae     @read
         {$ifdef FPC} align 16 {$else} .align 16 {$endif}
-@32:    add     rax, 1               // hash decompressed bytes
-        mov     ebx, dword ptr [rax]
-        mov     esi, ebx
-        shr     ebx, 12
-        xor     esi, ebx
-        and     esi, 4095
-        mov     qword ptr [off + rsi * 8], rax
-        cmp     rax, r8
-        jc      @32
-@34:    add     r8, r11
-        lea     rax, [r8 - 1]
-        shl     r10d, 1
-        jnz     @23
-        jmp     @22
-        {$ifdef FPC} align 16 {$else} .align 16 {$endif}
-@29:    mov     bl, byte ptr [r13 + rsi] // overlaping move
-        mov     byte ptr [r8 + rsi], bl
+@hash1: inc     rax
+        mov     edx, dword ptr [rax]
+        mov     ecx, edx
+        shr     edx, 12
+        xor     ecx, edx
+        and     ecx, 4095
+        mov     qword ptr [off + rcx * 8], rax
+        cmp     rax, rbx
+        jb      @hash1
+@read:  movzx   ebx, word ptr [rsi]
+        add     rsi, 2
+        mov     r11d, ebx
+        shr     ebx, 4                 // hash index
+        and     r11d, 15               // low nibble encodes match length
+        lea     r11, [r11 + 2]         // LEA preserves flags from AND
+        jnz     @m1
+        movzx   r11d, byte ptr [rsi]
         add     rsi, 1
-        sub     r12, 1
-        jnz     @29
-        jmp     @31
-@35:    pop     rax     // returns stored dest length
-@36:    pop     r13
+        add     r11, 18
+@m1:    mov     r13, qword ptr [off + rbx * 8]
+        mov     rbx, r8
+        sub     rbx, r13               // distance = dst - match source
+        cmp     rbx, r11
+        jb      @m2
+        cmp     r11, 8
+        jbe     @m3
+        mov     rbx, qword ptr [r13 + r11 - 8] // final word - may overlap
+        mov     qword ptr [r8 + r11 - 8], rbx
+        lea     r12, [r11 - 1]
+        shr     r12, 3                 // at least one word
+        {$ifdef FPC} align 16 {$else} .align 16 {$endif}
+@ms:    dec     r12
+        mov     rbx, qword ptr [r13 + r12 * 8]
+        mov     qword ptr [r8 + r12 * 8], rbx
+        jnz     @ms
+        jmp     @mok
+@m3:    mov     rbx, qword ptr [r13]
+        mov     qword ptr [r8], rbx    // same 8-byte fast path as Pascal
+        jmp     @mok
+@m2:    xor     edx, edx               // forward byte copy for overlap
+@mb:    mov     bl, byte ptr [r13 + rdx]
+        mov     byte ptr [r8 + rdx], bl
+        inc     rdx
+        cmp     rdx, r11
+        jne     @mb
+@mok:   cmp     rsi, r9
+        jae     @done                  // last token: no further hashing
+        cmp     rax, r8
+        jae     @hash3
+@hash2: inc     rax
+        mov     ebx, dword ptr [rax]
+        mov     ecx, ebx
+        shr     ebx, 12
+        xor     ecx, ebx
+        and     ecx, 4095
+        mov     qword ptr [off + rcx * 8], rax
+        cmp     rax, r8
+        jb      @hash2
+@hash3: add     r8, r11
+        lea     rax, [r8 - 1]
+        shr     edi, 1
+        dec     r10d
+        jmp     @main
+@done:  pop     rax                     // decompressed size
+@empty: pop     r13
         pop     r12
         pop     rbx
-        {$ifdef ABIWINX64} // additional registers to preserve
+        {$ifdef ABIWINX64}
         pop     rdi
         pop     rsi
         {$endif ABIWINX64}
