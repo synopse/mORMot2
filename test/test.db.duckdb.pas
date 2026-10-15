@@ -1,0 +1,416 @@
+/// regression tests for the DuckDB SynDB provider
+// - this unit is a part of the Open Source Synopse mORMot framework 2,
+// licensed under a MPL/GPL/LGPL three license - see LICENSE.md
+// - tests are skipped if the DuckDB library (duckdb.dll/libduckdb.so) is not
+// available on this system
+unit test.db.duckdb;
+
+interface
+
+{$I ..\src\mormot.defines.inc}
+
+uses
+  sysutils,
+  classes,
+  variants,
+  mormot.core.base,
+  mormot.core.os,
+  mormot.core.unicode,
+  mormot.core.text,
+  mormot.core.datetime,
+  mormot.core.json,
+  mormot.core.variants,
+  mormot.core.test,
+  mormot.db.core,
+  mormot.db.sql,
+  mormot.db.raw.duckdb,
+  mormot.db.sql.duckdb;
+
+type
+  /// regression tests for mormot.db.sql.duckdb.pas
+  TTestDuckDB = class(TSynTestCase)
+  protected
+    fProps: TSqlDBDuckDBConnectionProperties;
+    procedure Setup; override;
+    procedure CleanUp; override;
+  published
+    procedure BasicTypes;
+    procedure ParamsAndCrud;
+    procedure Transactions;
+    procedure NestedTypes;
+    procedure Json;
+    procedure Errors;
+    procedure Metadata;
+    procedure Bulk;
+    procedure BindArrays;
+    procedure Appender;
+  end;
+
+
+implementation
+
+{ TTestDuckDB }
+
+procedure TTestDuckDB.Setup;
+begin
+  if DuckDBLibraryAvailable then
+    fProps := TSqlDBDuckDBConnectionProperties.Create(':memory:', '', '', '')
+  else
+    NotifyProgress(['DuckDB library not available - tests skipped']);
+end;
+
+procedure TTestDuckDB.CleanUp;
+begin
+  FreeAndNil(fProps);
+end;
+
+procedure TTestDuckDB.BasicTypes;
+var
+  rows: ISqlDBRows;
+  dt: TDateTime;
+begin
+  if fProps = nil then
+    exit;
+  rows := fProps.Execute(
+    'select 42::INTEGER as i, 9007199254740993::BIGINT as b, ' +
+    'true as t, 1.5::DOUBLE as d, 1234.5678::DECIMAL(18,4) as c, ' +
+    '123456789012.3456::DECIMAL(38,4) as hc, ' +
+    'decode(from_hex(''68c3a46c6c6f2077c3b6726c642c2061206c6f6e67657220737472696e67203e203132206368617273'')) as s, ''short'' as ss, ' +
+    'DATE ''2024-02-29'' as dd, TIMESTAMP ''2024-02-29 13:14:15.678'' as ts, ' +
+    'TIME ''23:59:58'' as tt, NULL::INTEGER as n, ''\xAA\x00\x5C\xFF''::BLOB as bl, ' +
+    'sum(x)::HUGEINT as h, ''8f14e45f-ceea-467a-a5f0-6e0bd3f1d2a1''::UUID as u ' +
+    'from (values (1),(2)) v(x)', []);
+  Check(rows.Step, 'step');
+  CheckEqual(rows.ColumnInt(0), 42, 'integer');
+  CheckEqual(rows.ColumnInt(1), 9007199254740993, 'bigint');
+  CheckEqual(rows.ColumnInt(2), 1, 'boolean');
+  Check(rows.ColumnDouble(3) = 1.5, 'double');
+  Check(rows.ColumnCurrency(4) = 1234.5678, 'decimal(18,4) currency');
+  Check(rows.ColumnType(4) = ftCurrency, 'decimal(18,4) type');
+  Check(rows.ColumnCurrency(5) = 123456789012.3456, 'decimal(38,4) currency');
+  CheckEqual(rows.ColumnUtf8(5), '123456789012.3456', 'decimal(38,4) text');
+  CheckEqual(rows.ColumnUtf8(6), RawUtf8(HexToBin('68c3a46c6c6f2077c3b6726c642c2061206c6f6e67657220737472696e67203e203132206368617273')), 'varchar');
+  CheckEqual(rows.ColumnUtf8(7), 'short', 'inlined varchar');
+  dt := rows.ColumnDateTime(8);
+  CheckEqual(DateToIso8601Text(dt), '2024-02-29', 'date');
+  CheckEqual(rows.ColumnUtf8(8), '2024-02-29', 'date text');
+  dt := rows.ColumnDateTime(9);
+  CheckEqual(DateTimeToIso8601(dt, true, 'T', true), '2024-02-29T13:14:15.678',
+    'timestamp');
+  Check(rows.ColumnType(9) = ftDate, 'timestamp type');
+  CheckEqual(TimeToIso8601(rows.ColumnDateTime(10), true), 'T23:59:58', 'time');
+  Check(rows.ColumnNull(11), 'null');
+  Check(not rows.ColumnNull(0), 'not null');
+  CheckEqual(BinToHex(rows.ColumnBlob(12)), 'AA005CFF', 'blob');
+  CheckEqual(rows.ColumnInt(13), 3, 'hugeint');
+  CheckEqual(rows.ColumnUtf8(14), '8f14e45f-ceea-467a-a5f0-6e0bd3f1d2a1', 'uuid');
+  Check(not rows.Step, 'eof');
+end;
+
+procedure TTestDuckDB.ParamsAndCrud;
+var
+  conn: TSqlDBConnection;
+  st: ISqlDBStatement;
+  rows: ISqlDBRows;
+  i: integer;
+  blob: RawByteString;
+  dt: TDateTime;
+begin
+  if fProps = nil then
+    exit;
+  conn := fProps.ThreadSafeConnection;
+  fProps.ExecuteNoResult('drop table if exists people', []);
+  fProps.ExecuteNoResult('create table people (id INTEGER primary key, ' +
+    'name VARCHAR, amount DECIMAL(19,4), born DATE, seen TIMESTAMP, ' +
+    'ratio DOUBLE, photo BLOB)', []);
+  st := conn.NewStatementPrepared(
+    'insert into people values (?,?,?,?,?,?,?)', false, true);
+  blob := HexToBin('000102275C78FF'); // binary with quote, backslash and #255
+  dt := EncodeDate(2001, 2, 3) + EncodeTime(4, 5, 6, 789);
+  for i := 1 to 10 do
+  begin
+    st.Bind(1, i);
+    st.BindTextU(2, FormatUtf8('O''Neil ? -- #%', [i]));
+    st.BindCurrency(3, i * 1000 + 0.1234);
+    st.BindDateTime(4, EncodeDate(2000, 1, i));
+    st.BindDateTime(5, dt);
+    st.Bind(6, i / 4);
+    if i = 3 then
+      st.BindNull(7)
+    else
+      st.BindBlob(7, blob);
+    st.ExecutePrepared;
+    CheckEqual(st.UpdateCount, 1, 'insert updatecount');
+    st.Instance.Reset; // mandatory between executions for mormot.db.proxy clients
+  end;
+  rows := fProps.Execute('select count(*), sum(amount) from people', []);
+  Check(rows.Step, 'count step');
+  CheckEqual(rows.ColumnInt(0), 10, 'count');
+  Check(rows.ColumnCurrency(1) = 55001.234, 'sum(decimal)');
+  rows := nil;
+  rows := fProps.Execute('select * from people where id = ?', [7]);
+  Check(rows.Step, 'select by id');
+  CheckEqual(rows.ColumnUtf8(1), 'O''Neil ? -- #7', 'quoted text param');
+  Check(rows.ColumnCurrency(2) = 7000.1234, 'currency param');
+  CheckEqual(DateToIso8601Text(rows.ColumnDateTime(3)), '2000-01-07', 'date param');
+  CheckEqual(DateTimeToIso8601(rows.ColumnDateTime(4), true, 'T', true),
+    '2001-02-03T04:05:06.789', 'timestamp param');
+  Check(rows.ColumnDouble(5) = 1.75, 'double param');
+  Check(rows.ColumnBlob(6) = blob, 'blob param');
+  rows := nil;
+  rows := fProps.Execute('select photo from people where id = ?', [3]);
+  Check(rows.Step and rows.ColumnNull(0), 'null param');
+  rows := nil;
+  CheckEqual(fProps.ExecuteNoResult(
+    'update people set ratio = ratio * 2 where id > ?', [5]), 5, 'update count');
+  CheckEqual(fProps.ExecuteNoResult(
+    'delete from people where id in (?, ?)', [9, 10]), 2, 'delete count');
+  rows := fProps.Execute('select count(*) from people', []);
+  Check(rows.Step and (rows.ColumnInt(0) = 8), 'count after delete');
+end;
+
+procedure TTestDuckDB.Transactions;
+var
+  conn: TSqlDBConnection;
+  rows: ISqlDBRows;
+begin
+  if fProps = nil then
+    exit;
+  conn := fProps.ThreadSafeConnection;
+  fProps.ExecuteNoResult('create or replace table tx (id INTEGER)', []);
+  conn.StartTransaction;
+  fProps.ExecuteNoResult('insert into tx values (?)', [1]);
+  fProps.ExecuteNoResult('insert into tx values (?)', [2]);
+  rows := fProps.Execute('select count(*) from tx', []);
+  Check(rows.Step and (rows.ColumnInt(0) = 2), 'read own writes in transaction');
+  rows := nil;
+  conn.Rollback;
+  rows := fProps.Execute('select count(*) from tx', []);
+  Check(rows.Step and (rows.ColumnInt(0) = 0), 'rollback');
+  rows := nil;
+  conn.StartTransaction;
+  fProps.ExecuteNoResult('insert into tx values (?)', [3]);
+  fProps.ExecuteNoResult('insert into tx values (?)', [4]);
+  conn.Commit;
+  rows := fProps.Execute('select sum(id) from tx', []);
+  Check(rows.Step and (rows.ColumnInt(0) = 7), 'commit');
+  rows := nil;
+  // failing commit (constraint) keeps data unchanged
+  fProps.ExecuteNoResult('create or replace table txu (id INTEGER primary key)', []);
+  conn.StartTransaction;
+  try
+    fProps.ExecuteNoResult('insert into txu values (?)', [1]);
+    fProps.ExecuteNoResult('insert into txu values (?)', [1]); // duplicate
+    conn.Commit;
+    Check(false, 'duplicate key should fail');
+  except
+    on E: Exception do
+    begin
+      Check(true, 'duplicate key raised');
+      if conn.TransactionCount > 0 then
+        conn.Rollback;
+    end;
+  end;
+  rows := fProps.Execute('select count(*) from txu', []);
+  Check(rows.Step and (rows.ColumnInt(0) = 0), 'atomic failure');
+end;
+
+procedure TTestDuckDB.NestedTypes;
+var
+  rows: ISqlDBRows;
+begin
+  if fProps = nil then
+    exit;
+  rows := fProps.Execute('select [1, 2, NULL] as l, {''a'': 1, ''b'': ''x''} as s, ' +
+    'MAP {''k1'': 10, ''k2'': 20} as m, ''sad''::ENUM(''sad'',''happy'') as e, ' +
+    'INTERVAL 3 DAY as iv, [[1,2],[3]] as ll', []);
+  Check(rows.Step, 'nested step');
+  CheckEqual(rows.ColumnUtf8(0), '[1,2,null]', 'list');
+  CheckEqual(rows.ColumnUtf8(1), '{"a":1,"b":"x"}', 'struct');
+  CheckEqual(rows.ColumnUtf8(2), '{"k1":10,"k2":20}', 'map');
+  CheckEqual(rows.ColumnUtf8(3), 'sad', 'enum');
+  CheckEqual(rows.ColumnUtf8(4), '3 days', 'interval');
+  CheckEqual(rows.ColumnUtf8(5), '[[1,2],[3]]', 'list of list');
+end;
+
+procedure TTestDuckDB.Json;
+var
+  json: RawUtf8;
+  doc: TDocVariantData;
+begin
+  if fProps = nil then
+    exit;
+  with fProps.ThreadSafeConnection.NewStatementPrepared(
+    'select id, name, amount, born, [id, id*2] as arr from people where id < ? order by id',
+    true, true) do
+  begin
+    Bind(1, 3);
+    ExecutePreparedAndFetchAllAsJson(true, json);
+  end;
+  doc.InitJson(json, JSON_FAST);
+  CheckEqual(doc.Count, 2, 'json rows');
+  if doc.Count = 2 then
+  begin
+    CheckEqual(_Safe(doc.Values[1])^.U['name'], 'O''Neil ? -- #2', 'json text');
+    CheckEqual(_Safe(doc.Values[0])^.U['born'], '2000-01-01', 'json date');
+    CheckEqual(_Safe(doc.Values[1])^.U['amount'], '2000.1234', 'json currency');
+    CheckEqual(_Safe(doc.Values[1])^.U['arr'], '[2,4]', 'json nested');
+  end;
+end;
+
+procedure TTestDuckDB.Errors;
+var
+  raised: boolean;
+begin
+  if fProps = nil then
+    exit;
+  raised := false;
+  try
+    fProps.Execute('select * from table_does_not_exist', []);
+  except
+    on E: ESqlDBException do
+      raised := PosEx('table_does_not_exist', StringToUtf8(E.Message)) > 0;
+  end;
+  Check(raised, 'missing table error');
+  // connection is still usable after an error
+  with fProps.Execute('select 1', []) do
+    Check(Step and (ColumnInt(0) = 1), 'usable after error');
+end;
+
+procedure TTestDuckDB.Metadata;
+var
+  tables: TRawUtf8DynArray;
+  fields: TSqlDBColumnDefineDynArray;
+begin
+  if fProps = nil then
+    exit;
+  fProps.GetTableNames(tables);
+  Check(FindRawUtf8(tables, 'main.people', false) >= 0, 'GetTableNames');
+  fProps.GetFields('people', fields);
+  CheckEqual(length(fields), 7, 'GetFields count');
+  if length(fields) = 7 then
+  begin
+    CheckEqual(fields[0].ColumnName, 'id', 'field name');
+    Check(fields[1].ColumnType = ftUtf8, 'field type text');
+    Check(fields[5].ColumnType = ftDouble, 'field type double');
+  end;
+end;
+
+procedure TTestDuckDB.Bulk;
+var
+  conn: TSqlDBConnection;
+  st: ISqlDBStatement;
+  i: integer;
+  rows: ISqlDBRows;
+  n: integer;
+begin
+  if fProps = nil then
+    exit;
+  conn := fProps.ThreadSafeConnection;
+  fProps.ExecuteNoResult('create or replace table bulk (id INTEGER, v DOUBLE, t VARCHAR)', []);
+  conn.StartTransaction;
+  st := conn.NewStatementPrepared('insert into bulk values (?,?,?)', false, true);
+  for i := 1 to 10000 do
+  begin
+    st.Bind(1, i);
+    st.Bind(2, i * 0.5);
+    st.BindTextU(3, Int32ToUtf8(i mod 7));
+    st.ExecutePrepared;
+    st.Instance.Reset;
+  end;
+  conn.Commit;
+  rows := fProps.Execute('select t, count(*), sum(v) from bulk group by t order by t', []);
+  n := 0;
+  while rows.Step do
+    inc(n);
+  CheckEqual(n, 7, 'group by');
+  rows := fProps.Execute('select * from bulk order by id', []);
+  n := 0;
+  while rows.Step do
+    inc(n);
+  CheckEqual(n, 10000, 'read all rows (multiple chunks)');
+end;
+
+procedure TTestDuckDB.BindArrays;
+const
+  N = 1000;
+var
+  st: ISqlDBStatement;
+  ids: array of Int64;
+  names: TRawUtf8DynArray;
+  amounts: array of currency;
+  dates: array of TDateTime;
+  ratios: array of double;
+  i: integer;
+  rows: ISqlDBRows;
+begin
+  if fProps = nil then
+    exit;
+  fProps.ExecuteNoResult('create or replace table arr (id INTEGER, ' +
+    'name VARCHAR, amount DECIMAL(19,4), d TIMESTAMP, v DOUBLE)', []);
+  SetLength(ids, N);
+  SetLength(names, N);
+  SetLength(amounts, N);
+  SetLength(dates, N);
+  SetLength(ratios, N);
+  for i := 0 to N - 1 do
+  begin
+    ids[i] := i + 1;
+    names[i] := FormatUtf8('it''s #%', [i + 1]);
+    amounts[i] := (i + 1) + 0.5;
+    dates[i] := EncodeDate(2025, 1, 1) + i;
+    ratios[i] := i / 8;
+  end;
+  st := fProps.ThreadSafeConnection.NewStatementPrepared(
+    'insert into arr values (?,?,?,?,?)', false, true);
+  st.BindArray(1, ids);
+  st.BindArray(2, names);
+  st.BindArrayCurrency(3, amounts);
+  st.BindArrayDateTime(4, dates);
+  st.BindArray(5, ratios);
+  st.ExecutePrepared;
+  CheckEqual(st.UpdateCount, N, 'array updatecount');
+  st := nil;
+  rows := fProps.Execute('select count(*), sum(amount), max(d), ' +
+    'max(name) filter (where id = 1000), sum(v) from arr', []);
+  Check(rows.Step, 'array select');
+  CheckEqual(rows.ColumnInt(0), N, 'array count');
+  Check(rows.ColumnCurrency(1) = 501000, 'array sum(decimal)');
+  CheckEqual(DateToIso8601Text(rows.ColumnDateTime(2)),
+    DateToIso8601Text(EncodeDate(2025, 1, 1) + N - 1), 'array dates');
+  CheckEqual(rows.ColumnUtf8(3), 'it''s #1000', 'array quoted text');
+  Check(rows.ColumnDouble(4) = 62437.5, 'array doubles');
+end;
+
+procedure TTestDuckDB.Appender;
+var
+  app: TSqlDBDuckDBAppender;
+  i: integer;
+  rows: ISqlDBRows;
+begin
+  if fProps = nil then
+    exit;
+  fProps.ExecuteNoResult('create or replace table app (id INTEGER, ' +
+    'v DECIMAL(19,4), t VARCHAR, d TIMESTAMP)', []);
+  app := TSqlDBDuckDBAppender.Create(
+    fProps.ThreadSafeConnection as TSqlDBDuckDBConnection, 'app');
+  try
+    for i := 1 to 20000 do
+    begin
+      app.Add(i);
+      app.AddCurrency(i + 0.1234);
+      app.AddText('row');
+      app.AddDateTime(EncodeDate(2024, 1, 1) + i / 1000);
+      app.EndRow;
+    end;
+    app.AddRow([-1, 1.5, 'addrow', nil]);
+  finally
+    app.Free;
+  end;
+  rows := fProps.Execute('select count(*), sum(v) from app', []);
+  Check(rows.Step);
+  CheckEqual(rows.ColumnInt(0), 20001, 'appender count');
+  CheckEqual(rows.ColumnUtf8(1), '200012469.5000', 'appender sum');
+end;
+
+end.
