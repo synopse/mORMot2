@@ -4023,7 +4023,7 @@ asm // rcx=src, edx=size, r8=dest
         xor     eax, edx
         and     eax, 4095              // rax=h
         mov     r12, rdx
-        //lea [off + rax * 8] pre-compute is not faster: 2 AGUs since Nehalem
+        // lea [off + rax * 8] pre-compute is not faster: 2 AGUs since Nehalem
         mov     r13, qword ptr [off + rax * 8]    // r13=o
         mov     edx, dword ptr [cache + rax * 4]
         mov     qword ptr [off + rax * 8], rbx
@@ -4222,32 +4222,20 @@ asm
         mov     rbx, r8
         sub     rbx, r13               // distance = dst - match source
         cmp     rbx, r11
-        jb      @m2
-        cmp     r11, 8
-        jbe     @m3
-        mov     rbx, qword ptr [r13 + r11 - 8] // final word - may overlap
+        jb      @by1                   // MoveByOne is needed
+        cmp     r11, 8                 // same 8-byte fast path as Pascal PInt64
+        jbe     @ms
+        cmp     r11, 16
+        ja      @m128
+        mov     rbx, qword ptr [r13 + r11 - 8] // 3..16 = two overlapping 64-bit
         mov     qword ptr [r8 + r11 - 8], rbx
-        lea     r12, [r11 - 1]
-        shr     r12, 3                 // at least one word
-        {$ifdef FPC} align 16 {$else} .align 16 {$endif}
-@ms:    dec     r12
-        mov     rbx, qword ptr [r13 + r12 * 8]
-        mov     qword ptr [r8 + r12 * 8], rbx
-        jnz     @ms
-        jmp     @mok
-@m3:    mov     rbx, qword ptr [r13]
-        mov     qword ptr [r8], rbx    // same 8-byte fast path as Pascal PInt64
-        jmp     @mok
-@m2:    xor     edx, edx               // forward byte copy for overlap
-@mb:    mov     bl, byte ptr [r13 + rdx]
-        mov     byte ptr [r8 + rdx], bl
-        inc     rdx
-        cmp     rdx, r11
-        jne     @mb
+@ms:    mov     rbx, qword ptr [r13]
+        mov     qword ptr [r8], rbx
 @mok:   cmp     rsi, r9
         jae     @done                  // last token: no further hashing
-        cmp     rax, r8
+@hash:  cmp     rax, r8
         jae     @hash3
+        {$ifdef FPC} align 16 {$else} .align 16 {$endif}
 @hash2: inc     rax
         mov     ebx, dword ptr [rax]
         mov     ecx, ebx
@@ -4262,7 +4250,25 @@ asm
         shr     edi, 1
         dec     r10d
         jmp     @main
-@done:  pop     rax                     // decompressed size
+@by1:   xor     edx, edx               // forward byte copy
+@mb:    mov     bl, byte ptr [r13 + rdx]
+        mov     byte ptr [r8 + rdx], bl
+        inc     rdx
+        cmp     rdx, r11
+        jne     @mb
+        jmp     @mok
+@m128:  movdqu  xmm0, dqword ptr [r13 + r11 - 16] // ending overlapping 128-bit
+        movdqu  dqword ptr [r8 + r11 - 16], xmm0
+        lea     r12, [r11 - 1]
+        and     r12, -16               // 16 * ((len - 1) div 16) >= 16
+        {$ifdef FPC} align 16 {$else} .align 16 {$endif}
+@sse2:  sub     r12, 16                // SSE2 128-bit move
+        movdqu  xmm0, dqword ptr [r13 + r12]
+        movdqu  dqword ptr [r8 + r12], xmm0
+        jnz     @sse2
+        cmp     rsi, r9
+        jb      @hash
+@done:  pop     rax                    // decompressed size
 @empty: pop     r13
         pop     r12
         pop     rbx
