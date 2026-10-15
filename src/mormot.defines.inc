@@ -152,7 +152,7 @@
     HASCODEPAGE HASVARUSTRING STRCNT32 DACNT32 HASDYNARRAYTYPE HASQWORD
     HASITERATORS HASIMPLICITOPERATOR HASDBFTWIDE HASDBFNEW
     HASTTHREADSTART HASTTHREADTERMINATESET HASINTERFACEASTOBJECT
-    HASEXTRECORDRTTI HASSLOWMUL64
+    HASEXTRECORDRTTI HASSLOWMUL64 HASBITINTRINSICS
     HAS_UI HAS_UI_VCL_LCL HAS_UI_PDF
     CPU32 CPU64
     CPUINTEL CPUX86 CPUX64 CPUARM3264 CPUARM CPUAARCH64 CPUX86NOTPIC
@@ -207,6 +207,7 @@
   {$define NODELPHIASM}       // avoid e.g. low-level System.@LStrFromPCharLen
   {$define HASDYNARRAYTYPE}   // eltype2 field, used e.g. for T*ObjArray
   {$define HASQWORD}
+  {$define HASBITINTRINSICS}  // e.g. BsfDWord()
   {$define HASITERATORS}
   {$define HASSAFEITERATORS}
   {$define HASIMPLICITOPERATOR}
@@ -795,6 +796,7 @@
     {$if CompilerVersion >= 34.0} // = Delphi 10.4
       {$define ISDELPHI104}
       {$define HASCACHEDRESSTRING} // introducing LoadResStringFunc()
+      {$define HASBITINTRINSICS}   // introducing CountTrailingZeros32()
     {$ifend}
     {$if CompilerVersion >= 35.0} // = Delphi 11.x Alexandria
       {$define ISDELPHI11}

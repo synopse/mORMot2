@@ -545,6 +545,33 @@ begin // http://graphics.stanford.edu/~seander/bithacks.html#IntegerLogDeBruijn
     result := 255;
 end;
 
+function BSRqwordPurePascal(const q: Qword): cardinal;
+var
+  c: cardinal;
+begin
+  c := q shr 32;
+  if c = 0  then
+    result := BsrDwordPurePascal(cardinal(q)) // search in lowest 32-bit
+  else
+    result := BsrDwordPurePascal(c) or 32;   // search in highest 32-bit
+end;
+
+function BsfDWordPurePascal(c: cardinal): cardinal; // not published yet
+const
+  _debruijn32: array[0..31] of byte = (
+    0, 1, 28, 2, 29, 14, 24, 3, 30, 22, 20, 15, 25, 17, 4, 8,
+    31, 27, 13, 23, 21, 19, 16, 7, 26, 12, 18, 6, 11, 5, 10, 9);
+begin
+  if c <> 0 then
+  begin
+    c := c and not (c - 1); // isolate lowest set bit
+    c := c * $077cb531;     // truncate to 32 bits
+    result := _debruijn32[c shr 27];
+  end
+  else
+    result := 255;
+end;
+
 procedure TTestCoreBase.Bits;
 const
   N = 1000000;
@@ -631,8 +658,24 @@ const
       {$ifdef FPC}
       CheckEqual(popcnt(v), c);
       {$endif FPC}
+      {$ifdef CPU32}
+      v := v or (QWord(rnd.Next) shl 32);
+      {$endif CPU32}
+      CheckEqual(BSRqwordPurePascal(v), BSRqword(v), 'bsrq3');
     end;
     CheckEqual(BSRdwordPurePascal(0), BSRdword(0));
+    CheckEqual(BSRqwordPurePascal(0), BSRqword(0));
+    CheckEqual(BSRdword(0), 255);
+    CheckEqual(BSRqword(0), 255);
+    for i := 1 to 15 do
+    begin
+      v := i;
+      repeat
+        CheckEqual(BSRdwordPurePascal(v), BSRdword(v), 'bsrdi');
+        CheckEqual(BSRqwordPurePascal(v), BSRqword(v), 'bsrqi');
+        v := v shl 1;
+      until v = 0; // all 64-bit
+    end;
     timer.Start;
     for i := 1 to N do
       GetBitsCountPtrInt(i);

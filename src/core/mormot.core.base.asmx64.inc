@@ -4337,8 +4337,8 @@ end;
 
 {$ifdef ISDELPHI}
 
-// those functions are intrinsics with FPC :)
-
+{$ifndef HASBITINTRINSICS}
+// those functions are intrinsics with FPC and since Delphi 10.4
 function BSRdword(c: cardinal): cardinal;
 asm
         .noframe
@@ -4358,6 +4358,7 @@ asm
         mov     eax, 255
 @nz:
 end;
+{$endif HASBITINTRINSICS}
 
 // FPC will properly inline multiplication by reciprocal
 procedure Div100(Y: cardinal; var res: TDiv100Rec);

@@ -2805,8 +2805,8 @@ asm
         sub     dword ptr [ecx].TDiv100Rec.M, eax
 end;
 
-// those functions are intrinsics with FPC :)
-
+{$ifndef HASBITINTRINSICS}
+// those functions are intrinsics with FPC and since Delphi 10.4
 function BSRdword(c: cardinal): cardinal;
 asm
         bsr     eax, eax
@@ -2815,16 +2815,19 @@ asm
 @nz:
 end;
 
-function BSRqword(const q: qword): cardinal;
-var
-  c: cardinal; // CPU32 and inlining friendly
-begin
-  c := q shr 32;
-  if c = 0  then
-    result := BsrDword(cardinal(q)) // search in lowest 32-bit
-  else
-    result := BsrDword(c) or 32;   // search in highest 32-bit
+function BSRqword(const q: QWord): cardinal;
+asm
+        lea     edx, q          // pointer passed on stack with Delphi i386 ABI
+        bsr     eax, [edx + 4]  // high DWORD
+        jnz     @high
+        bsr     eax, [edx]      // low DWORD
+        jnz     @done
+        mov     eax, 255
+        jmp     @done
+@high:  add     eax, 32
+@done:
 end;
+{$endif HASBITINTRINSICS}
 
 {$ifndef ISDELPHIXE2}
 function ReturnAddress: pointer;

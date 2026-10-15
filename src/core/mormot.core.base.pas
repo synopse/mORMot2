@@ -3138,13 +3138,12 @@ function LockedReset32(Target: PInteger; New: integer = 0): integer;
 /// return the position of the leftmost set bit in a 32-bit value
 // - returns 255 if c equals 0
 // - mimics the FPC intrinsic, via asm on Intel or optimized pure pascal
-function BSRdword(c: cardinal): cardinal;
+function BSRdword(c: cardinal): cardinal; {$ifdef HASBITINTRINSICS} inline; {$endif}
 
 /// return the position of the leftmost set bit in a 64-bit value
 // - returns 255 if q equals 0
 // - mimics the FPC intrinsic, via asm on Intel x64 or optimized pure pascal
-function BSRqword(const q: Qword): cardinal;
-  {$ifndef ASMX64} {$ifdef HASINLINE} inline; {$endif} {$endif}
+function BSRqword(const q: Qword): cardinal; {$ifdef HASBITINTRINSICS} inline; {$endif}
 
 {$endif ISDELPHI}
 
@@ -11639,37 +11638,6 @@ begin
   until n = 0;
 end;
 
-function BSRdword(c: cardinal): cardinal;
-const
-  _debruijn32: array[0..31] of byte = (
-    0, 9, 1, 10, 13, 21, 2, 29, 11, 14, 16, 18, 22, 25, 3, 30,
-    8, 12, 20, 28, 15, 17, 24, 7, 19, 27, 23, 6, 26, 5, 4, 31);
-begin // http://graphics.stanford.edu/~seander/bithacks.html#IntegerLogDeBruijn
-  if c <> 0 then
-  begin
-    c := c or (c shr 1);
-    c := c or (c shr 2);
-    c := c or (c shr 4);
-    c := c or (c shr 8);
-    c := c or (c shr 16);
-    c := c * $07c4acdd; // explicit step for 32-bit truncation
-    result := _debruijn32[c shr 27];
-  end
-  else
-    result := 255;
-end;
-
-function BSRqword(const q: Qword): cardinal;
-var
-  c: cardinal; // CPU32 friendly, but fast also on CPU64
-begin
-  c := q shr 32;
-  if c = 0  then
-    result := BsrDword(cardinal(q)) // search in lowest 32-bit
-  else
-    result := BsrDword(c) or 32;   // search in highest 32-bit
-end;
-
 procedure mul64x64(const left, right: QWord; out product: THash128Rec);
 var
   l: TQWordRec absolute left;
@@ -12007,6 +11975,26 @@ end;
 {$endif FPC}
 
 {$endif ASMINTELNOTPIC}
+
+{$ifdef ISDELPHI}
+{$ifdef HASBITINTRINSICS} // Delphi 10.4 introduced them
+function BSRdword(c: cardinal): cardinal;
+begin
+  if c = 0 then
+    result := 255
+  else
+    result := 31 - CountLeadingZeros32(c);
+end;
+
+function BSRqword(const q: qword): cardinal;
+begin
+  if q = 0 then
+    result := 255
+  else
+    result := 63 - CountLeadingZeros64(q);
+end;
+{$endif HASBITINTRINSICS} // Delphi < 10.4 will use asmx86/x64.inc functions
+{$endif ISDELPHI}
 
 
 { ************ Buffers (e.g. Hashing and SynLZ compression) Raw Functions }
