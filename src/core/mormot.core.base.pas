@@ -4220,8 +4220,9 @@ function SynLZdecompress1pas(src: PAnsiChar; size: integer; dst: PAnsiChar): int
 /// SynLZ decompression algorithm with memory boundaries check
 // - this function is slower, but will allow to uncompress only the start
 // of the content (e.g. to read some metadata header)
-// - it will also check for dst buffer overflow, so will be more secure than
-// other functions, which expect the content to be verified (e.g. via CRC)
+// - it will also check for dst buffer overflow and detect invalid input
+// - so will be more secure than other functions, which expect the content to be
+// from a trusted source and verified ahead of time e.g. via a CRC/GMAC
 function SynLZdecompress1partial(src: PAnsiChar; size: integer; dst: PAnsiChar;
   maxDst: integer): integer;
 
@@ -12341,11 +12342,11 @@ begin
     // read a control word once exhausting its 32 bits
     if bits = 0 then
     begin
+      if src + 4 >= ctx.srcend then
+        break; // avoid buffer overflow
       cw := PCardinal(src)^;
       inc(src, 4);
       bits := 32;
-      if src >= ctx.srcend then
-        break;
     end;
     if cw and 1 = 0 then
     begin
@@ -12430,16 +12431,16 @@ begin
   hashed := dst - 1;
   cw := 0;
   bits := 0;
-  while src < ctx.srcend do
+  while dst < ctx.dstend do
   begin
     // read a control word once exhausting its 32 bits
     if bits = 0 then
     begin
+      if src + 4 >= ctx.srcend then
+        break;
       cw := PCardinal(src)^;
       inc(src, 4);
       bits := 32;
-      if src >= ctx.srcend then
-        break;
     end;
     if cw and 1 = 0 then
     begin
@@ -12454,24 +12455,29 @@ begin
       t := ctx.dstend - dst;
       if run > t then
         run := t;
+      if run = 0 then
+        break;
       // move all litterals at once - don't hash them yet
       MoveSynLzLiterals(pointer(src), pointer(dst), run);
       inc(src, run);
       inc(dst, run);
       dec(bits, run);
       cw := cw shr run;
-      if (src >= ctx.srcend) or
-         (dst >= ctx.dstend) then
-        break;
       continue;
     end;
     // match token: first register all preceding literal positions
+    if src + 2 >= ctx.srcend then
+      break;
     hashed := SynLzHash(hashed, dst - 3, ctx.offset^);
     run := (PtrUInt(PByte(src)^) and 15) + 2;
     o := ctx.offset^[PWord(src)^ shr 4];
+    if o = nil then
+      break; // invalid input
     inc(src, 2);
     if run = 2 then
     begin
+      if src + 1 >= ctx.srcend then
+        break;
       run := ord(src^) + 18;
       inc(src);
     end;
@@ -12480,10 +12486,12 @@ begin
     begin
       MoveByOne(o, dst, t);
       break;
-    end;
-    if (run <= 8) or
-       (PtrUInt(dst - o) < run) then
+    end
+    else if (t < 8) or
+            (PtrUInt(dst - o) < run) then
       MoveByOne(o, dst, run)
+    else if run <= 8 then
+      PInt64(dst)^ := PInt64(o)^
     else
     begin
       PPtrUInt(dst + run - SizeOf(o))^ := PPtrUInt(o + run - SizeOf(o))^;
@@ -12507,6 +12515,10 @@ var
   offset: TOffsets;
   ctx: TSynLzContext;
 begin
+  result := 0;
+  if (maxDst <= 0) or
+     (size < 2) then
+    exit;
   result := PWord(src)^;
   if result = 0 then
     exit;
@@ -12514,6 +12526,8 @@ begin
   inc(src, 2);
   if result and $8000 <> 0 then
   begin
+    if size < 4 then
+      exit;
     result := (result and $7fff) or (integer(PWord(src)^) shl 15);
     inc(src, 2);
   end;
@@ -12521,6 +12535,7 @@ begin
     result := maxDst;
   if result <= 0 then
     exit;
+  FillCharFast(offset, SizeOf(offset), 0); // reset to 0 to detect invalid input
   ctx.src := src;
   ctx.dst := dst;
   ctx.dstend := dst + result;
