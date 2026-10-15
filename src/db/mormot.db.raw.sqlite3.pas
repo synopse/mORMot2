@@ -202,7 +202,7 @@ const
 
   /// possible error codes for sqlite_exec() and sqlite3.step()
   // - as verified by sqlite3_check()
-  SQLITE_ERRORS = [SQLITE_ERROR .. SQLITE_ROW-1];
+  SQLITE_ERRORS = [SQLITE_ERROR .. SQLITE_ROW - 1];
 
 
   /// The sqlite3.load_extension() interface loads an extension into a single database connection.
@@ -2657,7 +2657,7 @@ type
     // - SQL must contains an UTF-8 encoded null-terminated string query
     // - SQL_bytes contains -1 (to stop at the null char) or the number of bytes in
     // the input string, including the null terminator
-    // - Return SQLITE_OK on success or an error code - see SQLITE_* and sqlite3.errmsg()
+    // - return SQLITE_OK on success or an error code - see SQLITE_* and sqlite3.errmsg()
     // - S will contain an handle of the resulting statement (an opaque sqlite3.stmt
     // object) on success, or will 0 on error - the calling procedure is responsible
     // for deleting the compiled SQL statement using sqlite3.finalize() after it has
@@ -4291,7 +4291,7 @@ type
     DB: TSqlite3DB;
     /// create the exception, getting the message from DB
     constructor Create(aDB: TSqlite3DB; aErrorCode: integer;
-      const aSql: RawUtf8); reintroduce; overload;
+      const aContext: RawUtf8); reintroduce; overload;
   published
     /// the corresponding error code, e.g. 21 (for SQLITE_MISUSE)
     property ErrorCode: integer
@@ -5165,6 +5165,13 @@ type
     procedure RegisterSQLFunction(aDynArrayTypeInfo: PRttiInfo;
       aCompare: TDynArraySortCompare;
       const aFunctionName: RawUtf8 = ''); overload;
+    /// load a trusted SQLite extension shared library
+    // - aPath is a local filename, including its .dll/.so/.dylib suffix
+    // - temporarily enables the C extension-loading API if necessary
+    // - never enables the SQL load_extension() function
+    // - restores the previous C-API loading state afterwards
+    // - raises ESqlite3Exception on error
+    procedure LoadExtension(const aPath: TFileName; const aEntryPoint: RawUtf8 = '');
 
     /// open a BLOB incrementally for read[/write] access
     // - find a BLOB located in row RowID, column ColumnName, table TableName
@@ -5795,14 +5802,14 @@ end;
 { ESqlite3Exception }
 
 constructor ESqlite3Exception.Create(aDB: TSqlite3DB; aErrorCode: integer;
-  const aSql: RawUtf8);
+  const aContext: RawUtf8);
 var
   er: integer;
 begin
   fErrorCode := aErrorCode;
   fSQLite3ErrorCode := sqlite3_resultToErrorCode(aErrorCode);
   FormatUtf8('Error % (%) [%] using %', [ErrorCodeToText(SQLite3ErrorCode),
-    aErrorCode, aSql, sqlite3.VersionText], fMessageUtf8);
+    aErrorCode, aContext, sqlite3.VersionText], fMessageUtf8);
   if aDB = 0 then
     fMessageUtf8 := fMessageUtf8 + ' with aDB=nil'
   else
@@ -7321,6 +7328,63 @@ begin
     fCache.AddOrUpdate(aSql, aJsonResult, aResultCount);
   finally
     fSafe.UnLock; // on non-concurent calls, this API is very fast
+  end;
+end;
+
+procedure TSqlDataBase.LoadExtension(const aPath: TFileName;
+  const aEntryPoint: RawUtf8);
+var
+  bak, enabled, res: integer;
+  fn: RawUtf8;
+  msg: PUtf8Char;
+begin
+  if self = nil then
+    exit;
+  if aPath = '' then
+    ESqlite3Exception.RaiseUtf8('%.LoadExtension: missing filename', [self]);
+  fLog.Add.Log(sllSQL, 'LoadExtension % [%]', [aPath, aEntryPoint], self);
+  LockAndFlushCache;
+  try
+    if (fDB = 0) or
+       (sqlite3 = nil) then
+      ESqlite3Exception.RaiseUtf8('%.LoadExtension: database not open', [self]);
+    if not Assigned(sqlite3.db_config) or
+       not Assigned(sqlite3.load_extension) or
+       not Assigned(sqlite3.free_) then
+      ESqlite3Exception.RaiseUtf8(
+        '%.LoadExtension: SQLite API unavailable', [self]);
+    // remember the current state of the C extension-loading API
+    bak := 0;
+    sqlite3_check(fDB, sqlite3.db_config(fDB,
+      SQLITE_DBCONFIG_ENABLE_LOAD_EXTENSION, -1, @bak),
+      'LoadExtension: db_config query');
+    if bak = 0 then
+    begin
+      enabled := 0;
+      sqlite3_check(fDB, sqlite3.db_config(fDB,
+        SQLITE_DBCONFIG_ENABLE_LOAD_EXTENSION, 1, @enabled),
+        'LoadExtension: db_config enable');
+    end;
+    try
+      StringToUtf8(aPath, fn);
+      msg := nil;
+      res := sqlite3.load_extension(fDB,pointer(fn), pointer(aEntryPoint), msg);
+      try
+        if res <> SQLITE_OK then
+          sqlite3_failed(fDB, res, Make(['LoadExtension ', fn, ': ', msg]));
+      finally
+        if msg <> nil then
+          sqlite3.free_(msg); // always release
+      end;
+    finally
+      // restore previous extension-loading state - e.g. after ESqlite3Exception
+      if bak = 0 then
+        sqlite3_check(fDB, sqlite3.db_config(fDB,
+          SQLITE_DBCONFIG_ENABLE_LOAD_EXTENSION, 0, @bak),
+        'LoadExtension: db_config restore');
+    end;
+  finally
+    UnLock;
   end;
 end;
 
