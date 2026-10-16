@@ -18,6 +18,7 @@ uses
   mormot.core.unicode,
   mormot.core.text,
   mormot.core.datetime,
+  mormot.core.rtti,
   mormot.core.json,
   mormot.core.variants,
   mormot.core.log,

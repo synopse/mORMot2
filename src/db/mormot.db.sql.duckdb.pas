@@ -362,11 +362,11 @@ procedure EnumValue(lt: TDuckDBLogicalType; data: pointer; row: PtrInt;
   var result: RawUtf8);
 var
   idx: Int64;
-  p: PAnsiChar;
+  p: PUtf8Char;
 begin
   idx := ReadIntegral(DuckDB.enum_internal_type(lt), data, row);
   p := DuckDB.enum_dictionary_value(lt, idx);
-  result := RawUtf8(p);
+  FastSetString(result, p, StrLen(p));
   DuckDB.free_(p);
 end;
 
@@ -375,8 +375,8 @@ procedure DuckDBVectorValueToText(vec: TDuckDBVector; lt: TDuckDBLogicalType;
 var
   data: pointer;
   typeid: TDuckDBType;
-  len, scale, offs: integer;
-  p: PAnsiChar;
+  len, scale, offs: integer; // not PtrInt
+  p: PUtf8Char;
   h: TDuckDBHugeInt;
   us: Int64;
   W: TJsonWriter;
@@ -485,10 +485,9 @@ var
   clt, klt: TDuckDBLogicalType;
   e: PDuckDBListEntry;
   i, n, size: PtrInt; // no Int64 for-loop variable on Delphi 7
-  name: PAnsiChar;
+  name, p: pointer;
   txt: RawUtf8;
-  len, scale: integer;
-  p: PAnsiChar;
+  len, scale: integer; // not PtrInt
   h: TDuckDBHugeInt;
   tag: integer;
   kvec, vvec: TDuckDBVector;
@@ -580,7 +579,7 @@ begin
         for i := 0 to n - 1 do
         begin
           name := DuckDB.struct_type_child_name(lt, i);
-          W.AddProp(pointer(name), StrLen(name));
+          W.AddProp(name, StrLen(name));
           DuckDB.free_(name);
           clt := DuckDB.struct_type_child_type(lt, i);
           DuckDBVectorValueToJson(DuckDB.struct_vector_get_child(vec, i), clt, row, W);
@@ -653,7 +652,7 @@ end;
 function TSqlDBDuckDBConnectionProperties.Database: TDuckDBDatabase;
 var
   cfg: TDuckDBConfig;
-  path, err: PAnsiChar;
+  path, err: PUtf8Char;
   name, value, msg: RawUtf8;
   p: PUtf8Char;
   pair: RawUtf8;
@@ -1321,8 +1320,8 @@ end;
 function TSqlDBDuckDBStatement.ColumnUtf8(Col: integer): RawUtf8;
 var
   c: PDuckDBColumnInfo;
-  p: PAnsiChar;
-  len: integer;
+  p: PUtf8Char;
+  len: integer; // not PtrInt
   idx: Int64;
   i: PtrInt;
 begin
@@ -1362,8 +1361,8 @@ end;
 function TSqlDBDuckDBStatement.ColumnBlob(Col: integer): RawByteString;
 var
   c: PDuckDBColumnInfo;
-  p: PAnsiChar;
-  len: integer;
+  p: PUtf8Char;
+  len: integer; // not PtrInt
 begin
   c := CheckCol(Col);
   result := '';
@@ -1381,7 +1380,7 @@ end;
 procedure TSqlDBDuckDBStatement.ColumnToJson(Col: integer; W: TJsonWriter);
 var
   c: PDuckDBColumnInfo;
-  p: PAnsiChar;
+  p: pointer;
   len: integer; // not PtrInt
 begin
   c := CheckCol(Col);
@@ -1435,7 +1434,7 @@ end;
 constructor TSqlDBDuckDBAppender.Create(aConnection: TSqlDBDuckDBConnection;
   const aTable, aSchema: RawUtf8);
 var
-  schema: PAnsiChar;
+  schema: PUtf8Char;
 begin
   inherited Create;
   if not DuckDB.HasAppender then
@@ -1446,8 +1445,8 @@ begin
   schema := nil;
   if aSchema <> '' then
     schema := pointer(aSchema);
-  if DuckDB.appender_create(aConnection.fConn, schema, pointer(aTable),
-       fAppender) <> DuckDBSuccess then
+  if DuckDB.appender_create(aConnection.fConn,
+       schema, pointer(aTable), fAppender) <> DuckDBSuccess then
   begin
     try
       Check(DuckDBError, 'create');

@@ -63,7 +63,7 @@ type
     deprecated_row_count: TDuckIdx;
     deprecated_rows_changed: TDuckIdx;
     deprecated_columns: pointer;
-    deprecated_error_message: PAnsiChar;
+    deprecated_error_message: PUtf8Char;
     internal_data: pointer;
   end;
   PDuckDBResult = ^TDuckDBResult;
@@ -193,8 +193,8 @@ type
   // - the field order should match DUCKDB_ENTRIES[] below
   TDuckDBLib = class(TSynLibrary)
   public
-    library_version: function: PAnsiChar; cdecl;
-    open_ext: function(path: PAnsiChar; out database: TDuckDBDatabase;
+    library_version: function: PUtf8Char; cdecl;
+    open_ext: function(path: PUtf8Char; out database: TDuckDBDatabase;
       config: TDuckDBConfig; out_error: PPAnsiChar): TDuckDBState; cdecl;
     close: procedure(var database: TDuckDBDatabase); cdecl;
     connect: function(database: TDuckDBDatabase;
@@ -203,18 +203,18 @@ type
     interrupt: procedure(connection: TDuckDBConnection); cdecl;
     create_config: function(out config: TDuckDBConfig): TDuckDBState; cdecl;
     set_config: function(config: TDuckDBConfig;
-      name, option: PAnsiChar): TDuckDBState; cdecl;
+      name, option: PUtf8Char): TDuckDBState; cdecl;
     destroy_config: procedure(var config: TDuckDBConfig); cdecl;
-    query: function(connection: TDuckDBConnection; sql: PAnsiChar;
+    query: function(connection: TDuckDBConnection; sql: PUtf8Char;
       out_result: PDuckDBResult): TDuckDBState; cdecl;
     destroy_result: procedure(res: PDuckDBResult); cdecl;
-    column_name: function(res: PDuckDBResult; col: TDuckIdx): PAnsiChar; cdecl;
+    column_name: function(res: PDuckDBResult; col: TDuckIdx): PUtf8Char; cdecl;
     column_type: function(res: PDuckDBResult; col: TDuckIdx): TDuckDBType; cdecl;
     column_logical_type: function(res: PDuckDBResult;
       col: TDuckIdx): TDuckDBLogicalType; cdecl;
     column_count: function(res: PDuckDBResult): TDuckIdx; cdecl;
     rows_changed: function(res: PDuckDBResult): TDuckIdx; cdecl;
-    result_error: function(res: PDuckDBResult): PAnsiChar; cdecl;
+    result_error: function(res: PDuckDBResult): PUtf8Char; cdecl;
     // C prototype is duckdb_fetch_chunk(duckdb_result result) i.e. BY VALUE
     fetch_chunk: function(res: TDuckDBResult): TDuckDBDataChunk; cdecl;
     data_chunk_get_size: function(chunk: TDuckDBDataChunk): TDuckIdx; cdecl;
@@ -234,27 +234,27 @@ type
     enum_internal_type: function(lt: TDuckDBLogicalType): TDuckDBType; cdecl;
     enum_dictionary_size: function(lt: TDuckDBLogicalType): cardinal; cdecl;
     enum_dictionary_value: function(lt: TDuckDBLogicalType;
-      index: TDuckIdx): PAnsiChar; cdecl;
+      index: TDuckIdx): PUtf8Char; cdecl;
     list_type_child_type: function(lt: TDuckDBLogicalType): TDuckDBLogicalType; cdecl;
     array_type_child_type: function(lt: TDuckDBLogicalType): TDuckDBLogicalType; cdecl;
     array_type_array_size: function(lt: TDuckDBLogicalType): TDuckIdx; cdecl;
     struct_type_child_count: function(lt: TDuckDBLogicalType): TDuckIdx; cdecl;
     struct_type_child_name: function(lt: TDuckDBLogicalType;
-      index: TDuckIdx): PAnsiChar; cdecl;
+      index: TDuckIdx): PUtf8Char; cdecl;
     struct_type_child_type: function(lt: TDuckDBLogicalType;
       index: TDuckIdx): TDuckDBLogicalType; cdecl;
     map_type_key_type: function(lt: TDuckDBLogicalType): TDuckDBLogicalType; cdecl;
     map_type_value_type: function(lt: TDuckDBLogicalType): TDuckDBLogicalType; cdecl;
     union_type_member_count: function(lt: TDuckDBLogicalType): TDuckIdx; cdecl;
     union_type_member_name: function(lt: TDuckDBLogicalType;
-      index: TDuckIdx): PAnsiChar; cdecl;
+      index: TDuckIdx): PUtf8Char; cdecl;
     union_type_member_type: function(lt: TDuckDBLogicalType;
       index: TDuckIdx): TDuckDBLogicalType; cdecl;
     destroy_logical_type: procedure(var lt: TDuckDBLogicalType); cdecl;
-    prepare: function(connection: TDuckDBConnection; query: PAnsiChar;
+    prepare: function(connection: TDuckDBConnection; query: PUtf8Char;
       out stmt: TDuckDBPreparedStatement): TDuckDBState; cdecl;
     destroy_prepare: procedure(var stmt: TDuckDBPreparedStatement); cdecl;
-    prepare_error: function(stmt: TDuckDBPreparedStatement): PAnsiChar; cdecl;
+    prepare_error: function(stmt: TDuckDBPreparedStatement): PUtf8Char; cdecl;
     nparams: function(stmt: TDuckDBPreparedStatement): TDuckIdx; cdecl;
     param_type: function(stmt: TDuckDBPreparedStatement;
       index: TDuckIdx): TDuckDBType; cdecl;
@@ -268,7 +268,7 @@ type
     bind_timestamp: function(stmt: TDuckDBPreparedStatement; index: TDuckIdx;
       micros: Int64): TDuckDBState; cdecl;
     bind_varchar_length: function(stmt: TDuckDBPreparedStatement;
-      index: TDuckIdx; value: PAnsiChar; length: TDuckIdx): TDuckDBState; cdecl;
+      index: TDuckIdx; value: PUtf8Char; length: TDuckIdx): TDuckDBState; cdecl;
     bind_blob: function(stmt: TDuckDBPreparedStatement; index: TDuckIdx;
       data: pointer; length: TDuckIdx): TDuckDBState; cdecl;
     bind_null: function(stmt: TDuckDBPreparedStatement;
@@ -278,8 +278,8 @@ type
     free_: procedure(ptr: pointer); cdecl; // duckdb_free - renamed to not hide TObject.Free
     // appender API - resolved as optional entries
     appender_create: function(connection: TDuckDBConnection;
-      schema, table: PAnsiChar; out appender: TDuckDBAppender): TDuckDBState; cdecl;
-    appender_error: function(appender: TDuckDBAppender): PAnsiChar; cdecl;
+      schema, table: PUtf8Char; out appender: TDuckDBAppender): TDuckDBState; cdecl;
+    appender_error: function(appender: TDuckDBAppender): PUtf8Char; cdecl;
     appender_flush: function(appender: TDuckDBAppender): TDuckDBState; cdecl;
     appender_close: function(appender: TDuckDBAppender): TDuckDBState; cdecl;
     appender_destroy: function(var appender: TDuckDBAppender): TDuckDBState; cdecl;
@@ -289,7 +289,7 @@ type
     append_double: function(appender: TDuckDBAppender; value: double): TDuckDBState; cdecl;
     append_timestamp: function(appender: TDuckDBAppender;
       micros: Int64): TDuckDBState; cdecl;
-    append_varchar_length: function(appender: TDuckDBAppender; value: PAnsiChar;
+    append_varchar_length: function(appender: TDuckDBAppender; value: PUtf8Char;
       length: TDuckIdx): TDuckDBState; cdecl;
     append_blob: function(appender: TDuckDBAppender; data: pointer;
       length: TDuckIdx): TDuckDBState; cdecl;
@@ -330,13 +330,12 @@ function DuckDBLibraryAvailable: boolean;
 
 /// return the text pointer and length of a duckdb_string_t
 // - warning: len should be defined as an exact integer type, not a PtrInt
-function DuckStringPtr(s: PDuckDBStringT; var len: integer): PAnsiChar;
+function DuckStringPtr(s: PDuckDBStringT; var len: integer): PUtf8Char;
   {$ifdef HASINLINE} inline; {$endif}
 
 /// return the address of the duckdb_string_t at a given row of a vector
 function DuckStringAt(data: pointer; row: PtrInt): PDuckDBStringT;
   {$ifdef HASINLINE} inline; {$endif}
-
 
 /// convert a signed/unsigned hugeint into a text buffer
 // - Scale=0 for HUGEINT/UHUGEINT, 0..38 for DECIMAL
@@ -491,11 +490,11 @@ end;
 
 procedure TDuckDBLib.RaiseResultError(res: PDuckDBResult; const ctxt: RawUtf8);
 var
-  msg: RawUtf8;
+  msg: PUtf8Char;
 begin
-  msg := RawUtf8(result_error(res));
+  msg := pointer(result_error(res));
   destroy_result(res);
-  raise ESqlDBDuckDB.CreateUtf8('DuckDB % failed: %', [ctxt, msg]);
+  ESqlDBDuckDB.RaiseUtf8('DuckDB % failed: %', [ctxt, msg]);
 end;
 
 function TDuckDBLib.Exec(conn: TDuckDBConnection; const sql: RawUtf8): Int64;
@@ -535,7 +534,7 @@ end;
 
 { ************ Value Conversion Helpers }
 
-function DuckStringPtr(s: PDuckDBStringT; var len: integer): PAnsiChar;
+function DuckStringPtr(s: PDuckDBStringT; var len: integer): PUtf8Char;
 begin
   len := s^.Length;
   if len <= SizeOf(s^.Data) then
@@ -591,12 +590,12 @@ var
   neg: boolean;
   i, digits: PtrInt;
   n, q: cardinal;
-  p, first, last: PAnsiChar;
+  p, first, last: PUtf8Char;
 begin
   if Scale < 0 then
     Scale := 0
   else if Scale > 38 then
-    raise ERangeError.Create('Invalid DuckDB decimal scale');
+    ESqlDBDuckDB.RaiseUtf8('Invalid DuckDB decimal scale=%', [Scale]);
   PInt64(@u[0])^ := v.Lower;
   PInt64(@u[2])^ := v.Upper;
   neg := Signed and (v.Upper < 0);
@@ -717,7 +716,7 @@ begin
   if (Days < DUCKDB_FIRST_DAY) or
      (Days > DUCKDB_LAST_DAY) or
      (ForDateTime and (Days < DUCKDB_FIRST_TDATETIME_DAY)) then
-    raise ERangeError.Create('DuckDB date outside TSynSystemTime range');
+    ESqlDBDuckDB.RaiseUtf8('DuckDB date=% outside TSynSystemTime range', [Days]);
 end;
 
 procedure FloorDivMod(const a, b: Int64; var q, r: Int64);
@@ -837,8 +836,9 @@ var
   st: TSynSystemTime;
 begin
   st.FromDateTime(Value);
-  if (st.Year = 0) or (st.Year > 9999) then
-    raise ERangeError.Create('TDateTime year outside 1..9999');
+  if (st.Year = 0) or
+     (st.Year > 9999) then
+    ESqlDBDuckDB.RaiseUtf8('TDateTime year=% outside 1..9999', [st.Year]);
   result := st.ToUnixMsTime * 1000;
 end;
 
