@@ -348,10 +348,10 @@ procedure DuckApplyScale(var Text: RawUtf8; Scale: integer);
 /// return TRUE if the hugeint fits into an Int64
 function DuckHugeIntIsInt64(const v: TDuckDBHugeInt; Signed: boolean): boolean;
 
-/// convert a DuckDB DATE (days since 1970-01-01) into Y/M/D
+/// convert a DuckDB DATE into Y/M/D (years 0000-03-01 through 9999-12-31)
 procedure DuckDaysToYmd(Days: integer; out Y, M, D: integer);
 
-/// convert a DuckDB DATE (days since 1970-01-01) into 'YYYY-MM-DD'
+/// convert a DuckDB DATE into ISO-8601 text (years 0000-03-01 .. 9999)
 procedure DuckDateToText(Days: integer; var result: RawUtf8);
 
 /// convert a DuckDB TIME (micros since midnight) into 'hh:mm:ss[.ffffff]'
@@ -623,33 +623,48 @@ begin
     Text := digits;
 end;
 
+const
+  // TSynSystemTime.FromUnixTime supports year 0000 only from March onward
+  // - all earlier dates and years >= 10000 are outside this unit's scope
+  DUCKDB_FIRST_DAY           = -719468;   // 0000-03-01
+  DUCKDB_FIRST_TDATETIME_DAY = -719162; // 0001-01-01
+  DUCKDB_LAST_DAY            = 2932896;   // 9999-12-31
+  DUCKDB_MICROSPERSEC        = Int64(1000000);
+  DUCKDB_MICROSPERHOUR       = Int64(3600000000);
+
+procedure DuckCheckDay(Days: Int64; ForDateTime: boolean = false);
+begin
+  if (Days < DUCKDB_FIRST_DAY) or
+     (Days > DUCKDB_LAST_DAY) or
+     (ForDateTime and (Days < DUCKDB_FIRST_TDATETIME_DAY)) then
+    raise ERangeError.Create('DuckDB date outside TSynSystemTime range');
+end;
+
+procedure FloorDivMod(const a, b: Int64; var q, r: Int64);
+  {$ifdef HASINLINE} inline; {$endif}
+begin
+  q := a div b;
+  r := a mod b;
+  if r >= 0 then
+    exit;
+  dec(q);
+  inc(r, b);
+end;
+
 procedure DuckDaysToYmd(Days: integer; out Y, M, D: integer);
 var
-  z, era, doe, yoe, doy, mp: Int64;
+  st: TSynSystemTime;
 begin
-  // Howard Hinnant's civil_from_days algorithm - exact for any day number
-  z := Int64(Days) + 719468;
-  if z >= 0 then
-    era := z div 146097
-  else
-    era := (z - 146096) div 146097;
-  doe := z - era * 146097;
-  yoe := (doe - doe div 1460 + doe div 36524 - doe div 146096) div 365;
-  doy := doe - (365 * yoe + yoe div 4 - yoe div 100);
-  mp := (5 * doy + 2) div 153;
-  D := doy - (153 * mp + 2) div 5 + 1;
-  if mp < 10 then
-    M := mp + 3
-  else
-    M := mp - 9;
-  Y := yoe + era * 400;
-  if M <= 2 then
-    inc(Y);
+  DuckCheckDay(Days);
+  st.FromUnixTime(Int64(Days) * SecsPerDay);
+  Y := st.Year;
+  M := st.Month;
+  D := st.Day;
 end;
 
 procedure DuckDateToText(Days: integer; var result: RawUtf8);
 var
-  y, m, d: integer;
+  st: TSynSystemTime;
 begin
   if Days = $7fffffff then
     result := 'infinity'
@@ -657,51 +672,51 @@ begin
     result := '-infinity'
   else
   begin
-    DuckDaysToYmd(Days, y, m, d);
-    if y < 0 then
-      FormatUtf8('%-%-% (BC)', [UInt4DigitsToShort(1 - y),
-        UInt2DigitsToShortFast(m), UInt2DigitsToShortFast(d)], result)
-    else
-      FormatUtf8('%-%-%', [UInt4DigitsToShort(y),
-        UInt2DigitsToShortFast(m), UInt2DigitsToShortFast(d)], result);
+    DuckCheckDay(Days);
+    st.FromUnixTime(Int64(Days) * SecsPerDay);
+    st.ToIsoDate(result);
+  end;
+end;
+
+procedure DuckAppendMicroFraction(Micro: Int64; var result: RawUtf8);
+var
+  s: RawUtf8;
+begin
+  // TSynSystemTime handles milliseconds; preserve DuckDB's full microseconds.
+  if Micro <> 0 then
+  begin
+    s := Int64ToUtf8(Micro + DUCKDB_MICROSPERSEC);
+    s[1] := '.';
+    while s[length(s)] = '0' do
+      SetLength(s, length(s) - 1);
+    result := result + s;
   end;
 end;
 
 procedure DuckTimeToText(Micros: Int64; var result: RawUtf8);
 var
-  s, f: Int64;
-  frac: RawUtf8;
+  st: TSynSystemTime;
+  u: QWord;
 begin
-  s := Micros div 1000000;
-  f := Micros mod 1000000;
-  FormatUtf8('%:%:%', [UInt2DigitsToShortFast(s div 3600),
-    UInt2DigitsToShortFast((s div 60) mod 60),
-    UInt2DigitsToShortFast(s mod 60)], result);
-  if f <> 0 then
-  begin
-    frac := Int64ToUtf8(f + 1000000); // '1xxxxxx'
-    frac[1] := '.';
-    while frac[length(frac)] = '0' do
-      SetLength(frac, length(frac) - 1);
-    result := result + frac;
-  end;
-end;
-
-procedure FloorDivMod(a, b: Int64; out q, r: Int64);
-begin
-  q := a div b;
-  r := a mod b;
-  if r < 0 then
-  begin
-    dec(q);
-    inc(r, b);
-  end;
+  // DuckDB INTERVAL uses this formatter too, including negative/>24h values.
+  if Micros < 0 then
+    u := QWord(-(Micros + 1)) + 1 // also safe for Low(Int64)
+  else
+    u := QWord(Micros);
+  st.FromMS(PtrUInt((u mod QWord(DUCKDB_MICROSPERDAY)) div 1000));
+  st.ToIsoTime(result, '');
+  if u >= QWord(DUCKDB_MICROSPERDAY) then
+    result := Int64ToUtf8(Int64(u div QWord(DUCKDB_MICROSPERHOUR))) +
+              copy(result, 3, maxInt);
+  DuckAppendMicroFraction(Int64(u mod DUCKDB_MICROSPERSEC), result);
+  if Micros < 0 then
+    result := '-' + result;
 end;
 
 procedure DuckTimestampToText(Micros: Int64; var result: RawUtf8);
 var
-  days, rem: Int64;
-  t: RawUtf8;
+  st: TSynSystemTime;
+  secs, micro, days, rem: Int64;
 begin
   if Micros = DUCKDB_TIMESTAMP_INFINITY then
     result := 'infinity'
@@ -709,32 +724,42 @@ begin
     result := '-infinity'
   else
   begin
-    FloorDivMod(Micros, DUCKDB_MICROSPERDAY, days, rem);
-    DuckDateToText(days, result);
-    DuckTimeToText(rem, t);
-    result := result + ' ' + t;
+    // Floor division correctly handles timestamps before the Unix epoch.
+    FloorDivMod(Micros, DUCKDB_MICROSPERSEC, secs, micro);
+    FloorDivMod(secs, SecsPerDay, days, rem);
+    DuckCheckDay(days);
+    st.FromUnixTime(secs);
+    st.ToIsoDateTime(result, ' ');
+    DuckAppendMicroFraction(micro, result);
   end;
 end;
 
 function DuckTimestampToDateTime(Micros: Int64): TDateTime;
 var
-  days, rem: Int64;
+  st: TSynSystemTime;
+  ms, micro, days, rem: Int64;
 begin
-  FloorDivMod(Micros, DUCKDB_MICROSPERDAY, days, rem);
-  // round to the millisecond, as TDateTime resolution
-  result := (days + DUCKDB_UNIXDATE_DELTA) +
-            ((rem + 500) div 1000) / MSecsPerDay;
+  FloorDivMod(Micros, 1000, ms, micro);
+  if micro >= 500 then
+    inc(ms); // nearest millisecond (TDateTime cannot store microseconds)
+  FloorDivMod(ms, MSecsPerDay, days, rem);
+  DuckCheckDay(days, {ForDateTime=}true);
+  st.FromUnixMsTime(ms);
+  result := st.ToDateTime;
+  // TSynSystemTime.ToDateTime uses a positive time fraction. Delphi instead
+  // requires a negative fraction when the date part is before 1899-12-30.
+  if days + DUCKDB_UNIXDATE_DELTA < 0 then
+    result := result - 2 * (rem / MSecsPerDay);
 end;
 
 function DateTimeToDuckTimestamp(Value: TDateTime): Int64;
 var
-  days: Int64;
+  st: TSynSystemTime;
 begin
-  days := trunc(Value);
-  if (Value < 0) and (frac(Value) <> 0) then
-    dec(days); // TDateTime negative values use abs(frac) as time
-  result := (days - DUCKDB_UNIXDATE_DELTA) * DUCKDB_MICROSPERDAY +
-            Int64(round(abs(frac(Value)) * MSecsPerDay)) * 1000;
+  st.FromDateTime(Value);
+  if (st.Year = 0) or (st.Year > 9999) then
+    raise ERangeError.Create('TDateTime year outside 1..9999');
+  result := st.ToUnixMsTime * 1000;
 end;
 
 procedure AddIntervalPart(var result: RawUtf8; n: integer; const unitname: RawUtf8);
@@ -744,7 +769,7 @@ begin
   if n = 0 then
     exit;
   s := Int32ToUtf8(n) + ' ' + unitname;
-  if abs(n) > 1 then
+  if (n > 1) or (n < -1) then
     s := s + 's';
   if result = '' then
     result := s
@@ -755,7 +780,6 @@ end;
 procedure DuckIntervalToText(const v: TDuckDBInterval; var result: RawUtf8);
 var
   t: RawUtf8;
-  us: Int64;
 begin
   result := '';
   AddIntervalPart(result, v.Months div 12, 'year');
@@ -763,14 +787,7 @@ begin
   AddIntervalPart(result, v.Days, 'day');
   if (v.Micros <> 0) or (result = '') then
   begin
-    us := v.Micros;
-    if us < 0 then
-    begin
-      DuckTimeToText(-us, t);
-      t := '-' + t;
-    end
-    else
-      DuckTimeToText(us, t);
+    DuckTimeToText(v.Micros, t);
     if result = '' then
       result := t
     else
