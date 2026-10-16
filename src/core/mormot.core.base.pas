@@ -3732,6 +3732,7 @@ type
   TTemp16  = array[0..15] of AnsiChar;
   TTemp24  = array[0..23] of AnsiChar;
   TTemp32  = array[0..31] of AnsiChar;
+  TTemp47  = array[0..47] of AnsiChar;
   TTemp64  = array[0..63] of AnsiChar;
   TTemp128 = array[0..127] of AnsiChar;
   TTemp256 = array[0..255] of AnsiChar;

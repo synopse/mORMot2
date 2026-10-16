@@ -337,9 +337,18 @@ function DuckStringPtr(s: PDuckDBStringT; var len: integer): PAnsiChar;
 function DuckStringAt(data: pointer; row: PtrInt): PDuckDBStringT;
   {$ifdef HASINLINE} inline; {$endif}
 
-/// convert a signed 128-bit hugeint into its decimal text
+
+/// convert a signed/unsigned hugeint into a text buffer
+// - Scale=0 for HUGEINT/UHUGEINT, 0..38 for DECIMAL
+// - returns the text length, excluding the trailing #0
+// - fill directly a TTemp47 stack structure with no heap allocation
+function DuckHugeIntToTextBuf(const v: TDuckDBHugeInt;
+  Signed: boolean; Scale: integer; var Buffer: TTemp47): PtrInt;
+
+/// convert a signed 128-bit hugeint into its decimal RawUtf8 text
+// - default Scale=0 for HUGEINT/UHUGEINT, 0..38 for DECIMAL
 procedure DuckHugeIntToText(const v: TDuckDBHugeInt; Signed: boolean;
-  var result: RawUtf8);
+  var result: RawUtf8; Scale: integer = 0);
 
 /// convert an integer mantissa text into a decimal number text with scale
 // - e.g. ('-12345', 2) -> '-123.45'
@@ -575,28 +584,31 @@ begin // see mormot.db.nosql.bson's div128bits9digits()
   result := cardinal(r);
 end;
 
-procedure DuckHugeIntToText(const v: TDuckDBHugeInt; Signed: boolean;
-  var result: RawUtf8);
+function DuckHugeIntToTextBuf(const v: TDuckDBHugeInt;
+  Signed: boolean; Scale: integer; var Buffer: TTemp47): PtrInt;
 var
   u: TU128;
   neg: boolean;
-  i: PtrInt;
+  i, digits: PtrInt;
   n, q: cardinal;
-  tmp: array[0..47] of AnsiChar; // up to 38 digits anyway
-  p: PAnsiChar;
+  p, first, last: PAnsiChar;
 begin
+  if Scale < 0 then
+    Scale := 0
+  else if Scale > 38 then
+    raise ERangeError.Create('Invalid DuckDB decimal scale');
   PInt64(@u[0])^ := v.Lower;
   PInt64(@u[2])^ := v.Upper;
   neg := Signed and (v.Upper < 0);
   if neg then
     U128Negate(u);
-  p := @tmp[pred(high(tmp))];
+  // reserve one byte for the terminating #0
+  last := @Buffer[high(Buffer)];
+  p := last - 1;
   repeat
-    // extract next 9 decimal digits during each iteration
     n := DivU128By1B(u);
     if (u[0] or u[1] or u[2] or u[3]) = 0 then
     begin
-      // most significant group: no leading zeros
       repeat
         q := n div 10;
         p^ := AnsiChar(ord('0') + n - q * 10);
@@ -605,7 +617,6 @@ begin
       until n = 0;
       break;
     end;
-    // remaining groups: always emit exactly 9 digits
     for i := 1 to 9 do
     begin
       q := n div 10;
@@ -614,11 +625,51 @@ begin
       n := q;
     end;
   until false;
+  first := p + 1;
+  digits := last - first;
+  // apply the DECIMAL scale directly within the stack buffer
+  if Scale > 0 then
+  begin
+    if digits > Scale then
+    begin
+      // move the integer part left to insert '.'
+      MoveFast(first^, (first - 1)^, digits - Scale);
+      dec(first);
+      first[digits - Scale] := '.';
+    end
+    else
+    begin
+      // e.g. 12 with Scale=4 -> 0.0012
+      p := first - 1;
+      for i := 1 to Scale - digits do
+      begin
+        p^ := '0';
+        dec(p);
+      end;
+      p^ := '.';
+      dec(p);
+      p^ := '0';
+      first := p;
+    end;
+  end;
   if neg then
-    p^ := '-'
-  else
-    inc(p);
-  FastSetString(result, p, @tmp[high(tmp)]);
+  begin
+    dec(first);
+    first^ := '-';
+  end;
+  result := last - first;
+  MoveFast(first^, Buffer[0], result);
+  Buffer[result] := #0;
+end;
+
+procedure DuckHugeIntToText(const v: TDuckDBHugeInt;
+  Signed: boolean; var result: RawUtf8; Scale: integer);
+var
+  tmp: TTemp47;
+  len: PtrInt;
+begin
+  len := DuckHugeIntToTextBuf(v, Signed, Scale, tmp);
+  FastSetString(result, @tmp[0], len);
 end;
 
 function DuckHugeIntIsInt64(const v: TDuckDBHugeInt; Signed: boolean): boolean;

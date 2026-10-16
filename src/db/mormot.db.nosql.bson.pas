@@ -58,7 +58,7 @@ type
   PDecimal128Bits = ^TDecimal128Bits;
 
   /// enough characters to contain any TDecimal128 text representation
-  TDecimal128Str = array[0..42] of AnsiChar;
+  TDecimal128Str = TTemp47;
 
   /// some special 128-bit decimal values
   // - see TDecimal128.SetSpecial to set the corresponding value
