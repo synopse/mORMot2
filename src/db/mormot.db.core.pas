@@ -189,7 +189,8 @@ const
     [ftInt64, ftDouble, ftCurrency, ftDate];
 
   /// conversion matrix from TSqlDBFieldType into VCL/LCL variant type
-  // - will use varSynUnicode to enhance Delphi and Windows compatibility
+  // - will use SynUnicode to enhance old Delphi and Windows compatibility: set
+  // ForceUtf8=true in TSqlDBStatement.ColumnToVariant() for RawUtf8/varString
   MAP_FIELDTYPE2VARTYPE: array[TSqlDBFieldType] of Word = (
     varEmpty,       // ftUnknown
     varNull,        // ftNull

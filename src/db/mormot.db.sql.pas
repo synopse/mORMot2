@@ -120,7 +120,8 @@ type
     Filter: RawUtf8;
     /// comma separated list of indexed column names, in order of their definition
     KeyColumns: RawUtf8;
-    /// comma separaded list of a nonkey column added to the index by using the CREATE INDEX INCLUDE clause
+    /// comma separaded list of a nonkey column added to the index by using the
+    // CREATE INDEX INCLUDE clause
     // - only set for MS SQL - not retrieved for other DB types yet
     IncludedColumns: RawUtf8;
     /// if Index is unique
@@ -138,8 +139,10 @@ type
   TSqlDBIndexDefineDynArray = array of TSqlDBIndexDefine;
 
   /// used to define a parameter/column layout in a stored procedure schema
-  // - for TSqlDBConnectionProperties.GetProcedureParameters to retrieve the stored procedure parameters
-  // - can be extended according to https://msdn.microsoft.com/en-us/library/ms711701(v=vs.85).aspx
+  // - for TSqlDBConnectionProperties.GetProcedureParameters to retrieve the
+  // stored procedure parameters
+  // - can be extended according to
+  // https://learn.microsoft.com/en-us/sql/odbc/reference/syntax/sqlprocedurecolumns-function
   TSqlDBProcColumnDefine = packed record
     /// the Column name
     ColumnName: RawUtf8;
@@ -3460,7 +3463,8 @@ begin
   ndx := smt.ColumnIndex(col);
   result := ndx >= 0;
   if ndx >= 0 then
-    smt.ColumnToVariant(ndx, Variant(Dest)); // text may be set as varSynUnicode
+    // note: ColumnToVariant() store text as varSynUnicode by default
+    smt.ColumnToVariant(ndx, Variant(Dest));
 end;
 
 
@@ -6147,13 +6151,13 @@ end;
 
 function TSqlDBStatement.ColumnVariant(Col: integer; ForceUtf8: boolean): Variant;
 begin
-  ColumnToVariant(Col, result, ForceUtf8); // may be SynUnicode
+  ColumnToVariant(Col, result, ForceUtf8); // SynUnicode unless ForceUtf8=true
 end;
 
 function TSqlDBStatement.ColumnToVariant(Col: integer;
   var Value: Variant; ForceUtf8: boolean): TSqlDBFieldType;
 var
-  tmp: RawByteString;
+  tmp: RawByteString; // used for ftUtf8/ftBlob
   V: TSqlVar;
   d: TSynVarData absolute Value;
 begin
@@ -6172,16 +6176,19 @@ begin
       d.VDate := V.VDateTime;
     ftCurrency:
       d.VCurrency := V.VCurrency;
-    ftBlob: // as varString
+    ftBlob: // VType is varString
       begin
         d.VAny := nil; // avoid GPF below
         if V.VBlob <> nil then
           if V.VBlob = pointer(tmp) then
-            RawByteString(d.VAny) := tmp // increment RefCount
-          else
+          begin
+            d.VAny := pointer(tmp); // direct assign with no refcount
+            pointer(tmp) := nil;
+          end
+          else // make full new RawByteString instance
             FastSetRawByteString(RawByteString(d.VAny), V.VBlob, V.VBlobLen);
       end;
-    ftUtf8: // VType is varSynUnicode
+    ftUtf8: // VType is varSynUnicode by default
       begin
         d.VAny := nil; // avoid GPF below
         if V.VText = nil then
@@ -6191,11 +6198,11 @@ begin
           d.VType := varString;
           if V.VText = pointer(tmp) then
           begin
-            FakeCodePage(tmp, CP_UTF8);
-            d.VAny := pointer(tmp); // direct assign with no refcount
+            FakeCodePage(tmp, CP_UTF8); // to please FPC
+            d.VAny := pointer(tmp);     // direct assign with no refcount
             pointer(tmp) := nil;
           end
-          else
+          else // make full new RawUtf8 instance
             FastSetString(RawUtf8(d.VAny), V.VText, StrLen(V.VText));
         end
         else
@@ -6887,7 +6894,7 @@ begin
 end;
 
 function TSqlDBStatement.GetColumnVariant(const ColName: RawUtf8): Variant;
-begin
+begin // will return text as SynUnicode by default
   ColumnToVariant(ColumnIndex(ColName), result, {forceUtf8=}false);
 end;
 
