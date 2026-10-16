@@ -1,8 +1,7 @@
 /// DuckDB native C API binding for mORMot 2
 // - dynamic loading of duckdb.dll / libduckdb.so / libduckdb.dylib
 // - Delphi 7 .. Delphi 13 and FPC 3.2+ compatible syntax
-// - note: official DuckDB binaries are 64-bit only - for Delphi 7 / Win32
-// use mormot.db.sql.duckdbhttp.pas (HTTP access to a DuckDB CLI process)
+// - note: official DuckDB binaries are 64-bit only - not for Win32
 unit mormot.db.raw.duckdb;
 
 {
@@ -46,15 +45,15 @@ type
   /// duckdb_type enumeration (DUCKDB_TYPE_* constants)
   TDuckDBType = integer;
 
-  /// opaque handles - pointers to a struct { void* internal_ptr }
-  TDuckDBDatabase = type pointer;
-  TDuckDBConnection = type pointer;
-  TDuckDBConfig = type pointer;
+  /// opaque handles - pointers to a struct (void* internal_ptr)
+  TDuckDBDatabase          = type pointer;
+  TDuckDBConnection        = type pointer;
+  TDuckDBConfig            = type pointer;
   TDuckDBPreparedStatement = type pointer;
-  TDuckDBLogicalType = type pointer;
-  TDuckDBDataChunk = type pointer;
-  TDuckDBVector = type pointer;
-  TDuckDBAppender = type pointer;
+  TDuckDBLogicalType       = type pointer;
+  TDuckDBDataChunk         = type pointer;
+  TDuckDBVector            = type pointer;
+  TDuckDBAppender          = type pointer;
 
   /// duckdb_result C struct - should be kept as-is, 48 bytes on 64-bit
   // - duckdb_fetch_chunk() expects it BY VALUE: the compiler will follow the
@@ -69,111 +68,111 @@ type
   end;
   PDuckDBResult = ^TDuckDBResult;
 
-  /// duckdb_string_t internal VARCHAR/BLOB representation (16 bytes)
+  /// duckdb_string_t internal VARCHAR/BLOB representation (stored as 16 bytes)
   // - inlined if Length <= 12, otherwise Prefix[] + Ptr
-  TDuckDBStringT = packed record
+  // - weird definition, but without "packed" usage which is much slower on arm
+  TDuckDBStringT = record
     Length: cardinal;
-    case integer of
-      0: (Prefix: array[0..3] of AnsiChar;
-          Ptr: PAnsiChar);
-      1: (Inlined: array[0..11] of AnsiChar);
+    Data: array[0..2] of cardinal;
   end;
   PDuckDBStringT = ^TDuckDBStringT;
 
   /// duckdb_hugeint / duckdb_uhugeint 128-bit integers
-  TDuckDBHugeInt = packed record
+  // - no "packed" usage which is much slower on arm
+  TDuckDBHugeInt = record
     Lower: Int64; // actually uint64_t
     Upper: Int64; // int64_t for hugeint, uint64_t for uhugeint
   end;
   PDuckDBHugeInt = ^TDuckDBHugeInt;
 
-  /// duckdb_interval
-  TDuckDBInterval = packed record
+  /// duckdb_interval (stored as 16 bytes)
+  // - no "packed" usage which is much slower on arm
+  TDuckDBInterval = record
     Months: integer;
     Days: integer;
     Micros: Int64;
   end;
   PDuckDBInterval = ^TDuckDBInterval;
 
-  /// duckdb_list_entry
-  TDuckDBListEntry = packed record
+  /// duckdb_list_entry as two 64-bit integers (stored as 16 bytes)
+  TDuckDBListEntry = record
     Offset: Int64;
     Length: Int64;
   end;
   PDuckDBListEntry = ^TDuckDBListEntry;
 
-  /// typed access to DuckDB vector data - no pointer math needed (Delphi 7)
-  TDuckI8Array = array[0..MaxInt div 8] of ShortInt;
-  PDuckI8Array = ^TDuckI8Array;
-  TDuckI16Array = array[0..MaxInt div 8] of SmallInt;
-  PDuckI16Array = ^TDuckI16Array;
-  TDuckU16Array = array[0..MaxInt div 8] of word;
-  PDuckU16Array = ^TDuckU16Array;
-  TDuckI32Array = array[0..MaxInt div 8] of integer;
-  PDuckI32Array = ^TDuckI32Array;
-  TDuckU32Array = array[0..MaxInt div 8] of cardinal;
-  PDuckU32Array = ^TDuckU32Array;
-  TDuckI64Array = array[0..MaxInt div 16] of Int64;
-  PDuckI64Array = ^TDuckI64Array;
+  /// typed access to DuckDB vector data - no pointer math needed
+  TDuckI8Array     = array[0..MaxInt div 8] of ShortInt;
+  PDuckI8Array     = ^TDuckI8Array;
+  TDuckI16Array    = array[0..MaxInt div 8] of SmallInt;
+  PDuckI16Array    = ^TDuckI16Array;
+  TDuckU16Array    = array[0..MaxInt div 8] of word;
+  PDuckU16Array    = ^TDuckU16Array;
+  TDuckI32Array    = array[0..MaxInt div 8] of integer;
+  PDuckI32Array    = ^TDuckI32Array;
+  TDuckU32Array    = array[0..MaxInt div 8] of cardinal;
+  PDuckU32Array    = ^TDuckU32Array;
+  TDuckI64Array    = array[0..MaxInt div 16] of Int64;
+  PDuckI64Array    = ^TDuckI64Array;
   TDuckSingleArray = array[0..MaxInt div 8] of single;
   PDuckSingleArray = ^TDuckSingleArray;
   TDuckDoubleArray = array[0..MaxInt div 16] of double;
   PDuckDoubleArray = ^TDuckDoubleArray;
-  TDuckU8Array = array[0..MaxInt div 8] of byte;
-  PDuckU8Array = ^TDuckU8Array;
+  TDuckU8Array     = array[0..MaxInt div 8] of byte;
+  PDuckU8Array     = ^TDuckU8Array;
 
 const
   DuckDBSuccess = 0;
-  DuckDBError = 1;
+  DuckDBError   = 1;
 
-  DUCKDB_TYPE_INVALID = 0;
-  DUCKDB_TYPE_BOOLEAN = 1;
-  DUCKDB_TYPE_TINYINT = 2;
-  DUCKDB_TYPE_SMALLINT = 3;
-  DUCKDB_TYPE_INTEGER = 4;
-  DUCKDB_TYPE_BIGINT = 5;
-  DUCKDB_TYPE_UTINYINT = 6;
-  DUCKDB_TYPE_USMALLINT = 7;
-  DUCKDB_TYPE_UINTEGER = 8;
-  DUCKDB_TYPE_UBIGINT = 9;
-  DUCKDB_TYPE_FLOAT = 10;
-  DUCKDB_TYPE_DOUBLE = 11;
-  DUCKDB_TYPE_TIMESTAMP = 12;
-  DUCKDB_TYPE_DATE = 13;
-  DUCKDB_TYPE_TIME = 14;
-  DUCKDB_TYPE_INTERVAL = 15;
-  DUCKDB_TYPE_HUGEINT = 16;
-  DUCKDB_TYPE_VARCHAR = 17;
-  DUCKDB_TYPE_BLOB = 18;
-  DUCKDB_TYPE_DECIMAL = 19;
-  DUCKDB_TYPE_TIMESTAMP_S = 20;
-  DUCKDB_TYPE_TIMESTAMP_MS = 21;
-  DUCKDB_TYPE_TIMESTAMP_NS = 22;
-  DUCKDB_TYPE_ENUM = 23;
-  DUCKDB_TYPE_LIST = 24;
-  DUCKDB_TYPE_STRUCT = 25;
-  DUCKDB_TYPE_MAP = 26;
-  DUCKDB_TYPE_UUID = 27;
-  DUCKDB_TYPE_UNION = 28;
-  DUCKDB_TYPE_BIT = 29;
-  DUCKDB_TYPE_TIME_TZ = 30;
-  DUCKDB_TYPE_TIMESTAMP_TZ = 31;
-  DUCKDB_TYPE_UHUGEINT = 32;
-  DUCKDB_TYPE_ARRAY = 33;
-  DUCKDB_TYPE_ANY = 34;
-  DUCKDB_TYPE_BIGNUM = 35;
-  DUCKDB_TYPE_SQLNULL = 36;
-  DUCKDB_TYPE_STRING_LITERAL = 37;
+  DUCKDB_TYPE_INVALID         = 0;
+  DUCKDB_TYPE_BOOLEAN         = 1;
+  DUCKDB_TYPE_TINYINT         = 2;
+  DUCKDB_TYPE_SMALLINT        = 3;
+  DUCKDB_TYPE_INTEGER         = 4;
+  DUCKDB_TYPE_BIGINT          = 5;
+  DUCKDB_TYPE_UTINYINT        = 6;
+  DUCKDB_TYPE_USMALLINT       = 7;
+  DUCKDB_TYPE_UINTEGER        = 8;
+  DUCKDB_TYPE_UBIGINT         = 9;
+  DUCKDB_TYPE_FLOAT           = 10;
+  DUCKDB_TYPE_DOUBLE          = 11;
+  DUCKDB_TYPE_TIMESTAMP       = 12;
+  DUCKDB_TYPE_DATE            = 13;
+  DUCKDB_TYPE_TIME            = 14;
+  DUCKDB_TYPE_INTERVAL        = 15;
+  DUCKDB_TYPE_HUGEINT         = 16;
+  DUCKDB_TYPE_VARCHAR         = 17;
+  DUCKDB_TYPE_BLOB            = 18;
+  DUCKDB_TYPE_DECIMAL         = 19;
+  DUCKDB_TYPE_TIMESTAMP_S     = 20;
+  DUCKDB_TYPE_TIMESTAMP_MS    = 21;
+  DUCKDB_TYPE_TIMESTAMP_NS    = 22;
+  DUCKDB_TYPE_ENUM            = 23;
+  DUCKDB_TYPE_LIST            = 24;
+  DUCKDB_TYPE_STRUCT          = 25;
+  DUCKDB_TYPE_MAP             = 26;
+  DUCKDB_TYPE_UUID            = 27;
+  DUCKDB_TYPE_UNION           = 28;
+  DUCKDB_TYPE_BIT             = 29;
+  DUCKDB_TYPE_TIME_TZ         = 30;
+  DUCKDB_TYPE_TIMESTAMP_TZ    = 31;
+  DUCKDB_TYPE_UHUGEINT        = 32;
+  DUCKDB_TYPE_ARRAY           = 33;
+  DUCKDB_TYPE_ANY             = 34;
+  DUCKDB_TYPE_BIGNUM          = 35;
+  DUCKDB_TYPE_SQLNULL         = 36;
+  DUCKDB_TYPE_STRING_LITERAL  = 37;
   DUCKDB_TYPE_INTEGER_LITERAL = 38;
-  DUCKDB_TYPE_TIME_NS = 39;
+  DUCKDB_TYPE_TIME_NS         = 39;
 
   /// DuckDB TIMESTAMP 'infinity' / '-infinity' special values
-  DUCKDB_TIMESTAMP_INFINITY = $7fffffffffffffff;
+  DUCKDB_TIMESTAMP_INFINITY  = $7fffffffffffffff;
   DUCKDB_TIMESTAMP_NINFINITY = -$7fffffffffffffff;
 
-  /// days between 0001-01-01 (TDateTime 0 = 1899-12-30) and 1970-01-01
+  /// days between the TDateTime epoch (1899-12-30) and 1970-01-01
   DUCKDB_UNIXDATE_DELTA = 25569;
-  DUCKDB_MICROSPERDAY = Int64(86400000000);
+  DUCKDB_MICROSPERDAY   = Int64(86400000000);
 
 {$ifdef OSWINDOWS}
   DUCKDB_LIBNAME = 'duckdb.dll';
@@ -330,11 +329,11 @@ function DuckDBLibraryAvailable: boolean;
 { ************ Value Conversion Helpers (hugeint, decimal, date/time, string_t) }
 
 /// return the text pointer and length of a duckdb_string_t
-function DuckStringPtr(s: PDuckDBStringT; out len: integer): PAnsiChar;
+// - warning: len should be defined as an exact integer type, not a PtrInt
+function DuckStringPtr(s: PDuckDBStringT; var len: integer): PAnsiChar;
   {$ifdef HASINLINE} inline; {$endif}
 
 /// return the address of the duckdb_string_t at a given row of a vector
-// - avoid pointer math, which is not available on Delphi 7
 function DuckStringAt(data: pointer; row: PtrInt): PDuckDBStringT;
   {$ifdef HASINLINE} inline; {$endif}
 
@@ -527,13 +526,13 @@ end;
 
 { ************ Value Conversion Helpers }
 
-function DuckStringPtr(s: PDuckDBStringT; out len: integer): PAnsiChar;
+function DuckStringPtr(s: PDuckDBStringT; var len: integer): PAnsiChar;
 begin
   len := s^.Length;
-  if len <= 12 then
-    result := @s^.Inlined
+  if len <= SizeOf(s^.Data) then
+    result := @s^.Data
   else
-    result := s^.Ptr;
+    result := PPointer(@s^.Data[1])^; // 64-bit aligned
 end;
 
 function DuckStringAt(data: pointer; row: PtrInt): PDuckDBStringT;
@@ -542,7 +541,7 @@ begin
 end;
 
 type
-  TU128 = array[0..3] of cardinal; // little-endian 32-bit limbs
+  TU128 = TBlock128; // little-endian 32-bit limbs
 
 procedure U128Negate(var v: TU128);
 var
