@@ -915,9 +915,12 @@ var
       id, lastid, i, n, n1: integer;
       IDs: TIntegerDynArray;
       names: TRawUtf8DynArray;
+      ndx: TSqlDBIndexDefineDynArray;
       Row, RowDoc, all: variant;
       r, v: PDocVariantData;
       fields, expected: TSqlDBColumnDefineDynArray;
+      f, e: ^TSqlDBColumnDefine;
+      json: RawUtf8;
       stmt: ISqlDBStatement;
 
       procedure DoInsert;
@@ -927,7 +930,7 @@ var
         for i := 0 to high(IDs) do
           Check(proxy.ExecuteNoResult(
             'INSERT INTO People (ID,FirstName,LastName,YearOfBirth,YearOfDeath) ' +
-            'VALUES (?,?,?,?,?)', [IDs[i], 'FirstName New ' + Int32ToUtf8(i),
+            'VALUES (?,?,?,?,?)', [IDs[i], Make(['FirstName New ', i]),
             'New Last', i + 1400, 1519]) = 1);
       end;
 
@@ -951,18 +954,32 @@ var
       // metadata should be transmitted as retrieved on the server side
       proxy.GetFields('CustomProps', fields);
       Props.GetFields('CustomProps', expected);
-      CheckEqual(length(fields), length(expected), 'GetFields');
-      if length(fields) = length(expected) then
-        for i := 0 to high(fields) do
+      f := pointer(fields);
+      e := pointer(expected);
+      if CheckEqual(length(fields), length(expected), 'GetFields') then
+        for i := 1 to length(fields) do
         begin
-          CheckEqual(fields[i].ColumnName, expected[i].ColumnName);
-          CheckEqual(fields[i].ColumnTypeNative, expected[i].ColumnTypeNative);
-          CheckEqual(fields[i].ColumnLength, expected[i].ColumnLength);
-          CheckEqual(fields[i].ColumnPrecision, expected[i].ColumnPrecision);
-          CheckEqual(fields[i].ColumnScale, expected[i].ColumnScale);
-          Check(fields[i].ColumnType = expected[i].ColumnType);
-          Check(fields[i].ColumnIndexed = expected[i].ColumnIndexed);
+          CheckEqual(f^.ColumnName, e^.ColumnName);
+          CheckEqual(f^.ColumnTypeNative, e^.ColumnTypeNative);
+          CheckEqual(f^.ColumnLength, e^.ColumnLength);
+          CheckEqual(f^.ColumnPrecision, e^.ColumnPrecision);
+          CheckEqual(f^.ColumnScale, e^.ColumnScale);
+          Check(f^.ColumnType = e^.ColumnType);
+          Check(f^.ColumnIndexed = e^.ColumnIndexed);
+          inc(f);
+          inc(e);
         end;
+      proxy.GetFields('People', fields);
+      SaveJson(fields, TypeInfo(TSqlDBColumnDefineDynArray),
+        [twoIgnoreDefaultInRecord, twoEnumSetsAsTextInRecord], json);
+      CheckEqual(json,
+       '[{"ColumnName":"ID","ColumnTypeNative":"INTEGER","ColumnType":"ftInt64","' +
+       'ColumnIndexed":true},{"ColumnName":"FirstName","ColumnTypeNative":"TEXT",' +
+       '"ColumnType":"ftUtf8"},{"ColumnName":"LastName","ColumnTypeNative":"TEXT"' +
+       ',"ColumnType":"ftUtf8"},{"ColumnName":"Data","ColumnTypeNative":"BLOB","C' +
+       'olumnType":"ftBlob"},{"ColumnName":"YearOfBirth","ColumnTypeNative":"INTE' +
+       'GER","ColumnType":"ftInt64"},{"ColumnName":"YearOfDeath","ColumnTypeNativ' +
+       'e":"INTEGER","ColumnType":"ftInt64"}]');
       Check(names = nil);
       proxy.GetTableNames(names);
       CheckEqual(RawUtf8ArrayToCsv(names),
@@ -977,6 +994,13 @@ var
       CheckEqual(RawUtf8ArrayToCsv(names),
         'ID [INTEGER] *,FirstName [TEXT],LastName [TEXT],Data [BLOB],YearOfBirth [' +
         'INTEGER],YearOfDeath [INTEGER]');
+      proxy.GetIndexes('ADests', ndx);
+      CheckEqual(DynArraySaveJson(ndx, TypeInfo(TSqlDBIndexDefineDynArray)),
+       '[{"IndexName":"IndexADestsDest","TypeDesc":"BTREE","Filter":"","KeyColumn' +
+       's":"Dest","IncludedColumns":"","IsUnique":false,"IsPrimaryKey":false,"IsU' +
+       'niqueConstraint":false},{"IndexName":"IndexADestsSource","TypeDesc":"BTRE' +
+       'E","Filter":"","KeyColumns":"Source","IncludedColumns":"","IsUnique":fals' +
+       'e,"IsPrimaryKey":false,"IsUniqueConstraint":false}]');
       // the same statement instance should be executable several times
       stmt := proxy.NewThreadSafeStatementPrepared(
         'select count(*) from People where YearOfDeath=?', true, true);
