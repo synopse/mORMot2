@@ -119,14 +119,21 @@ type
 
   /// cached information about one DuckDB result column
   TDuckDBColumnInfo = record
+    /// 32-bit ordinal number corresponding to DUCKDB_TYPE_* constants
     TypeId: TDuckDBType;
-    Internal: TDuckDBType; // storage type for DECIMAL and ENUM
-    Scale: integer;        // for DECIMAL
+    /// number precision retrieved for DECIMAL - 0 means integer
+    Scale: integer;
+    /// internal nested storage type for DECIMAL and ENUM
+    Internal: TDuckDBType;
+    /// DuckDB type info structure
     LogicalType: TDuckDBLogicalType;
+    /// internal cache of ENUM values
     EnumValues: TRawUtf8DynArray;
-    // current chunk content
+    /// current chunk content
     Vector: TDuckDBVector;
+    /// current position in the data buffer
     Data: pointer;
+    /// cached vector_get_validity() values
     Validity: PDuckI64Array;
   end;
   PDuckDBColumnInfo = ^TDuckDBColumnInfo;
@@ -145,7 +152,7 @@ type
     fDirectQuery: boolean;
     fInfo: TDuckDBColumnInfoDynArray;
     procedure BindParams;
-    procedure BindArrayRow(Row: integer);
+    procedure BindArrayRow(Row: integer; var Temp: RawUtf8);
     procedure ExecuteArray;
     procedure ReleaseResult;
     function NextChunk: boolean;
@@ -201,6 +208,8 @@ type
     fRowCount: Int64;
     fTable: RawUtf8;
     procedure Check(res: TDuckDBState; const ctxt: RawUtf8);
+      {$ifdef HASINLINE} inline; {$endif}
+    procedure Failed(res: TDuckDBState; const ctxt: RawUtf8);
   public
     /// create an appender for a given table of an opened connection
     constructor Create(aConnection: TSqlDBDuckDBConnection;
@@ -220,7 +229,10 @@ type
     /// append a TDateTime value as TIMESTAMP
     procedure AddDateTime(Value: TDateTime);
     /// append some UTF-8 text - also usable for any castable column type
-    procedure AddText(const Value: RawUtf8);
+    procedure AddText(const Value: RawUtf8); overload;
+      {$ifdef HASINLINE} inline; {$endif}
+    /// append some UTF-8 text - also usable for any castable column type
+    procedure AddText(Value: PUtf8Char; Len: PtrInt); overload;
     /// append some binary content
     procedure AddBlob(const Value: RawByteString);
     /// append all values of a row, from Delphi values
@@ -238,18 +250,21 @@ type
   end;
 
 
-/// map a DuckDB logical type into a mORMot field type
-function DuckDBTypeToField(lt: TDuckDBLogicalType): TSqlDBFieldType;
-
 /// append the value at Row of a DuckDB vector as JSON
 // - handles all scalar types, and nested LIST/ARRAY/STRUCT/MAP/UNION
 procedure DuckDBVectorValueToJson(vec: TDuckDBVector; lt: TDuckDBLogicalType;
   row: PtrInt; W: TJsonWriter);
 
+
 /// return the value at Row of a DuckDB vector as text
 // - scalar values in DuckDB text format, nested values as JSON
 procedure DuckDBVectorValueToText(vec: TDuckDBVector; lt: TDuckDBLogicalType;
   row: PtrInt; var result: RawUtf8);
+
+/// fill the simple value at Row of a DuckDB vector into a text buffer
+// - returns the number of bytes written, or -1 if this type is not supported
+function DuckDBVectorValueToTextBuf(vec: TDuckDBVector;  lt: TDuckDBLogicalType;
+  row: PtrInt; var Buffer: TTemp47): PtrInt;
 
 
 implementation
@@ -270,9 +285,9 @@ begin
             ((validity^[row shr 6] shr (row and 63)) and 1 <> 0);
 end;
 
-function DuckDBTypeToField(lt: TDuckDBLogicalType): TSqlDBFieldType;
+function DuckDBTypeToField(typeid: TDuckDBType; scale: integer): TSqlDBFieldType;
 begin
-  case DuckDB.get_type_id(lt) of
+  case typeid of
     DUCKDB_TYPE_BOOLEAN, DUCKDB_TYPE_TINYINT, DUCKDB_TYPE_SMALLINT,
     DUCKDB_TYPE_INTEGER, DUCKDB_TYPE_BIGINT, DUCKDB_TYPE_UTINYINT,
     DUCKDB_TYPE_USMALLINT, DUCKDB_TYPE_UINTEGER, DUCKDB_TYPE_UBIGINT,
@@ -281,7 +296,7 @@ begin
     DUCKDB_TYPE_FLOAT, DUCKDB_TYPE_DOUBLE:
       result := ftDouble;
     DUCKDB_TYPE_DECIMAL:
-      if DuckDB.decimal_scale(lt) <= 4 then
+      if scale <= 4 then
         result := ftCurrency
       else
         result := ftDouble;
@@ -333,7 +348,7 @@ begin
 end;
 
 procedure DecimalValue(lt: TDuckDBLogicalType; data: pointer; row: PtrInt;
-  out mantissa: TDuckDBHugeInt; out scale: integer);
+  var mantissa: TDuckDBHugeInt; var scale: integer);
 var
   v: Int64;
 begin
@@ -370,48 +385,132 @@ begin
   DuckDB.free_(p);
 end;
 
-procedure DuckDBVectorValueToText(vec: TDuckDBVector; lt: TDuckDBLogicalType;
-  row: PtrInt; var result: RawUtf8);
+function DuckDBVectorValueToTextBuf(vec: TDuckDBVector;  lt: TDuckDBLogicalType;
+  row: PtrInt; var Buffer: TTemp47): PtrInt;
 var
   data: pointer;
   typeid: TDuckDBType;
-  len, scale, offs: integer; // not PtrInt
-  p: PUtf8Char;
+  scale: integer;
+  p, num: PAnsiChar;
   h: TDuckDBHugeInt;
-  us: Int64;
-  W: TJsonWriter;
-  tmp: TTextWriterStackBuffer;
+  d: double;
+  tmp: ShortString;
 begin
-  result := '';
+  result := 0;
+  Buffer[0] := #0;
   if not IsValid(DuckDB.vector_get_validity(vec), row) then
     exit;
   data := DuckDB.vector_get_data(vec);
   typeid := DuckDB.get_type_id(lt);
+  num := nil;
   case typeid of
     DUCKDB_TYPE_BOOLEAN:
-      result := BOOL_UTF8[PDuckU8Array(data)^[row] <> 0];
-    DUCKDB_TYPE_TINYINT, DUCKDB_TYPE_SMALLINT, DUCKDB_TYPE_INTEGER,
-    DUCKDB_TYPE_BIGINT, DUCKDB_TYPE_UTINYINT, DUCKDB_TYPE_USMALLINT,
-    DUCKDB_TYPE_UINTEGER:
-      Int64ToUtf8(ReadIntegral(typeid, data, row), result);
-    DUCKDB_TYPE_UBIGINT:
       begin
-        h.Lower := PDuckI64Array(data)^[row];
-        h.Upper := 0;
-        DuckHugeIntToText(h, false, result);
+        p := @BOOL_STR[PDuckU8Array(data)^[row] <> 0]; // 'false'/'true'
+        PInt64(@Buffer)^ := PInt64(p + 1)^;            // include ending #0
+        result := ord(p[0]);
       end;
+    DUCKDB_TYPE_TINYINT, DUCKDB_TYPE_SMALLINT,
+    DUCKDB_TYPE_INTEGER, DUCKDB_TYPE_BIGINT,
+    DUCKDB_TYPE_UTINYINT, DUCKDB_TYPE_USMALLINT,
+    DUCKDB_TYPE_UINTEGER:
+      num := StrInt64(@Buffer[high(Buffer)],
+        ReadIntegral(typeid, data, row));
+    DUCKDB_TYPE_UBIGINT:
+      num := StrUInt64(@Buffer[high(Buffer)],
+        QWord(PDuckI64Array(data)^[row]));
     DUCKDB_TYPE_HUGEINT, DUCKDB_TYPE_UHUGEINT:
-      DuckHugeIntToText(PDuckDBHugeInt(PAnsiChar(data) + row * 16)^,
-        typeid = DUCKDB_TYPE_HUGEINT, result);
-    DUCKDB_TYPE_FLOAT:
-      DoubleToStr(PDuckSingleArray(data)^[row], result);
-    DUCKDB_TYPE_DOUBLE:
-      DoubleToStr(PDuckDoubleArray(data)^[row], result);
+      result := DuckHugeIntToTextBuf(
+        PDuckDBHugeInt(PAnsiChar(data) + row * 16)^,
+        typeid = DUCKDB_TYPE_HUGEINT, 0, Buffer);
     DUCKDB_TYPE_DECIMAL:
       begin
         DecimalValue(lt, data, row, h, scale);
-        DuckHugeIntToText(h, true, result);
-        DuckApplyScale(result, scale);
+        result := DuckHugeIntToTextBuf(h, true, scale, Buffer);
+      end;
+    DUCKDB_TYPE_FLOAT, DUCKDB_TYPE_DOUBLE:
+      begin
+        if typeid = DUCKDB_TYPE_FLOAT then
+          d := PDuckSingleArray(data)^[row]
+        else
+          d := PDuckDoubleArray(data)^[row];
+        if PInt64(@d)^ = 0 then
+        begin
+          PCardinal(@Buffer)^ := ord('0');
+          result := 1;
+        end
+        else
+        begin
+          result := DoubleToShort(@tmp, d);
+          if result > high(Buffer) then
+            result := -1 // very unlikely
+          else
+          begin
+            MoveFast(tmp[1], Buffer[0], result);
+            Buffer[result] := #0;
+          end;
+        end;
+      end;
+    DUCKDB_TYPE_UUID:
+      result := DuckUuidToTextBuf(
+        PDuckDBHugeInt(PAnsiChar(data) + row * 16)^, Buffer);
+    DUCKDB_TYPE_SQLNULL:
+      ; // NULL -> empty buffer
+  else
+    // Dates, times, intervals, ENUM, VARCHAR, DUCKDB_TYPE_BIT and nested types
+    result := -1;
+  end;
+  // normalize the backward-generated 64-bit integer text
+  if num = nil then
+   exit;
+  result := @Buffer[high(Buffer)] - num;
+  MoveFast(num^, Buffer[0], result);
+  Buffer[result] := #0;
+end;
+
+procedure ComplexDuckDBVectorValueToText(vec: TDuckDBVector;
+  lt: TDuckDBLogicalType; row: PtrInt; var result: RawUtf8);
+var
+  W: TJsonWriter;
+  tmp: TTextWriterStackBuffer;
+begin
+  W := TJsonWriter.CreateOwnedStream(tmp);
+  try
+    DuckDBVectorValueToJson(vec, lt, row, W);
+    W.SetText(result);
+  finally
+    W.Free;
+  end;
+end;
+
+procedure DuckDBVectorValueToText(vec: TDuckDBVector;
+  lt: TDuckDBLogicalType; row: PtrInt; var result: RawUtf8);
+var
+  typeid: TDuckDBType;
+  len, offs: integer;
+  data: PAnsiChar;
+  p: pointer;
+  us: Int64;
+  d: double;
+  buf: TTemp47;
+begin
+  len := DuckDBVectorValueToTextBuf(vec, lt, row, buf);
+  if len >= 0 then
+  begin
+    FastSetString(result, @buf[0], len); // most simple types
+    exit;
+  end;
+  FastAssignNew(result);
+  data := DuckDB.vector_get_data(vec);
+  typeid := DuckDB.get_type_id(lt);
+  case typeid of
+    DUCKDB_TYPE_FLOAT, DUCKDB_TYPE_DOUBLE:
+      begin
+        if typeid = DUCKDB_TYPE_FLOAT then
+          d := PDuckSingleArray(data)^[row]
+        else
+          d := PDuckDoubleArray(data)^[row];
+        DoubleToStr(d, result);
       end;
     DUCKDB_TYPE_DATE:
       DuckDateToText(PDuckI32Array(data)^[row], result);
@@ -432,21 +531,22 @@ begin
         if offs mod 3600 <> 0 then
         begin
           result := result + ':';
-          AppendShortToUtf8(UInt2DigitsToShortFast((offs div 60) mod 60), result);
+          AppendShortToUtf8(
+            UInt2DigitsToShortFast((offs div 60) mod 60), result);
         end;
       end;
-    DUCKDB_TYPE_TIMESTAMP, DUCKDB_TYPE_TIMESTAMP_S, DUCKDB_TYPE_TIMESTAMP_MS,
-    DUCKDB_TYPE_TIMESTAMP_NS:
-      DuckTimestampToText(TimestampMicros(typeid, PDuckI64Array(data)^[row]), result);
+    DUCKDB_TYPE_TIMESTAMP, DUCKDB_TYPE_TIMESTAMP_S,
+    DUCKDB_TYPE_TIMESTAMP_MS, DUCKDB_TYPE_TIMESTAMP_NS:
+      DuckTimestampToText(
+        TimestampMicros(typeid, PDuckI64Array(data)^[row]), result);
     DUCKDB_TYPE_TIMESTAMP_TZ:
       begin
         DuckTimestampToText(PDuckI64Array(data)^[row], result);
         result := result + '+00'; // stored as UTC
       end;
     DUCKDB_TYPE_INTERVAL:
-      DuckIntervalToText(PDuckDBInterval(PAnsiChar(data) + row * 16)^, result);
-    DUCKDB_TYPE_UUID:
-      DuckUuidToText(PDuckDBHugeInt(PAnsiChar(data) + row * 16)^, result);
+      DuckIntervalToText(
+        PDuckDBInterval(data + row * 16)^, result);
     DUCKDB_TYPE_VARCHAR, DUCKDB_TYPE_BLOB:
       begin
         p := DuckStringPtr(DuckStringAt(data, row), len);
@@ -459,72 +559,27 @@ begin
       end;
     DUCKDB_TYPE_ENUM:
       EnumValue(lt, data, row, result);
-    DUCKDB_TYPE_SQLNULL:
-      ;
   else
-    begin
-      // LIST, ARRAY, STRUCT, MAP, UNION -> JSON
-      W := TJsonWriter.CreateOwnedStream(tmp);
-      try
-        DuckDBVectorValueToJson(vec, lt, row, W);
-        W.SetText(result);
-      finally
-        W.Free;
-      end;
-      exit;
-    end;
+    // LIST, ARRAY, STRUCT, MAP, UNION -> JSON
+    ComplexDuckDBVectorValueToText(vec, lt, row, result);
   end;
 end;
 
-procedure DuckDBVectorValueToJson(vec: TDuckDBVector; lt: TDuckDBLogicalType;
-  row: PtrInt; W: TJsonWriter);
+procedure ComplexDuckDBVectorValueToJson(vec: TDuckDBVector; data: PAnsiChar;
+  lt: TDuckDBLogicalType; typeid: TDuckDBType; row: PtrInt; W: TJsonWriter);
 var
-  data: pointer;
-  typeid: TDuckDBType;
+  i: PtrInt;
+  e: PDuckDBListEntry;
   child: TDuckDBVector;
   clt, klt: TDuckDBLogicalType;
-  e: PDuckDBListEntry;
-  i, n, size: PtrInt; // no Int64 for-loop variable on Delphi 7
-  name, p: pointer;
-  txt: RawUtf8;
-  len, scale: integer; // not PtrInt
-  h: TDuckDBHugeInt;
-  tag: integer;
   kvec, vvec: TDuckDBVector;
+  txt: RawUtf8;
 begin
-  if not IsValid(DuckDB.vector_get_validity(vec), row) then
-  begin
-    W.AddNull;
-    exit;
-  end;
-  data := DuckDB.vector_get_data(vec);
-  typeid := DuckDB.get_type_id(lt);
+  // those complex types require a temporary txt: RawUtf8 conversion
   case typeid of
-    DUCKDB_TYPE_BOOLEAN:
-      W.Add(PDuckU8Array(data)^[row] <> 0);
-    DUCKDB_TYPE_TINYINT, DUCKDB_TYPE_SMALLINT, DUCKDB_TYPE_INTEGER,
-    DUCKDB_TYPE_BIGINT, DUCKDB_TYPE_UTINYINT, DUCKDB_TYPE_USMALLINT,
-    DUCKDB_TYPE_UINTEGER:
-      W.Add(ReadIntegral(typeid, data, row));
-    DUCKDB_TYPE_UBIGINT, DUCKDB_TYPE_HUGEINT, DUCKDB_TYPE_UHUGEINT:
-      begin
-        DuckDBVectorValueToText(vec, lt, row, txt);
-        W.AddString(txt); // numbers are JSON numbers, even if > 64-bit
-      end;
-    DUCKDB_TYPE_FLOAT:
-      W.AddSingle(PDuckSingleArray(data)^[row]);
-    DUCKDB_TYPE_DOUBLE:
-      W.AddDouble(PDuckDoubleArray(data)^[row]);
-    DUCKDB_TYPE_DECIMAL:
-      begin
-        DecimalValue(lt, data, row, h, scale);
-        DuckHugeIntToText(h, true, txt);
-        DuckApplyScale(txt, scale);
-        W.AddString(txt);
-      end;
     DUCKDB_TYPE_LIST, DUCKDB_TYPE_MAP:
       begin
-        e := PDuckDBListEntry(PAnsiChar(data) + row * SizeOf(TDuckDBListEntry));
+        e := PDuckDBListEntry(data + row * SizeOf(TDuckDBListEntry));
         child := DuckDB.list_vector_get_child(vec);
         if typeid = DUCKDB_TYPE_LIST then
         begin
@@ -557,6 +612,60 @@ begin
           DuckDB.destroy_logical_type(klt);
           DuckDB.destroy_logical_type(clt);
         end;
+      end;
+  else
+    begin
+      // ENUM, UUID, dates, INTERVAL, BIT -> JSON string
+      DuckDBVectorValueToText(vec, lt, row, txt);
+      W.Add('"');
+      W.AddJsonEscape(pointer(txt), length(txt));
+      W.Add('"');
+    end;
+  end;
+end;
+
+procedure DuckDBVectorValueToJson(vec: TDuckDBVector; lt: TDuckDBLogicalType;
+  row: PtrInt; W: TJsonWriter);
+var
+  data: PAnsiChar;
+  name, p: pointer;
+  typeid: TDuckDBType;
+  i, n, size: PtrInt; // no Int64 for-loop variable on Delphi 7
+  len, scale: integer; // not PtrInt
+  h: TDuckDBHugeInt;
+  tag: integer;
+  child: TDuckDBVector;
+  clt: TDuckDBLogicalType;
+  buf: TTemp47;
+begin
+  if not IsValid(DuckDB.vector_get_validity(vec), row) then
+  begin
+    W.AddNull;
+    exit;
+  end;
+  data := DuckDB.vector_get_data(vec);
+  typeid := DuckDB.get_type_id(lt);
+  case typeid of
+    DUCKDB_TYPE_BOOLEAN:
+      W.Add(PDuckU8Array(data)^[row] <> 0);
+    DUCKDB_TYPE_TINYINT, DUCKDB_TYPE_SMALLINT, DUCKDB_TYPE_INTEGER,
+    DUCKDB_TYPE_BIGINT, DUCKDB_TYPE_UTINYINT, DUCKDB_TYPE_USMALLINT,
+    DUCKDB_TYPE_UINTEGER:
+      W.Add(ReadIntegral(typeid, data, row));
+    DUCKDB_TYPE_UBIGINT, DUCKDB_TYPE_HUGEINT, DUCKDB_TYPE_UHUGEINT:
+      begin
+        n := DuckDBVectorValueToTextBuf(vec, lt, row, buf);
+        W.AddNoJsonEscape(@buf[0], n);
+      end;
+    DUCKDB_TYPE_FLOAT:
+      W.AddSingle(PDuckSingleArray(data)^[row]);
+    DUCKDB_TYPE_DOUBLE:
+      W.AddDouble(PDuckDoubleArray(data)^[row]);
+    DUCKDB_TYPE_DECIMAL:
+      begin
+        DecimalValue(lt, data, row, h, scale);
+        n := DuckHugeIntToTextBuf(h, true, scale, buf);
+        W.AddNoJsonEscape(@buf[0], n);
       end;
     DUCKDB_TYPE_ARRAY:
       begin
@@ -605,21 +714,15 @@ begin
       end;
     DUCKDB_TYPE_SQLNULL:
       W.AddNull;
-  else
-    begin
-      // VARCHAR, ENUM, UUID, dates, INTERVAL, BIT -> JSON string
-      if typeid = DUCKDB_TYPE_VARCHAR then
-        p := DuckStringPtr(DuckStringAt(data, row), len)
-      else
+    DUCKDB_TYPE_VARCHAR:
       begin
-        DuckDBVectorValueToText(vec, lt, row, txt);
-        p := pointer(txt);
-        len := length(txt);
-      end;
-      W.Add('"');
-      W.AddJsonEscape(p, len);
-      W.Add('"');
-    end;
+        p := DuckStringPtr(DuckStringAt(data, row), len);
+        W.Add('"');
+        W.AddJsonEscape(p, len);
+        W.Add('"');
+      end
+  else
+    ComplexDuckDBVectorValueToJson(vec, data, lt, typeid, row, W);
   end;
 end;
 
@@ -666,7 +769,7 @@ begin
     begin
       cfg := nil;
       if DuckDB.create_config(cfg) <> DuckDBSuccess then
-        raise ESqlDBDuckDB.Create('duckdb_create_config failed');
+        ESqlDBDuckDB.RaiseU('duckdb_create_config failed');
       try
         if fReadOnly then
           DuckDB.set_config(cfg, 'access_mode', 'READ_ONLY');
@@ -680,7 +783,7 @@ begin
             continue;
           if DuckDB.set_config(cfg, pointer(name), pointer(TrimU(value))) <>
                DuckDBSuccess then
-            raise ESqlDBDuckDB.CreateUtf8('%: invalid config option %=%',
+            ESqlDBDuckDB.RaiseUtf8('%: invalid config option %=%',
               [self, name, value]);
         end;
         if (ServerName = '') or
@@ -695,7 +798,7 @@ begin
           if err <> nil then
             DuckDB.free_(err);
           fDatabase := nil;
-          raise ESqlDBDuckDB.CreateUtf8('%: cannot open [%]: %',
+          ESqlDBDuckDB.RaiseUtf8('%: cannot open [%]: %',
             [self, ServerName, msg]);
         end;
       finally
@@ -748,7 +851,7 @@ begin
   if DuckDB.connect(db, fConn) <> DuckDBSuccess then
   begin
     fConn := nil;
-    raise ESqlDBDuckDB.CreateUtf8('%.Connect: duckdb_connect failed', [self]);
+    ESqlDBDuckDB.RaiseUtf8('%.Connect: duckdb_connect failed', [self]);
   end;
   inherited Connect; // notify any re-connection
 end;
@@ -865,18 +968,18 @@ begin
        (PosExChar('?', fSql) = 0) then
       fDirectQuery := true
     else
-      raise ESqlDBDuckDB.CreateUtf8('%.Prepare: % [%]', [self, msg, fSql]);
+      ESqlDBDuckDB.RaiseUtf8('%.Prepare: % [%]', [self, msg, fSql]);
   end;
   SqlLogEnd;
 end;
 
 procedure TSqlDBDuckDBStatement.BindParams;
 var
-  i: PtrInt;
+  i, len: PtrInt;
   p: PSqlDBParam;
   idx: TDuckIdx;
   res: TDuckDBState;
-  txt: RawUtf8;
+  tmp: TTemp32;
 begin
   p := pointer(fParams);
   for i := 0 to fParamCount - 1 do
@@ -890,12 +993,12 @@ begin
       ftDouble:
         res := DuckDB.bind_double(fStmt, idx, unaligned(PDouble(@p^.VInt64)^));
       ftCurrency:
-        if DuckDB.param_type(fStmt, idx) in [DUCKDB_TYPE_DECIMAL,
-             DUCKDB_TYPE_VARCHAR] then
+        if DuckDB.param_type(fStmt, idx) in
+             [DUCKDB_TYPE_DECIMAL, DUCKDB_TYPE_VARCHAR] then
         begin
-          // exact conversion from text, e.g. into a DECIMAL(19,4) column
-          txt := Curr64ToStr(p^.VInt64);
-          res := DuckDB.bind_varchar_length(fStmt, idx, pointer(txt), length(txt));
+          // conversion into text, e.g. into a DECIMAL(19,4) column
+          len := Curr64ToPChar(p^.VInt64, @tmp);
+          res := DuckDB.bind_varchar_length(fStmt, idx, @tmp, len);
         end
         else
           res := DuckDB.bind_double(fStmt, idx, PCurrency(@p^.VInt64)^);
@@ -908,23 +1011,26 @@ begin
       ftBlob:
         res := DuckDB.bind_blob(fStmt, idx, pointer(p^.VData), length(p^.VData));
     else
-      raise ESqlDBDuckDB.CreateUtf8('%: unexpected parameter #% type %',
-        [self, idx, ord(p^.VType)]);
+      res := 2; // 0=DuckDBSuccess 1=DuckDBError
     end;
     if res <> DuckDBSuccess then
-      raise ESqlDBDuckDB.CreateUtf8('%: cannot bind parameter #% [%]',
-        [self, idx, fSql]);
+      ESqlDBDuckDB.RaiseUtf8(
+        '%.BindParams=%: cannot bind parameter #% type % [%]',
+        [self, res, idx, ord(p^.VType), fSql]);
     inc(p);
   end;
 end;
 
-procedure TSqlDBDuckDBStatement.BindArrayRow(Row: integer);
+const
+  NULL_TXT: RawUtf8 = 'null';
+
+procedure TSqlDBDuckDBStatement.BindArrayRow(Row: integer; var Temp: RawUtf8);
 var
   i: PtrInt;
   p: PSqlDBParam;
   idx: TDuckIdx;
   res: TDuckDBState;
-  v: RawUtf8;
+  v: PRawUtf8;
 begin
   // values are stored as SQL literals: number, 'quoted string', null
   p := pointer(fParams);
@@ -932,31 +1038,34 @@ begin
   begin
     idx := i + 1;
     if Row < length(p^.VArray) then
-      v := p^.VArray[Row]
+      v := @p^.VArray[Row]
     else
-      v := 'null';
+      v := @NULL_TXT;
     if (p^.VType = ftNull) or
-       IdemPropNameU(v, 'null') then
+       (v^ = 'null') then
       res := DuckDB.bind_null(fStmt, idx)
     else
       case p^.VType of
         ftInt64:
-          res := DuckDB.bind_int64(fStmt, idx, GetInt64(pointer(v)));
+          res := DuckDB.bind_int64(fStmt, idx, GetInt64(pointer(v^)));
         ftDouble:
-          res := DuckDB.bind_double(fStmt, idx, GetExtended(pointer(v)));
+          res := DuckDB.bind_double(fStmt, idx, GetExtended(pointer(v^)));
         ftBlob:
-          res := DuckDB.bind_blob(fStmt, idx, pointer(v), length(v));
+          res := DuckDB.bind_blob(fStmt, idx, pointer(v^), length(v^));
       else
         begin
           // ftUtf8, ftDate, ftCurrency: bind as text, DuckDB casts as needed
-          if (v <> '') and
-             (v[1] = '''') then
-            v := UnQuoteSqlString(v);
-          res := DuckDB.bind_varchar_length(fStmt, idx, pointer(v), length(v));
+          if (v^ <> '') and
+             (v^[1] = '''') then
+          begin
+            UnQuoteSqlStringVar(pointer(v^), Temp);
+            v := @Temp;
+          end;
+          res := DuckDB.bind_varchar_length(fStmt, idx, pointer(v^), length(v^));
         end;
       end;
     if res <> DuckDBSuccess then
-      raise ESqlDBDuckDB.CreateUtf8('%: cannot bind array parameter #% row % [%]',
+      ESqlDBDuckDB.CreateUtf8('%: cannot bind array parameter #% row % [%]',
         [self, idx, Row, fSql]);
     inc(p);
   end;
@@ -967,7 +1076,7 @@ var
   row: integer;
   intrans: boolean;
   conn: TDuckDBConnection;
-  msg: RawUtf8;
+  temp: RawUtf8;
 begin
   // run the prepared statement once per row - in an implicit transaction
   conn := TSqlDBDuckDBConnection(fConnection).fConn;
@@ -977,14 +1086,14 @@ begin
   try
     for row := 0 to fParamsArrayCount - 1 do
     begin
-      BindArrayRow(row);
+      BindArrayRow(row, temp);
       FillCharFast(fRes, SizeOf(fRes), 0);
       if DuckDB.execute_prepared(fStmt, @fRes) <> DuckDBSuccess then
       begin
-        msg := RawUtf8(DuckDB.result_error(@fRes));
+        temp := RawUtf8(DuckDB.result_error(@fRes));
         DuckDB.destroy_result(@fRes);
-        raise ESqlDBDuckDB.CreateUtf8('%.ExecutePrepared: % [%] row #%',
-          [self, msg, fSql, row]);
+        ESqlDBDuckDB.RaiseUtf8('%.ExecutePrepared: % [%] row #%',
+          [self, temp, fSql, row]);
       end;
       inc(fUpdateCount, DuckDB.rows_changed(@fRes));
       DuckDB.destroy_result(@fRes);
@@ -1011,7 +1120,7 @@ begin
   inherited ExecutePrepared; // set fConnection.fLastAccessTicks
   if (fStmt = nil) and
      not fDirectQuery then
-    raise ESqlDBDuckDB.CreateUtf8('%.ExecutePrepared without Prepare', [self]);
+    ESqlDBDuckDB.RaiseUtf8('%.ExecutePrepared without Prepare', [self]);
   ReleaseResult;
   ClearColumns;
   fColumnCount := 0;
@@ -1041,7 +1150,7 @@ begin
     msg := RawUtf8(DuckDB.result_error(@fRes));
     DuckDB.destroy_result(@fRes);
     SqlLogEnd;
-    raise ESqlDBDuckDB.CreateUtf8('%.ExecutePrepared: % [%]', [self, msg, fSql]);
+    ESqlDBDuckDB.RaiseUtf8('%.ExecutePrepared: % [%]', [self, msg, fSql]);
   end;
   fHasResult := true;
   fUpdateCount := DuckDB.rows_changed(@fRes);
@@ -1063,7 +1172,7 @@ begin
     end;
     name := RawUtf8(DuckDB.column_name(@fRes, i));
     col := AddColumn(name);
-    col^.ColumnType := DuckDBTypeToField(c^.LogicalType);
+    col^.ColumnType := DuckDBTypeToField(c^.TypeId, c^.Scale);
     col^.ColumnAttr := c^.TypeId;
   end;
   SqlLogEnd;
@@ -1120,7 +1229,7 @@ begin
   result := false;
   if SeekFirst and
      (fCurrentRow > 0) then
-    raise ESqlDBDuckDB.CreateUtf8('%.Step(SeekFirst=true) not implemented', [self]);
+    ESqlDBDuckDB.RaiseUtf8('%.Step(SeekFirst=true) not implemented', [self]);
   if not fHasResult or
      (fInfo = nil) then
     exit;
@@ -1143,7 +1252,7 @@ function TSqlDBDuckDBStatement.CheckCol(Col: integer): PDuckDBColumnInfo;
 begin
   if (fChunk = nil) or
      (cardinal(Col) >= cardinal(length(fInfo))) then
-    raise ESqlDBDuckDB.CreateUtf8('%: invalid Column(%) or no current row',
+    ESqlDBDuckDB.RaiseUtf8('%: invalid Column(%) or no current row',
       [self, Col]);
   result := @fInfo[Col];
 end;
@@ -1207,7 +1316,7 @@ begin
       begin
         h := PDuckDBHugeInt(PAnsiChar(c^.Data) + fChunkRow * 16)^;
         if not DuckHugeIntIsInt64(h, c^.TypeId = DUCKDB_TYPE_HUGEINT) then
-          raise ESqlDBDuckDB.CreateUtf8('%.ColumnInt(%): 128-bit overflow',
+          ESqlDBDuckDB.RaiseUtf8('%.ColumnInt(%): 128-bit overflow',
             [self, Col]);
         result := h.Lower;
       end;
@@ -1431,6 +1540,12 @@ end;
 
 { TSqlDBDuckDBAppender }
 
+procedure TSqlDBDuckDBAppender.Check(res: TDuckDBState; const ctxt: RawUtf8);
+begin
+  if res <> DuckDBSuccess then
+    Failed(res, ctxt);
+end;
+
 constructor TSqlDBDuckDBAppender.Create(aConnection: TSqlDBDuckDBConnection;
   const aTable, aSchema: RawUtf8);
 var
@@ -1438,7 +1553,7 @@ var
 begin
   inherited Create;
   if not DuckDB.HasAppender then
-    raise ESqlDBDuckDB.Create('DuckDB library has no appender API');
+    ESqlDBDuckDB.RaiseU('DuckDB library has no appender API');
   if not aConnection.IsConnected then
     aConnection.Connect;
   fTable := aTable;
@@ -1466,7 +1581,7 @@ begin
   end;
 end;
 
-procedure TSqlDBDuckDBAppender.Check(res: TDuckDBState; const ctxt: RawUtf8);
+procedure TSqlDBDuckDBAppender.Failed(res: TDuckDBState; const ctxt: RawUtf8);
 var
   msg: RawUtf8;
 begin
@@ -1474,7 +1589,7 @@ begin
     exit;
   if fAppender <> nil then
     msg := RawUtf8(DuckDB.appender_error(fAppender));
-  raise ESqlDBDuckDB.CreateUtf8('Appender(%).%: %', [fTable, ctxt, msg]);
+  ESqlDBDuckDB.RaiseUtf8('Appender(%).%: %', [fTable, ctxt, msg]);
 end;
 
 procedure TSqlDBDuckDBAppender.AddNull;
@@ -1493,8 +1608,12 @@ begin
 end;
 
 procedure TSqlDBDuckDBAppender.AddCurrency(Value: currency);
+var
+  tmp: TTemp32;
+  len: PtrInt;
 begin
-  AddText(Curr64ToStr(PInt64(@Value)^)); // exact text -> DECIMAL cast
+  len := Curr64ToPChar(PInt64(@Value)^, @tmp); // exact text -> DECIMAL cast
+  Check(DuckDB.append_varchar_length(fAppender, @tmp, len), 'AddCurrency');
 end;
 
 procedure TSqlDBDuckDBAppender.AddBoolean(Value: boolean);
@@ -1508,10 +1627,14 @@ begin
     'AddDateTime');
 end;
 
+procedure TSqlDBDuckDBAppender.AddText(Value: PUtf8Char; Len: PtrInt);
+begin
+  Check(DuckDB.append_varchar_length(fAppender, Value, Len), 'AddText');
+end;
+
 procedure TSqlDBDuckDBAppender.AddText(const Value: RawUtf8);
 begin
-  Check(DuckDB.append_varchar_length(fAppender, pointer(Value), length(Value)),
-    'AddText');
+  AddText(pointer(Value), length(Value));
 end;
 
 procedure TSqlDBDuckDBAppender.AddBlob(const Value: RawByteString);
@@ -1522,7 +1645,7 @@ end;
 procedure TSqlDBDuckDBAppender.AddRow(const Values: array of const);
 var
   i: PtrInt;
-  tmp: RawUtf8;
+  tmp: TTempUtf8;
 begin
   for i := 0 to high(Values) do
     with Values[i] do
@@ -1545,11 +1668,12 @@ begin
           if VPointer = nil then
             AddNull
           else
-            raise ESqlDBDuckDB.CreateUtf8('Appender(%).AddRow: pointer', [fTable]);
+            ESqlDBDuckDB.RaiseUtf8('Appender(%).AddRow: pointer', [fTable]);
       else
         begin
-          VarRecToUtf8(@Values[i], tmp);
-          AddText(tmp);
+          VarRecToTempUtf8(@Values[i], tmp);
+          AddText(tmp.Text, tmp.Len);
+          TempUtf8Done(tmp);
         end;
       end;
   EndRow;
