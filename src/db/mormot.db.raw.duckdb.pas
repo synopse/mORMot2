@@ -378,8 +378,14 @@ function DateTimeToDuckTimestamp(Value: TDateTime): Int64;
 /// convert a DuckDB INTERVAL into its DuckDB-like text representation
 procedure DuckIntervalToText(const v: TDuckDBInterval; var result: RawUtf8);
 
+/// convert a DuckDB UUID (hugeint with flipped sign bit) into a text buffer
+function DuckUuidToTextBuf(const v: TDuckDBHugeInt; var Buffer: TTemp47): PtrInt;
+
 /// convert a DuckDB UUID (hugeint with flipped sign bit) into its text
 procedure DuckUuidToText(const v: TDuckDBHugeInt; var result: RawUtf8);
+
+// reconstruct regular TGuid fields from a DuckDB UUID to match expected text output
+procedure DuckUuidToGuid(const v: TDuckDBHugeInt; var g: TGuid);
 
 /// convert a DuckDB BIT string_t content into '0101...' text
 procedure DuckBitToText(P: PDuckU8Array; Len: integer; var result: RawUtf8);
@@ -875,23 +881,43 @@ begin
   end;
 end;
 
-procedure DuckUuidToText(const v: TDuckDBHugeInt; var result: RawUtf8);
+procedure DuckUuidToGuid(const v: TDuckDBHugeInt; var g: TGuid);
 var
-  b: array[0..15] of byte;
+  hi, lo: QWord;
   i: PtrInt;
-  hi, lo: Int64;
-  h: RawUtf8;
 begin
-  hi := v.Upper xor Int64($8000000000000000); // DuckDB flips the top bit
-  lo := v.Lower;
+  // DuckDB flips the highest bit of its UUID HUGEINT
+  hi := QWord(v.Upper) xor (QWord(1) shl 63);
+  lo := QWord(v.Lower);
+  // reconstruct native TGuid fields in their correct order
+  g.D1 := cardinal(hi shr 32);
+  g.D2 := word(hi shr 16);
+  g.D3 := word(hi);
   for i := 0 to 7 do
-  begin
-    b[7 - i] := byte(hi shr (i * 8));
-    b[15 - i] := byte(lo shr (i * 8));
-  end;
-  h := LowerCase(BinToHex(@b, 16));
-  result := Join([copy(h, 1, 8), '-', copy(h, 9, 4), '-', copy(h, 13, 4), '-',
-    copy(h, 17, 4), '-', copy(h, 21, 12)]);
+    g.D4[i] := byte(lo shr ((7 - i) * 8));
+end;
+
+function DuckUuidToTextBuf(const v: TDuckDBHugeInt; var Buffer: TTemp47): PtrInt;
+var
+  g: TGuid;
+  p: PUtf8Char;
+begin
+  // reconstruct native TGuid fields in their correct order
+  DuckUuidToGuid(v, g);
+  // same 8-4-4-4-12 format as DuckDB, lowercase, without braces
+  p := GuidToText(@Buffer[0], @g, @TwoDigitsHexLower);
+  p^ := #0;
+  result := p - PUtf8Char(@Buffer[0]);
+end;
+
+procedure DuckUuidToText(const v: TDuckDBHugeInt;
+  var result: RawUtf8);
+var
+  tmp: TTemp47;
+  len: PtrInt;
+begin
+  len := DuckUuidToTextBuf(v, tmp);
+  FastSetString(result, @tmp[0], len);
 end;
 
 procedure DuckBitToText(P: PDuckU8Array; Len: integer; var result: RawUtf8);
