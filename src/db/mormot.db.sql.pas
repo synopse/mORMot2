@@ -1332,6 +1332,8 @@ type
     function GetDbmsName: RawUtf8; virtual;
     function GetForeignKeysData: RawByteString;
     procedure SetForeignKeysData(const Value: RawByteString);
+    function GetForeignKeysJson: RawUtf8;
+    procedure SetForeignKeysJson(const Value: RawUtf8);
     function FieldsFromList(const aFields: TSqlDBColumnDefineDynArray;
       aExcludeTypes: TSqlDBFieldTypes): RawUtf8;
     function GetMainConnection: TSqlDBConnection; virtual;
@@ -1802,10 +1804,14 @@ type
     // PasswordValue in DatabaseName
     property DatabaseName: RawUtf8
       read fDatabaseName;
-    /// can be used to store the fForeignKeys[] data in an external BLOB
+    /// can be used to store the fForeignKeys[] data in an external binary BLOB
     // - since GetForeignKeys can be (somewhat) slow, could save a lot of time
+    // - if you want a cross-system content rather use ForeignKeysJson
     property ForeignKeysData: RawByteString
       read GetForeignKeysData write SetForeignKeysData;
+    /// can be used to store the fForeignKeys[] data as JSON object
+    property ForeignKeysJson: RawUtf8
+      read GetForeignKeysJson write SetForeignKeysJson;
     /// this event handler will be called during all process
     // - can be used e.g. to change the desktop cursor, or be notified
     // on connection/disconnection/reconnection
@@ -4956,6 +4962,21 @@ begin
   if not fForeignKeys.Initialized then
     fForeignKeys.Init(false);
   fForeignKeys.BlobData := Value;
+end;
+
+function TSqlDBConnectionProperties.GetForeignKeysJson: RawUtf8;
+begin
+  if not fForeignKeys.Initialized then
+  begin
+    fForeignKeys.Init(false);
+    GetForeignKeys;
+  end;
+  result := fForeignKeys.AsJson;
+end;
+
+procedure TSqlDBConnectionProperties.SetForeignKeysJson(const Value: RawUtf8);
+begin
+  fForeignKeys.InitFromJson(Value, false);
 end;
 
 function TSqlDBConnectionProperties.SqlIso8601ToDate(const Iso8601: RawUtf8): RawUtf8;
