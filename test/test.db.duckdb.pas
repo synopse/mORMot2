@@ -20,6 +20,7 @@ uses
   mormot.core.datetime,
   mormot.core.json,
   mormot.core.variants,
+  mormot.core.log,
   mormot.core.test,
   mormot.db.core,
   mormot.db.sql,
@@ -31,7 +32,7 @@ type
   TTestDuckDB = class(TSynTestCase)
   protected
     fProps: TSqlDBDuckDBConnectionProperties;
-    procedure Setup; override;
+    function Prepare: boolean; override;
     procedure CleanUp; override;
   published
     procedure BasicTypes;
@@ -51,11 +52,17 @@ implementation
 
 { TTestDuckDB }
 
-procedure TTestDuckDB.Setup;
+function TTestDuckDB.Prepare: boolean;
 begin
-  if DuckDBLibraryAvailable then
-    fProps := TSqlDBDuckDBConnectionProperties.Create(':memory:', '', '', '')
-  else
+  TSynLog.Family.ExceptionIgnoreCurrentThread := true;
+  try
+    if DuckDBLibraryAvailable then
+      fProps := TSqlDBDuckDBConnectionProperties.Create(':memory:', '', '', '')
+  finally
+    TSynLog.Family.ExceptionIgnoreCurrentThread := false;
+  end;
+  result := fProps <> nil;
+  if not result then
     NotifyProgress(['DuckDB library not available - tests skipped']);
 end;
 
@@ -69,6 +76,12 @@ var
   rows: ISqlDBRows;
   dt: TDateTime;
 begin
+  CheckEqual(SizeOf(TDuckDBStringT),   16, 'SizeOf(TDuckDBStringT)');
+  CheckEqual(SizeOf(TDuckDBHugeInt),   16, 'SizeOf(TDuckDBHugeInt)');
+  CheckEqual(SizeOf(TDuckDBInterval),  16, 'SizeOf(TDuckDBInterval)');
+  CheckEqual(SizeOf(TDuckDBListEntry), 16, 'SizeOf(TDuckDBListEntry)');
+  CheckEqual(SizeOf(TDuckDBResult),
+    3 * SizeOf(TDuckIdx) + 3 * SizeOf(pointer), 'SizeOf(TDuckDBResult)');
   if fProps = nil then
     exit;
   rows := fProps.Execute(
@@ -198,6 +211,7 @@ begin
   // failing commit (constraint) keeps data unchanged
   fProps.ExecuteNoResult('create or replace table txu (id INTEGER primary key)', []);
   conn.StartTransaction;
+  TSynLog.Family.ExceptionIgnoreCurrentThread := true;
   try
     fProps.ExecuteNoResult('insert into txu values (?)', [1]);
     fProps.ExecuteNoResult('insert into txu values (?)', [1]); // duplicate
@@ -211,6 +225,7 @@ begin
         conn.Rollback;
     end;
   end;
+  TSynLog.Family.ExceptionIgnoreCurrentThread := false;
   rows := fProps.Execute('select count(*) from txu', []);
   Check(rows.Step and (rows.ColumnInt(0) = 0), 'atomic failure');
 end;
@@ -264,13 +279,15 @@ var
 begin
   if fProps = nil then
     exit;
+  TSynLog.Family.ExceptionIgnoreCurrentThread := true;
   raised := false;
   try
     fProps.Execute('select * from table_does_not_exist', []);
   except
     on E: ESqlDBException do
-      raised := PosEx('table_does_not_exist', StringToUtf8(E.Message)) > 0;
+      raised := Pos('table_does_not_exist', E.Message) > 0;
   end;
+  TSynLog.Family.ExceptionIgnoreCurrentThread := false;
   Check(raised, 'missing table error');
   // connection is still usable after an error
   with fProps.Execute('select 1', []) do
@@ -287,8 +304,7 @@ begin
   fProps.GetTableNames(tables);
   Check(FindRawUtf8(tables, 'main.people', false) >= 0, 'GetTableNames');
   fProps.GetFields('people', fields);
-  CheckEqual(length(fields), 7, 'GetFields count');
-  if length(fields) = 7 then
+  if CheckEqual(length(fields), 7, 'GetFields count') then
   begin
     CheckEqual(fields[0].ColumnName, 'id', 'field name');
     Check(fields[1].ColumnType = ftUtf8, 'field type text');

@@ -389,10 +389,7 @@ begin
   typeid := DuckDB.get_type_id(lt);
   case typeid of
     DUCKDB_TYPE_BOOLEAN:
-      if PDuckU8Array(data)^[row] <> 0 then
-        result := 'true'
-      else
-        result := 'false';
+      result := BOOL_UTF8[PDuckU8Array(data)^[row] <> 0];
     DUCKDB_TYPE_TINYINT, DUCKDB_TYPE_SMALLINT, DUCKDB_TYPE_INTEGER,
     DUCKDB_TYPE_BIGINT, DUCKDB_TYPE_UTINYINT, DUCKDB_TYPE_USMALLINT,
     DUCKDB_TYPE_UINTEGER:
@@ -1385,7 +1382,7 @@ procedure TSqlDBDuckDBStatement.ColumnToJson(Col: integer; W: TJsonWriter);
 var
   c: PDuckDBColumnInfo;
   p: PAnsiChar;
-  len: integer;
+  len: integer; // not PtrInt
 begin
   c := CheckCol(Col);
   if not IsValid(c^.Validity, fChunkRow) then
