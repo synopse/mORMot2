@@ -771,7 +771,16 @@ end;
 { ************ Server-Side Proxy Remote Protocol }
 
 const
-  REMOTE_MAGIC = 1;
+  // version 1 = still legacy SymmetricEncrypt() obfuscation
+  ENCRYPT_OBFUSCATE = 1;
+  // version 1 = initial release
+  MAGIC_LEGACY = 1;
+  // version 2 = changed metadata layout (integer fields, JSON keys)
+  MAGIC_METADATA = 2;
+  // current version
+  REMOTE_MAGIC = MAGIC_METADATA;
+  // compatible/supported versions
+  REMOTE_MAGICS = [MAGIC_LEGACY, MAGIC_METADATA];
 
 type
   TRemoteMessageHeader = packed record
@@ -885,7 +894,7 @@ function TSqlDBRemoteConnectionProtocol.HandleInput(
   const input: RawByteString): RawByteString;
 begin
   result := input;
-  SymmetricEncrypt(REMOTE_MAGIC, result);
+  SymmetricEncrypt(ENCRYPT_OBFUSCATE, result);
   result := AlgoSynLZ.Decompress(result); // also check crc32c
 end;
 
@@ -893,7 +902,7 @@ function TSqlDBRemoteConnectionProtocol.HandleOutput(
   const output: RawByteString): RawByteString;
 begin
   result := AlgoSynLZ.Compress(output); // includes cr32c hashing
-  SymmetricEncrypt(REMOTE_MAGIC, result);
+  SymmetricEncrypt(ENCRYPT_OBFUSCATE, result);
 end;
 
 procedure TSqlDBProxyConnectionProtocol.RemoteProcessMessage(
@@ -929,10 +938,12 @@ begin
     ESqlDBRemote.RaiseUtf8('%.RemoteProcessMessage(connection=nil)', [self]);
   msgin := HandleInput(Input);
   header := pointer(msgin);
-  if (header = nil) or
-     (header.Magic <> REMOTE_MAGIC) then
+  if header = nil then
+    ESqlDBRemote.RaiseUtf8('Empty %.RemoteProcessMessage', [self]);
+  if not (header.Magic in REMOTE_MAGICS) then
     ESqlDBRemote.RaiseUtf8(
-      'Incorrect %.RemoteProcessMessage() input magic/version', [self]);
+      'Incorrect %.RemoteProcessMessage() input magic/version=%',
+      [self, header.Magic]);
   if (Authenticate <> nil) and
      (Authenticate.UsersCount > 0) and
      not (header.Command in [cGetToken, cGetDbms]) then
@@ -982,14 +993,16 @@ begin
       cGetFields:
         begin
           Connection.Properties.GetFields(P, colarr);
-          Append(msgout, DynArraySave(
-            colarr, TypeInfo(TSqlDBColumnDefineDynArray)));
+          if header.Magic >= MAGIC_METADATA then // version 2 has integer fields
+            Append(msgout, DynArraySave(
+              colarr, TypeInfo(TSqlDBColumnDefineDynArray)));
         end;
       cGetIndexes:
         begin
           Connection.Properties.GetIndexes(P, defarr);
-          Append(msgout, DynArraySave(
-            defarr, TypeInfo(TSqlDBIndexDefineDynArray)));
+          if header.Magic >= MAGIC_METADATA then // version 2 has integer fields
+            Append(msgout, DynArraySave(
+              defarr, TypeInfo(TSqlDBIndexDefineDynArray)));
         end;
       cGetTableNames:
         begin
@@ -999,8 +1012,11 @@ begin
         end;
       cGetForeignKeys:
         begin
-          Connection.Properties.GetForeignKey('', ''); // ensure Dest.fForeignKeys exists
-          Append(msgout, Connection.Properties.ForeignKeysJson);
+          Connection.Properties.GetForeignKey('', ''); // fill Dest.fForeignKeys
+          if header.Magic >= MAGIC_METADATA then // version 2 uses JSON
+            Append(msgout, Connection.Properties.ForeignKeysJson)
+          else
+            Append(msgout, Connection.Properties.ForeignKeysData);
         end;
       cExecute,
       cExecuteToBinary,
@@ -1176,7 +1192,7 @@ begin
     ESqlDBRemote.RaiseUtf8('%.Process(%) with no connection',
       [self, ToText(Command)^]);
   // use our optimized RecordLoadSave/DynArrayLoadSave binary serialization
-  header.Magic := REMOTE_MAGIC;
+  header.Magic := REMOTE_MAGIC; // current version
   header.SessionID := fCurrentSession;
   header.Command := Command;
   FastSetString(msgin, @header, SizeOf(header));
@@ -1209,9 +1225,11 @@ begin
   ProcessMessage(fProtocol.HandleOutput(msgin), msgRaw);
   msgout := fProtocol.HandleInput(msgRaw);
   outheader := pointer(msgout);
-  if (outheader = nil) or
-     (outheader.Magic <> REMOTE_MAGIC) then
-    ESqlDBRemote.RaiseUtf8('Incorrect %.Process() magic/version', [self]);
+  if outheader = nil then
+    ESqlDBRemote.RaiseUtf8('Empty message for %.Process', [self]);
+  if not (outheader.Magic in REMOTE_MAGICS) then
+    ESqlDBRemote.RaiseUtf8(
+      'Unsupported %.Process() magic/version=%', [self, outheader.Magic]);
   msg := pointer(msgout);
   msgmax := msg + length(msgout);
   inc(msg, SizeOf(header));
@@ -1230,14 +1248,23 @@ begin
     cTryStartTransaction:
       outboolean := boolean(msg^);
     cGetFields:
-      DynArrayLoad(outcolarr, msg, TypeInfo(TSqlDBColumnDefineDynArray), nil, msgmax);
+      if header.Magic >= MAGIC_METADATA then // version 2 has integer fields
+        DynArrayLoad(outcolarr, msg, TypeInfo(TSqlDBColumnDefineDynArray), nil, msgmax)
+      else
+        ESqlDBRemote.RaiseUtf8('Unsupported %.Process(cGetFields)', [self]);
     cGetIndexes:
-      DynArrayLoad(outindexarr, msg, TypeInfo(TSqlDBIndexDefineDynArray), nil, msgmax);
+      if header.Magic >= MAGIC_METADATA then // version 2 has integer fields
+        DynArrayLoad(outindexarr, msg, TypeInfo(TSqlDBIndexDefineDynArray), nil, msgmax)
+      else
+        ESqlDBRemote.RaiseUtf8('Unsupported %.Process(cGetIndexes)', [self]);
     cGetTableNames:
       DynArrayLoad(outarr, msg, TypeInfo(TRawUtf8DynArray), nil, msgmax);
     cGetForeignKeys:
-      if StrLen(msg) = msgmax - msg then
-        outnamevalue.InitFromJsonBuffer(msg, false) // new format
+      if header.Magic >= MAGIC_METADATA then // version 2 has integer fields
+        if StrLen(msg) = msgmax - msg then
+          outnamevalue.InitFromJsonBuffer(msg, false) // new format
+        else
+          ESqlDBRemote.RaiseUtf8('Invalid %.Process(cGetForeignKeys)', [self])
       else
         outnamevalue.SetBlobDataPtr(msg, msgmax); // old system-specific binary
     cExecute,
