@@ -168,6 +168,8 @@ type
     fCheckLastTix: cardinal;
     /// called before all published properties are executed
     procedure Setup; virtual;
+    /// just like Setup but allow to return false and bypass the whole tests
+    function Prepare: boolean; virtual;
     /// called after all published properties are executed
     // - WARNING: this method should be re-entrant - so using FreeAndNil() is
     // a good idea in this method :)
@@ -795,6 +797,11 @@ end;
 procedure TSynTestCase.Setup;
 begin
   // do nothing by default
+end;
+
+function TSynTestCase.Prepare: boolean;
+begin
+  result := true; // continue by default
 end;
 
 procedure TSynTestCase.CleanUp;
@@ -1586,6 +1593,8 @@ begin
           started := false;
           c := fTestCaseClass[i].Create(self); // add all published methods
           try
+            if not c.Prepare then
+              continue; // by-pass the whole TSynTestCase class
             nfo := nil;
             for t := 0 to c.Count - 1 do
             try
