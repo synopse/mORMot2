@@ -145,6 +145,41 @@ Use `TSqlDBConnectionProperties.AdaptSqlLimitForEngineList()` for automatic conv
 - **JSON Integration:** Use `FetchAllAsJson()`, `ColumnBlob()` with JSON, or `TResultsWriter` for direct JSON export.
 - **Logging:** Define `SYNDB_SILENCE` to disable statement execution logging.
 
+## DuckDB Provider: Review Notes and Future Optimizations
+
+Source: Arnaud Bouchez review of PR #666 (`mormot.db.raw.duckdb` / `mormot.db.sql.duckdb`),
+https://github.com/synopse/mORMot2/issues/423#issuecomment-6218806358 (2026-10-16).
+He merged the PR and started a cleanup on master (commits `2d1593c57`..`587ce1674`), but
+said it is not finished. Read the current trunk code before touching these units.
+
+**What DuckDB is for in mORMot:** an analytical (OLAP) query engine over large datasets
+(CSV, Parquet, attached PostgreSQL...), not a replacement for SQLite3 as in-process
+transactional/memory database. Row-by-row INSERT speed is far below SQLite3 - do not
+benchmark or sell it on insertion numbers.
+
+### Open TODOs (priority order)
+
+1. **Implement `TOnBatchInsert` for DuckDB** (`TSqlDBConnectionProperties.OnBatchInsert`,
+   see `mormot.db.sql.pas`). This is the minimum: it is used directly by the ORM batch
+   process, and is easily implemented on top of the `TSqlDBDuckDBAppender` logic.
+2. **Remove the array binding (`BindArray`) feature** from `TSqlDBDuckDBStatement`
+   (`BindArrayRow` and the per-row loop in `ExecutePrepared`). It still executes one
+   statement per row, so it is *slower* than plain manual inserts - it is just bloat.
+   Note: mormot.db.proxy batches (e.g. a DuckDB proxy server) rely on it today, so route
+   proxy batches to the appender / `OnBatchInsert` first.
+3. **Maybe** use `duckdb_append_data_chunk` for bulk loading - unclear whether it is
+   worth it; measure against the appender before adopting.
+4. **Static linking** of the `.a` (shipped with each DuckDB release) - low priority:
+   the library is ~60MB, not a trivial dependency.
+5. Fix Delphi warning W1073 in `mormot.db.raw.duckdb.pas` (`DuckTimeToText`: signed
+   constant mixed with `QWord` in `u mod DUCKDB_MICROSPERSEC`).
+
+### Code quality
+
+The general code-quality rules derived from this review (parse once, no duplicated
+code, reuse core units, no transient RawUtf8, benchmark against the naive path...) are in
+the root `CLAUDE.md` and apply to all code in this repository.
+
 ## Testing
 
 The database layer is tested through the mORMot ORM test suite. Individual database providers require their respective client libraries installed.
