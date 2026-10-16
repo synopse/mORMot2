@@ -22,6 +22,7 @@ uses
   mormot.core.json,
   mormot.core.variants,
   mormot.core.log,
+  mormot.core.perf,
   mormot.core.test,
   mormot.db.core,
   mormot.db.sql,
@@ -79,10 +80,25 @@ begin
   FreeAndNil(fProps);
 end;
 
+
 procedure TTestDuckDB.BasicTypes;
 var
   rows: ISqlDBRows;
   dt: TDateTime;
+  h: TDuckDBHugeInt;
+  buf: TTemp47;
+  n: PtrInt;
+
+  procedure Test(const Expected: RawUtf8);
+  var
+    actual: RawUtf8;
+  begin
+    FastSetString(actual, @buf[0], n);
+    CheckEqual(actual, Expected);
+    Check(buf[n] = #0, 'Missing buffer terminator');
+    FillCharFast(buf, SizeOf(buf), 255);
+  end;
+
 begin
   CheckEqual(SizeOf(TDuckDBStringT),   16, 'SizeOf(TDuckDBStringT)');
   CheckEqual(SizeOf(TDuckDBHugeInt),   16, 'SizeOf(TDuckDBHugeInt)');
@@ -90,6 +106,44 @@ begin
   CheckEqual(SizeOf(TDuckDBListEntry), 16, 'SizeOf(TDuckDBListEntry)');
   CheckEqual(SizeOf(TDuckDBResult),
     3 * SizeOf(TDuckIdx) + 3 * SizeOf(pointer), 'SizeOf(TDuckDBResult)');
+  FillCharFast(buf, SizeOf(buf), 255);
+  h.Lower := 12345;
+  h.Upper := 0;
+  n := DuckHugeIntToTextBuf(h, true, 0, buf);
+  Test('12345');
+  n := DuckHugeIntToTextBuf(h, true, 2, buf);
+  Test('123.45');
+  n := DuckHugeIntToTextBuf(h, true, 5, buf);
+  Test('0.12345');
+  n := DuckHugeIntToTextBuf(h, true, 7, buf);
+  Test('0.0012345');
+  h.Lower := -12345;
+  h.Upper := -1;
+  n := DuckHugeIntToTextBuf(h, true, 2, buf);
+  Test('-123.45');
+  h.Lower := 0;
+  h.Upper := 0;
+  n := DuckHugeIntToTextBuf(h, true, 4, buf);
+  Test('0.0000');
+  h.Lower := -1;
+  h.Upper := -1;
+  n := DuckHugeIntToTextBuf(h, false, 0, buf);
+  Test('340282366920938463463374607431768211455');
+  n := DuckHugeIntToTextBuf(h, true, 0, buf);
+  Test('-1');
+  h.Lower := 0;
+  h.Upper := low(Int64);
+  n := DuckHugeIntToTextBuf(h, true, 0, buf);
+  Test('-170141183460469231731687303715884105728');
+  h.Upper := high(Int64);
+  h.Lower := -1;
+  n := DuckHugeIntToTextBuf(h, true, 0, buf);
+  Test('170141183460469231731687303715884105727');
+  // UUID representation with DuckDB's highest-bit flip
+  h.Upper := Int64($8011223344556677);
+  h.Lower := Int64($8899AABBCCDDEEFF);
+  n := DuckUuidToTextBuf(h, buf);
+  Test('00112233-4455-6677-8899-aabbccddeeff');
   if fProps = nil then
     exit;
   rows := fProps.Execute(
@@ -271,8 +325,7 @@ begin
     ExecutePreparedAndFetchAllAsJson(true, json);
   end;
   doc.InitJson(json, JSON_FAST);
-  CheckEqual(doc.Count, 2, 'json rows');
-  if doc.Count = 2 then
+  if CheckEqual(doc.Count, 2, 'json rows') then
   begin
     CheckEqual(_Safe(doc.Values[1])^.U['name'], 'O''Neil ? -- #2', 'json text');
     CheckEqual(_Safe(doc.Values[0])^.U['born'], '2000-01-01', 'json date');
@@ -321,20 +374,24 @@ begin
 end;
 
 procedure TTestDuckDB.Bulk;
+const
+  COUNT = 1000;
 var
   conn: TSqlDBConnection;
   st: ISqlDBStatement;
   i: integer;
   rows: ISqlDBRows;
   n: integer;
+  timer: TPrecisionTimer;
 begin
   if fProps = nil then
     exit;
   conn := fProps.ThreadSafeConnection;
   fProps.ExecuteNoResult('create or replace table bulk (id INTEGER, v DOUBLE, t VARCHAR)', []);
+  timer.Start;
   conn.StartTransaction;
   st := conn.NewStatementPrepared('insert into bulk values (?,?,?)', false, true);
-  for i := 1 to 10000 do
+  for i := 1 to COUNT do
   begin
     st.Bind(1, i);
     st.Bind(2, i * 0.5);
@@ -343,21 +400,26 @@ begin
     st.Instance.Reset;
   end;
   conn.Commit;
+  NotifyTestSpeed('insert', COUNT, 0, @timer);
+  timer.Start;
   rows := fProps.Execute('select t, count(*), sum(v) from bulk group by t order by t', []);
   n := 0;
   while rows.Step do
     inc(n);
   CheckEqual(n, 7, 'group by');
+  NotifyTestSpeed('group by', COUNT, 0, @timer);
+  timer.Start;
   rows := fProps.Execute('select * from bulk order by id', []);
   n := 0;
   while rows.Step do
     inc(n);
-  CheckEqual(n, 10000, 'read all rows (multiple chunks)');
+  CheckEqual(n, COUNT, 'read all rows (multiple chunks)');
+  NotifyTestSpeed('read all', COUNT, 0, @timer);
 end;
 
 procedure TTestDuckDB.BindArrays;
 const
-  N = 1000;
+  COUNT = 1000;
 var
   st: ISqlDBStatement;
   ids: array of Int64;
@@ -367,17 +429,18 @@ var
   ratios: array of double;
   i: integer;
   rows: ISqlDBRows;
+  timer: TPrecisionTimer;
 begin
   if fProps = nil then
     exit;
   fProps.ExecuteNoResult('create or replace table arr (id INTEGER, ' +
     'name VARCHAR, amount DECIMAL(19,4), d TIMESTAMP, v DOUBLE)', []);
-  SetLength(ids, N);
-  SetLength(names, N);
-  SetLength(amounts, N);
-  SetLength(dates, N);
-  SetLength(ratios, N);
-  for i := 0 to N - 1 do
+  SetLength(ids, COUNT);
+  SetLength(names, COUNT);
+  SetLength(amounts, COUNT);
+  SetLength(dates, COUNT);
+  SetLength(ratios, COUNT);
+  for i := 0 to COUNT - 1 do
   begin
     ids[i] := i + 1;
     names[i] := FormatUtf8('it''s #%', [i + 1]);
@@ -385,6 +448,7 @@ begin
     dates[i] := EncodeDate(2025, 1, 1) + i;
     ratios[i] := i / 8;
   end;
+  timer.Start;
   st := fProps.ThreadSafeConnection.NewStatementPrepared(
     'insert into arr values (?,?,?,?,?)', false, true);
   st.BindArray(1, ids);
@@ -393,33 +457,38 @@ begin
   st.BindArrayDateTime(4, dates);
   st.BindArray(5, ratios);
   st.ExecutePrepared;
-  CheckEqual(st.UpdateCount, N, 'array updatecount');
+  CheckEqual(st.UpdateCount, COUNT, 'array updatecount');
+  NotifyTestSpeed('insert', COUNT, 0, @timer);
   st := nil;
   rows := fProps.Execute('select count(*), sum(amount), max(d), ' +
     'max(name) filter (where id = 1000), sum(v) from arr', []);
   Check(rows.Step, 'array select');
-  CheckEqual(rows.ColumnInt(0), N, 'array count');
+  CheckEqual(rows.ColumnInt(0), COUNT, 'array count');
   Check(rows.ColumnCurrency(1) = 501000, 'array sum(decimal)');
   CheckEqual(DateToIso8601Text(rows.ColumnDateTime(2)),
-    DateToIso8601Text(EncodeDate(2025, 1, 1) + N - 1), 'array dates');
+    DateToIso8601Text(EncodeDate(2025, 1, 1) + COUNT - 1), 'array dates');
   CheckEqual(rows.ColumnUtf8(3), 'it''s #1000', 'array quoted text');
   Check(rows.ColumnDouble(4) = 62437.5, 'array doubles');
 end;
 
 procedure TTestDuckDB.Appender;
+const
+  COUNT = 20000;
 var
   app: TSqlDBDuckDBAppender;
   i: integer;
   rows: ISqlDBRows;
+  timer: TPrecisionTimer;
 begin
   if fProps = nil then
     exit;
   fProps.ExecuteNoResult('create or replace table app (id INTEGER, ' +
     'v DECIMAL(19,4), t VARCHAR, d TIMESTAMP)', []);
+  timer.Start;
   app := TSqlDBDuckDBAppender.Create(
     fProps.ThreadSafeConnection as TSqlDBDuckDBConnection, 'app');
   try
-    for i := 1 to 20000 do
+    for i := 1 to COUNT do
     begin
       app.Add(i);
       app.AddCurrency(i + 0.1234);
@@ -431,6 +500,7 @@ begin
   finally
     app.Free;
   end;
+  NotifyTestSpeed('insert', COUNT, 0, @timer);
   rows := fProps.Execute('select count(*), sum(v) from app', []);
   Check(rows.Step);
   CheckEqual(rows.ColumnInt(0), 20001, 'appender count');
