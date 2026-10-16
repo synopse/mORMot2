@@ -54,6 +54,12 @@ implementation
 
 function TTestDuckDB.Prepare: boolean;
 begin
+  result := false;
+  {$ifdef CPU64}
+  // our tests require a local 64-bit DuckDB library within the main executable
+  if not FileExists(Executable.ProgramFilePath + DuckDBLibraryName) then
+    exit;
+  // try to initialize this instance
   TSynLog.Family.ExceptionIgnoreCurrentThread := true;
   try
     if DuckDBLibraryAvailable then
@@ -63,7 +69,8 @@ begin
   end;
   result := fProps <> nil;
   if not result then
-    NotifyProgress(['DuckDB library not available - tests skipped']);
+    NotifyProgress(['DuckDB library failed to load - tests skipped']);
+  {$endif CPU64}
 end;
 
 procedure TTestDuckDB.CleanUp;
