@@ -557,14 +557,32 @@ begin
   end;
 end;
 
+function DivU128By1B(var u: TU128): cardinal;
+  {$ifdef HASINLINE} inline; {$endif}
+var
+  r, cur: QWord;
+  i: PtrInt;
+begin // see mormot.db.nosql.bson's div128bits9digits()
+  r := 0;
+  for i := 3 downto 0 do
+  begin
+    cur := (r shl 32) or QWord(u[i]);
+    if cur = 0 then
+      continue;
+    u[i] := cardinal(cur div 1000000000);
+    r := cur - QWord(u[i]) * 1000000000;
+  end;
+  result := cardinal(r);
+end;
+
 procedure DuckHugeIntToText(const v: TDuckDBHugeInt; Signed: boolean;
   var result: RawUtf8);
 var
   u: TU128;
   neg: boolean;
   i: PtrInt;
-  rem, cur: Int64;
-  tmp: array[0..47] of AnsiChar;
+  n, q: cardinal;
+  tmp: array[0..47] of AnsiChar; // up to 38 digits anyway
   p: PAnsiChar;
 begin
   PInt64(@u[0])^ := v.Lower;
@@ -572,24 +590,35 @@ begin
   neg := Signed and (v.Upper < 0);
   if neg then
     U128Negate(u);
-  p := @tmp[high(tmp)];
+  p := @tmp[pred(high(tmp))];
   repeat
-    rem := 0;
-    for i := 3 downto 0 do
+    // extract next 9 decimal digits during each iteration
+    n := DivU128By1B(u);
+    if (u[0] or u[1] or u[2] or u[3]) = 0 then
     begin
-      cur := (rem shl 32) or Int64(u[i]);
-      u[i] := cardinal(cur div 10);
-      rem := cur mod 10;
+      // most significant group: no leading zeros
+      repeat
+        q := n div 10;
+        p^ := AnsiChar(ord('0') + n - q * 10);
+        dec(p);
+        n := q;
+      until n = 0;
+      break;
     end;
-    p^ := AnsiChar(ord('0') + rem);
-    dec(p);
-  until (u[0] or u[1] or u[2] or u[3]) = 0;
+    // remaining groups: always emit exactly 9 digits
+    for i := 1 to 9 do
+    begin
+      q := n div 10;
+      p^ := AnsiChar(ord('0') + n - q * 10);
+      dec(p);
+      n := q;
+    end;
+  until false;
   if neg then
-  begin
-    p^ := '-';
-    dec(p);
-  end;
-  FastSetString(result, p + 1, PAnsiChar(@tmp[high(tmp)]) - p);
+    p^ := '-'
+  else
+    inc(p);
+  FastSetString(result, p, @tmp[high(tmp)]);
 end;
 
 function DuckHugeIntIsInt64(const v: TDuckDBHugeInt; Signed: boolean): boolean;
