@@ -11986,7 +11986,7 @@ begin
   checkEqual(nv.AsCsv('=', ';'), 'a=1;b=be;');
   checkEqual(nv.AsJson, '{"a":"1","b":"be"}');
   tmp.Init('{a:10,b:"bee"}');
-  check(nv.InitFromJson(tmp.buf));
+  check(nv.InitFromJsonBuffer(tmp.buf, false));
   checkEqual(nv.Count, 2);
   checkEqual(nv.Str['a'], '10');
   checkEqual(nv.Str['b'], 'bee');
@@ -12005,9 +12005,13 @@ begin
   checkEqual(nv.DeleteByValue('10'), 0);
   checkEqual(nv.Count, 0);
   checkEqual(nv.AsCsv('=', ';'), '');
-  tmp.Init('{"a":20,b:"bi"]');
-  check(not nv.InitFromJson(tmp.buf));
+  check(not nv.InitFromJson('{"a":20,b:"bi"]'));
   checkEqual(nv.Count, 0);
+  checkEqual(nv.AsCsv('=', ';'), '');
+  checkEqual(nv.AsJson, '{}');
+  check(nv.InitFromJson('{a:10,b:"bee"}', false));
+  checkEqual(nv.Count, 2);
+  checkEqual(nv.AsCsv('=', ';'), 'a=10;b=bee;');
 end;
 
 procedure TTestCoreBase.TSynUniqueIdentifierSlow(Sender: TObject);

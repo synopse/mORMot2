@@ -11879,9 +11879,9 @@ begin
   TestPartial('0000080000004142435167', '123456789', 'ABCABC123456789',
    15);  // 8-byte match fast path
   // literal runs across a 32-bit control-word boundary
-  TestPartial('000000000000',
-    RawUtf8OfChar('A', 32) + HumanHexToBin('00000000') + 'Z',
-    RawUtf8OfChar('A', 32) + 'Z', 64);
+  TestPartial('000000000000' +
+    '4141414141414141414141414141414141414141414141414141414141414141' +
+    '00000000', 'Z', Join([RawUtf8OfChar('A', 32), 'Z']), 64);
   TestPartial('000008000000414243506702', '', '', 0); // no writes
 end;
 

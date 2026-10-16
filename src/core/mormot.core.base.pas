@@ -3787,7 +3787,7 @@ type
     tmp: TBuffer4K;
     /// initialize a temporary copy of the content supplied as RawByteString
     // - will also allocate and copy the ending #0 (even for binary)
-    procedure Init(const Source: RawByteString); overload;
+    function Init(const Source: RawByteString): PUtf8Char; overload;
     /// initialize a temporary copy of the supplied text buffer, ending with #0
     function Init(Source: PUtf8Char): PUtf8Char; overload;
     /// initialize a temporary copy of the supplied text buffer
@@ -12803,9 +12803,10 @@ begin
   result := buf;
 end;
 
-procedure TSynTempBuffer.Init(const Source: RawByteString);
+function TSynTempBuffer.Init(const Source: RawByteString): PUtf8Char;
 begin
   Init(pointer(Source), length(Source));
+  result := buf;
 end;
 
 function TSynTempBuffer.Init(Source: PUtf8Char): PUtf8Char;

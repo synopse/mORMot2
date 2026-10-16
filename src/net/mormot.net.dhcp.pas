@@ -3077,8 +3077,7 @@ begin
   result := false;
   if json = '' then
     exit;
-  tmp.Init(json);
-  result := JsonObjectToRttiArray(tmp.buf,
+  result := JsonObjectToRttiArray(tmp.Init(json),
     @m, @METRIC_TXT, length(m), TypeInfo(QWord)) <> nil;
   tmp.Done;
 end;
