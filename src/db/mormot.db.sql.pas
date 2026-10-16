@@ -4193,12 +4193,12 @@ var
 begin
   fa.Init(TypeInfo(TSqlDBColumnDefineDynArray), Fields, @n);
   fa.Compare := SortDynArrayAnsiStringI; // fa.Find() case insensitive
-  FillCharFast(f, SizeOf(f), 0);
+  FillCharFast(f, SizeOf(f), 0); // record cleanup
   if fDbms = dSQLite then
   begin
-    // SQLite3 has a specific PRAGMA metadata query
+    // SQLite3 has specific PRAGMA metadata queries
     try
-      with Execute('PRAGMA table_info(`' + aTableName + '`)', []) do
+      with ExecuteFmt('PRAGMA table_info(`%`)', [aTableName]) do
         while Step do
         begin
           // cid=0,name=1,type=2,notnull=3,dflt_value=4,pk=5
@@ -4213,9 +4213,9 @@ begin
         n := 0; // external SQLite3 providers (e.g. UniDAC) are buggy
     end;
     try
-      with Execute('PRAGMA index_list(`' + aTableName + '`)', []) do
+      with ExecuteFmt('PRAGMA index_list(`%`)', [aTableName]) do
         while Step do        // seq=0,name=1,unique=2
-          with Execute('PRAGMA index_info(' + ColumnUtf8(1) + ')', []) do
+          with ExecuteFmt('PRAGMA index_info(%)', [QuotedStr(ColumnUtf8(1))]) do
             while Step do
             begin
               f.ColumnName := ColumnUtf8(2); // seqno=0,cid=1,name=2
@@ -4264,25 +4264,54 @@ var
   f: TSqlDBIndexDefine;
   fa: TDynArray;
 begin
-  sql := SqlGetIndex(aTableName);
-  if sql = '' then
-    exit;
   fa.Init(TypeInfo(TSqlDBIndexDefineDynArray), Indexes, @n);
-  with Execute(sql, []) do
+  FillCharFast(f, SizeOf(f), 0); // record cleanup
+  if fDbms = dSQLite then
   begin
-    while Step do
-    begin
-      f.IndexName := TrimU(ColumnUtf8(0));
-      f.IsUnique := ColumnInt(1) > 0;
-      f.TypeDesc := TrimU(ColumnUtf8(2));
-      f.IsPrimaryKey := ColumnInt(3) > 0;
-      f.IsUniqueConstraint := ColumnInt(4) > 0;
-      f.Filter := TrimU(ColumnUtf8(5));
-      f.KeyColumns := TrimU(ColumnUtf8(6));
-      f.IncludedColumns := TrimU(ColumnUtf8(7));
-      fa.Add(f);
+    // SQLite3 has specific PRAGMA metadata queries
+    try
+      with ExecuteFmt('PRAGMA index_list(`%`)', [aTableName]) do
+        while Step do
+        begin
+          // seq=0, name=1, unique=2, origin=3, partial=4
+          f.IndexName := ColumnUtf8(1);
+          f.IsUnique := ColumnInt(2) <> 0;
+          f.TypeDesc := 'BTREE';
+          f.IsPrimaryKey := ColumnUtf8(3) = 'pk';
+          f.IsUniqueConstraint := ColumnUtf8(3) = 'u';
+          FastAssignNew(f.KeyColumns);
+          with ExecuteFmt('PRAGMA index_info(%)', [QuotedStr(f.IndexName)]) do
+            while Step do
+              // seqno=0, cid=1, name=2
+              AddToCsv(ColumnUtf8(2), f.KeyColumns);
+          fa.Add(f);
+        end;
+    except
+      on Exception do
+        n := 0; // same fallback as GetFields()
     end;
-    ReleaseRows;
+  end
+  else
+  begin
+    sql := SqlGetIndex(aTableName);
+    if sql = '' then
+      exit;
+    with Execute(sql, []) do
+    begin
+      while Step do
+      begin
+        f.IndexName := TrimU(ColumnUtf8(0));
+        f.IsUnique := ColumnInt(1) > 0;
+        f.TypeDesc := TrimU(ColumnUtf8(2));
+        f.IsPrimaryKey := ColumnInt(3) > 0;
+        f.IsUniqueConstraint := ColumnInt(4) > 0;
+        f.Filter := TrimU(ColumnUtf8(5));
+        f.KeyColumns := TrimU(ColumnUtf8(6));
+        f.IncludedColumns := TrimU(ColumnUtf8(7));
+        fa.Add(f);
+      end;
+      ReleaseRows;
+    end;
   end;
   SetLength(Indexes, n);
 end;
@@ -4568,9 +4597,9 @@ var
 begin
   FastAssignNew(result);
   case GetDbms of
-    dSQLite:
+    dSQLite: // normally retrieved using direct #PRAGMA in GetIndexes()
       begin
-        // SQLite 3.16+ supports table-valued PRAGMA functions
+        // seldom called - needs SQLite 3.16+ table-valued PRAGMA functions
         FormatUtf8(
           'select i.name as index_name, ' +
           ' i."unique" as is_unique, ' +
