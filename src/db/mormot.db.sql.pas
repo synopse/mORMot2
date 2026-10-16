@@ -4550,6 +4550,26 @@ var
 begin
   FastAssignNew(result);
   case GetDbms of
+    dSQLite:
+      begin
+        // SQLite 3.16+ supports table-valued PRAGMA functions
+        FormatUtf8(
+          'select i.name as index_name, ' +
+          ' i."unique" as is_unique, ' +
+          ' case i.origin when ''pk'' then ''PRIMARY KEY'' ' +
+          '   else ''BTREE'' end as type_desc, ' +
+          ' case when i.origin = ''pk'' then 1 else 0 end as is_primary_key, ' +
+          ' case when i.origin = ''u'' then 1 else 0 end as unique_constraint, ' +
+          ' null as index_filter, ' +
+          ' (select group_concat(name, '','') from ' +
+          '   (select name from pragma_index_xinfo(i.name) ' +
+          '    where key = 1 order by seqno)) as key_columns, ' +
+          ' null as included_columns ' +
+          'from pragma_index_list(''%'') i ' +
+          'order by i.seq',
+          [StringReplace(aTableName, '''', '''''', [rfReplaceAll])], result);
+        exit;
+      end;
     dOracle:
       fmt :=
         'select  index_name, decode(max(uniqueness),''NONUNIQUE'',0,1) as is_unique, ' +
