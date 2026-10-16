@@ -349,10 +349,6 @@ function DuckHugeIntToTextBuf(const v: TDuckDBHugeInt;
 procedure DuckHugeIntToText(const v: TDuckDBHugeInt; Signed: boolean;
   var result: RawUtf8; Scale: integer = 0);
 
-/// convert an integer mantissa text into a decimal number text with scale
-// - e.g. ('-12345', 2) -> '-123.45'
-procedure DuckApplyScale(var Text: RawUtf8; Scale: integer);
-
 /// return TRUE if the hugeint fits into an Int64
 function DuckHugeIntIsInt64(const v: TDuckDBHugeInt; Signed: boolean): boolean;
 
@@ -385,7 +381,7 @@ function DuckUuidToTextBuf(const v: TDuckDBHugeInt; var Buffer: TTemp47): PtrInt
 procedure DuckUuidToText(const v: TDuckDBHugeInt; var result: RawUtf8);
 
 // reconstruct regular TGuid fields from a DuckDB UUID to match expected text output
-procedure DuckUuidToGuid(const v: TDuckDBHugeInt; var g: TGuid);
+procedure DuckUuidToGuid(v: PDuckDBHugeInt; g: PGuid);
 
 /// convert a DuckDB BIT string_t content into '0101...' text
 procedure DuckBitToText(P: PDuckU8Array; Len: integer; var result: RawUtf8);
@@ -686,28 +682,6 @@ begin
     result := (v.Upper = 0) and (v.Lower >= 0);
 end;
 
-procedure DuckApplyScale(var Text: RawUtf8; Scale: integer);
-var
-  neg: boolean;
-  digits: RawUtf8;
-begin
-  if Scale <= 0 then
-    exit;
-  neg := (Text <> '') and (Text[1] = '-');
-  if neg then
-    digits := copy(Text, 2, maxInt)
-  else
-    digits := Text;
-  while length(digits) <= Scale do
-    digits := '0' + digits;
-  digits := copy(digits, 1, length(digits) - Scale) + '.' +
-            copy(digits, length(digits) - Scale + 1, Scale);
-  if neg then
-    Text := '-' + digits
-  else
-    Text := digits;
-end;
-
 const
   // TSynSystemTime.FromUnixTime supports year 0000 only from March onward
   // - all earlier dates and years >= 10000 are outside this unit's scope
@@ -765,17 +739,17 @@ end;
 
 procedure DuckAppendMicroFraction(Micro: Int64; var result: RawUtf8);
 var
-  s: RawUtf8;
+  tmp: TShort31;
 begin
-  // TSynSystemTime handles milliseconds; preserve DuckDB's full microseconds.
-  if Micro <> 0 then
-  begin
-    s := Int64ToUtf8(Micro + DUCKDB_MICROSPERSEC);
-    s[1] := '.';
-    while s[length(s)] = '0' do
-      SetLength(s, length(s) - 1);
-    result := result + s;
-  end;
+  // TSynSystemTime handles milliseconds; preserve DuckDB's full microseconds
+  if Micro = 0 then
+    exit;
+  tmp[0] := #0;
+  AppendShortQWord(Micro + DUCKDB_MICROSPERSEC, tmp);
+  tmp[1] := '.'; // replace first '1' = DUCKDB_MICROSPERSEC
+  while tmp[length(tmp)] = '0' do
+    dec(tmp[0]);
+  Append(result, @tmp[1], length(tmp));
 end;
 
 procedure DuckTimeToText(Micros: Int64; var result: RawUtf8);
@@ -815,7 +789,8 @@ begin
     DuckCheckDay(days);
     st.FromUnixTime(secs);
     st.ToIsoDateTime(result, ' ');
-    DuckAppendMicroFraction(micro, result);
+    if micro <> 0 then
+      DuckAppendMicroFraction(micro, result);
   end;
 end;
 
@@ -824,7 +799,7 @@ var
   st: TSynSystemTime;
   ms, micro, days, rem: Int64;
 begin
-  FloorDivMod(Micros, 1000, ms, micro);
+  FloorDivMod(Micros, MicroSecsPerMilliSec, ms, micro);
   if micro >= 500 then
     inc(ms); // nearest millisecond (TDateTime cannot store microseconds)
   FloorDivMod(ms, MSecsPerDay, days, rem);
@@ -845,56 +820,67 @@ begin
   if (st.Year = 0) or
      (st.Year > 9999) then
     ESqlDBDuckDB.RaiseUtf8('TDateTime year=% outside 1..9999', [st.Year]);
-  result := st.ToUnixMsTime * 1000;
+  result := st.ToUnixMsTime * MicroSecsPerMilliSec;
 end;
 
-procedure AddIntervalPart(var result: RawUtf8; n: integer; const unitname: RawUtf8);
-var
-  s: RawUtf8;
+procedure AddIntervalPart(var result: ShortString; n: integer;
+  const unitname: ShortString);
 begin
   if n = 0 then
     exit;
-  s := Int32ToUtf8(n) + ' ' + unitname;
-  if (n > 1) or (n < -1) then
-    s := s + 's';
-  if result = '' then
-    result := s
-  else
-    result := result + ' ' + s;
+  if result[0] <> #0 then
+    AppendShortChar(' ', @result);
+  AppendShortInt64(n, result);
+  AppendShortChar(' ', @result);
+  AppendShort(unitname, result);
+  if (n > 1) or
+     (n < -1) then
+   AppendShortChar('s', @result);
 end;
 
 procedure DuckIntervalToText(const v: TDuckDBInterval; var result: RawUtf8);
 var
-  t: RawUtf8;
+  t: pointer;
+  tmp: ShortSTring;
 begin
-  result := '';
-  AddIntervalPart(result, v.Months div 12, 'year');
-  AddIntervalPart(result, v.Months mod 12, 'month');
-  AddIntervalPart(result, v.Days, 'day');
-  if (v.Micros <> 0) or (result = '') then
+  tmp[0] := #0;
+  AddIntervalPart(tmp, v.Months div 12, 'year');
+  AddIntervalPart(tmp, v.Months mod 12, 'month');
+  AddIntervalPart(tmp, v.Days, 'day');
+  if (v.Micros <> 0) or
+     (tmp[0] = #0) then
   begin
-    DuckTimeToText(v.Micros, t);
-    if result = '' then
-      result := t
-    else
-      result := result + ' ' + t;
+    if tmp[0] <> #0 then
+      AppendShortChar(' ', @result);
+    t := nil;
+    DuckTimeToText(v.Micros, RawUtf8(t));
+    AppendShortAnsi7String(RawUtf8(t), tmp);
+    FastAssignNew(t);
   end;
+  ShortStringToAnsi7String(tmp, result);
 end;
 
-procedure DuckUuidToGuid(const v: TDuckDBHugeInt; var g: TGuid);
+procedure DuckUuidToGuid(v: PDuckDBHugeInt; g: PGuid);
 var
-  hi, lo: QWord;
-  i: PtrInt;
+  src: PByteArray absolute v;
+  dst: PByteArray absolute g;
 begin
-  // DuckDB flips the highest bit of its UUID HUGEINT
-  hi := QWord(v.Upper) xor (QWord(1) shl 63);
-  lo := QWord(v.Lower);
-  // reconstruct native TGuid fields in their correct order
-  g.D1 := cardinal(hi shr 32);
-  g.D2 := word(hi shr 16);
-  g.D3 := word(hi);
-  for i := 0 to 7 do
-    g.D4[i] := byte(lo shr ((7 - i) * 8));
+  dst^[0]  := src^[12];
+  dst^[1]  := src^[13];
+  dst^[2]  := src^[14];
+  dst^[3]  := src^[15] xor $80;
+  dst^[4]  := src^[10];
+  dst^[5]  := src^[11];
+  dst^[6]  := src^[8];
+  dst^[7]  := src^[9];
+  dst^[8]  := src^[7];
+  dst^[9]  := src^[6];
+  dst^[10] := src^[5];
+  dst^[11] := src^[4];
+  dst^[12] := src^[3];
+  dst^[13] := src^[2];
+  dst^[14] := src^[1];
+  dst^[15] := src^[0];
 end;
 
 function DuckUuidToTextBuf(const v: TDuckDBHugeInt; var Buffer: TTemp47): PtrInt;
@@ -903,7 +889,7 @@ var
   p: PUtf8Char;
 begin
   // reconstruct native TGuid fields in their correct order
-  DuckUuidToGuid(v, g);
+  DuckUuidToGuid(@v, @g);
   // same 8-4-4-4-12 format as DuckDB, lowercase, without braces
   p := GuidToText(@Buffer[0], @g, @TwoDigitsHexLower);
   p^ := #0;
