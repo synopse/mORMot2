@@ -1598,6 +1598,10 @@ type
     // optional parameter
     function Execute(const aSql: RawUtf8; const Params: array of const;
       RowsVariant: PVariant = nil; ForceBlobAsNull: boolean = false): ISqlDBRows;
+    /// execute a SQL query, returning a statement interface instance to retrieve
+    // the result rows corresponding to the supplied SELECT statement
+    // - here the SQL is supplied as FormatUtf8() with no bound parameter
+    function ExecuteFmt(const aFmt: RawUtf8; const aFmtArgs: array of const): ISqlDBRows;
     /// execute a SQL query, without returning any rows
     // - can be used to launch INSERT, DELETE or UPDATE statement, e.g.
     // - will call NewThreadSafeStatement method to retrieve a thread-safe
@@ -3548,7 +3552,8 @@ var
 begin
   stmt := NewThreadSafeStatementPrepared(aSql, {expectres=}true, true);
   stmt.ForceBlobAsNull := ForceBlobAsNull;
-  stmt.Bind(Params);
+  if high(Params) >= 0 then
+    stmt.Bind(Params);
   stmt.ExecutePrepared;
   result := stmt;
   if RowsVariant <> nil then
@@ -3556,6 +3561,15 @@ begin
       SetVariantNull(RowsVariant^)
     else
       RowsVariant^ := result.RowData;
+end;
+
+function TSqlDBConnectionProperties.ExecuteFmt(const aFmt: RawUtf8;
+  const aFmtArgs: array of const): ISqlDBRows;
+var
+  sql: RawUtf8;
+begin
+  FormatUtf8(aFmt, aFmtArgs, sql);
+  result := Execute(sql, []);
 end;
 
 function TSqlDBConnectionProperties.ExecuteNoResult(const aSql: RawUtf8;
