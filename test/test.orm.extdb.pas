@@ -917,6 +917,8 @@ var
       Row, RowDoc, all: variant;
       r, v: PDocVariantData;
       stmt: ISqlDBStatement;
+      fields, expected: TSqlDBColumnDefineDynArray;
+      indexes, expectedindexes: TSqlDBIndexDefineDynArray;
 
       procedure DoInsert;
       var
@@ -946,6 +948,21 @@ var
       TSynLogTestLog.EnterLocal(log, proxy, msg);
       if proxy <> Props then
         Check(proxy.UserID = 'user');
+      // metadata should be transmitted as JSON, with no record layout issue
+      proxy.GetFields('People', fields);
+      Props.GetFields('People', expected);
+      Check(fields <> nil, 'GetFields');
+      CheckEqual(DynArraySaveJson(fields, TypeInfo(TSqlDBColumnDefineDynArray)),
+        DynArraySaveJson(expected, TypeInfo(TSqlDBColumnDefineDynArray)), 'GetFields');
+      proxy.GetIndexes('People', indexes);
+      Props.GetIndexes('People', expectedindexes);
+      CheckEqual(DynArraySaveJson(indexes, TypeInfo(TSqlDBIndexDefineDynArray)),
+        DynArraySaveJson(expectedindexes, TypeInfo(TSqlDBIndexDefineDynArray)),
+        'GetIndexes');
+      CheckEqual(proxy.GetForeignKey('People', 'ID'), 'Other.ID', 'GetForeignKey');
+      CheckEqual(proxy.GetForeignKey('people', 'lastname'), 'Ref."Name"');
+      CheckEqual(proxy.GetForeignKey('People', 'FirstName'), '');
+      CheckEqual(proxy.ForeignKeysJson, Props.ForeignKeysJson, 'ForeignKeysJson');
       // the same statement instance should be executable several times
       stmt := proxy.NewThreadSafeStatementPrepared(
         'select count(*) from People where YearOfDeath=?', true, true);
@@ -1028,6 +1045,8 @@ const
 begin
   Props := TSqlDBSQLite3ConnectionProperties.Create('test.db3', '', '', '');
   try
+    // SQLite3 GetForeignKeys is void: force some content for the proxy tests
+    Props.ForeignKeysJson := '{"People.ID":"Other.ID","People.LastName":"Ref.\"Name\""}';
     DoTest(Props, 'raw Props');
     DoTest(TSqlDBRemoteConnectionPropertiesTest.Create(
       Props, 'user', 'pass', TSqlDBProxyConnectionProtocol), 'proxy test');

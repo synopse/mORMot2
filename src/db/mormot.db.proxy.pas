@@ -70,6 +70,8 @@ type
   // - Output is TSqlDBColumnDefineDynArray for cGetFields
   // - Output is TSqlDBIndexDefineDynArray for cGetIndexes
   // - Output is TSynNameValue (fForeignKeys) for cGetForeignKeys
+  // - cGetFields, cGetIndexes and cGetForeignKeys results are transmitted as
+  // JSON, so that they don't depend on the client and server records layout
   // - Output is TRawUtf8DynArray for cGetTableNames
   // - Output is RawByteString result data for cExecuteToBinary
   // - Output is UpdateCount: integer text for cExecute
@@ -771,7 +773,13 @@ end;
 { ************ Server-Side Proxy Remote Protocol }
 
 const
-  REMOTE_MAGIC = 1;
+  /// identify the protocol version, checked by both ends
+  // - 2 = cGetFields/cGetIndexes/cGetForeignKeys results as JSON
+  REMOTE_MAGIC = 2;
+  /// the key used for SymmetricEncrypt() of each message
+  // - not changed with REMOTE_MAGIC, so that previous protocol versions
+  // could decode the message, and report an explicit magic/version error
+  REMOTE_KEY = 1;
 
 type
   TRemoteMessageHeader = packed record
@@ -885,7 +893,7 @@ function TSqlDBRemoteConnectionProtocol.HandleInput(
   const input: RawByteString): RawByteString;
 begin
   result := input;
-  SymmetricEncrypt(REMOTE_MAGIC, result);
+  SymmetricEncrypt(REMOTE_KEY, result);
   result := AlgoSynLZ.Decompress(result); // also check crc32c
 end;
 
@@ -893,7 +901,7 @@ function TSqlDBRemoteConnectionProtocol.HandleOutput(
   const output: RawByteString): RawByteString;
 begin
   result := AlgoSynLZ.Compress(output); // includes cr32c hashing
-  SymmetricEncrypt(REMOTE_MAGIC, result);
+  SymmetricEncrypt(REMOTE_KEY, result);
 end;
 
 procedure TSqlDBProxyConnectionProtocol.RemoteProcessMessage(
@@ -929,11 +937,11 @@ begin
     ESqlDBRemote.RaiseUtf8('%.RemoteProcessMessage(connection=nil)', [self]);
   msgin := HandleInput(Input);
   header := pointer(msgin);
-  if (header = nil) or
-     (header.Magic <> REMOTE_MAGIC) then
+  if length(msgin) < SizeOf(header^) then
     ESqlDBRemote.RaiseUtf8(
-      'Incorrect %.RemoteProcessMessage() input magic/version', [self]);
-  if (Authenticate <> nil) and
+      'Incorrect %.RemoteProcessMessage() input', [self]);
+  if (header.Magic = REMOTE_MAGIC) and // version error is notified below
+     (Authenticate <> nil) and
      (Authenticate.UsersCount > 0) and
      not (header.Command in [cGetToken, cGetDbms]) then
     if not Authenticate.SessionExists(header.SessionID) then
@@ -942,6 +950,11 @@ begin
   inc(P, SizeOf(header^));
   try
     FastSetString(msgout, pointer(msgin), SizeOf(header^));
+    if header.Magic <> REMOTE_MAGIC then
+      // raised within the try..except: msgout has the client magic, so that
+      // the client could report this exception as cExceptionRaised
+      ESqlDBRemote.RaiseUtf8('Incorrect %.RemoteProcessMessage() ' +
+        'magic/version: client=% server=%', [self, header.Magic, REMOTE_MAGIC]);
     case header.Command of
       cGetToken:
         AppendOutput(Authenticate.CurrentToken);
@@ -982,13 +995,13 @@ begin
       cGetFields:
         begin
           Connection.Properties.GetFields(P, colarr);
-          Append(msgout, DynArraySave(
+          Append(msgout, DynArraySaveJson(
             colarr, TypeInfo(TSqlDBColumnDefineDynArray)));
         end;
       cGetIndexes:
         begin
           Connection.Properties.GetIndexes(P, defarr);
-          Append(msgout, DynArraySave(
+          Append(msgout, DynArraySaveJson(
             defarr, TypeInfo(TSqlDBIndexDefineDynArray)));
         end;
       cGetTableNames:
@@ -998,10 +1011,7 @@ begin
             outarr, TypeInfo(TRawUtf8DynArray)));
         end;
       cGetForeignKeys:
-        begin
-          Connection.Properties.GetForeignKey('', ''); // ensure Dest.fForeignKeys exists
-          Append(msgout, Connection.Properties.ForeignKeysData);
-        end;
+        Append(msgout, Connection.Properties.ForeignKeysJson);
       cExecute,
       cExecuteToBinary,
       cExecuteToJson,
@@ -1230,13 +1240,17 @@ begin
     cTryStartTransaction:
       outboolean := boolean(msg^);
     cGetFields:
-      DynArrayLoad(outcolarr, msg, TypeInfo(TSqlDBColumnDefineDynArray), nil, msgmax);
+      if DynArrayLoadJsonInPlace(outcolarr, pointer(msg),
+           TypeInfo(TSqlDBColumnDefineDynArray)) = nil then
+        ESqlDBRemote.RaiseUtf8('%.Process(%): invalid JSON', [self, ToText(Command)^]);
     cGetIndexes:
-      DynArrayLoad(outindexarr, msg, TypeInfo(TSqlDBIndexDefineDynArray), nil, msgmax);
+      if DynArrayLoadJsonInPlace(outindexarr, pointer(msg),
+           TypeInfo(TSqlDBIndexDefineDynArray)) = nil then
+        ESqlDBRemote.RaiseUtf8('%.Process(%): invalid JSON', [self, ToText(Command)^]);
     cGetTableNames:
       DynArrayLoad(outarr, msg, TypeInfo(TRawUtf8DynArray), nil, msgmax);
     cGetForeignKeys:
-      outnamevalue.SetBlobDataPtr(msg, msgmax);
+      outnamevalue.InitFromJsonBuffer(pointer(msg), false); // as Init(false)
     cExecute,
     cExecuteToBinary,
     cExecuteToJson,
