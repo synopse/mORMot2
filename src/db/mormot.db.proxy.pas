@@ -917,9 +917,9 @@ var
   user: RawUtf8;
   exec: TSqlDBProxyConnectionCommandExecute;
   execwithres: boolean;
-  colarr: TSqlDBColumnDefineDynArray;
-  defarr: TSqlDBIndexDefineDynArray;
-  outarr: TRawUtf8DynArray;
+  cols: TSqlDBColumnDefineDynArray;
+  defs: TSqlDBIndexDefineDynArray;
+  nams: TRawUtf8DynArray;
 
   procedure AppendOutput(value: Int64);
   var
@@ -992,23 +992,20 @@ begin
         AppendOutput(Connection.ServerTimestamp);
       cGetFields:
         begin
-          Connection.Properties.GetFields(P, colarr);
           if header.Magic >= MAGIC_METADATA then // version 2 has integer fields
-            Append(msgout, DynArraySave(
-              colarr, TypeInfo(TSqlDBColumnDefineDynArray)));
+            Connection.Properties.GetFields(P, cols);
+          Append(msgout, DynArraySave(cols, TypeInfo(TSqlDBColumnDefineDynArray)));
         end;
       cGetIndexes:
         begin
-          Connection.Properties.GetIndexes(P, defarr);
           if header.Magic >= MAGIC_METADATA then // version 2 has integer fields
-            Append(msgout, DynArraySave(
-              defarr, TypeInfo(TSqlDBIndexDefineDynArray)));
+            Connection.Properties.GetIndexes(P, defs);
+          Append(msgout, DynArraySave(defs, TypeInfo(TSqlDBIndexDefineDynArray)));
         end;
       cGetTableNames:
         begin
-          Connection.Properties.GetTableNames(outarr);
-          Append(msgout, DynArraySave(
-            outarr, TypeInfo(TRawUtf8DynArray)));
+          Connection.Properties.GetTableNames(nams);
+          Append(msgout, DynArraySave(nams, TypeInfo(TRawUtf8DynArray)));
         end;
       cGetForeignKeys:
         begin
@@ -1248,19 +1245,19 @@ begin
     cTryStartTransaction:
       outboolean := boolean(msg^);
     cGetFields:
-      if header.Magic >= MAGIC_METADATA then // version 2 has integer fields
+      if outheader.Magic >= MAGIC_METADATA then // version 2 has integer fields
         DynArrayLoad(outcolarr, msg, TypeInfo(TSqlDBColumnDefineDynArray), nil, msgmax)
       else
         ESqlDBRemote.RaiseUtf8('Unsupported %.Process(cGetFields)', [self]);
     cGetIndexes:
-      if header.Magic >= MAGIC_METADATA then // version 2 has integer fields
+      if outheader.Magic >= MAGIC_METADATA then // version 2 has integer fields
         DynArrayLoad(outindexarr, msg, TypeInfo(TSqlDBIndexDefineDynArray), nil, msgmax)
       else
         ESqlDBRemote.RaiseUtf8('Unsupported %.Process(cGetIndexes)', [self]);
     cGetTableNames:
       DynArrayLoad(outarr, msg, TypeInfo(TRawUtf8DynArray), nil, msgmax);
     cGetForeignKeys:
-      if header.Magic >= MAGIC_METADATA then // version 2 has integer fields
+      if outheader.Magic >= MAGIC_METADATA then // version 2 has integer fields
         if StrLen(msg) = msgmax - msg then
           outnamevalue.InitFromJsonBuffer(PUtf8Char(msg), false) // new format
         else
