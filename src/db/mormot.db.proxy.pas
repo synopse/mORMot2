@@ -1262,7 +1262,7 @@ begin
     cGetForeignKeys:
       if header.Magic >= MAGIC_METADATA then // version 2 has integer fields
         if StrLen(msg) = msgmax - msg then
-          outnamevalue.InitFromJsonBuffer(msg, false) // new format
+          outnamevalue.InitFromJsonBuffer(PUtf8Char(msg), false) // new format
         else
           ESqlDBRemote.RaiseUtf8('Invalid %.Process(cGetForeignKeys)', [self])
       else
@@ -1702,11 +1702,11 @@ begin
     ftNull:
       FastAssignNew(result);
     ftInt64:
-      result := Int64ToUtf8(FromVarInt64Value(data{%H-}));
+      Int64ToUtf8(FromVarInt64Value(data{%H-}), result);
     ftDouble:
-      result := DoubleToStr(unaligned(PDouble(data)^));
+      DoubleToStr(unaligned(PDouble(data)^), result);
     ftCurrency:
-      result := Curr64ToStr(PInt64(data)^);
+      Curr64ToStr(PInt64(data)^, result);
     ftDate:
       DateTimeToIso8601TextVar(unaligned(PDateTime(data)^), 'T', result);
     ftBlob,

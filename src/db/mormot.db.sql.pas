@@ -4361,7 +4361,7 @@ begin
   try
     if FilterTableViewSchemaName and
        (fForcedSchemaName <> '') then
-      checkschema := UpperCase(fForcedSchemaName) + '.';
+      Join([UpperCase(fForcedSchemaName), '.'], checkschema);
     with Execute(sql, []) do
     begin
       count := 0;
@@ -4399,7 +4399,7 @@ begin
   try
     if FilterTableViewSchemaName and
        (fForcedSchemaName <> '') then
-      checkschema := UpperCase(fForcedSchemaName) + '.';
+      Join([UpperCase(fForcedSchemaName), '.'], checkschema);
     with Execute(sql, []) do
     begin
       count := 0;
@@ -4584,8 +4584,7 @@ begin
           '    where key = 1 order by seqno)) as key_columns, ' +
           ' null as included_columns ' +
           'from pragma_index_list(''%'') i ' +
-          'order by i.seq',
-          [StringReplace(aTableName, '''', '''''', [rfReplaceAll])], result);
+          'order by i.seq', [QuotedStr(aTableName)], result);
         exit;
       end;
     dOracle:
@@ -5160,7 +5159,7 @@ begin
       posGlobalBefore:
         AppendShortToUtf8('DESC ', result);
       posWithColumn:
-        coldesc := JoinCsv(' DESC,', aFieldNames) + ' DESC';
+        Join([JoinCsv(' DESC,', aFieldNames), ' DESC'], coldesc);
     end;
   if {%H-}coldesc = '' then
     coldesc := JoinCsv(',', aFieldNames);
@@ -8137,7 +8136,7 @@ begin
      fConnection.fProperties.StoreVoidStringAsNull then
     CheckParam(Param, ftNull, IO)
   else
-    CheckParam(Param, ftUtf8, IO)^.VData := StringToUtf8(Value);
+    StringToUtf8(Value, RawUtf8(CheckParam(Param, ftUtf8, IO)^.VData));
 end;
 
 procedure TSqlDBStatementWithParams.BindTextU(Param: integer;
@@ -8171,8 +8170,8 @@ begin
      fConnection.fProperties.StoreVoidStringAsNull then
     CheckParam(Param, ftNull, IO)
   else
-    CheckParam(Param, ftUtf8, IO)^.VData := RawUnicodeToUtf8(pointer(Value),
-      length(Value));
+    RawUnicodeToUtf8(pointer(Value), length(Value),
+      RawUtf8(CheckParam(Param, ftUtf8, IO)^.VData));
 end;
 
 function TSqlDBStatementWithParams.ParamToVariant(Param: integer;
@@ -8253,7 +8252,7 @@ var
 begin
   with CheckParam(Param, ftDouble, paramIn, length(Values))^ do
     for i := 0 to high(Values) do
-      VArray[i] := DoubleToStr(Values[i]);
+      DoubleToStr(Values[i], VArray[i]);
 end;
 
 procedure TSqlDBStatementWithParams.BindArray(Param: integer;
@@ -8263,7 +8262,7 @@ var
 begin
   with CheckParam(Param, ftInt64, paramIn, length(Values))^ do
     for i := 0 to high(Values) do
-      VArray[i] := Int64ToUtf8(Values[i]);
+      Int64ToUtf8(Values[i], VArray[i]);
 end;
 
 procedure TSqlDBStatementWithParams.BindArray(Param: integer;
@@ -8359,6 +8358,7 @@ procedure TSqlDBStatementWithParams.BindArrayRow(const aValues: array of const);
 var
   i: PtrInt;
   StoreVoidStringAsNull: boolean;
+  V: PRawUtf8;
 begin
   if length(aValues) <> fParamCount then
     ESqlDBException.RaiseUtf8('Invalid %.BindArrayRow call', [self]);
@@ -8369,23 +8369,23 @@ begin
     begin
       if length(VArray) <= fParamsArrayCount then
         SetLength(VArray, NextGrow(fParamsArrayCount));
+      V := @VArray[fParamsArrayCount];
       VInt64 := fParamsArrayCount;
       if (VType = ftDate) and
-         (aValues[i].VType = vtExtended) then
-        VArray[fParamsArrayCount] := // direct binding of TDateTime value
-          Connection.Properties.SqlDateToIso8601Quoted(aValues[i].VExtended^)
+         (aValues[i].VType = vtExtended) then // direct SQL-TDateTime binding
+        V^ := Connection.Properties.SqlDateToIso8601Quoted(aValues[i].VExtended^)
       else
       begin
-        VarRecToUtf8(@aValues[i], VArray[fParamsArrayCount]);
+        VarRecToUtf8(@aValues[i], V^);
         case VType of
           ftUtf8:
             if StoreVoidStringAsNull and
-               (VArray[fParamsArrayCount] = '') then
-              VArray[fParamsArrayCount] := 'null'
+               (V^ = '') then
+              V^ := 'null'
             else
-              QuotedStr(VArray[fParamsArrayCount], '''', VArray[fParamsArrayCount]);
+              QuotedStr(V^, '''', V^);
           ftDate:
-            QuotedStr(VArray[fParamsArrayCount], '''', VArray[fParamsArrayCount]);
+            QuotedStr(V^, '''', V^);
         end;
       end;
     end;
@@ -8396,6 +8396,7 @@ procedure TSqlDBStatementWithParams.BindFromRows(Rows: TSqlDBStatement);
 var
   F: PtrInt;
   U: RawUtf8;
+  V: PRawUtf8;
 begin
   if Rows <> nil then
     if Rows.ColumnCount <> fParamCount then
@@ -8406,33 +8407,33 @@ begin
         begin
           if length(VArray) <= fParamsArrayCount then
             SetLength(VArray, NextGrow(fParamsArrayCount));
+          V := @VArray[fParamsArrayCount];
           if Rows.ColumnNull(F) then
-            VArray[fParamsArrayCount] := 'null'
+            V^ := 'null'
           else
             case Rows.ColumnType(F) of
               ftNull:
-                VArray[fParamsArrayCount] := 'null';
+                V^ := 'null';
               ftInt64:
-                Int64ToUtf8(Rows.ColumnInt(F), VArray[fParamsArrayCount]);
+                Int64ToUtf8(Rows.ColumnInt(F), V^);
               ftDouble:
-                DoubleToStr(Rows.ColumnDouble(F), VArray[fParamsArrayCount]);
+                DoubleToStr(Rows.ColumnDouble(F), V^);
               ftCurrency:
-                VArray[fParamsArrayCount] := CurrencyToStr(Rows.ColumnCurrency(F));
+                V^ := CurrencyToStr(Rows.ColumnCurrency(F));
               ftDate:
-                Join(['''', DateTimeToSql(Rows.ColumnDateTime (F)), ''''],
-                  VArray[fParamsArrayCount]);
+                Join(['''', DateTimeToSql(Rows.ColumnDateTime (F)), ''''], V^);
               ftUtf8:
                 begin
                   U := Rows.ColumnUtf8(F);
                   if (U = '') and
                      (fConnection <> nil) and
                      fConnection.Properties.StoreVoidStringAsNull then
-                    VArray[fParamsArrayCount] := 'null'
+                    V^ := 'null'
                   else
-                    QuotedStr(U, '''', VArray[fParamsArrayCount]);
+                    QuotedStr(U, '''', V^);
                 end;
               ftBlob:
-                VArray[fParamsArrayCount] := Rows.ColumnBlob(F);
+                V^ := Rows.ColumnBlob(F);
             end;
         end;
   inc(fParamsArrayCount);
