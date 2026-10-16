@@ -914,8 +914,10 @@ var
       res: ISqlDBRows;
       id, lastid, i, n, n1: integer;
       IDs: TIntegerDynArray;
+      names: TRawUtf8DynArray;
       Row, RowDoc, all: variant;
       r, v: PDocVariantData;
+      fields, expected: TSqlDBColumnDefineDynArray;
       stmt: ISqlDBStatement;
 
       procedure DoInsert;
@@ -946,6 +948,35 @@ var
       TSynLogTestLog.EnterLocal(log, proxy, msg);
       if proxy <> Props then
         Check(proxy.UserID = 'user');
+      // metadata should be transmitted as retrieved on the server side
+      proxy.GetFields('CustomProps', fields);
+      Props.GetFields('CustomProps', expected);
+      CheckEqual(length(fields), length(expected), 'GetFields');
+      if length(fields) = length(expected) then
+        for i := 0 to high(fields) do
+        begin
+          CheckEqual(fields[i].ColumnName, expected[i].ColumnName);
+          CheckEqual(fields[i].ColumnTypeNative, expected[i].ColumnTypeNative);
+          CheckEqual(fields[i].ColumnLength, expected[i].ColumnLength);
+          CheckEqual(fields[i].ColumnPrecision, expected[i].ColumnPrecision);
+          CheckEqual(fields[i].ColumnScale, expected[i].ColumnScale);
+          Check(fields[i].ColumnType = expected[i].ColumnType);
+          Check(fields[i].ColumnIndexed = expected[i].ColumnIndexed);
+        end;
+      Check(names = nil);
+      proxy.GetTableNames(names);
+      CheckEqual(RawUtf8ArrayToCsv(names),
+        'ADest,ADests,ASource,AuthGroup,AuthUser,CustomProps,Dali1,Dali2,FtsTest,F' +
+        'tsTest_content,FtsTest_segdir,FtsTest_segments,People,PeopleArray,PeopleO' +
+        'bject,test');
+      proxy.GetFieldDefinitions('PEOPLE', names, {withkeys=}false);
+      CheckEqual(RawUtf8ArrayToCsv(names),
+        'ID [INTEGER] *,FirstName [TEXT],LastName [TEXT],Data [BLOB],YearOfBirth [' +
+        'INTEGER],YearOfDeath [INTEGER]');
+      proxy.GetFieldDefinitions('PEOPLE', names, {withkeys=}true);
+      CheckEqual(RawUtf8ArrayToCsv(names),
+        'ID [INTEGER] *,FirstName [TEXT],LastName [TEXT],Data [BLOB],YearOfBirth [' +
+        'INTEGER],YearOfDeath [INTEGER]');
       // the same statement instance should be executable several times
       stmt := proxy.NewThreadSafeStatementPrepared(
         'select count(*) from People where YearOfDeath=?', true, true);

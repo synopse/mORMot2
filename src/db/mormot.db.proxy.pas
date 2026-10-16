@@ -1000,7 +1000,7 @@ begin
       cGetForeignKeys:
         begin
           Connection.Properties.GetForeignKey('', ''); // ensure Dest.fForeignKeys exists
-          Append(msgout, Connection.Properties.ForeignKeysData);
+          Append(msgout, Connection.Properties.ForeignKeysJson);
         end;
       cExecute,
       cExecuteToBinary,
@@ -1236,7 +1236,10 @@ begin
     cGetTableNames:
       DynArrayLoad(outarr, msg, TypeInfo(TRawUtf8DynArray), nil, msgmax);
     cGetForeignKeys:
-      outnamevalue.SetBlobDataPtr(msg, msgmax);
+      if StrLen(msg) = msgmax - msg then
+        outnamevalue.InitFromJsonBuffer(msg, false) // new format
+      else
+        outnamevalue.SetBlobDataPtr(msg, msgmax); // old system-specific binary
     cExecute,
     cExecuteToBinary,
     cExecuteToJson,
