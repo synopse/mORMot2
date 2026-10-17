@@ -1047,6 +1047,16 @@ type
     // - on OpenSSL client or server, set the SSL_MODE_RELEASE_BUFFERS option
     // - on SChannel, releases idle read/write buffers when requested
     ReleaseBuffers: boolean;
+    /// input: accept a server certificate whose revocation status could not
+    // be checked at all
+    // - on SChannel client, set SCH_CRED_IGNORE_NO_REVOCATION_CHECK: by default
+    // only an offline revocation server is ignored (SCH_CRED_IGNORE_REVOCATION_OFFLINE)
+    // but CRYPT_E_NO_REVOCATION_CHECK is still raised, e.g. behind a proxy or a
+    // firewall blocking the CRL/OCSP endpoints of the Certificate Authority
+    // - the certificate chain and its revocation (when known) are still validated
+    // - ignored with IgnoreCertificateErrors=true, and not used on OpenSSL which
+    // does not check revocation unless explicitly configured
+    IgnoreNoRevocationCheck: boolean;
     /// input: PEM/PFX file name containing a certificate to be loaded
     // - (Delphi) warning: encoded as UTF-8 not UnicodeString/TFileName
     // - on OpenSSL client or server, calls SSL_CTX_use_certificate_file() API
@@ -4920,6 +4930,7 @@ begin
   result := (tls1.Enabled = tls2.Enabled) and
     ((not tls1.Enabled) or
      ((tls1.IgnoreCertificateErrors       = tls2.IgnoreCertificateErrors) and
+      (tls1.IgnoreNoRevocationCheck       = tls2.IgnoreNoRevocationCheck) and
       (tls1.AllowDeprecatedTls            = tls2.AllowDeprecatedTls) and
       (tls1.DisableTls13                  = tls2.DisableTls13) and
       (tls1.ClientAllowUnsafeRenegotation = tls2.ClientAllowUnsafeRenegotation) and
