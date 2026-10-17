@@ -93,6 +93,8 @@ type
     fBatchMethod: TUriMethod;
     fBatchOptions: TRestBatchOptions;
     fBatchCapacity, fBatchCount: integer;
+    // the thread which called InternalBatchStart (and owns the storage lock)
+    fBatchThread: TThreadID;
     // BATCH sending uses TEXT storage for direct sending to database driver
     fBatchIDs: TIDDynArray;
     fBatchValues: TRawUtf8DynArray;
@@ -176,6 +178,11 @@ type
     procedure InternalBatchStop; override;
     /// called internally by EngineAdd/EngineUpdate/EngineDelete in batch mode
     procedure InternalBatchAppend(const aValue: RawUtf8; aID: TID);
+    /// true if the current thread is within its own InternalBatchStart/Stop
+    // - a regular Engine*() call from another thread during this BATCH should
+    // not see fBatchMethod, but wait for the storage lock as a regular call
+    function InBatchOfCurrentThread: boolean;
+      {$ifdef HASINLINE} inline; {$endif}
     /// TRestServer.Uri use it for Static.EngineList to by-pass virtual table
     // - overridden method to handle most potential simple queries, e.g. like
     // $ SELECT Field1,RowID FROM table WHERE RowID=... AND/OR/NOT Field2=
@@ -1033,6 +1040,7 @@ begin
       fBatchMethod := Method;
       fBatchOptions := BatchOptions;
       fBatchCount := 0;
+      fBatchThread := GetCurrentThreadId;
       result := true; // means BATCH mode is supported
     finally
       if not result then
@@ -1221,8 +1229,17 @@ begin
     fBatchCapacity := 0;
     fBatchMethod := mNone;
     fBatchOptions := [];
+    fBatchThread := TThreadID(0);
     StorageUnLock;
   end;
+end;
+
+function TRestStorageExternal.InBatchOfCurrentThread: boolean;
+begin
+  // fBatchThread is only set within StorageLock, so may equal the current
+  // thread ID only if this thread did actually start the BATCH
+  result := (fBatchMethod <> mNone) and
+            (fBatchThread = GetCurrentThreadId);
 end;
 
 procedure TRestStorageExternal.InternalBatchAppend(const aValue: RawUtf8;
@@ -1255,7 +1272,7 @@ begin
      (fModel.Tables[TableModelIndex] <> fStoredClass) then
     result := 0 // avoid GPF
   else
-    if fBatchMethod <> mNone then
+    if InBatchOfCurrentThread then
       // BATCH process
       if fBatchMethod <> mPOST then
         result := 0
@@ -1274,7 +1291,8 @@ begin
     else
     begin
       // regular insert with EngineLockedNextID (UpdatedID=0)
-      result := ExecuteFromJson(SentData, ooInsert, 0, fBatchOptions);
+      // - fBatchOptions may belong to a BATCH of another thread: ignore them
+      result := ExecuteFromJson(SentData, ooInsert, 0, []);
       if (result > 0) and
          (Owner <> nil) then
       begin
@@ -1293,7 +1311,7 @@ begin
      (TableModelIndex < 0) or
      (Model.Tables[TableModelIndex] <> fStoredClass) then
     result := false
-  else if fBatchMethod <> mNone then
+  else if InBatchOfCurrentThread then
     // BATCH process
     if fBatchMethod <> mPUT then
       result := false
@@ -1304,8 +1322,8 @@ begin
     end
   else
   begin
-    // regular update
-    result := ExecuteFromJson(SentData, ooUpdate, ID, fBatchOptions) = ID;
+    // regular update - may wait for a BATCH of another thread
+    result := ExecuteFromJson(SentData, ooUpdate, ID, []) = ID;
     if result and
        (Owner <> nil) then
     begin
@@ -1323,7 +1341,7 @@ begin
      (TableModelIndex < 0) or
      (Model.Tables[TableModelIndex] <> fStoredClass) then
     result := false
-  else if fBatchMethod <> mNone then
+  else if InBatchOfCurrentThread then
     // BATCH process
     if fBatchMethod <> mDELETE then
       result := false
@@ -1359,7 +1377,7 @@ begin
      (Model.Tables[TableModelIndex] <> fStoredClass) then
     exit;
   n := length(IDs);
-  if fBatchMethod <> mNone then
+  if InBatchOfCurrentThread then
     // BATCH process
     if fBatchMethod <> mDELETE then
       exit
