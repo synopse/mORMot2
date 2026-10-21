@@ -155,6 +155,11 @@ type
     {$endif OSPOSIX}
     /// validate THttpServerGeneric.OnBodyDownload streamed body upload
     procedure DoHttpBodyDownload(Sender: TObject);
+    /// validate THttpAsyncServer "Expect: 100-continue" interim response
+    procedure DoHttpExpect100(Sender: TObject);
+    function DoExpectRequest(Ctxt: THttpServerRequestAbstract): cardinal;
+    function DoExpectDownload(const aUrl, aMethod, aInHeaders, aInContentType,
+      aRemoteIP: RawUtf8; aContentLength: Int64): TStream;
     /// validate 'Range:' file responses, especially against invalid offsets
     procedure DoHttpFileRange(Sender: TObject);
     /// validate THttpServerRequestAbstract.SetOutStream streamed body download
@@ -486,6 +491,7 @@ procedure TNetworkProtocols.SlowTests;
 begin
   // start some slow tests in background if /multithread is enabled
   Run(DoHttpBodyDownload, self, 'HttpBodyDownload', true, false);
+  Run(DoHttpExpect100, self, 'HttpExpect100', true, false);
   Run(DoHttpFileRange, self, 'HttpFileRange', true, false);
   Run(DoHttpOutStream, self, 'HttpOutStream', true, false);
   Run(DoTFTPServer, self, 'TFTPServer', true, false);
@@ -6830,6 +6836,137 @@ begin
     FreeAndNil(outkept);
     outdata := '';
     TSynLog.Family.ExceptionIgnore.RemoveSeveral([EHttpServer, EStreamError]);
+  end;
+end;
+
+function TNetworkProtocols.DoExpectRequest(
+  Ctxt: THttpServerRequestAbstract): cardinal;
+var
+  data: RawByteString;
+begin
+  // echo the length and hash of the body, received either in memory or
+  // through the stream supplied by DoExpectDownload
+  if Ctxt.InContentStream <> nil then
+  begin
+    SetLength(data, Ctxt.InContentStream.Size);
+    Ctxt.InContentStream.Position := 0;
+    Ctxt.InContentStream.ReadBuffer(pointer(data)^, length(data));
+  end
+  else
+    data := Ctxt.InContent;
+  Ctxt.OutContent := Make(['ok ', length(data), ' ',
+    CardinalToHexShort(crc32cHash(data))]);
+  Ctxt.OutContentType := TEXT_CONTENT_TYPE;
+  result := HTTP_SUCCESS;
+end;
+
+function TNetworkProtocols.DoExpectDownload(const aUrl, aMethod, aInHeaders,
+  aInContentType, aRemoteIP: RawUtf8; aContentLength: Int64): TStream;
+begin
+  if aUrl = '/stream' then
+    result := TRawByteStringStream.Create // the body is written to this stream
+  else
+    result := nil; // in-memory Content fallback
+end;
+
+procedure TNetworkProtocols.DoHttpExpect100(Sender: TObject);
+var
+  srv: THttpAsyncServer;
+  raw: TCrtSocket;
+  body: RawByteString;
+  hosthead, ok, cmd: RawUtf8;
+  i, clen: integer;
+
+  procedure Post(const url: RawUtf8; expect, waitfor100: boolean);
+  var
+    received100: boolean;
+  begin
+    // send the headers, optionally wait for the interim response, then send
+    // the body and read the final response - all on the same connection
+    raw.SockSend(['POST ', url, ' HTTP/1.1']);
+    raw.SockSend(hosthead);
+    raw.SockSend(['Content-Length: ', length(body)]);
+    raw.SockSend('Content-Type: application/dummy');
+    if expect then
+      raw.SockSend('Expect: 100-continue');
+    raw.SockSendCRLF; // void line: end of headers
+    raw.SockSendFlush;
+    received100 := false;
+    if expect and waitfor100 then
+    begin
+      // RFC 9110 10.1.1: the 100 interim response lets the client send the body
+      cmd := '';
+      raw.SockRecvLn(cmd);
+      CheckUtf8(IdemPChar(pointer(cmd), 'HTTP/1.1 100 '),
+        '% 100 %', [url, cmd]);
+      cmd := '';
+      raw.SockRecvLn(cmd); // void line ending the interim response
+      CheckEqual(cmd, '', '100 void line');
+      received100 := true;
+    end;
+    raw.SockSendFlush(body);
+    cmd := '';
+    raw.SockRecvLn(cmd);
+    if expect and not received100 then
+    begin
+      // the client did not wait: the interim response is still sent first
+      CheckUtf8(IdemPChar(pointer(cmd), 'HTTP/1.1 100 '),
+        '% early 100 %', [url, cmd]);
+      cmd := '';
+      raw.SockRecvLn(cmd);
+      CheckEqual(cmd, '', 'early 100 void line');
+      cmd := '';
+      raw.SockRecvLn(cmd);
+    end;
+    CheckUtf8(PosEx(' 200 ', cmd) > 0, '% final %', [url, cmd]);
+    clen := 0;
+    repeat
+      cmd := '';
+      raw.SockRecvLn(cmd);
+      if IdemPChar(pointer(cmd), 'CONTENT-LENGTH:') then
+        clen := Utf8ToInteger(TrimU(copy(cmd, 16, 20)), 0);
+    until cmd = '';
+    // SockInRead() and not SockRecv(), since the headers were read via SockIn
+    CheckEqual(raw.SockInRead(clen), ok, url);
+  end;
+
+begin
+  body := RandomWinAnsi(200 shl 10); // 200KB, i.e. way above the socket buffer
+  CheckEqual(length(body), 200 shl 10);
+  Make(['ok ', length(body), ' ', CardinalToHexShort(crc32cHash(body))], ok);
+  for i := 0 to 1 do
+  begin
+    // validate both immediate and polled writes of the interim response
+    if i = 0 then
+      srv := THttpAsyncServer.Create('8899', nil, nil, 'expect100', 2)
+    else
+      srv := THttpAsyncServer.Create('8890', nil, nil, 'expect100poll', 2);
+    try
+      if i = 1 then
+        srv.Async.Sockets.Options :=
+          srv.Async.Sockets.Options + [paoWritePollOnly];
+      srv.OnBodyDownload := DoExpectDownload;
+      srv.OnRequest := DoExpectRequest;
+      srv.WaitStarted(10);
+      Join(['Host: 127.0.0.1:', srv.SockPort], hosthead);
+      raw := TCrtSocket.Open('127.0.0.1', srv.SockPort, nlTcp, 5000);
+      try
+        raw.CreateSockIn; // needed for proper SockRecvLn() below
+        // in-memory body, then a body supplied as a stream, then again in
+        // memory: three Expect: requests on the same kept-alive connection
+        Post('/mem', true, true);
+        Post('/stream', true, true);
+        Post('/mem', true, true);
+        // a client sending the body without waiting for the interim response
+        Post('/mem', true, false);
+        // a request without Expect: is not affected
+        Post('/mem', false, false);
+      finally
+        raw.Free;
+      end;
+    finally
+      srv.Free;
+    end;
   end;
 end;
 

@@ -5133,6 +5133,15 @@ begin
   result := soClose; // on error, shutdown and clear the connection
   if fOwner.fSockets = nil then
     fHttp.State := hrsErrorMisuse;
+  if fHttp.State in [hrsGetBodyChunkedHexFirst .. hrsWaitAsyncProcessing] then
+  begin
+    // the request is still being received or processed, so this write can
+    // only be the end of the "100 Continue" interim response, when DoHeaders
+    // could not send it at once: nothing to release yet - the final response
+    // will trigger its own AfterWrite()
+    result := soContinue;
+    exit;
+  end;
   // compute next step
   if fHttp.State = hrsSendBody then
   begin
@@ -5310,9 +5319,14 @@ begin
   end;
 end;
 
+const
+  HTTP_CONTINUE_RESPONSE: string[25] = 'HTTP/1.1 100 Continue'#13#10#13#10;
+
 function THttpAsyncServerConnection.DoHeaders: TPollAsyncSocketOnReadWrite;
 var
   status: integer;
+  p: PByte;
+  len: integer; // warning: len should be defined as integer, not PtrInt
 begin
   // finalize the headers
   result := soClose;
@@ -5337,10 +5351,27 @@ begin
     exit;
   // implement Expect: 100-Continue for a framed request body
   if hfExpect100 in fHttp.HeaderFlags then
+  begin
     // client waits for the server to parse the headers and return 100
-    // before sending the request body
-    fServer.fAsync.fSockets.WriteString(self,
-      'HTTP/1.1 100 Continue'#13#10#13#10);
+    // before sending the request body: send this interim response at once
+    // from this thread, as DoResponse() does for the final response, so that
+    // it is never pending behind the final response (e.g. with acoWritePollOnly
+    // when the client sends the body without waiting), and AfterWrite() is
+    // not called for it
+    p := @HTTP_CONTINUE_RESPONSE[1];
+    len := ord(HTTP_CONTINUE_RESPONSE[0]);
+    if not fServer.fAsync.fSockets.RawWrite(self, p, len) then
+    begin
+      result := soClose; // socket closed or broken
+      exit;
+    end;
+    if (len <> 0) and // OS buffer was full (paranoid): finish in ProcessWrite
+       not fServer.fAsync.fSockets.Write(self, p, len, {timeout=}1000) then
+    begin
+      result := soClose; // the connection was already closed on write error
+      exit;
+    end;
+  end;
   // OnBodyDownload callback can supply a stream for the body - even for HEAD
   if not (hfConnectionUpgrade in fHttp.HeaderFlags) and
      Assigned(fServer.fOnBodyDownload) then
