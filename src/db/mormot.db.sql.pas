@@ -1322,6 +1322,8 @@ type
     fOnTableAddColumn: TOnTableAddColumn;
     fOnTableCreateMultiIndex: TOnTableCreateMultiIndex;
     procedure UnRegisterSharedTransaction(SessionID: cardinal);
+    /// SharedTransaction() helper after a failed Commit of aConnection
+    procedure ReleaseFailedCommit(aConnection: TSqlDBConnection);
     procedure SetFlag(const flag: TSqlDBConnectionPropertiesFlag; const value: boolean);
       {$ifdef HASINLINE}inline;{$endif}
     function GetFlag(const flag: TSqlDBConnectionPropertiesFlag): boolean;
@@ -3757,10 +3759,13 @@ var
   i, n: PtrInt;
   found, added: boolean;
   t: ^TSqlDBConnectionTransaction;
+  conn: TSqlDBConnection;
 begin
   added := false;
+  conn := nil;
   try
     result := ThreadSafeConnection;
+    conn := result;
     // thread-safe found transactions support
     fSharedTransactionsSafe.Lock;
     try
@@ -3847,11 +3852,35 @@ begin
         // the "found" branch and just inc(RefCount), letting the caller write
         // OUTSIDE any transaction, silently
         UnRegisterSharedTransaction(SessionID);
+      if (action in [transCommitWithException, transCommitWithoutException]) and
+         (conn <> nil) then
+        // the entry was unregistered above, BEFORE the actual Commit: if it
+        // failed (e.g. a SQLite3 deferred foreign key, or a lost connection),
+        // the Zeos and SQLite3 drivers restore their TransactionCount, and the
+        // database transaction may still be open - nobody would ever close it,
+        // and later statements of this connection would run within it
+        ReleaseFailedCommit(conn);
       result := nil; // result.StartTransaction/Commit/Rollback failed
       if action = transCommitWithException then
         raise;
     end;
   end;
+end;
+
+procedure TSqlDBConnectionProperties.ReleaseFailedCommit(
+  aConnection: TSqlDBConnection);
+begin
+  if aConnection.fTransactionCount > 1 then
+    // another (nested) transaction is counted on this connection: only release
+    // our own level, and leave the database transaction to its owner
+    dec(aConnection.fTransactionCount)
+  else if aConnection.fTransactionCount = 1 then
+    // only our transaction: roll it back in the database
+    try
+      aConnection.Rollback;
+    except
+      aConnection.fTransactionCount := 0; // flush anyway
+    end;
 end;
 
 procedure TSqlDBConnectionProperties.UnRegisterSharedTransaction(
