@@ -363,7 +363,7 @@ No manual cleanup needed: `InjectInstance` ref-counts the repos, and `Dispatcher
 
 ### 11. Update the build files
 
-**FPC**: add the new folders to `prj/fpc/compile.sh` and `prj/fpc/compile_cli.sh`, and the same paths to their Windows twins `compile.bat` / `compile_cli.bat` (`^` line continuations). `-Futests/myfeature` goes in `compile.*` only — the CLI does not link the tests:
+**FPC**: add the new folders to `prj/fpc/compile.sh` and `prj/fpc/compile_cli.sh`, and the same paths to their Windows twins `compile.bat` / `compile_cli.bat` (`^` line continuations). `-Futests/myfeature` goes in `compile.*` only — the CLI does not link the tests. In `compile_cli.*` only the `interface` folder is listed unconditionally; the `dom`, `infra` and `implementation` folders go in the `SERVER_PATHS` variable, which is set in local mode only, so the remote client cannot reach into the domain:
 
 ```
 -Fusrc/dom/myfeature \
@@ -382,7 +382,7 @@ myfeature_query in '..\..\src\app\myfeature\interface\myfeature_query.pas',
 // ... and so on for the infra/, implementation/ and tests/ units
 ```
 
-In `prj/delphi/cli_client.dpr`, list the `interface/` units (and any `dom/` unit they use) unconditionally, and the remaining units inside the existing `{$ifdef LOCAL_MODE}` block. Then mirror them as `<DCCReference Include="…"/>` items, which msbuild and the Delphi IDE read: every new unit in `task_manager.dproj`, only the unconditional ones in `cli_client.dproj`. The new units also go in the `uses` clause of `AppTaskManagerClientLocal.pas` (step 10).
+In `prj/delphi/cli_client.dpr`, list the `interface/` units unconditionally, and the remaining units (`dom/` included) inside the existing `{$ifdef LOCAL_MODE}` block. The `*_dtos.pas` units must not use a `dom/` unit (see [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md)), so the remote client needs none. Then mirror them as `<DCCReference Include="…"/>` items, which msbuild and the Delphi IDE read: every new unit in `task_manager.dproj`, only the unconditional ones in `cli_client.dproj`. The new units also go in the `uses` clause of `AppTaskManagerClientLocal.pas` (step 10).
 
 ## Debugging
 

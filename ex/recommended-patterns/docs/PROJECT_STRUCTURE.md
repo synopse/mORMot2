@@ -170,7 +170,7 @@ Following the Recommended-Patterns [B.6.1](https://github.com/synopse/mORMot2/bl
     ├── <a href="../src/shared_types.pas">shared_types.pas</a>, <a href="../src/app_config.pas">app_config.pas</a>
     ├── tasks:
     │   ├── <a href="../src/dom/tasks/task.pas">dom/tasks/task.pas</a>                        → shared_types  # TOrm aggregate (ORM base type only, no IRestOrm)
-    │   ├── <a href="../src/app/tasks/interface/task_dtos.pas">app/tasks/interface/task_dtos.pas</a>         → shared_types, task
+    │   ├── <a href="../src/app/tasks/interface/task_dtos.pas">app/tasks/interface/task_dtos.pas</a>         → shared_types
     │   ├── <a href="../src/app/tasks/implementation/task_mappers.pas">app/tasks/implementation/task_mappers.pas</a> → task, task_dtos
     │   ├── <a href="../src/dom/tasks/task_repository.pas">dom/tasks/task_repository.pas</a>             → task
     │   ├── <a href="../src/infra/tasks/task_repository_orm.pas">infra/tasks/task_repository_orm.pas</a>
@@ -183,10 +183,12 @@ Following the Recommended-Patterns [B.6.1](https://github.com/synopse/mORMot2/bl
     │   │       → task_command, shared_types, task, task_dtos, task_mappers, task_repository
     │   └── <a href="../tests/tasks/task_tests.pas">tests/tasks/task_tests.pas</a>
     │           → shared_types, task, task_dtos, task_mappers, task_query, task_command
-    └── tags: (same shape, except that tag.pas does not use shared_types and tag_dtos does not use tag)
+    └── tags: (same shape, except that tag.pas does not use shared_types)
 </pre>
 
 The key rule: `app/*/implementation/*_impl.pas` depends on `dom/*_repository.pas` (interface), **never** on `infra/*_repository_orm.pas` (implementation). The composition root is the only file that knows the concrete `T*RepositoryOrm` class exists.
+
+The second rule: `app/*/interface/*_dtos.pas` uses no `dom` unit. The DTOs declare their own types (`TTaskCommentDTO` instead of the aggregate's `TTaskComment`) and `task_mappers` copies between the two. The CLI in remote mode therefore compiles with the `app/*/interface` folders alone: `compile_cli.sh` / `.bat` put `dom`, `infra` and `app/*/implementation` on the search path in local mode only, and `cli_client.dpr` lists those units inside `{$ifdef LOCAL_MODE}`, so a stray domain dependency fails the remote build.
 
 ## File Naming Conventions
 
@@ -226,5 +228,5 @@ The key rule: `app/*/implementation/*_impl.pas` depends on `dom/*_repository.pas
     - Register services on the dispatcher (class form): `Dispatcher.ServiceDefine(T<Entity>QueryService, [I<Entity>Query], sicShared)`; same for Command.
     - Add the test case to the `TSynTests` suite.
 11. **Build files** — each entity folder is listed explicitly, so a new entity needs:
-    - **FPC** (`prj/fpc/compile.sh` / `.bat`, `prj/fpc/compile_cli.sh` / `.bat`): add `-Fusrc/dom/<entity> -Fusrc/infra/<entity> -Fusrc/app/<entity>/interface -Fusrc/app/<entity>/implementation`, plus `-Futests/<entity>` in `compile.*` only.
-    - **Delphi / Lazarus** (`prj/delphi/*.dpr`, also the main sources of the `.lpi` projects): add a `unit in '..\..\src\…'` entry per new unit — every unit in `task_manager.dpr`; in `cli_client.dpr`, the `interface/` units (and any `dom/` unit they use) always, the remaining units inside `{$ifdef LOCAL_MODE}`. Mirror them as `DCCReference` items in `task_manager.dproj` (all) and `cli_client.dproj` (unconditional ones only). The `.lpi` files need no change.
+    - **FPC** (`prj/fpc/compile.sh` / `.bat`, `prj/fpc/compile_cli.sh` / `.bat`): add `-Fusrc/dom/<entity> -Fusrc/infra/<entity> -Fusrc/app/<entity>/interface -Fusrc/app/<entity>/implementation`, plus `-Futests/<entity>` in `compile.*` only. In `compile_cli.*` only the `interface` folder is unconditional; the other three go in `SERVER_PATHS`, which is set in local mode.
+    - **Delphi / Lazarus** (`prj/delphi/*.dpr`, also the main sources of the `.lpi` projects): add a `unit in '..\..\src\…'` entry per new unit — every unit in `task_manager.dpr`; in `cli_client.dpr`, the `interface/` units always, the remaining units (`dom/` included) inside `{$ifdef LOCAL_MODE}`. Mirror them as `DCCReference` items in `task_manager.dproj` (all) and `cli_client.dproj` (unconditional ones only). The `.lpi` files need no change.
