@@ -1179,37 +1179,43 @@ begin
     props.ExecuteNoResult('CREATE TABLE p(id INTEGER PRIMARY KEY)', []);
     props.ExecuteNoResult('CREATE TABLE c(pid INTEGER REFERENCES p(id) ' +
       'DEFERRABLE INITIALLY DEFERRED)', []);
-    conn := props.SharedTransaction(1, transBegin);
-    Check(conn <> nil, 'begin');
-    props.ExecuteNoResult('INSERT INTO c VALUES (999)', []);
-    Check(props.SharedTransaction(1, transCommitWithoutException) = nil, 'commit');
-    CheckEqual(conn.TransactionCount, 0, 'counter');
-    Check(not TSqlDBSQLite3Connection(conn).DB.TransactionActive, 'rolled back');
-    CheckEqual(Count('c'), 0, 'row rolled back');
-    // another transaction counted on the same connection is kept as such
-    conn := props.SharedTransaction(1, transBegin);
-    Check(conn <> nil, 'begin 2');
-    conn.StartTransaction;
-    props.ExecuteNoResult('INSERT INTO p VALUES (1)', []);
-    props.ExecuteNoResult('INSERT INTO c VALUES (999)', []);
-    Check(props.SharedTransaction(1, transCommitWithoutException) = nil, 'commit 2');
-    CheckEqual(conn.TransactionCount, 1, 'other transaction still counted');
-    Check(TSqlDBSQLite3Connection(conn).DB.TransactionActive, 'left to its owner');
-    conn.Rollback;
-    CheckEqual(conn.TransactionCount, 0, 'counter 2');
-    CheckEqual(Count('p'), 0, 'owner rolled back');
-    // with exception: same cleaning, and the error is propagated
-    conn := props.SharedTransaction(1, transBegin);
-    props.ExecuteNoResult('INSERT INTO c VALUES (999)', []);
-    raised := false;
+    // the COMMIT failures below are expected: no exception logging
+    TSynLog.Family.ExceptionIgnoreCurrentThread := true;
     try
-      props.SharedTransaction(1, transCommitWithException);
-    except
-      raised := true;
+      conn := props.SharedTransaction(1, transBegin);
+      Check(conn <> nil, 'begin');
+      props.ExecuteNoResult('INSERT INTO c VALUES (999)', []);
+      Check(props.SharedTransaction(1, transCommitWithoutException) = nil, 'commit');
+      CheckEqual(conn.TransactionCount, 0, 'counter');
+      Check(not TSqlDBSQLite3Connection(conn).DB.TransactionActive, 'rolled back');
+      CheckEqual(Count('c'), 0, 'row rolled back');
+      // another transaction counted on the same connection is kept as such
+      conn := props.SharedTransaction(1, transBegin);
+      Check(conn <> nil, 'begin 2');
+      conn.StartTransaction;
+      props.ExecuteNoResult('INSERT INTO p VALUES (1)', []);
+      props.ExecuteNoResult('INSERT INTO c VALUES (999)', []);
+      Check(props.SharedTransaction(1, transCommitWithoutException) = nil, 'commit 2');
+      CheckEqual(conn.TransactionCount, 1, 'other transaction still counted');
+      Check(TSqlDBSQLite3Connection(conn).DB.TransactionActive, 'left to its owner');
+      conn.Rollback;
+      CheckEqual(conn.TransactionCount, 0, 'counter 2');
+      CheckEqual(Count('p'), 0, 'owner rolled back');
+      // with exception: same cleaning, and the error is propagated
+      conn := props.SharedTransaction(1, transBegin);
+      props.ExecuteNoResult('INSERT INTO c VALUES (999)', []);
+      raised := false;
+      try
+        props.SharedTransaction(1, transCommitWithException);
+      except
+        raised := true;
+      end;
+      Check(raised, 'commit 3 should raise');
+      CheckEqual(conn.TransactionCount, 0, 'counter 3');
+      Check(not TSqlDBSQLite3Connection(conn).DB.TransactionActive, 'rolled back 3');
+    finally
+      TSynLog.Family.ExceptionIgnoreCurrentThread := false;
     end;
-    Check(raised, 'commit 3 should raise');
-    CheckEqual(conn.TransactionCount, 0, 'counter 3');
-    Check(not TSqlDBSQLite3Connection(conn).DB.TransactionActive, 'rolled back 3');
     // and a new shared transaction works as usual
     Check(props.SharedTransaction(1, transBegin) <> nil, 'begin again');
     Check(props.SharedTransaction(1, transRollback) <> nil, 'rollback');
