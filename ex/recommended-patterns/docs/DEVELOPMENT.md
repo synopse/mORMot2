@@ -58,7 +58,9 @@ The hard rule: `app/*/implementation/*_impl.pas` depends on `dom/*_repository.pa
 - **Lazarus**: open `prj/lazarus/task_manager.lpi` or `prj/lazarus/cli_client.lpi`.
   Both require the `mormot2` package (`packages/lazarus/mormot2.lpk` in the
   enclosing repository). The `cli_client.lpi` "local" build mode adds
-  `-dLOCAL_MODE`. Headless builds work too:
+  `-dLOCAL_MODE` and the `dom`, `infra` and `app/*/implementation` folders to
+  the unit search path; the other modes build the remote client from the
+  `app/*/interface` folders alone. Headless builds work too:
 
   ```bash
   lazbuild --add-package-link ../../packages/lazarus/mormot2.lpk   # once
@@ -373,7 +375,7 @@ No manual cleanup needed: `InjectInstance` ref-counts the repos, and `Dispatcher
 -Futests/myfeature \
 ```
 
-**Delphi / Lazarus**: the `.lpi` projects use `prj/delphi/*.dpr` as their main source, so both toolchains resolve project units through the `.dpr` `in` clauses — the `.lpi` files need no change. Add each new unit to `prj/delphi/task_manager.dpr`:
+**Delphi / Lazarus**: the `.lpi` projects use `prj/delphi/*.dpr` as their main source, so both toolchains resolve project units through the `.dpr` `in` clauses. The `.lpi` files additionally list every unit (for the Project Inspector) and the source folders as unit search paths (for code navigation in the editor), so new units and folders go there too. Add each new unit to `prj/delphi/task_manager.dpr`:
 
 ```pascal
 myfeature in '..\..\src\dom\myfeature\myfeature.pas',
@@ -382,7 +384,7 @@ myfeature_query in '..\..\src\app\myfeature\interface\myfeature_query.pas',
 // ... and so on for the infra/, implementation/ and tests/ units
 ```
 
-In `prj/delphi/cli_client.dpr`, list the `interface/` units unconditionally, and the remaining units (`dom/` included) inside the existing `{$ifdef LOCAL_MODE}` block. The `*_dtos.pas` units must not use a `dom/` unit (see [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md)), so the remote client needs none. Then mirror them as `<DCCReference Include="…"/>` items, which msbuild and the Delphi IDE read: every new unit in `task_manager.dproj`, only the unconditional ones in `cli_client.dproj`. The new units also go in the `uses` clause of `AppTaskManagerClientLocal.pas` (step 10).
+In `prj/delphi/cli_client.dpr`, list the `interface/` units unconditionally, and the remaining units (`dom/` included) inside the existing `{$ifdef LOCAL_MODE}` block. The `*_dtos.pas` units must not use a `dom/` unit (see [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md)), so the remote client needs none. Then mirror them as `<DCCReference Include="…"/>` items, which msbuild and the Delphi IDE read: every new unit in `task_manager.dproj`, only the unconditional ones in `cli_client.dproj`. In the `.lpi` files, add every new unit as a project unit (Project Inspector → Add) and the new folders to *Project Options → Paths → Other unit files*: in every build mode of `task_manager.lpi`; in `cli_client.lpi` the `interface/` folder in every build mode, the `dom/`, `infra/` and `implementation/` folders in the "local" mode only, so the remote build keeps failing on a stray domain dependency. The new units also go in the `uses` clause of `AppTaskManagerClientLocal.pas` (step 10).
 
 ## Debugging
 
