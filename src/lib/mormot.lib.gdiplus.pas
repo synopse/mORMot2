@@ -1186,6 +1186,7 @@ type
     fontColor, fontAlign: integer;
     fontSpec: TFontSpec;
     BkMode, BkColor: cardinal;
+    WorldTransform: TXForm;
   end;
 
   /// internal data used by EnumEmfCallback() callback function
@@ -1232,7 +1233,7 @@ type
     Temp: TSynTempBuffer;
     procedure SaveDC;
     procedure RestoreDC;
-    procedure ScaleMatrix(matrixOrg: THandle);
+    procedure ScaleMatrix;
     procedure CreatePenObj(index: integer; Color, Width, Style: cardinal);
     procedure DeleteObj(index: integer);
     procedure EnumerateEnd;
@@ -1319,7 +1320,7 @@ function EnumEmfCallback(DC: HDC; var Table: THandleTable; Rec: PEnhMetaRecord;
   NumObjects: DWord; var E: TGdiplusEnum): LongBool; stdcall;
 var
   x: TXForm;
-  mtx, path: THandle;
+  path: THandle;
 begin
   result := true;
   with E.DC[E.nDC] do
@@ -1350,10 +1351,8 @@ begin
         BkColor := PEMRSetBkColor(Rec)^.crColor;
       EMR_SETWORLDTRANSFORM:
         begin
-          with PEMRSetWorldTransform(Rec)^.xform do
-            E.gdip.CreateMatrix2(eM11, eM12, eM21, eM22, eDx, eDy, mtx);
-          E.ScaleMatrix(mtx);
-          E.gdip.DeleteMatrix(mtx);
+          WorldTransform := PEMRSetWorldTransform(Rec)^.xform;
+          E.ScaleMatrix;
         end;
       EMR_EXTCREATEFONTINDIRECTW:
         with PEMRExtCreateFontIndirect(Rec)^ do
@@ -1615,7 +1614,7 @@ begin
     EMR_SETWINDOWORGEX,
     EMR_SETVIEWPORTEXTEX,
     EMR_SETVIEWPORTORGEX:
-      E.ScaleMatrix(0);
+      E.ScaleMatrix;
   end;
 end;
 
@@ -1956,7 +1955,7 @@ begin
     gdip.DeleteRegion(ClipRegion);
   end;
   dec(nDC);
-  ScaleMatrix(0);
+  ScaleMatrix;
 //  with DC[nDC] do
 //    Gdip.SetWorldTransform(Graphics,destMatrix);
 end;
@@ -1973,10 +1972,10 @@ begin
   end;
 end;
 
-procedure TGdiplusEnum.ScaleMatrix(matrixOrg: THandle);
+procedure TGdiplusEnum.ScaleMatrix;
 var
   P: TPoint;
-  mtx: THandle;
+  mtx, world: THandle;
 begin
   with DC[nDC] do
   begin
@@ -1985,8 +1984,10 @@ begin
     gdip.CreateMatrix2(
       ViewSize.cx / WinSize.cx, 0, 0, ViewSize.cy / WinSize.cy, P.X, P.Y, mtx);
     gdip.MultiplyMatrix(mtx, destMatrix);
-    if matrixOrg <> 0 then
-      gdip.MultiplyMatrix(mtx, matrixOrg);
+    with WorldTransform do
+      gdip.CreateMatrix2(eM11, eM12, eM21, eM22, eDx, eDy, world);
+    gdip.MultiplyMatrix(mtx, world);
+    gdip.DeleteMatrix(world);
     gdip.SetWorldTransform(gr, mtx);
     gdip.DeleteMatrix(mtx);
   end;
@@ -2083,6 +2084,8 @@ begin
     begin
       PInt64(@WinSize)^ := PInt64(@R.Width)^;
       ViewSize := WinSize;
+      WorldTransform.eM11 := 1;
+      WorldTransform.eM22 := 1;
     end;
     E.dest := CreateCompatibleDC(Dest);
     E.gdip.Lock;
