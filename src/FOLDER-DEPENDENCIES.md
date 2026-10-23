@@ -193,7 +193,7 @@ mORMot2 follows a **strict layered architecture** with 14 source folders organiz
 
 ### Layer 3: Database Access
 
-#### **db** (27 files)
+#### **db** (29 files)
 - **Dependencies:** core, crypt (secure), net (proxy), db.core
 - **Key Units:**
   - **Core:**
@@ -205,6 +205,7 @@ mORMot2 follows a **strict layered architecture** with 14 source folders organiz
     - `mormot.db.raw.sqlite3.static` - Static SQLite3 library
     - `mormot.db.raw.postgres` - PostgreSQL API
     - `mormot.db.raw.duckdb` - DuckDB C API (dynamic duckdb.dll/libduckdb.so)
+    - `mormot.db.raw.quack` - DuckDB Quack client/server wire protocol encoding and decoding
     - `mormot.db.raw.oracle` - Oracle OCI
     - `mormot.db.raw.odbc` - ODBC API
     - `mormot.db.raw.oledb` - OLE DB API
@@ -212,6 +213,7 @@ mORMot2 follows a **strict layered architecture** with 14 source folders organiz
     - `mormot.db.sql.sqlite3` - SQLite3 SQL connector
     - `mormot.db.sql.postgres` - PostgreSQL SQL connector
     - `mormot.db.sql.duckdb` - DuckDB SQL connector (embedded analytics engine)
+    - `mormot.db.sql.quack` - DuckDB Quack SQL connector (native remote client, no DuckDB library)
     - `mormot.db.sql.oracle` - Oracle SQL connector
     - `mormot.db.sql.odbc` - ODBC SQL connector
     - `mormot.db.sql.oledb` - OLE DB SQL connector
