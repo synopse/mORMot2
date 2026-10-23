@@ -1309,7 +1309,7 @@ var
 begin
   PI := temp.Init(n * 8);
   for i := 0 to n * 2 - 1 do
-    PI^[i] := PW^[i];
+    PI^[i] := smallint(PW^[i]);
 end;
 
 // EMF enumeration callback function, called from GDI
