@@ -390,6 +390,50 @@ procedure DuckBitToText(P: PDuckU8Array; Len: integer; var result: RawUtf8);
 procedure DuckTimeTzDecode(Bits: Int64; out Micros: Int64; out OffsetSec: integer);
 
 
+{ ************ DuckDB Logical Type Cache }
+
+type
+  PDuckDBTypeInfo = ^TDuckDBTypeInfo;
+  PDuckDBTypeInfoArray = ^TDuckDBTypeInfoArray;
+
+  /// a DuckDB logical type, parsed once with all its nested types
+  // - to avoid calling the DuckDB C API for every row of a result set
+  // - initialized by DuckDBTypeInfoInit() and released by DuckDBTypeInfoDone()
+  TDuckDBTypeInfo = record
+    /// 32-bit ordinal number corresponding to DUCKDB_TYPE_* constants
+    TypeId: TDuckDBType;
+    /// internal storage type of a DECIMAL or an ENUM
+    Internal: TDuckDBType;
+    /// number of decimals of a DECIMAL, or fixed size of an ARRAY
+    Scale: integer;
+    /// number of nested types in Children[]
+    ChildCount: integer;
+    /// the DuckDB logical type handle, owned by this structure
+    Handle: TDuckDBLogicalType;
+    /// STRUCT field names, or ENUM values (cached on first use)
+    Names: TRawUtf8DynArray;
+    /// nested types of a LIST/ARRAY (item), MAP (key, value),
+    // STRUCT (fields) or UNION (members)
+    Children: PDuckDBTypeInfoArray;
+  end;
+
+  /// pointer-based array of TDuckDBTypeInfo nested types
+  TDuckDBTypeInfoArray = array[0..1023] of TDuckDBTypeInfo;
+
+/// parse a DuckDB logical type and all its nested types, once
+// - the supplied Handle is owned by Info, and released by DuckDBTypeInfoDone()
+procedure DuckDBTypeInfoInit(var Info: TDuckDBTypeInfo; Handle: TDuckDBLogicalType);
+
+/// release the DuckDB logical type handles of a DuckDBTypeInfoInit() structure
+procedure DuckDBTypeInfoDone(var Info: TDuckDBTypeInfo);
+
+/// retrieve the text of an ENUM value, caching all the ENUM dictionary
+function DuckDBEnumValue(var Info: TDuckDBTypeInfo; Index: PtrInt): RawUtf8;
+
+/// convert a DuckDB type into the corresponding mormot.db field type
+function DuckDBTypeToField(TypeId: TDuckDBType; Scale: integer): TSqlDBFieldType;
+
+
 implementation
 
 
@@ -936,6 +980,139 @@ const
 begin
   Micros := Bits shr 24; // logical shift: Bits is always positive in practice
   OffsetSec := MAX_OFFSET - integer(Bits and $ffffff);
+end;
+
+
+{ ************ DuckDB Logical Type Cache }
+
+procedure DuckDBTypeInfoInit(var Info: TDuckDBTypeInfo; Handle: TDuckDBLogicalType);
+
+  procedure InitChildren(n: PtrInt);
+  begin
+    Info.ChildCount := n;
+    if n > 0 then
+    begin
+      GetMem(Info.Children, n * SizeOf(TDuckDBTypeInfo));
+      FillCharFast(Info.Children^, n * SizeOf(TDuckDBTypeInfo), 0);
+    end;
+  end;
+
+var
+  i: PtrInt;
+  p: PUtf8Char;
+begin
+  FillCharFast(Info, SizeOf(Info), 0);
+  Info.Handle := Handle;
+  Info.TypeId := DuckDB.get_type_id(Handle);
+  case Info.TypeId of
+    DUCKDB_TYPE_DECIMAL:
+      begin
+        Info.Internal := DuckDB.decimal_internal_type(Handle);
+        Info.Scale := DuckDB.decimal_scale(Handle);
+      end;
+    DUCKDB_TYPE_ENUM:
+      Info.Internal := DuckDB.enum_internal_type(Handle);
+    DUCKDB_TYPE_LIST:
+      begin
+        InitChildren(1);
+        DuckDBTypeInfoInit(Info.Children^[0], DuckDB.list_type_child_type(Handle));
+      end;
+    DUCKDB_TYPE_ARRAY:
+      begin
+        Info.Scale := DuckDB.array_type_array_size(Handle);
+        InitChildren(1);
+        DuckDBTypeInfoInit(Info.Children^[0], DuckDB.array_type_child_type(Handle));
+      end;
+    DUCKDB_TYPE_MAP:
+      begin
+        InitChildren(2);
+        DuckDBTypeInfoInit(Info.Children^[0], DuckDB.map_type_key_type(Handle));
+        DuckDBTypeInfoInit(Info.Children^[1], DuckDB.map_type_value_type(Handle));
+      end;
+    DUCKDB_TYPE_STRUCT:
+      begin
+        InitChildren(DuckDB.struct_type_child_count(Handle));
+        SetLength(Info.Names, Info.ChildCount);
+        for i := 0 to Info.ChildCount - 1 do
+        begin
+          p := DuckDB.struct_type_child_name(Handle, i);
+          FastSetString(Info.Names[i], p, StrLen(p));
+          DuckDB.free_(p);
+          DuckDBTypeInfoInit(Info.Children^[i],
+            DuckDB.struct_type_child_type(Handle, i));
+        end;
+      end;
+    DUCKDB_TYPE_UNION:
+      begin
+        InitChildren(DuckDB.union_type_member_count(Handle));
+        for i := 0 to Info.ChildCount - 1 do
+          DuckDBTypeInfoInit(Info.Children^[i],
+            DuckDB.union_type_member_type(Handle, i));
+      end;
+  end;
+end;
+
+procedure DuckDBTypeInfoDone(var Info: TDuckDBTypeInfo);
+var
+  i: PtrInt;
+begin
+  for i := 0 to Info.ChildCount - 1 do
+    DuckDBTypeInfoDone(Info.Children^[i]);
+  if Info.Children <> nil then
+    FreeMem(Info.Children);
+  if Info.Handle <> nil then
+    DuckDB.destroy_logical_type(Info.Handle);
+  Info.Names := nil;
+  FillCharFast(Info, SizeOf(Info), 0);
+end;
+
+function DuckDBEnumValue(var Info: TDuckDBTypeInfo; Index: PtrInt): RawUtf8;
+var
+  i: PtrInt;
+  p: PUtf8Char;
+begin
+  if Info.Names = nil then
+  begin
+    SetLength(Info.Names, DuckDB.enum_dictionary_size(Info.Handle));
+    for i := 0 to high(Info.Names) do
+    begin
+      p := DuckDB.enum_dictionary_value(Info.Handle, i);
+      FastSetString(Info.Names[i], p, StrLen(p));
+      DuckDB.free_(p);
+    end;
+  end;
+  if cardinal(Index) < cardinal(length(Info.Names)) then
+    result := Info.Names[Index]
+  else
+    result := '';
+end;
+
+function DuckDBTypeToField(TypeId: TDuckDBType; Scale: integer): TSqlDBFieldType;
+begin
+  case TypeId of
+    DUCKDB_TYPE_BOOLEAN, DUCKDB_TYPE_TINYINT, DUCKDB_TYPE_SMALLINT,
+    DUCKDB_TYPE_INTEGER, DUCKDB_TYPE_BIGINT, DUCKDB_TYPE_UTINYINT,
+    DUCKDB_TYPE_USMALLINT, DUCKDB_TYPE_UINTEGER, DUCKDB_TYPE_UBIGINT,
+    DUCKDB_TYPE_HUGEINT, DUCKDB_TYPE_UHUGEINT:
+      result := ftInt64;
+    DUCKDB_TYPE_FLOAT, DUCKDB_TYPE_DOUBLE:
+      result := ftDouble;
+    DUCKDB_TYPE_DECIMAL:
+      if Scale <= 4 then
+        result := ftCurrency
+      else
+        result := ftDouble;
+    DUCKDB_TYPE_DATE, DUCKDB_TYPE_TIME, DUCKDB_TYPE_TIME_TZ, DUCKDB_TYPE_TIME_NS,
+    DUCKDB_TYPE_TIMESTAMP, DUCKDB_TYPE_TIMESTAMP_S, DUCKDB_TYPE_TIMESTAMP_MS,
+    DUCKDB_TYPE_TIMESTAMP_NS, DUCKDB_TYPE_TIMESTAMP_TZ:
+      result := ftDate;
+    DUCKDB_TYPE_BLOB:
+      result := ftBlob;
+    DUCKDB_TYPE_SQLNULL:
+      result := ftNull;
+  else
+    result := ftUtf8; // VARCHAR, UUID, ENUM, INTERVAL, BIT, nested as JSON
+  end;
 end;
 
 

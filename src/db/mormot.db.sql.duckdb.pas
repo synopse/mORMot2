@@ -126,16 +126,9 @@ type
 
   /// cached information about one DuckDB result column
   TDuckDBColumnInfo = record
-    /// 32-bit ordinal number corresponding to DUCKDB_TYPE_* constants
-    TypeId: TDuckDBType;
-    /// number precision retrieved for DECIMAL - 0 means integer
-    Scale: integer;
-    /// internal nested storage type for DECIMAL and ENUM
-    Internal: TDuckDBType;
-    /// DuckDB type info structure
-    LogicalType: TDuckDBLogicalType;
-    /// internal cache of ENUM values
-    EnumValues: TRawUtf8DynArray;
+    /// the column type, parsed once with its nested types
+    Info: TDuckDBTypeInfo;
+
     /// current chunk content
     Vector: TDuckDBVector;
     /// current position in the data buffer
@@ -257,18 +250,18 @@ type
 
 /// append the value at Row of a DuckDB vector as JSON
 // - handles all scalar types, and nested LIST/ARRAY/STRUCT/MAP/UNION
-procedure DuckDBVectorValueToJson(vec: TDuckDBVector; lt: TDuckDBLogicalType;
+procedure DuckDBVectorValueToJson(vec: TDuckDBVector; T: PDuckDBTypeInfo;
   row: PtrInt; W: TJsonWriter);
 
 
 /// return the value at Row of a DuckDB vector as text
 // - scalar values in DuckDB text format, nested values as JSON
-procedure DuckDBVectorValueToText(vec: TDuckDBVector; lt: TDuckDBLogicalType;
+procedure DuckDBVectorValueToText(vec: TDuckDBVector; T: PDuckDBTypeInfo;
   row: PtrInt; var result: RawUtf8);
 
 /// fill the simple value at Row of a DuckDB vector into a text buffer
 // - returns the number of bytes written, or -1 if this type is not supported
-function DuckDBVectorValueToTextBuf(vec: TDuckDBVector;  lt: TDuckDBLogicalType;
+function DuckDBVectorValueToTextBuf(vec: TDuckDBVector; T: PDuckDBTypeInfo;
   row: PtrInt; var Buffer: TTemp47): PtrInt;
 
 
@@ -288,34 +281,6 @@ function IsValid(validity: PDuckI64Array; row: PtrInt): boolean;
 begin
   result := (validity = nil) or
             ((validity^[row shr 6] shr (row and 63)) and 1 <> 0);
-end;
-
-function DuckDBTypeToField(typeid: TDuckDBType; scale: integer): TSqlDBFieldType;
-begin
-  case typeid of
-    DUCKDB_TYPE_BOOLEAN, DUCKDB_TYPE_TINYINT, DUCKDB_TYPE_SMALLINT,
-    DUCKDB_TYPE_INTEGER, DUCKDB_TYPE_BIGINT, DUCKDB_TYPE_UTINYINT,
-    DUCKDB_TYPE_USMALLINT, DUCKDB_TYPE_UINTEGER, DUCKDB_TYPE_UBIGINT,
-    DUCKDB_TYPE_HUGEINT, DUCKDB_TYPE_UHUGEINT:
-      result := ftInt64;
-    DUCKDB_TYPE_FLOAT, DUCKDB_TYPE_DOUBLE:
-      result := ftDouble;
-    DUCKDB_TYPE_DECIMAL:
-      if scale <= 4 then
-        result := ftCurrency
-      else
-        result := ftDouble;
-    DUCKDB_TYPE_DATE, DUCKDB_TYPE_TIME, DUCKDB_TYPE_TIME_TZ, DUCKDB_TYPE_TIME_NS,
-    DUCKDB_TYPE_TIMESTAMP, DUCKDB_TYPE_TIMESTAMP_S, DUCKDB_TYPE_TIMESTAMP_MS,
-    DUCKDB_TYPE_TIMESTAMP_NS, DUCKDB_TYPE_TIMESTAMP_TZ:
-      result := ftDate;
-    DUCKDB_TYPE_BLOB:
-      result := ftBlob;
-    DUCKDB_TYPE_SQLNULL:
-      result := ftNull;
-  else
-    result := ftUtf8; // VARCHAR, UUID, ENUM, INTERVAL, BIT, nested as JSON
-  end;
 end;
 
 function TimestampMicros(typeid: TDuckDBType; v: Int64): Int64;
@@ -352,13 +317,13 @@ begin
   end;
 end;
 
-procedure DecimalValue(lt: TDuckDBLogicalType; data: pointer; row: PtrInt;
+procedure DecimalValue(T: PDuckDBTypeInfo; data: pointer; row: PtrInt;
   var mantissa: TDuckDBHugeInt; var scale: integer);
 var
   v: Int64;
 begin
-  scale := DuckDB.decimal_scale(lt);
-  case DuckDB.decimal_internal_type(lt) of
+  scale := T^.Scale;
+  case T^.Internal of
     DUCKDB_TYPE_HUGEINT:
       begin
         mantissa := PDuckDBHugeInt(PAnsiChar(data) + row * SizeOf(TDuckDBHugeInt))^;
@@ -378,19 +343,7 @@ begin
     mantissa.Upper := 0;
 end;
 
-procedure EnumValue(lt: TDuckDBLogicalType; data: pointer; row: PtrInt;
-  var result: RawUtf8);
-var
-  idx: Int64;
-  p: PUtf8Char;
-begin
-  idx := ReadIntegral(DuckDB.enum_internal_type(lt), data, row);
-  p := DuckDB.enum_dictionary_value(lt, idx);
-  FastSetString(result, p, StrLen(p));
-  DuckDB.free_(p);
-end;
-
-function DuckDBVectorValueToTextBuf(vec: TDuckDBVector;  lt: TDuckDBLogicalType;
+function DuckDBVectorValueToTextBuf(vec: TDuckDBVector; T: PDuckDBTypeInfo;
   row: PtrInt; var Buffer: TTemp47): PtrInt;
 var
   data: pointer;
@@ -406,7 +359,7 @@ begin
   if not IsValid(DuckDB.vector_get_validity(vec), row) then
     exit;
   data := DuckDB.vector_get_data(vec);
-  typeid := DuckDB.get_type_id(lt);
+  typeid := T^.TypeId;
   num := nil;
   case typeid of
     DUCKDB_TYPE_BOOLEAN:
@@ -430,7 +383,7 @@ begin
         typeid = DUCKDB_TYPE_HUGEINT, 0, Buffer);
     DUCKDB_TYPE_DECIMAL:
       begin
-        DecimalValue(lt, data, row, h, scale);
+        DecimalValue(T, data, row, h, scale);
         result := DuckHugeIntToTextBuf(h, true, scale, Buffer);
       end;
     DUCKDB_TYPE_FLOAT, DUCKDB_TYPE_DOUBLE:
@@ -474,14 +427,14 @@ begin
 end;
 
 procedure ComplexDuckDBVectorValueToText(vec: TDuckDBVector;
-  lt: TDuckDBLogicalType; row: PtrInt; var result: RawUtf8);
+  T: PDuckDBTypeInfo; row: PtrInt; var result: RawUtf8);
 var
   W: TJsonWriter;
   tmp: TTextWriterStackBuffer;
 begin
   W := TJsonWriter.CreateOwnedStream(tmp);
   try
-    DuckDBVectorValueToJson(vec, lt, row, W);
+    DuckDBVectorValueToJson(vec, T, row, W);
     W.SetText(result);
   finally
     W.Free;
@@ -489,7 +442,7 @@ begin
 end;
 
 procedure DuckDBVectorValueToText(vec: TDuckDBVector;
-  lt: TDuckDBLogicalType; row: PtrInt; var result: RawUtf8);
+  T: PDuckDBTypeInfo; row: PtrInt; var result: RawUtf8);
 var
   typeid: TDuckDBType;
   len, offs: integer;
@@ -499,7 +452,7 @@ var
   d: double;
   buf: TTemp47;
 begin
-  len := DuckDBVectorValueToTextBuf(vec, lt, row, buf);
+  len := DuckDBVectorValueToTextBuf(vec, T, row, buf);
   if len >= 0 then
   begin
     FastSetString(result, @buf[0], len); // most simple types
@@ -507,7 +460,7 @@ begin
   end;
   FastAssignNew(result);
   data := DuckDB.vector_get_data(vec);
-  typeid := DuckDB.get_type_id(lt);
+  typeid := T^.TypeId;
   case typeid of
     DUCKDB_TYPE_FLOAT, DUCKDB_TYPE_DOUBLE:
       begin
@@ -563,84 +516,95 @@ begin
         DuckBitToText(pointer(p), len, result);
       end;
     DUCKDB_TYPE_ENUM:
-      EnumValue(lt, data, row, result);
+      result := DuckDBEnumValue(T^,
+        ReadIntegral(T^.Internal, data, row));
   else
     // LIST, ARRAY, STRUCT, MAP, UNION -> JSON
-    ComplexDuckDBVectorValueToText(vec, lt, row, result);
+    ComplexDuckDBVectorValueToText(vec, T, row, result);
   end;
+end;
+
+procedure AddVectorValueAsJsonString(vec: TDuckDBVector; T: PDuckDBTypeInfo;
+  row: PtrInt; W: TJsonWriter);
+var
+  n: PtrInt;
+  buf: TTemp47;
+  txt: RawUtf8;
+begin
+  W.AddDirect('"');
+  n := DuckDBVectorValueToTextBuf(vec, T, row, buf);
+  if n >= 0 then
+    W.AddJsonEscape(@buf[0], n) // no transient RawUtf8 for UUID, numbers...
+  else
+  begin
+    DuckDBVectorValueToText(vec, T, row, txt); // dates, ENUM, INTERVAL, BIT
+    W.AddJsonEscape(pointer(txt), length(txt));
+  end;
+  W.AddDirect('"');
 end;
 
 procedure ComplexDuckDBVectorValueToJson(vec: TDuckDBVector; data: PAnsiChar;
-  lt: TDuckDBLogicalType; typeid: TDuckDBType; row: PtrInt; W: TJsonWriter);
+  T: PDuckDBTypeInfo; row: PtrInt; W: TJsonWriter);
 var
-  i: PtrInt;
+  i, n: PtrInt;
   e: PDuckDBListEntry;
-  child: TDuckDBVector;
-  clt, klt: TDuckDBLogicalType;
-  kvec, vvec: TDuckDBVector;
+  child, kvec, vvec: TDuckDBVector;
+  buf: TTemp47;
   txt: RawUtf8;
 begin
-  // those complex types require a temporary txt: RawUtf8 conversion
-  case typeid of
-    DUCKDB_TYPE_LIST, DUCKDB_TYPE_MAP:
+  case T^.TypeId of
+    DUCKDB_TYPE_LIST:
       begin
         e := PDuckDBListEntry(data + row * SizeOf(TDuckDBListEntry));
         child := DuckDB.list_vector_get_child(vec);
-        if typeid = DUCKDB_TYPE_LIST then
+        W.AddDirect('[');
+        for i := PtrInt(e^.Offset) to PtrInt(e^.Offset + e^.Length) - 1 do
         begin
-          clt := DuckDB.list_type_child_type(lt);
-          W.Add('[');
-          for i := PtrInt(e^.Offset) to PtrInt(e^.Offset + e^.Length) - 1 do
-          begin
-            DuckDBVectorValueToJson(child, clt, i, W);
-            W.AddComma;
-          end;
-          W.CancelLastComma(']');
-          DuckDB.destroy_logical_type(clt);
-        end
-        else
-        begin
-          // MAP = LIST(STRUCT(key, value)) -> JSON object
-          klt := DuckDB.map_type_key_type(lt);
-          clt := DuckDB.map_type_value_type(lt);
-          kvec := DuckDB.struct_vector_get_child(child, 0);
-          vvec := DuckDB.struct_vector_get_child(child, 1);
-          W.Add('{');
-          for i := PtrInt(e^.Offset) to PtrInt(e^.Offset + e^.Length) - 1 do
-          begin
-            DuckDBVectorValueToText(kvec, klt, i, txt);
-            W.AddProp(pointer(txt), length(txt));
-            DuckDBVectorValueToJson(vvec, clt, i, W);
-            W.AddComma;
-          end;
-          W.CancelLastComma('}');
-          DuckDB.destroy_logical_type(klt);
-          DuckDB.destroy_logical_type(clt);
+          DuckDBVectorValueToJson(child, @T^.Children^[0], i, W);
+          W.AddComma;
         end;
+        W.CancelLastComma(']');
+      end;
+    DUCKDB_TYPE_MAP:
+      begin
+        // MAP = LIST(STRUCT(key, value)) -> JSON object
+        e := PDuckDBListEntry(data + row * SizeOf(TDuckDBListEntry));
+        child := DuckDB.list_vector_get_child(vec);
+        kvec := DuckDB.struct_vector_get_child(child, 0);
+        vvec := DuckDB.struct_vector_get_child(child, 1);
+        W.AddDirect('{');
+        for i := PtrInt(e^.Offset) to PtrInt(e^.Offset + e^.Length) - 1 do
+        begin
+          n := DuckDBVectorValueToTextBuf(kvec, @T^.Children^[0], i, buf);
+          if n >= 0 then
+            W.AddProp(@buf[0], n)
+          else
+          begin
+            DuckDBVectorValueToText(kvec, @T^.Children^[0], i, txt);
+            W.AddProp(pointer(txt), length(txt));
+          end;
+          DuckDBVectorValueToJson(vvec, @T^.Children^[1], i, W);
+          W.AddComma;
+        end;
+        W.CancelLastComma('}');
       end;
   else
-    begin
-      // ENUM, UUID, dates, INTERVAL, BIT -> JSON string
-      DuckDBVectorValueToText(vec, lt, row, txt);
-      W.Add('"');
-      W.AddJsonEscape(pointer(txt), length(txt));
-      W.Add('"');
-    end;
+    // ENUM, UUID, dates, INTERVAL, BIT -> JSON string
+    AddVectorValueAsJsonString(vec, T, row, W);
   end;
 end;
 
-procedure DuckDBVectorValueToJson(vec: TDuckDBVector; lt: TDuckDBLogicalType;
+procedure DuckDBVectorValueToJson(vec: TDuckDBVector; T: PDuckDBTypeInfo;
   row: PtrInt; W: TJsonWriter);
 var
   data: PAnsiChar;
-  name, p: pointer;
+  p: pointer;
   typeid: TDuckDBType;
   i, n, size: PtrInt; // no Int64 for-loop variable on Delphi 7
   len, scale: integer; // not PtrInt
   h: TDuckDBHugeInt;
   tag: integer;
   child: TDuckDBVector;
-  clt: TDuckDBLogicalType;
   buf: TTemp47;
 begin
   if not IsValid(DuckDB.vector_get_validity(vec), row) then
@@ -649,7 +613,7 @@ begin
     exit;
   end;
   data := DuckDB.vector_get_data(vec);
-  typeid := DuckDB.get_type_id(lt);
+  typeid := T^.TypeId;
   case typeid of
     DUCKDB_TYPE_BOOLEAN:
       W.Add(PDuckU8Array(data)^[row] <> 0);
@@ -659,7 +623,7 @@ begin
       W.Add(ReadIntegral(typeid, data, row));
     DUCKDB_TYPE_UBIGINT, DUCKDB_TYPE_HUGEINT, DUCKDB_TYPE_UHUGEINT:
       begin
-        n := DuckDBVectorValueToTextBuf(vec, lt, row, buf);
+        n := DuckDBVectorValueToTextBuf(vec, T, row, buf);
         W.AddNoJsonEscape(@buf[0], n);
       end;
     DUCKDB_TYPE_FLOAT:
@@ -668,36 +632,30 @@ begin
       W.AddDouble(PDuckDoubleArray(data)^[row]);
     DUCKDB_TYPE_DECIMAL:
       begin
-        DecimalValue(lt, data, row, h, scale);
+        DecimalValue(T, data, row, h, scale);
         n := DuckHugeIntToTextBuf(h, true, scale, buf);
         W.AddNoJsonEscape(@buf[0], n);
       end;
     DUCKDB_TYPE_ARRAY:
       begin
         child := DuckDB.array_vector_get_child(vec);
-        clt := DuckDB.array_type_child_type(lt);
-        size := DuckDB.array_type_array_size(lt);
-        W.Add('[');
+        size := T^.Scale;
+        W.AddDirect('[');
         for i := row * size to row * size + size - 1 do
         begin
-          DuckDBVectorValueToJson(child, clt, i, W);
+          DuckDBVectorValueToJson(child, @T^.Children^[0], i, W);
           W.AddComma;
         end;
         W.CancelLastComma(']');
-        DuckDB.destroy_logical_type(clt);
       end;
     DUCKDB_TYPE_STRUCT:
       begin
-        n := DuckDB.struct_type_child_count(lt);
-        W.Add('{');
-        for i := 0 to n - 1 do
+        W.AddDirect('{');
+        for i := 0 to T^.ChildCount - 1 do
         begin
-          name := DuckDB.struct_type_child_name(lt, i);
-          W.AddProp(name, StrLen(name));
-          DuckDB.free_(name);
-          clt := DuckDB.struct_type_child_type(lt, i);
-          DuckDBVectorValueToJson(DuckDB.struct_vector_get_child(vec, i), clt, row, W);
-          DuckDB.destroy_logical_type(clt);
+          W.AddProp(pointer(T^.Names[i]), length(T^.Names[i]));
+          DuckDBVectorValueToJson(DuckDB.struct_vector_get_child(vec, i),
+            @T^.Children^[i], row, W);
           W.AddComma;
         end;
         W.CancelLastComma('}');
@@ -707,10 +665,8 @@ begin
         // UNION = STRUCT(tag UTINYINT, member1, member2, ...)
         tag := PDuckU8Array(DuckDB.vector_get_data(
           DuckDB.struct_vector_get_child(vec, 0)))^[row];
-        clt := DuckDB.union_type_member_type(lt, tag);
         DuckDBVectorValueToJson(DuckDB.struct_vector_get_child(vec, tag + 1),
-          clt, row, W);
-        DuckDB.destroy_logical_type(clt);
+          @T^.Children^[tag], row, W);
       end;
     DUCKDB_TYPE_BLOB:
       begin
@@ -722,12 +678,12 @@ begin
     DUCKDB_TYPE_VARCHAR:
       begin
         p := DuckStringPtr(DuckStringAt(data, row), len);
-        W.Add('"');
+        W.AddDirect('"');
         W.AddJsonEscape(p, len);
-        W.Add('"');
+        W.AddDirect('"');
       end
   else
-    ComplexDuckDBVectorValueToJson(vec, data, lt, typeid, row, W);
+    ComplexDuckDBVectorValueToJson(vec, data, T, row, W);
   end;
 end;
 
@@ -1019,8 +975,7 @@ begin
   fChunkSize := 0;
   fChunkRow := 0;
   for i := 0 to length(fInfo) - 1 do
-    if fInfo[i].LogicalType <> nil then
-      DuckDB.destroy_logical_type(fInfo[i].LogicalType);
+    DuckDBTypeInfoDone(fInfo[i].Info);
   fInfo := nil;
   if fHasResult then
     DuckDB.destroy_result(@fRes);
@@ -1143,21 +1098,11 @@ begin
   for i := 0 to length(fInfo) - 1 do
   begin
     c := @fInfo[i];
-    c^.LogicalType := DuckDB.column_logical_type(@fRes, i);
-    c^.TypeId := DuckDB.get_type_id(c^.LogicalType);
-    case c^.TypeId of
-      DUCKDB_TYPE_DECIMAL:
-        begin
-          c^.Internal := DuckDB.decimal_internal_type(c^.LogicalType);
-          c^.Scale := DuckDB.decimal_scale(c^.LogicalType);
-        end;
-      DUCKDB_TYPE_ENUM:
-        c^.Internal := DuckDB.enum_internal_type(c^.LogicalType);
-    end;
+    DuckDBTypeInfoInit(c^.Info, DuckDB.column_logical_type(@fRes, i));
     name := RawUtf8(DuckDB.column_name(@fRes, i));
     col := AddColumn(name);
-    col^.ColumnType := DuckDBTypeToField(c^.TypeId, c^.Scale);
-    col^.ColumnAttr := c^.TypeId;
+    col^.ColumnType := DuckDBTypeToField(c^.Info.TypeId, c^.Info.Scale);
+    col^.ColumnAttr := c^.Info.TypeId;
   end;
   SqlLogEnd;
 end;
@@ -1246,7 +1191,7 @@ begin
   if cardinal(Col) >= cardinal(length(fInfo)) then
     result := DUCKDB_TYPE_INVALID
   else
-    result := fInfo[Col].TypeId;
+    result := fInfo[Col].Info.TypeId;
 end;
 
 function TSqlDBDuckDBStatement.ColumnNull(Col: integer): boolean;
@@ -1260,7 +1205,7 @@ function TSqlDBDuckDBStatement.DecimalMantissa(c: PDuckDBColumnInfo;
 var
   h: PDuckDBHugeInt;
 begin
-  case c^.Internal of
+  case c^.Info.Internal of
     DUCKDB_TYPE_SMALLINT:
       result := PDuckI16Array(c^.Data)^[fChunkRow];
     DUCKDB_TYPE_INTEGER:
@@ -1291,24 +1236,24 @@ begin
   result := 0;
   if not IsValid(c^.Validity, fChunkRow) then
     exit;
-  case c^.TypeId of
+  case c^.Info.TypeId of
     DUCKDB_TYPE_BOOLEAN, DUCKDB_TYPE_TINYINT, DUCKDB_TYPE_SMALLINT,
     DUCKDB_TYPE_INTEGER, DUCKDB_TYPE_BIGINT, DUCKDB_TYPE_UTINYINT,
     DUCKDB_TYPE_USMALLINT, DUCKDB_TYPE_UINTEGER, DUCKDB_TYPE_UBIGINT:
-      result := ReadIntegral(c^.TypeId, c^.Data, fChunkRow);
+      result := ReadIntegral(c^.Info.TypeId, c^.Data, fChunkRow);
     DUCKDB_TYPE_HUGEINT, DUCKDB_TYPE_UHUGEINT:
       begin
         h := PDuckDBHugeInt(PAnsiChar(c^.Data) + fChunkRow * 16)^;
-        if not DuckHugeIntIsInt64(h, c^.TypeId = DUCKDB_TYPE_HUGEINT) then
+        if not DuckHugeIntIsInt64(h, c^.Info.TypeId = DUCKDB_TYPE_HUGEINT) then
           ESqlDBDuckDB.RaiseUtf8('%.ColumnInt(%): 128-bit overflow',
             [self, Col]);
         result := h.Lower;
       end;
     DUCKDB_TYPE_DECIMAL:
-      if c^.Internal = DUCKDB_TYPE_HUGEINT then
+      if c^.Info.Internal = DUCKDB_TYPE_HUGEINT then
         result := GetInt64(pointer(ColumnUtf8(Col))) // integer part
       else
-        result := DecimalMantissa(c, hi) div POW10[c^.Scale];
+        result := DecimalMantissa(c, hi) div POW10[c^.Info.Scale];
     DUCKDB_TYPE_FLOAT, DUCKDB_TYPE_DOUBLE:
       result := trunc(ColumnDouble(Col));
     DUCKDB_TYPE_DATE:
@@ -1330,20 +1275,20 @@ begin
   result := 0;
   if not IsValid(c^.Validity, fChunkRow) then
     exit;
-  case c^.TypeId of
+  case c^.Info.TypeId of
     DUCKDB_TYPE_FLOAT:
       result := PDuckSingleArray(c^.Data)^[fChunkRow];
     DUCKDB_TYPE_DOUBLE:
       result := PDuckDoubleArray(c^.Data)^[fChunkRow];
     DUCKDB_TYPE_DECIMAL:
-      if c^.Internal = DUCKDB_TYPE_HUGEINT then
+      if c^.Info.Internal = DUCKDB_TYPE_HUGEINT then
         result := GetExtended(pointer(ColumnUtf8(Col)))
       else
-        result := DecimalMantissa(c, hi) / POW10[c^.Scale];
+        result := DecimalMantissa(c, hi) / POW10[c^.Info.Scale];
     DUCKDB_TYPE_BOOLEAN, DUCKDB_TYPE_TINYINT, DUCKDB_TYPE_SMALLINT,
     DUCKDB_TYPE_INTEGER, DUCKDB_TYPE_BIGINT, DUCKDB_TYPE_UTINYINT,
     DUCKDB_TYPE_USMALLINT, DUCKDB_TYPE_UINTEGER:
-      result := ReadIntegral(c^.TypeId, c^.Data, fChunkRow);
+      result := ReadIntegral(c^.Info.TypeId, c^.Data, fChunkRow);
   else
     result := GetExtended(pointer(ColumnUtf8(Col)));
   end;
@@ -1358,12 +1303,12 @@ begin
   result := 0;
   if not IsValid(c^.Validity, fChunkRow) then
     exit;
-  case c^.TypeId of
+  case c^.Info.TypeId of
     DUCKDB_TYPE_DECIMAL:
-      if (c^.Internal <> DUCKDB_TYPE_HUGEINT) and
-         (c^.Scale <= 4) then
+      if (c^.Info.Internal <> DUCKDB_TYPE_HUGEINT) and
+         (c^.Info.Scale <= 4) then
       begin
-        v := DecimalMantissa(c, hi) * POW10[4 - c^.Scale];
+        v := DecimalMantissa(c, hi) * POW10[4 - c^.Info.Scale];
         result := PCurrency(@v)^;
       end
       else
@@ -1373,7 +1318,7 @@ begin
     DUCKDB_TYPE_BOOLEAN, DUCKDB_TYPE_TINYINT, DUCKDB_TYPE_SMALLINT,
     DUCKDB_TYPE_INTEGER, DUCKDB_TYPE_BIGINT, DUCKDB_TYPE_UTINYINT,
     DUCKDB_TYPE_USMALLINT, DUCKDB_TYPE_UINTEGER:
-      result := ReadIntegral(c^.TypeId, c^.Data, fChunkRow);
+      result := ReadIntegral(c^.Info.TypeId, c^.Data, fChunkRow);
   else
     PInt64(@result)^ := StrToCurr64(pointer(ColumnUtf8(Col)));
   end;
@@ -1389,7 +1334,7 @@ begin
   result := 0;
   if not IsValid(c^.Validity, fChunkRow) then
     exit;
-  case c^.TypeId of
+  case c^.Info.TypeId of
     DUCKDB_TYPE_DATE:
       result := PDuckI32Array(c^.Data)^[fChunkRow] + DUCKDB_UNIXDATE_DELTA;
     DUCKDB_TYPE_TIME:
@@ -1404,7 +1349,7 @@ begin
     DUCKDB_TYPE_TIMESTAMP, DUCKDB_TYPE_TIMESTAMP_TZ, DUCKDB_TYPE_TIMESTAMP_S,
     DUCKDB_TYPE_TIMESTAMP_MS, DUCKDB_TYPE_TIMESTAMP_NS:
       result := DuckTimestampToDateTime(
-        TimestampMicros(c^.TypeId, PDuckI64Array(c^.Data)^[fChunkRow]));
+        TimestampMicros(c^.Info.TypeId, PDuckI64Array(c^.Data)^[fChunkRow]));
   else
     result := Iso8601ToDateTime(ColumnUtf8(Col));
   end;
@@ -1415,39 +1360,19 @@ var
   c: PDuckDBColumnInfo;
   p: PUtf8Char;
   len: integer; // not PtrInt
-  idx: Int64;
-  i: PtrInt;
 begin
   c := CheckCol(Col);
   result := '';
   if not IsValid(c^.Validity, fChunkRow) then
     exit;
-  case c^.TypeId of
+  case c^.Info.TypeId of
     DUCKDB_TYPE_VARCHAR, DUCKDB_TYPE_BLOB:
       begin
         p := DuckStringPtr(DuckStringAt(c^.Data, fChunkRow), len);
         FastSetString(result, p, len);
       end;
-    DUCKDB_TYPE_ENUM:
-      begin
-        if c^.EnumValues = nil then
-        begin
-          // cache the whole enum dictionary for this column
-          SetLength(c^.EnumValues, DuckDB.enum_dictionary_size(c^.LogicalType));
-          for i := 0 to length(c^.EnumValues) - 1 do
-          begin
-            p := DuckDB.enum_dictionary_value(c^.LogicalType, i);
-            c^.EnumValues[i] := RawUtf8(p);
-            DuckDB.free_(p);
-          end;
-        end;
-        idx := ReadIntegral(c^.Internal, c^.Data, fChunkRow);
-        if (idx >= 0) and
-           (idx < length(c^.EnumValues)) then
-          result := c^.EnumValues[idx];
-      end;
   else
-    DuckDBVectorValueToText(c^.Vector, c^.LogicalType, fChunkRow, result);
+    DuckDBVectorValueToText(c^.Vector, @c^.Info, fChunkRow, result);
   end;
 end;
 
@@ -1461,7 +1386,7 @@ begin
   result := '';
   if not IsValid(c^.Validity, fChunkRow) then
     exit;
-  if c^.TypeId in [DUCKDB_TYPE_BLOB, DUCKDB_TYPE_VARCHAR] then
+  if c^.Info.TypeId in [DUCKDB_TYPE_BLOB, DUCKDB_TYPE_VARCHAR] then
   begin
     p := DuckStringPtr(DuckStringAt(c^.Data, fChunkRow), len);
     FastSetRawByteString(result, p, len);
@@ -1482,11 +1407,11 @@ begin
     W.AddNull;
     exit;
   end;
-  case c^.TypeId of
+  case c^.Info.TypeId of
     DUCKDB_TYPE_BOOLEAN, DUCKDB_TYPE_TINYINT, DUCKDB_TYPE_SMALLINT,
     DUCKDB_TYPE_INTEGER, DUCKDB_TYPE_BIGINT, DUCKDB_TYPE_UTINYINT,
     DUCKDB_TYPE_USMALLINT, DUCKDB_TYPE_UINTEGER:
-      W.Add(ReadIntegral(c^.TypeId, c^.Data, fChunkRow)); // boolean as 0/1
+      W.Add(ReadIntegral(c^.Info.TypeId, c^.Data, fChunkRow)); // boolean as 0/1
     DUCKDB_TYPE_VARCHAR:
       begin
         p := DuckStringPtr(DuckStringAt(c^.Data, fChunkRow), len);
@@ -1517,7 +1442,7 @@ begin
         W.Add('"');
       end;
   else
-    DuckDBVectorValueToJson(c^.Vector, c^.LogicalType, fChunkRow, W);
+    DuckDBVectorValueToJson(c^.Vector, @c^.Info, fChunkRow, W);
   end;
 end;
 
