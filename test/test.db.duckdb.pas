@@ -465,7 +465,8 @@ begin
     end;
     timer.Start;
     if pass = 0 then
-      fProps.OnBatchInsert(fProps, 'arr', names, types, COUNT, values, [])
+      // the ORM supplies schema-qualified table names
+      fProps.OnBatchInsert(fProps, 'main.arr', names, types, COUNT, values, [])
     else
     begin
       // not all columns: the Appender is not usable -> regular INSERT

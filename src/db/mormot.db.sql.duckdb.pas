@@ -1462,6 +1462,8 @@ constructor TSqlDBDuckDBAppender.Create(aConnection: TSqlDBDuckDBConnection;
   const aTable, aSchema: RawUtf8);
 var
   schema: PUtf8Char;
+  sch, tbl: RawUtf8;
+  p: PtrInt;
 begin
   inherited Create;
   if not DuckDB.HasAppender then
@@ -1469,11 +1471,21 @@ begin
   if not aConnection.IsConnected then
     aConnection.Connect;
   fTable := aTable;
+  sch := aSchema;
+  tbl := aTable;
+  p := PosExChar('.', tbl);
+  if (sch = '') and
+     (p > 0) then
+  begin
+    // 'schema.table' as supplied by the ORM
+    sch := copy(tbl, 1, p - 1);
+    tbl := copy(tbl, p + 1, maxInt);
+  end;
   schema := nil;
-  if aSchema <> '' then
-    schema := pointer(aSchema);
+  if sch <> '' then
+    schema := pointer(sch);
   if DuckDB.appender_create(aConnection.fConn,
-       schema, pointer(aTable), fAppender) <> DuckDBSuccess then
+       schema, pointer(tbl), fAppender) <> DuckDBSuccess then
   begin
     try
       Check(DuckDBError, 'create');
