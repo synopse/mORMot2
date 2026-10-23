@@ -185,9 +185,8 @@ type
     fMoreToFetch: boolean;
     fExecuted: boolean;
     fUpdateCount: integer;
-    function BuildSql(Row: integer): RawUtf8;
-    procedure AddParam(W: TJsonWriter; Index, Row: integer);
-    procedure ExecuteArray;
+    function BuildSql: RawUtf8;
+    procedure AddParam(W: TJsonWriter; Index: integer);
     procedure ReleaseResult;
     procedure FetchNext;
     function NextChunk: boolean;
@@ -243,12 +242,6 @@ implementation
 
 
 { ************ Vector Value Conversion }
-
-const
-  POW10: array[0..18] of Int64 = (1, 10, 100, 1000, 10000, 100000, 1000000,
-    10000000, 100000000, 1000000000, 10000000000, 100000000000,
-    1000000000000, 10000000000000, 100000000000000, 1000000000000000,
-    10000000000000000, 100000000000000000, 1000000000000000000);
 
 function IntegralAt(TypeId: TDuckDBType; D: PAnsiChar): Int64;
 begin
@@ -309,20 +302,6 @@ begin
       result := word(QuackInt16(D));
   else
     result := cardinal(QuackInt32(D));
-  end;
-end;
-
-function TimestampMicros(TypeId: TDuckDBType; Value: Int64): Int64;
-begin
-  case TypeId of
-    DUCKDB_TYPE_TIMESTAMP_S:
-      result := Value * 1000000;
-    DUCKDB_TYPE_TIMESTAMP_MS:
-      result := Value * 1000;
-    DUCKDB_TYPE_TIMESTAMP_NS:
-      result := Value div 1000;
-  else
-    result := Value;
   end;
 end;
 
@@ -419,7 +398,7 @@ begin
           DUCKDB_TYPE_TIMESTAMP, DUCKDB_TYPE_TIMESTAMP_S,
           DUCKDB_TYPE_TIMESTAMP_MS, DUCKDB_TYPE_TIMESTAMP_NS:
             DuckTimestampToText(
-              TimestampMicros(t.DuckType, QuackInt64(d)), Result);
+              DuckTimestampMicros(t.DuckType, QuackInt64(d)), Result);
           DUCKDB_TYPE_TIMESTAMP_TZ:
             begin
               DuckTimestampToText(QuackInt64(d), Result);
@@ -943,29 +922,12 @@ begin
   W.AddShort('''::BLOB');
 end;
 
-procedure TSqlDBQuackStatement.AddParam(W: TJsonWriter; Index, Row: integer);
+procedure TSqlDBQuackStatement.AddParam(W: TJsonWriter; Index: integer);
 var
   p: PSqlDBParam;
   bits: Int64;
-  v: RawUtf8;
 begin
   p := @fParams[Index];
-  if (Row >= 0) and
-     (p^.VArray <> nil) then
-  begin
-    // array values are already stored as SQL literals
-    if Row >= length(p^.VArray) then
-      W.AddShort('null')
-    else
-    begin
-      v := p^.VArray[Row];
-      if p^.VType = ftBlob then
-        AddBlobLiteral(W, pointer(v), length(v))
-      else
-        W.AddNoJsonEscape(pointer(v), length(v));
-    end;
-    exit;
-  end;
   case p^.VType of
     ftNull:
       W.AddShort('null');
@@ -1002,7 +964,7 @@ begin
   end;
 end;
 
-function TSqlDBQuackStatement.BuildSql(Row: integer): RawUtf8;
+function TSqlDBQuackStatement.BuildSql: RawUtf8;
 var
   P, B: PUtf8Char;
   n: integer;
@@ -1029,7 +991,7 @@ begin
       if n >= fParamCount then
         ESqlDBQuack.RaiseUtf8('%: missing parameter #% in [%]',
           [self, n + 1, fSql]);
-      AddParam(W, n, Row);
+      AddParam(W, n);
       inc(n);
     until false;
     if n <> fParamCount then
@@ -1038,29 +1000,6 @@ begin
     W.SetText(result);
   finally
     W.Free;
-  end;
-end;
-
-procedure TSqlDBQuackStatement.ExecuteArray;
-var
-  row: integer;
-  intrans: boolean;
-  conn: TSqlDBQuackConnection;
-begin
-  // run the statement once per row - in an implicit transaction
-  conn := TSqlDBQuackConnection(fConnection);
-  intrans := conn.TransactionCount > 0;
-  if not intrans then
-    conn.ExecuteScript('BEGIN TRANSACTION');
-  try
-    for row := 0 to fParamsArrayCount - 1 do
-      inc(fUpdateCount, conn.ExecuteScript(BuildSql(row)));
-    if not intrans then
-      conn.ExecuteScript('COMMIT');
-  except
-    if not intrans then
-      conn.ExecuteScript('ROLLBACK');
-    raise;
   end;
 end;
 
@@ -1080,17 +1019,10 @@ begin
   fCurrentRow := 0;
   fUpdateCount := 0;
   if fParamsArrayCount > 0 then
-  begin
-    // BindArray() was used: execute once per row (e.g. mormot.db.proxy batch)
-    try
-      ExecuteArray;
-    finally
-      SqlLogEnd;
-    end;
-    exit;
-  end;
+    ESqlDBQuack.RaiseUtf8('%.ExecutePrepared: BindArray() is not supported - ' +
+      'use OnBatchInsert or a transaction', [self]);
   conn := TSqlDBQuackConnection(fConnection);
-  sql := BuildSql(-1);
+  sql := BuildSql;
   QuackNewQueryUuid(fQueryUuid);
   try
     // PREPARE_REQUEST also runs the query on the server
@@ -1273,7 +1205,7 @@ begin
       else
       begin
         DecimalAt(v.VType, d, h);
-        result := h.Lower div POW10[v.VType.Scale];
+        result := h.Lower div DUCKDB_POW10[v.VType.Scale];
       end;
     DUCKDB_TYPE_FLOAT, DUCKDB_TYPE_DOUBLE:
       result := trunc(ColumnDouble(Col));
@@ -1315,7 +1247,7 @@ begin
       else
       begin
         DecimalAt(v.VType, d, h);
-        result := h.Lower / POW10[v.VType.Scale];
+        result := h.Lower / DUCKDB_POW10[v.VType.Scale];
       end;
     DUCKDB_TYPE_BOOLEAN, DUCKDB_TYPE_TINYINT, DUCKDB_TYPE_SMALLINT,
     DUCKDB_TYPE_INTEGER, DUCKDB_TYPE_BIGINT, DUCKDB_TYPE_UTINYINT,
@@ -1351,7 +1283,7 @@ begin
          (v.VType.Scale <= 4) then
       begin
         DecimalAt(v.VType, d, h);
-        c := h.Lower * POW10[4 - v.VType.Scale];
+        c := h.Lower * DUCKDB_POW10[4 - v.VType.Scale];
         result := PCurrency(@c)^;
       end
       else
@@ -1401,7 +1333,7 @@ begin
     DUCKDB_TYPE_TIMESTAMP, DUCKDB_TYPE_TIMESTAMP_TZ, DUCKDB_TYPE_TIMESTAMP_S,
     DUCKDB_TYPE_TIMESTAMP_MS, DUCKDB_TYPE_TIMESTAMP_NS:
       result := DuckTimestampToDateTime(
-        TimestampMicros(v.VType.DuckType, QuackInt64(d)));
+        DuckTimestampMicros(v.VType.DuckType, QuackInt64(d)));
   else
     result := Iso8601ToDateTime(ColumnUtf8(Col));
   end;

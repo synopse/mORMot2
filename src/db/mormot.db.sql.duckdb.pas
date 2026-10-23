@@ -283,11 +283,6 @@ implementation
 { ************ Vector Value Conversion }
 
 const
-  POW10: array[0..18] of Int64 = (1, 10, 100, 1000, 10000, 100000, 1000000,
-    10000000, 100000000, 1000000000, 10000000000, 100000000000,
-    1000000000000, 10000000000000, 100000000000000, 1000000000000000,
-    10000000000000000, 100000000000000000, 1000000000000000000);
-
   // integer types which can be read by ReadIntegral() as Int64
   DUCKDB_INT_TYPES = [DUCKDB_TYPE_BOOLEAN, DUCKDB_TYPE_TINYINT,
     DUCKDB_TYPE_SMALLINT, DUCKDB_TYPE_INTEGER, DUCKDB_TYPE_BIGINT,
@@ -298,20 +293,6 @@ function IsValid(validity: PDuckI64Array; row: PtrInt): boolean;
 begin
   result := (validity = nil) or
             ((validity^[row shr 6] shr (row and 63)) and 1 <> 0);
-end;
-
-function TimestampMicros(typeid: TDuckDBType; v: Int64): Int64;
-begin
-  case typeid of
-    DUCKDB_TYPE_TIMESTAMP_S:
-      result := v * 1000000;
-    DUCKDB_TYPE_TIMESTAMP_MS:
-      result := v * 1000;
-    DUCKDB_TYPE_TIMESTAMP_NS, DUCKDB_TYPE_TIMESTAMP_TZ_NS:
-      result := v div 1000;
-  else
-    result := v;
-  end;
 end;
 
 function ReadIntegral(typeid: TDuckDBType; data: pointer; row: PtrInt): Int64;
@@ -513,11 +494,11 @@ begin
     DUCKDB_TYPE_TIMESTAMP, DUCKDB_TYPE_TIMESTAMP_S,
     DUCKDB_TYPE_TIMESTAMP_MS, DUCKDB_TYPE_TIMESTAMP_NS:
       DuckTimestampToText(
-        TimestampMicros(typeid, PDuckI64Array(data)^[row]), result);
+        DuckTimestampMicros(typeid, PDuckI64Array(data)^[row]), result);
     DUCKDB_TYPE_TIMESTAMP_TZ, DUCKDB_TYPE_TIMESTAMP_TZ_NS:
       begin
         DuckTimestampToText(
-          TimestampMicros(typeid, PDuckI64Array(data)^[row]), result);
+          DuckTimestampMicros(typeid, PDuckI64Array(data)^[row]), result);
         result := result + '+00'; // stored as UTC
       end;
     DUCKDB_TYPE_INTERVAL:
@@ -1327,7 +1308,7 @@ begin
       if c^.Info.Internal = DUCKDB_TYPE_HUGEINT then
         result := GetInt64(pointer(ColumnUtf8(Col))) // integer part
       else
-        result := DecimalMantissa(c, hi) div POW10[c^.Info.Scale];
+        result := DecimalMantissa(c, hi) div DUCKDB_POW10[c^.Info.Scale];
     DUCKDB_TYPE_FLOAT, DUCKDB_TYPE_DOUBLE:
       result := trunc(ColumnDouble(Col));
     DUCKDB_TYPE_DATE:
@@ -1359,7 +1340,7 @@ begin
       if c^.Info.Internal = DUCKDB_TYPE_HUGEINT then
         result := GetExtended(pointer(ColumnUtf8(Col)))
       else
-        result := DecimalMantissa(c, hi) / POW10[c^.Info.Scale];
+        result := DecimalMantissa(c, hi) / DUCKDB_POW10[c^.Info.Scale];
   else
     if c^.Info.TypeId in DUCKDB_INT_TYPES then
       result := ReadIntegral(c^.Info.TypeId, c^.Data, fChunkRow)
@@ -1382,7 +1363,7 @@ begin
       if (c^.Info.Internal <> DUCKDB_TYPE_HUGEINT) and
          (c^.Info.Scale <= 4) then
       begin
-        v := DecimalMantissa(c, hi) * POW10[4 - c^.Info.Scale];
+        v := DecimalMantissa(c, hi) * DUCKDB_POW10[4 - c^.Info.Scale];
         result := PCurrency(@v)^;
       end
       else
@@ -1423,7 +1404,7 @@ begin
     DUCKDB_TYPE_TIMESTAMP_MS, DUCKDB_TYPE_TIMESTAMP_NS,
     DUCKDB_TYPE_TIMESTAMP_TZ_NS:
       result := DuckTimestampToDateTime(
-        TimestampMicros(c^.Info.TypeId, PDuckI64Array(c^.Data)^[fChunkRow]));
+        DuckTimestampMicros(c^.Info.TypeId, PDuckI64Array(c^.Data)^[fChunkRow]));
   else
     result := Iso8601ToDateTime(ColumnUtf8(Col));
   end;
