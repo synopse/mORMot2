@@ -1152,6 +1152,7 @@ const
   EMR_POLYBEZIER16 = 85;
   EMR_POLYGON16 = 86;
   EMR_POLYLINE16 = 87;
+  EMR_EXTCREATEPEN = 95;
 
 type
   TEMRExtTextOut = TEMREXTTEXTOUTW;
@@ -1375,6 +1376,18 @@ begin
           E.DeleteObj(ihPen - 1);
           E.CreatePenObj(
             ihPen - 1, lopn.lopnColor, lopn.lopnWidth.x, lopn.lopnStyle);
+        end;
+      EMR_EXTCREATEPEN:
+        // approximated: only the color, width and dash style are handled
+        with PEMRExtCreatePen(Rec)^ do
+        begin
+          E.DeleteObj(ihPen - 1);
+          if elp.elpPenStyle and PS_TYPE_MASK = PS_COSMETIC then
+            E.CreatePenObj(ihPen - 1, elp.elpColor, 0,
+              elp.elpPenStyle and PS_STYLE_MASK)
+          else
+            E.CreatePenObj(ihPen - 1, elp.elpColor, elp.elpWidth,
+              elp.elpPenStyle and PS_STYLE_MASK);
         end;
       EMR_CREATEBRUSHINDIRECT:
         with PEMRCreateBrushIndirect(Rec)^ do
