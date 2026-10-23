@@ -1134,6 +1134,7 @@ const
   EMR_SAVEDC = 33;
   EMR_RESTOREDC = 34;
   EMR_SETWORLDTRANSFORM = 35;
+  EMR_MODIFYWORLDTRANSFORM = 36;
   EMR_SELECTOBJECT = 37;
   EMR_CREATEPEN = 38;
   EMR_CREATEBRUSHINDIRECT = 39;
@@ -1314,6 +1315,14 @@ begin
     PI^[i] := smallint(PW^[i]);
 end;
 
+{$ifdef FPC}
+// FPC declares CombineTransform(LPXFORM; var XFORM; var XFORM): match Delphi
+function CombineTransform(var dest: TXForm; const a, b: TXForm): BOOL;
+begin
+  result := Windows.CombineTransform(@dest, PXForm(@a)^, PXForm(@b)^);
+end;
+{$endif FPC}
+
 // EMF enumeration callback function, called from GDI
 // - draw most content with GDI+ functions via the TGdiplusEnum state machine
 function EnumEmfCallback(DC: HDC; var Table: THandleTable; Rec: PEnhMetaRecord;
@@ -1352,6 +1361,25 @@ begin
       EMR_SETWORLDTRANSFORM:
         begin
           WorldTransform := PEMRSetWorldTransform(Rec)^.xform;
+          E.ScaleMatrix;
+        end;
+      EMR_MODIFYWORLDTRANSFORM:
+        begin
+          with PEMRModifyWorldTransform(Rec)^ do
+            case iMode of
+              MWT_IDENTITY:
+                begin
+                  FillCharFast(WorldTransform, SizeOf(WorldTransform), 0);
+                  WorldTransform.eM11 := 1;
+                  WorldTransform.eM22 := 1;
+                end;
+              MWT_LEFTMULTIPLY:
+                CombineTransform(WorldTransform, xform, WorldTransform);
+              MWT_RIGHTMULTIPLY:
+                CombineTransform(WorldTransform, WorldTransform, xform);
+            else
+              WorldTransform := xform; // MWT_SET
+            end;
           E.ScaleMatrix;
         end;
       EMR_EXTCREATEFONTINDIRECTW:
