@@ -276,6 +276,11 @@ const
     1000000000000, 10000000000000, 100000000000000, 1000000000000000,
     10000000000000000, 100000000000000000, 1000000000000000000);
 
+  // integer types which can be read by ReadIntegral() as Int64
+  DUCKDB_INT_TYPES = [DUCKDB_TYPE_BOOLEAN, DUCKDB_TYPE_TINYINT,
+    DUCKDB_TYPE_SMALLINT, DUCKDB_TYPE_INTEGER, DUCKDB_TYPE_BIGINT,
+    DUCKDB_TYPE_UTINYINT, DUCKDB_TYPE_USMALLINT, DUCKDB_TYPE_UINTEGER];
+
 function IsValid(validity: PDuckI64Array; row: PtrInt): boolean;
   {$ifdef HASINLINE} inline; {$endif}
 begin
@@ -1285,12 +1290,11 @@ begin
         result := GetExtended(pointer(ColumnUtf8(Col)))
       else
         result := DecimalMantissa(c, hi) / POW10[c^.Info.Scale];
-    DUCKDB_TYPE_BOOLEAN, DUCKDB_TYPE_TINYINT, DUCKDB_TYPE_SMALLINT,
-    DUCKDB_TYPE_INTEGER, DUCKDB_TYPE_BIGINT, DUCKDB_TYPE_UTINYINT,
-    DUCKDB_TYPE_USMALLINT, DUCKDB_TYPE_UINTEGER:
-      result := ReadIntegral(c^.Info.TypeId, c^.Data, fChunkRow);
   else
-    result := GetExtended(pointer(ColumnUtf8(Col)));
+    if c^.Info.TypeId in DUCKDB_INT_TYPES then
+      result := ReadIntegral(c^.Info.TypeId, c^.Data, fChunkRow)
+    else
+      result := GetExtended(pointer(ColumnUtf8(Col)));
   end;
 end;
 
@@ -1315,12 +1319,11 @@ begin
         PInt64(@result)^ := StrToCurr64(pointer(ColumnUtf8(Col)));
     DUCKDB_TYPE_FLOAT, DUCKDB_TYPE_DOUBLE:
       result := ColumnDouble(Col);
-    DUCKDB_TYPE_BOOLEAN, DUCKDB_TYPE_TINYINT, DUCKDB_TYPE_SMALLINT,
-    DUCKDB_TYPE_INTEGER, DUCKDB_TYPE_BIGINT, DUCKDB_TYPE_UTINYINT,
-    DUCKDB_TYPE_USMALLINT, DUCKDB_TYPE_UINTEGER:
-      result := ReadIntegral(c^.Info.TypeId, c^.Data, fChunkRow);
   else
-    PInt64(@result)^ := StrToCurr64(pointer(ColumnUtf8(Col)));
+    if c^.Info.TypeId in DUCKDB_INT_TYPES then
+      result := ReadIntegral(c^.Info.TypeId, c^.Data, fChunkRow)
+    else
+      PInt64(@result)^ := StrToCurr64(pointer(ColumnUtf8(Col)));
   end;
 end;
 
