@@ -32,6 +32,12 @@ uses
 
 { ************ DuckDB C API Types and Constants }
 
+const
+  /// the TSqlDBDefinition used for DuckDB, since its SQL is PostgreSQL-like
+  // - please use this constant in the DuckDB code instead of dPostgreSQL, in
+  // case a specific dialect would be needed in the future
+  dDuckDB = dPostgreSQL;
+
 type
   /// exception raised by the DuckDB providers
   ESqlDBDuckDB = class(ESqlDBException);

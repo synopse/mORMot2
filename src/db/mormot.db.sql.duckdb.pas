@@ -14,7 +14,7 @@ unit mormot.db.sql.duckdb;
   *****************************************************************************
 
   Notes:
-  - DuckDB SQL is very close to PostgreSQL, so dPostgreSQL is used as
+  - DuckDB SQL is very close to PostgreSQL, so dDuckDB = dPostgreSQL is used as
     TSqlDBDefinition (LIMIT syntax, DDL types, information_schema metadata)
   - one database file can only be opened by ONE process in read/write mode:
     the duckdb_database handle is owned by the connection properties instance,
@@ -701,7 +701,7 @@ constructor TSqlDBDuckDBConnectionProperties.Create(
   const aServerName, aDatabaseName, aUserID, aPassWord: RawUtf8);
 begin
   DuckDBLibraryInitialize; // raise ESqlDBDuckDB if no duckdb.dll
-  fDbms := dPostgreSQL;    // DuckDB SQL dialect is PostgreSQL-like
+  fDbms := dDuckDB;        // PostgreSQL-like SQL dialect
   inherited Create(aServerName, aDatabaseName, aUserID, aPassWord);
   fEngineName := 'DuckDB';
   ForcedSchemaName := 'main'; // DuckDB default schema, for metadata queries
@@ -1463,7 +1463,6 @@ constructor TSqlDBDuckDBAppender.Create(aConnection: TSqlDBDuckDBConnection;
 var
   schema: PUtf8Char;
   sch, tbl: RawUtf8;
-  p: PtrInt;
 begin
   inherited Create;
   if not DuckDB.HasAppender then
@@ -1473,14 +1472,8 @@ begin
   fTable := aTable;
   sch := aSchema;
   tbl := aTable;
-  p := PosExChar('.', tbl);
-  if (sch = '') and
-     (p > 0) then
-  begin
-    // 'schema.table' as supplied by the ORM
-    sch := copy(tbl, 1, p - 1);
-    tbl := copy(tbl, p + 1, maxInt);
-  end;
+  if sch = '' then
+    tbl := SplitRight(aTable, '.', @sch); // 'schema.table' as set by the ORM
   schema := nil;
   if sch <> '' then
     schema := pointer(sch);
