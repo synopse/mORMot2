@@ -1817,7 +1817,7 @@ end;
 constructor TSqlDBQuackConnectionProperties.Create(
   const aServerName, aDatabaseName, aUserID, aPassWord: RawUtf8);
 begin
-  fDbms := dPostgreSQL; // DuckDB SQL dialect is PostgreSQL-like
+  fDbms := dDuckDB; // PostgreSQL-like SQL dialect
   inherited Create(aServerName, aDatabaseName, aUserID, aPassWord);
   fEngineName := 'Quack';
   ForcedSchemaName := 'main'; // DuckDB default schema, for metadata queries
