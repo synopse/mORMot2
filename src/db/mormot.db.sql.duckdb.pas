@@ -626,10 +626,9 @@ procedure DuckDBVectorValueToText(vec: TDuckDBVector;
   T: PDuckDBTypeInfo; row: PtrInt; var result: RawUtf8);
 var
   typeid: TDuckDBType;
-  len, offs: integer;
+  len: integer;
   data: PAnsiChar;
   p: pointer;
-  us: Int64;
   d: double;
   buf: TTemp47;
 begin
@@ -658,22 +657,8 @@ begin
     DUCKDB_TYPE_TIME_NS:
       DuckTimeToText(PDuckI64Array(data)^[row] div 1000, result);
     DUCKDB_TYPE_TIME_TZ:
-      begin
-        DuckTimeTzDecode(PDuckI64Array(data)^[row], us, offs);
-        DuckTimeToText(us, result);
-        if offs < 0 then
-          result := result + '-'
-        else
-          result := result + '+';
-        offs := abs(offs);
-        AppendShortToUtf8(UInt2DigitsToShortFast(offs div 3600), result);
-        if offs mod 3600 <> 0 then
-        begin
-          result := result + ':';
-          AppendShortToUtf8(
-            UInt2DigitsToShortFast((offs div 60) mod 60), result);
-        end;
-      end;
+      DuckTimeTzToText(PDuckI64Array(data)^[row], result);
+
     DUCKDB_TYPE_TIMESTAMP, DUCKDB_TYPE_TIMESTAMP_S,
     DUCKDB_TYPE_TIMESTAMP_MS, DUCKDB_TYPE_TIMESTAMP_NS:
       DuckTimestampToText(
@@ -1894,7 +1879,7 @@ var
   t: TQuackType;
   d: PAnsiChar;
   p: PUtf8Char;
-  len, offs: integer;
+  len: integer;
   h: TDuckDBHugeInt;
   iv: TDuckDBInterval;
   us: Int64;
@@ -1962,22 +1947,8 @@ begin
           DUCKDB_TYPE_TIME_NS:
             DuckTimeToText(QuackInt64(d) div 1000, Result);
           DUCKDB_TYPE_TIME_TZ:
-            begin
-              DuckTimeTzDecode(QuackInt64(d), us, offs);
-              DuckTimeToText(us, Result);
-              if offs < 0 then
-                Result := Result + '-'
-              else
-                Result := Result + '+';
-              offs := abs(offs);
-              AppendShortToUtf8(UInt2DigitsToShortFast(offs div 3600), Result);
-              if offs mod 3600 <> 0 then
-              begin
-                Result := Result + ':';
-                AppendShortToUtf8(
-                  UInt2DigitsToShortFast((offs div 60) mod 60), Result);
-              end;
-            end;
+            DuckTimeTzToText(QuackInt64(d), Result);
+
           DUCKDB_TYPE_TIMESTAMP, DUCKDB_TYPE_TIMESTAMP_S,
           DUCKDB_TYPE_TIMESTAMP_MS, DUCKDB_TYPE_TIMESTAMP_NS:
             DuckTimestampToText(

@@ -415,6 +415,9 @@ procedure DuckBitToText(P: PDuckU8Array; Len: integer; var result: RawUtf8);
 /// decode a DuckDB TIME_TZ 64-bit value into micros and offset in seconds
 procedure DuckTimeTzDecode(Bits: Int64; out Micros: Int64; out OffsetSec: integer);
 
+/// convert a DuckDB TIME_TZ 64-bit value into 'hh:mm:ss[.ffffff]+hh[:mm]'
+procedure DuckTimeTzToText(Bits: Int64; var result: RawUtf8);
+
 /// convert a DuckDB TIMESTAMP_S/MS/NS value into microseconds
 function DuckTimestampMicros(TypeId: TDuckDBType; Value: Int64): Int64;
 
@@ -1337,6 +1340,25 @@ begin
   OffsetSec := MAX_OFFSET - integer(Bits and $ffffff);
 end;
 
+procedure DuckTimeTzToText(Bits: Int64; var result: RawUtf8);
+var
+  us: Int64;
+  offs: integer;
+begin
+  DuckTimeTzDecode(Bits, us, offs);
+  DuckTimeToText(us, result);
+  if offs < 0 then
+    result := result + '-'
+  else
+    result := result + '+';
+  offs := abs(offs);
+  AppendShortToUtf8(UInt2DigitsToShortFast(offs div 3600), result);
+  if offs mod 3600 <> 0 then
+  begin
+    result := result + ':';
+    AppendShortToUtf8(UInt2DigitsToShortFast((offs div 60) mod 60), result);
+  end;
+end;
 function DuckTimestampMicros(TypeId: TDuckDBType; Value: Int64): Int64;
 begin
   case TypeId of
@@ -1638,29 +1660,7 @@ end;
 
 function TQuackType.FieldType: TSqlDBFieldType;
 begin
-  case Id of
-    QTYPE_BOOLEAN, QTYPE_TINYINT, QTYPE_SMALLINT, QTYPE_INTEGER, QTYPE_BIGINT,
-    QTYPE_UTINYINT, QTYPE_USMALLINT, QTYPE_UINTEGER, QTYPE_UBIGINT,
-    QTYPE_HUGEINT, QTYPE_UHUGEINT:
-      result := ftInt64;
-    QTYPE_FLOAT, QTYPE_DOUBLE:
-      result := ftDouble;
-    QTYPE_DECIMAL:
-      if Scale <= 4 then
-        result := ftCurrency
-      else
-        result := ftDouble;
-    QTYPE_DATE, QTYPE_TIME, QTYPE_TIME_TZ, QTYPE_TIME_NS, QTYPE_TIMESTAMP,
-    QTYPE_TIMESTAMP_SEC, QTYPE_TIMESTAMP_MS, QTYPE_TIMESTAMP_NS,
-    QTYPE_TIMESTAMP_TZ:
-      result := ftDate;
-    QTYPE_BLOB, QTYPE_GEOMETRY:
-      result := ftBlob;
-    QTYPE_SQLNULL:
-      result := ftNull;
-  else
-    result := ftUtf8; // VARCHAR, UUID, ENUM, INTERVAL, BIT, nested as JSON
-  end;
+  result := DuckDBTypeToField(DuckType, Scale); // same mapping as the C API
 end;
 
 type
