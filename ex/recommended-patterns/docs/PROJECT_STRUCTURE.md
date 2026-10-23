@@ -96,7 +96,7 @@ All SQL/FTS5 knowledge lives here. If the application layer ever calls `IRestOrm
 
 ### `app/` — Application (contract, DTOs, mappers, services)
 
-Each `app/<entity>/` is split in two. **`interface/`** is the public contract shared by the server and its clients — the client-facing units (`AppTaskManagerClient`, `AppTaskManagerClientRemote`, `cli_client_core`) reference this folder (plus the `dom/` types the DTOs embed, and `shared_types`), never `implementation/`. **`implementation/`** holds the server-side services and mappers; clients never reference it. The exceptions run server-side code in-process: the CLI's `LOCAL_MODE` backend (`AppTaskManagerClientLocal`), which hosts the services, and the tests, which exercise the mappers directly.
+Each `app/<entity>/` is split in two. **`interface/`** is the public contract shared by the server and its clients — the client-facing units (`AppTaskManagerClient`, `AppTaskManagerClientRemote`, `cli_client_core`) reference this folder (plus `shared_types`), never `dom/` or `implementation/`. **`implementation/`** holds the server-side services and mappers; clients never reference it. The exceptions run server-side code in-process: the CLI's `LOCAL_MODE` backend (`AppTaskManagerClientLocal`), which hosts the services, and the tests, which exercise the mappers directly.
 
 `interface/`:
 
