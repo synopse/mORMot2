@@ -60,6 +60,13 @@ type
     fConfig: RawUtf8;
     fReadOnly: boolean;
     procedure GetForeignKeys; override;
+    /// OnBatchInsert implementation using TSqlDBDuckDBAppender
+    // - fallback to MultipleValuesInsert() if the Appender can't be used
+    procedure AppendBatchInsert(Props: TSqlDBConnectionProperties;
+      const TableName: RawUtf8; const FieldNames: TRawUtf8DynArray;
+      const FieldTypes: TSqlDBFieldTypeArray; RowCount: integer;
+      const FieldValues: TRawUtf8DynArrayDynArray;
+      BatchOptions: TRestBatchOptions);
   public
     /// initialize the properties - the database is opened on first connection
     constructor Create(const aServerName, aDatabaseName, aUserID, aPassWord: RawUtf8);
@@ -152,8 +159,6 @@ type
     fDirectQuery: boolean;
     fInfo: TDuckDBColumnInfoDynArray;
     procedure BindParams;
-    procedure BindArrayRow(Row: integer; var Temp: RawUtf8);
-    procedure ExecuteArray;
     procedure ReleaseResult;
     function NextChunk: boolean;
     function CheckCol(Col: integer): PDuckDBColumnInfo;
@@ -739,6 +744,78 @@ begin
   inherited Create(aServerName, aDatabaseName, aUserID, aPassWord);
   fEngineName := 'DuckDB';
   ForcedSchemaName := 'main'; // DuckDB default schema, for metadata queries
+  if DuckDB.HasAppender then
+  begin
+    // the Appender is much faster than multi-values INSERT statements
+    fBatchSendingAbilities := [cCreate];
+    fOnBatchInsert := AppendBatchInsert;
+    fBatchMaxSentAtOnce := 4096;
+  end;
+end;
+
+procedure TSqlDBDuckDBConnectionProperties.AppendBatchInsert(
+  Props: TSqlDBConnectionProperties; const TableName: RawUtf8;
+  const FieldNames: TRawUtf8DynArray; const FieldTypes: TSqlDBFieldTypeArray;
+  RowCount: integer; const FieldValues: TRawUtf8DynArrayDynArray;
+  BatchOptions: TRestBatchOptions);
+var
+  cols: TSqlDBColumnDefineDynArray;
+  app: TSqlDBDuckDBAppender;
+  f, r: PtrInt;
+  v: PRawUtf8;
+  tmp: RawUtf8;
+begin
+  // the Appender expects all columns, in the table order, without conflict
+  // handling: fallback to the regular multi-values INSERT otherwise
+  GetFields(TableName, cols);
+  if (BatchOptions * [boInsertOrIgnore, boInsertOrReplace, boUpsert] <> []) or
+     (length(cols) <> length(FieldNames)) then
+  begin
+    MultipleValuesInsert(Props, TableName, FieldNames, FieldTypes, RowCount,
+      FieldValues, BatchOptions);
+    exit;
+  end;
+  for f := 0 to high(cols) do
+    if not PropNameEquals(cols[f].ColumnName, FieldNames[f]) then
+    begin
+      MultipleValuesInsert(Props, TableName, FieldNames, FieldTypes, RowCount,
+        FieldValues, BatchOptions);
+      exit;
+    end;
+  app := TSqlDBDuckDBAppender.Create(
+    Props.ThreadSafeConnection as TSqlDBDuckDBConnection, TableName);
+  try
+    for r := 0 to RowCount - 1 do
+    begin
+      for f := 0 to high(FieldNames) do
+      begin
+        v := @FieldValues[f, r]; // values are SQL literals, BLOB are decoded
+        if (v^ = 'null') or
+           (FieldTypes[f] = ftNull) then
+          app.AddNull
+        else
+          case FieldTypes[f] of
+            ftInt64:
+              app.Add(GetInt64(pointer(v^)));
+            ftDouble:
+              app.AddDouble(GetExtended(pointer(v^)));
+            ftBlob:
+              app.AddBlob(v^);
+            ftCurrency:
+              app.AddText(v^); // exact text -> DECIMAL cast
+          else
+            begin
+              // ftUtf8, ftDate: unquote and let DuckDB cast to the column type
+              UnQuoteSqlStringVar(pointer(v^), tmp);
+              app.AddText(tmp);
+            end;
+          end;
+      end;
+      app.EndRow;
+    end;
+  finally
+    app.Free; // flush the rows
+  end;
 end;
 
 destructor TSqlDBDuckDBConnectionProperties.Destroy;
@@ -1021,92 +1098,6 @@ begin
   end;
 end;
 
-const
-  NULL_TXT: RawUtf8 = 'null';
-
-procedure TSqlDBDuckDBStatement.BindArrayRow(Row: integer; var Temp: RawUtf8);
-var
-  i: PtrInt;
-  p: PSqlDBParam;
-  idx: TDuckIdx;
-  res: TDuckDBState;
-  v: PRawUtf8;
-begin
-  // values are stored as SQL literals: number, 'quoted string', null
-  p := pointer(fParams);
-  for i := 0 to fParamCount - 1 do
-  begin
-    idx := i + 1;
-    if Row < length(p^.VArray) then
-      v := @p^.VArray[Row]
-    else
-      v := @NULL_TXT;
-    if (p^.VType = ftNull) or
-       (v^ = 'null') then
-      res := DuckDB.bind_null(fStmt, idx)
-    else
-      case p^.VType of
-        ftInt64:
-          res := DuckDB.bind_int64(fStmt, idx, GetInt64(pointer(v^)));
-        ftDouble:
-          res := DuckDB.bind_double(fStmt, idx, GetExtended(pointer(v^)));
-        ftBlob:
-          res := DuckDB.bind_blob(fStmt, idx, pointer(v^), length(v^));
-      else
-        begin
-          // ftUtf8, ftDate, ftCurrency: bind as text, DuckDB casts as needed
-          if (v^ <> '') and
-             (v^[1] = '''') then
-          begin
-            UnQuoteSqlStringVar(pointer(v^), Temp);
-            v := @Temp;
-          end;
-          res := DuckDB.bind_varchar_length(fStmt, idx, pointer(v^), length(v^));
-        end;
-      end;
-    if res <> DuckDBSuccess then
-      ESqlDBDuckDB.CreateUtf8('%: cannot bind array parameter #% row % [%]',
-        [self, idx, Row, fSql]);
-    inc(p);
-  end;
-end;
-
-procedure TSqlDBDuckDBStatement.ExecuteArray;
-var
-  row: integer;
-  intrans: boolean;
-  conn: TDuckDBConnection;
-  temp: RawUtf8;
-begin
-  // run the prepared statement once per row - in an implicit transaction
-  conn := TSqlDBDuckDBConnection(fConnection).fConn;
-  intrans := fConnection.TransactionCount > 0;
-  if not intrans then
-    DuckDB.Exec(conn, 'BEGIN TRANSACTION');
-  try
-    for row := 0 to fParamsArrayCount - 1 do
-    begin
-      BindArrayRow(row, temp);
-      FillCharFast(fRes, SizeOf(fRes), 0);
-      if DuckDB.execute_prepared(fStmt, @fRes) <> DuckDBSuccess then
-      begin
-        temp := RawUtf8(DuckDB.result_error(@fRes));
-        DuckDB.destroy_result(@fRes);
-        ESqlDBDuckDB.RaiseUtf8('%.ExecutePrepared: % [%] row #%',
-          [self, temp, fSql, row]);
-      end;
-      inc(fUpdateCount, DuckDB.rows_changed(@fRes));
-      DuckDB.destroy_result(@fRes);
-    end;
-    if not intrans then
-      DuckDB.Exec(conn, 'COMMIT');
-  except
-    if not intrans then
-      DuckDB.Exec(conn, 'ROLLBACK');
-    raise;
-  end;
-end;
-
 procedure TSqlDBDuckDBStatement.ExecutePrepared;
 var
   i: PtrInt;
@@ -1127,15 +1118,8 @@ begin
   fCurrentRow := 0;
   fUpdateCount := 0;
   if fParamsArrayCount > 0 then
-  begin
-    // BindArray() was used: execute once per row (e.g. mormot.db.proxy batch)
-    try
-      ExecuteArray;
-    finally
-      SqlLogEnd;
-    end;
-    exit;
-  end;
+    ESqlDBDuckDB.RaiseUtf8('%.ExecutePrepared: BindArray() is not supported - ' +
+      'use OnBatchInsert or a transaction', [self]);
   FillCharFast(fRes, SizeOf(fRes), 0);
   if fDirectQuery then
     res := DuckDB.query(TSqlDBDuckDBConnection(fConnection).fConn,
