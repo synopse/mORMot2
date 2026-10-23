@@ -395,6 +395,15 @@ procedure DuckBitToText(P: PDuckU8Array; Len: integer; var result: RawUtf8);
 /// decode a DuckDB TIME_TZ 64-bit value into micros and offset in seconds
 procedure DuckTimeTzDecode(Bits: Int64; out Micros: Int64; out OffsetSec: integer);
 
+/// convert a DuckDB TIMESTAMP_S/MS/NS value into microseconds
+function DuckTimestampMicros(TypeId: TDuckDBType; Value: Int64): Int64;
+
+const
+  /// powers of 10 up to the Int64 limit, e.g. to scale a DECIMAL mantissa
+  DUCKDB_POW10: array[0..18] of Int64 = (1, 10, 100, 1000, 10000, 100000,
+    1000000, 10000000, 100000000, 1000000000, 10000000000, 100000000000,
+    1000000000000, 10000000000000, 100000000000000, 1000000000000000,
+    10000000000000000, 100000000000000000, 1000000000000000000);
 
 { ************ DuckDB Logical Type Cache }
 
@@ -988,6 +997,19 @@ begin
   OffsetSec := MAX_OFFSET - integer(Bits and $ffffff);
 end;
 
+function DuckTimestampMicros(TypeId: TDuckDBType; Value: Int64): Int64;
+begin
+  case TypeId of
+    DUCKDB_TYPE_TIMESTAMP_S:
+      result := Value * 1000000;
+    DUCKDB_TYPE_TIMESTAMP_MS:
+      result := Value * 1000;
+    DUCKDB_TYPE_TIMESTAMP_NS:
+      result := Value div 1000;
+  else
+    result := Value;
+  end;
+end;
 
 { ************ DuckDB Logical Type Cache }
 
