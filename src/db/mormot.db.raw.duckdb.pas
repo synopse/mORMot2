@@ -445,6 +445,8 @@ type
     Internal: TDuckDBType;
     /// number of decimals of a DECIMAL, or fixed size of an ARRAY
     Scale: integer;
+    /// size in bytes of a fixed-size value, 0 for variable-size types
+    Size: PtrInt;
     /// number of nested types in Children[]
     ChildCount: integer;
     /// the DuckDB logical type handle, owned by this structure
@@ -821,7 +823,38 @@ procedure DuckFixedToText(TypeId, Internal: TDuckDBType; Scale: integer;
 // - handles all DuckFixedToText() types but not ENUM
 procedure DuckFixedToJson(TypeId, Internal: TDuckDBType; Scale: integer;
   P: PAnsiChar; W: TJsonWriter);
-implementation
+
+type
+  /// result of DuckFixedToInt64()
+  TDuckConvert = (
+    dcFallback,
+    dcOk,
+    dcOverflow);
+
+/// convert a fixed-size value into an Int64
+// - handles integers, BOOLEAN, HUGEINT, DECIMAL, floats, dates and times:
+// the 64-bit date/time kinds are returned as their raw integer value
+// - returns dcFallback if the value type should be converted from its text,
+// or dcOverflow if a 128-bit value does not fit in an Int64
+function DuckFixedToInt64(TypeId, Internal: TDuckDBType; Scale: integer;
+  P: PAnsiChar; out Value: Int64): TDuckConvert;
+
+/// convert a fixed-size value into a double
+// - handles BOOLEAN, integers (but UBIGINT), FLOAT, DOUBLE and DECIMAL
+// - returns false if the value type should be converted from its text
+function DuckFixedToDouble(TypeId, Internal: TDuckDBType; Scale: integer;
+  P: PAnsiChar; out Value: double): boolean;
+
+/// convert a fixed-size value into a currency, with no precision loss for
+// DECIMAL with up to 4 decimals
+// - returns false if the value type should be converted from its text
+function DuckFixedToCurrency(TypeId, Internal: TDuckDBType; Scale: integer;
+  P: PAnsiChar; out Value: currency): boolean;
+
+/// convert a fixed-size date, time or timestamp value into a TDateTime
+// - returns false if the value type should be converted from its text
+function DuckFixedToDateTime(TypeId: TDuckDBType; P: PAnsiChar;
+  out Value: TDateTime): boolean;implementation
 
 
 { ************ TDuckDBLib Dynamic Library Loader }
@@ -1469,6 +1502,7 @@ begin
             DuckDB.union_type_member_type(Handle, i));
       end;
   end;
+  Info.Size := DuckFixedSize(Info.TypeId, Info.Internal);
 end;
 
 procedure DuckDBTypeInfoDone(var Info: TDuckDBTypeInfo);
@@ -3002,6 +3036,142 @@ begin
       end;
       W.AddDirect('"');
     end;
+  end;
+end;
+
+function DuckDecimalMantissa(Internal: TDuckDBType; P: PAnsiChar): Int64;
+begin
+  case Internal of
+    DUCKDB_TYPE_SMALLINT:
+      result := QuackInt16(P);
+    DUCKDB_TYPE_INTEGER:
+      result := QuackInt32(P);
+  else
+    result := QuackInt64(P);
+  end;
+end;
+
+function DuckFixedToInt64(TypeId, Internal: TDuckDBType; Scale: integer;
+  P: PAnsiChar; out Value: Int64): TDuckConvert;
+var
+  h: TDuckDBHugeInt;
+  d: double;
+begin
+  result := dcOk;
+  case TypeId of
+    DUCKDB_TYPE_BOOLEAN, DUCKDB_TYPE_TINYINT, DUCKDB_TYPE_SMALLINT,
+    DUCKDB_TYPE_INTEGER, DUCKDB_TYPE_BIGINT, DUCKDB_TYPE_UTINYINT,
+    DUCKDB_TYPE_USMALLINT, DUCKDB_TYPE_UINTEGER, DUCKDB_TYPE_UBIGINT,
+    DUCKDB_TYPE_DATE, DUCKDB_TYPE_TIME, DUCKDB_TYPE_TIMESTAMP,
+    DUCKDB_TYPE_TIMESTAMP_TZ, DUCKDB_TYPE_TIMESTAMP_S,
+    DUCKDB_TYPE_TIMESTAMP_MS, DUCKDB_TYPE_TIMESTAMP_NS:
+      Value := DuckFixedInt(TypeId, P);
+    DUCKDB_TYPE_HUGEINT, DUCKDB_TYPE_UHUGEINT:
+      begin
+        DuckFixedHuge(P, h);
+        Value := h.Lower;
+        if not DuckHugeIntIsInt64(h, TypeId = DUCKDB_TYPE_HUGEINT) then
+          result := dcOverflow;
+      end;
+    DUCKDB_TYPE_DECIMAL:
+      if Internal = DUCKDB_TYPE_HUGEINT then
+        result := dcFallback // integer part from the text
+      else
+        Value := DuckDecimalMantissa(Internal, P) div DUCKDB_POW10[Scale];
+    DUCKDB_TYPE_FLOAT, DUCKDB_TYPE_DOUBLE:
+      begin
+        DuckFixedToDouble(TypeId, Internal, Scale, P, d);
+        Value := trunc(d);
+      end;
+  else
+    result := dcFallback;
+  end;
+end;
+
+function DuckFixedToDouble(TypeId, Internal: TDuckDBType; Scale: integer;
+  P: PAnsiChar; out Value: double): boolean;
+var
+  s: single;
+begin
+  result := true;
+  case TypeId of
+    DUCKDB_TYPE_FLOAT:
+      begin
+        MoveFast(P^, s, SizeOf(s));
+        Value := s;
+      end;
+    DUCKDB_TYPE_DOUBLE:
+      Value := QuackDouble(P);
+    DUCKDB_TYPE_DECIMAL:
+      if Internal = DUCKDB_TYPE_HUGEINT then
+        result := false
+      else
+        Value := DuckDecimalMantissa(Internal, P) / DUCKDB_POW10[Scale];
+    DUCKDB_TYPE_BOOLEAN, DUCKDB_TYPE_TINYINT, DUCKDB_TYPE_SMALLINT,
+    DUCKDB_TYPE_INTEGER, DUCKDB_TYPE_BIGINT, DUCKDB_TYPE_UTINYINT,
+    DUCKDB_TYPE_USMALLINT, DUCKDB_TYPE_UINTEGER:
+      Value := DuckFixedInt(TypeId, P);
+  else
+    result := false;
+  end;
+end;
+
+function DuckFixedToCurrency(TypeId, Internal: TDuckDBType; Scale: integer;
+  P: PAnsiChar; out Value: currency): boolean;
+var
+  v: Int64;
+  d: double;
+begin
+  result := true;
+  case TypeId of
+    DUCKDB_TYPE_DECIMAL:
+      if (Internal <> DUCKDB_TYPE_HUGEINT) and
+         (Scale <= 4) then
+      begin
+        v := DuckDecimalMantissa(Internal, P) * DUCKDB_POW10[4 - Scale];
+        Value := PCurrency(@v)^;
+      end
+      else
+        result := false;
+    DUCKDB_TYPE_FLOAT, DUCKDB_TYPE_DOUBLE:
+      begin
+        DuckFixedToDouble(TypeId, Internal, Scale, P, d);
+        Value := d;
+      end;
+    DUCKDB_TYPE_BOOLEAN, DUCKDB_TYPE_TINYINT, DUCKDB_TYPE_SMALLINT,
+    DUCKDB_TYPE_INTEGER, DUCKDB_TYPE_BIGINT, DUCKDB_TYPE_UTINYINT,
+    DUCKDB_TYPE_USMALLINT, DUCKDB_TYPE_UINTEGER:
+      Value := DuckFixedInt(TypeId, P);
+  else
+    result := false;
+  end;
+end;
+
+function DuckFixedToDateTime(TypeId: TDuckDBType; P: PAnsiChar;
+  out Value: TDateTime): boolean;
+var
+  us: Int64;
+  offs: integer;
+begin
+  result := true;
+  case TypeId of
+    DUCKDB_TYPE_DATE:
+      Value := QuackInt32(P) + DUCKDB_UNIXDATE_DELTA;
+    DUCKDB_TYPE_TIME:
+      Value := QuackInt64(P) / DUCKDB_MICROSPERDAY;
+    DUCKDB_TYPE_TIME_NS:
+      Value := (QuackInt64(P) div 1000) / DUCKDB_MICROSPERDAY;
+    DUCKDB_TYPE_TIME_TZ:
+      begin
+        DuckTimeTzDecode(QuackInt64(P), us, offs);
+        Value := us / DUCKDB_MICROSPERDAY;
+      end;
+    DUCKDB_TYPE_TIMESTAMP, DUCKDB_TYPE_TIMESTAMP_TZ, DUCKDB_TYPE_TIMESTAMP_S,
+    DUCKDB_TYPE_TIMESTAMP_MS, DUCKDB_TYPE_TIMESTAMP_NS:
+      Value := DuckTimestampToDateTime(
+        DuckTimestampMicros(TypeId, QuackInt64(P)));
+  else
+    result := false;
   end;
 end;
 

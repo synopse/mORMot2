@@ -173,7 +173,6 @@ type
     function NextChunk: boolean;
     function CheckCol(Col: integer): PDuckDBColumnInfo;
       {$ifdef HASINLINE} inline; {$endif}
-    function DecimalMantissa(c: PDuckDBColumnInfo; out hi: Int64): Int64;
   public
     /// release all associated DuckDB handles
     destructor Destroy; override;
@@ -509,7 +508,7 @@ begin
   end;
   result := DuckFixedToTextBuf(T^.TypeId, T^.Internal, T^.Scale,
     PAnsiChar(DuckDB.vector_get_data(vec)) +
-      row * DuckFixedSize(T^.TypeId, T^.Internal), Buffer);
+      row * T^.Size, Buffer);
 end;
 
 procedure ComplexDuckDBVectorValueToText(vec: TDuckDBVector;
@@ -559,7 +558,7 @@ begin
       ComplexDuckDBVectorValueToText(vec, T, row, result); // as JSON
   else
     DuckFixedToText(typeid, T^.Internal, T^.Scale,
-      data + row * DuckFixedSize(typeid, T^.Internal), result);
+      data + row * T^.Size, result);
   end;
 end;
 
@@ -687,7 +686,7 @@ begin
       AddVectorValueAsJsonString(vec, T, row, W);
   else
     DuckFixedToJson(typeid, T^.Internal, T^.Scale,
-      data + row * DuckFixedSize(typeid, T^.Internal), W);
+      data + row * T^.Size, W);
   end;
 end;
 
@@ -1228,159 +1227,62 @@ begin
     result := not IsValid(Validity, fChunkRow);
 end;
 
-function TSqlDBDuckDBStatement.DecimalMantissa(c: PDuckDBColumnInfo;
-  out hi: Int64): Int64;
-var
-  h: PDuckDBHugeInt;
-begin
-  case c^.Info.Internal of
-    DUCKDB_TYPE_SMALLINT:
-      result := PDuckI16Array(c^.Data)^[fChunkRow];
-    DUCKDB_TYPE_INTEGER:
-      result := PDuckI32Array(c^.Data)^[fChunkRow];
-    DUCKDB_TYPE_HUGEINT:
-      begin
-        h := PDuckDBHugeInt(PAnsiChar(c^.Data) + fChunkRow * 16);
-        hi := h^.Upper;
-        result := h^.Lower;
-        exit;
-      end;
-  else
-    result := PDuckI64Array(c^.Data)^[fChunkRow];
-  end;
-  if result < 0 then
-    hi := -1
-  else
-    hi := 0;
-end;
-
 function TSqlDBDuckDBStatement.ColumnInt(Col: integer): Int64;
 var
   c: PDuckDBColumnInfo;
-  hi: Int64;
-  h: TDuckDBHugeInt;
 begin
   c := CheckCol(Col);
   result := 0;
   if not IsValid(c^.Validity, fChunkRow) then
     exit;
-  case c^.Info.TypeId of
-    DUCKDB_TYPE_BOOLEAN, DUCKDB_TYPE_TINYINT, DUCKDB_TYPE_SMALLINT,
-    DUCKDB_TYPE_INTEGER, DUCKDB_TYPE_BIGINT, DUCKDB_TYPE_UTINYINT,
-    DUCKDB_TYPE_USMALLINT, DUCKDB_TYPE_UINTEGER, DUCKDB_TYPE_UBIGINT:
-      result := ReadIntegral(c^.Info.TypeId, c^.Data, fChunkRow);
-    DUCKDB_TYPE_HUGEINT, DUCKDB_TYPE_UHUGEINT:
-      begin
-        h := PDuckDBHugeInt(PAnsiChar(c^.Data) + fChunkRow * 16)^;
-        if not DuckHugeIntIsInt64(h, c^.Info.TypeId = DUCKDB_TYPE_HUGEINT) then
-          ESqlDBDuckDB.RaiseUtf8('%.ColumnInt(%): 128-bit overflow',
-            [self, Col]);
-        result := h.Lower;
-      end;
-    DUCKDB_TYPE_DECIMAL:
-      if c^.Info.Internal = DUCKDB_TYPE_HUGEINT then
-        result := GetInt64(pointer(ColumnUtf8(Col))) // integer part
-      else
-        result := DecimalMantissa(c, hi) div DUCKDB_POW10[c^.Info.Scale];
-    DUCKDB_TYPE_FLOAT, DUCKDB_TYPE_DOUBLE:
-      result := trunc(ColumnDouble(Col));
-    DUCKDB_TYPE_DATE:
-      result := PDuckI32Array(c^.Data)^[fChunkRow];
-    DUCKDB_TYPE_TIME, DUCKDB_TYPE_TIMESTAMP, DUCKDB_TYPE_TIMESTAMP_TZ,
-    DUCKDB_TYPE_TIMESTAMP_S, DUCKDB_TYPE_TIMESTAMP_MS, DUCKDB_TYPE_TIMESTAMP_NS:
-      result := PDuckI64Array(c^.Data)^[fChunkRow];
-  else
-    result := GetInt64(pointer(ColumnUtf8(Col)));
-  end;
+  with c^.Info do
+    case DuckFixedToInt64(TypeId, Internal, Scale,
+           PAnsiChar(c^.Data) + fChunkRow * Size, result) of
+      dcOk:
+        exit;
+      dcOverflow:
+        ESqlDBDuckDB.RaiseUtf8('%.ColumnInt(%): 128-bit overflow', [self, Col]);
+    end;
+  result := GetInt64(pointer(ColumnUtf8(Col)));
 end;
 
 function TSqlDBDuckDBStatement.ColumnDouble(Col: integer): double;
 var
   c: PDuckDBColumnInfo;
-  hi: Int64;
 begin
   c := CheckCol(Col);
   result := 0;
-  if not IsValid(c^.Validity, fChunkRow) then
-    exit;
-  case c^.Info.TypeId of
-    DUCKDB_TYPE_FLOAT:
-      result := PDuckSingleArray(c^.Data)^[fChunkRow];
-    DUCKDB_TYPE_DOUBLE:
-      result := PDuckDoubleArray(c^.Data)^[fChunkRow];
-    DUCKDB_TYPE_DECIMAL:
-      if c^.Info.Internal = DUCKDB_TYPE_HUGEINT then
-        result := GetExtended(pointer(ColumnUtf8(Col)))
-      else
-        result := DecimalMantissa(c, hi) / DUCKDB_POW10[c^.Info.Scale];
-  else
-    if c^.Info.TypeId in DUCKDB_INT_TYPES then
-      result := ReadIntegral(c^.Info.TypeId, c^.Data, fChunkRow)
-    else
-      result := GetExtended(pointer(ColumnUtf8(Col)));
-  end;
+  if IsValid(c^.Validity, fChunkRow) then
+    with c^.Info do
+      if not DuckFixedToDouble(TypeId, Internal, Scale,
+               PAnsiChar(c^.Data) + fChunkRow * Size, result) then
+        result := GetExtended(pointer(ColumnUtf8(Col)));
 end;
 
 function TSqlDBDuckDBStatement.ColumnCurrency(Col: integer): currency;
 var
   c: PDuckDBColumnInfo;
-  hi, v: Int64;
 begin
   c := CheckCol(Col);
   result := 0;
-  if not IsValid(c^.Validity, fChunkRow) then
-    exit;
-  case c^.Info.TypeId of
-    DUCKDB_TYPE_DECIMAL:
-      if (c^.Info.Internal <> DUCKDB_TYPE_HUGEINT) and
-         (c^.Info.Scale <= 4) then
-      begin
-        v := DecimalMantissa(c, hi) * DUCKDB_POW10[4 - c^.Info.Scale];
-        result := PCurrency(@v)^;
-      end
-      else
+  if IsValid(c^.Validity, fChunkRow) then
+    with c^.Info do
+      if not DuckFixedToCurrency(TypeId, Internal, Scale,
+               PAnsiChar(c^.Data) + fChunkRow * Size, result) then
         PInt64(@result)^ := StrToCurr64(pointer(ColumnUtf8(Col)));
-    DUCKDB_TYPE_FLOAT, DUCKDB_TYPE_DOUBLE:
-      result := ColumnDouble(Col);
-  else
-    if c^.Info.TypeId in DUCKDB_INT_TYPES then
-      result := ReadIntegral(c^.Info.TypeId, c^.Data, fChunkRow)
-    else
-      PInt64(@result)^ := StrToCurr64(pointer(ColumnUtf8(Col)));
-  end;
 end;
 
 function TSqlDBDuckDBStatement.ColumnDateTime(Col: integer): TDateTime;
 var
   c: PDuckDBColumnInfo;
-  us: Int64;
-  offs: integer;
 begin
   c := CheckCol(Col);
   result := 0;
-  if not IsValid(c^.Validity, fChunkRow) then
-    exit;
-  case c^.Info.TypeId of
-    DUCKDB_TYPE_DATE:
-      result := PDuckI32Array(c^.Data)^[fChunkRow] + DUCKDB_UNIXDATE_DELTA;
-    DUCKDB_TYPE_TIME:
-      result := PDuckI64Array(c^.Data)^[fChunkRow] / DUCKDB_MICROSPERDAY;
-    DUCKDB_TYPE_TIME_NS:
-      result := (PDuckI64Array(c^.Data)^[fChunkRow] div 1000) / DUCKDB_MICROSPERDAY;
-    DUCKDB_TYPE_TIME_TZ:
-      begin
-        DuckTimeTzDecode(PDuckI64Array(c^.Data)^[fChunkRow], us, offs);
-        result := us / DUCKDB_MICROSPERDAY;
-      end;
-    DUCKDB_TYPE_TIMESTAMP, DUCKDB_TYPE_TIMESTAMP_TZ, DUCKDB_TYPE_TIMESTAMP_S,
-    DUCKDB_TYPE_TIMESTAMP_MS, DUCKDB_TYPE_TIMESTAMP_NS:
-      result := DuckTimestampToDateTime(
-        DuckTimestampMicros(c^.Info.TypeId, PDuckI64Array(c^.Data)^[fChunkRow]));
-  else
-    result := Iso8601ToDateTime(ColumnUtf8(Col));
-  end;
+  if IsValid(c^.Validity, fChunkRow) then
+    if not DuckFixedToDateTime(c^.Info.TypeId,
+             PAnsiChar(c^.Data) + fChunkRow * c^.Info.Size, result) then
+      result := Iso8601ToDateTime(ColumnUtf8(Col));
 end;
-
 function TSqlDBDuckDBStatement.ColumnUtf8(Col: integer): RawUtf8;
 var
   c: PDuckDBColumnInfo;
@@ -1648,56 +1550,6 @@ end;
 
 
 { ************ Vector Value Conversion }
-
-function IntegralAt(TypeId: TDuckDBType; D: PAnsiChar): Int64;
-begin
-  case TypeId of
-    DUCKDB_TYPE_BOOLEAN, DUCKDB_TYPE_UTINYINT:
-      result := PByte(D)^;
-    DUCKDB_TYPE_TINYINT:
-      result := PShortInt(D)^;
-    DUCKDB_TYPE_SMALLINT:
-      result := QuackInt16(D);
-    DUCKDB_TYPE_USMALLINT:
-      result := word(QuackInt16(D));
-    DUCKDB_TYPE_INTEGER, DUCKDB_TYPE_DATE:
-      result := QuackInt32(D);
-    DUCKDB_TYPE_UINTEGER:
-      result := cardinal(QuackInt32(D));
-  else // BIGINT, UBIGINT and the 64-bit date/time kinds
-    result := QuackInt64(D);
-  end;
-end;
-
-procedure HugeAt(D: PAnsiChar; out H: TDuckDBHugeInt);
-begin
-  H.Lower := QuackInt64(D);
-  H.Upper := QuackInt64(D + 8);
-end;
-
-procedure DecimalAt(T: TQuackType; D: PAnsiChar; out Mantissa: TDuckDBHugeInt);
-var
-  v: Int64;
-begin
-  case T.ElemSize of
-    2:
-      v := QuackInt16(D);
-    4:
-      v := QuackInt32(D);
-    8:
-      v := QuackInt64(D);
-  else
-    begin
-      HugeAt(D, Mantissa);
-      exit;
-    end;
-  end;
-  Mantissa.Lower := v;
-  if v < 0 then
-    Mantissa.Upper := -1
-  else
-    Mantissa.Upper := 0;
-end;
 
 function EnumIndexAt(T: TQuackType; D: PAnsiChar): PtrInt;
 begin
@@ -2484,176 +2336,75 @@ function TSqlDBQuackStatement.ColumnInt(Col: integer): Int64;
 var
   v: TQuackVector;
   i: PtrInt;
-  d: PAnsiChar;
-  h: TDuckDBHugeInt;
+  t: TQuackType;
 begin
   v := CheckCol(Col);
   result := 0;
   i := v.Stored(fChunkRow);
   if not v.IsStoredValid(i) then
     exit;
-  if v.VType.Storage <> qsFixed then
-  begin
-    result := GetInt64(pointer(ColumnUtf8(Col)));
-    exit;
-  end;
-  d := v.DataAt(i);
-  case v.VType.DuckType of
-    DUCKDB_TYPE_BOOLEAN, DUCKDB_TYPE_TINYINT, DUCKDB_TYPE_SMALLINT,
-    DUCKDB_TYPE_INTEGER, DUCKDB_TYPE_BIGINT, DUCKDB_TYPE_UTINYINT,
-    DUCKDB_TYPE_USMALLINT, DUCKDB_TYPE_UINTEGER, DUCKDB_TYPE_UBIGINT,
-    DUCKDB_TYPE_DATE, DUCKDB_TYPE_TIME, DUCKDB_TYPE_TIMESTAMP,
-    DUCKDB_TYPE_TIMESTAMP_TZ, DUCKDB_TYPE_TIMESTAMP_S,
-    DUCKDB_TYPE_TIMESTAMP_MS, DUCKDB_TYPE_TIMESTAMP_NS:
-      result := IntegralAt(v.VType.DuckType, d);
-    DUCKDB_TYPE_HUGEINT, DUCKDB_TYPE_UHUGEINT:
-      begin
-        HugeAt(d, h);
-        if not DuckHugeIntIsInt64(h, v.VType.DuckType = DUCKDB_TYPE_HUGEINT) then
-          ESqlDBQuack.RaiseUtf8('%.ColumnInt(%): 128-bit overflow',
-            [self, Col]);
-        result := h.Lower;
-      end;
-    DUCKDB_TYPE_DECIMAL:
-      if v.VType.ElemSize = 16 then
-        result := GetInt64(pointer(ColumnUtf8(Col))) // integer part
-      else
-      begin
-        DecimalAt(v.VType, d, h);
-        result := h.Lower div DUCKDB_POW10[v.VType.Scale];
-      end;
-    DUCKDB_TYPE_FLOAT, DUCKDB_TYPE_DOUBLE:
-      result := trunc(ColumnDouble(Col));
-  else
-    result := GetInt64(pointer(ColumnUtf8(Col)));
-  end;
+  t := v.VType;
+  if t.Storage = qsFixed then
+    case DuckFixedToInt64(t.DuckType, QuackInternal(t), t.Scale,
+           v.DataAt(i), result) of
+      dcOk:
+        exit;
+      dcOverflow:
+        ESqlDBQuack.RaiseUtf8('%.ColumnInt(%): 128-bit overflow', [self, Col]);
+    end;
+  result := GetInt64(pointer(ColumnUtf8(Col)));
 end;
 
 function TSqlDBQuackStatement.ColumnDouble(Col: integer): double;
 var
   v: TQuackVector;
   i: PtrInt;
-  d: PAnsiChar;
-  h: TDuckDBHugeInt;
-  s: single;
+  t: TQuackType;
 begin
   v := CheckCol(Col);
   result := 0;
   i := v.Stored(fChunkRow);
   if not v.IsStoredValid(i) then
     exit;
-  if v.VType.Storage <> qsFixed then
-  begin
+  t := v.VType;
+  if (t.Storage <> qsFixed) or
+     not DuckFixedToDouble(t.DuckType, QuackInternal(t), t.Scale,
+           v.DataAt(i), result) then
     result := GetExtended(pointer(ColumnUtf8(Col)));
-    exit;
-  end;
-  d := v.DataAt(i);
-  case v.VType.DuckType of
-    DUCKDB_TYPE_FLOAT:
-      begin
-        MoveFast(d^, s, SizeOf(s));
-        result := s;
-      end;
-    DUCKDB_TYPE_DOUBLE:
-      result := QuackDouble(d);
-    DUCKDB_TYPE_DECIMAL:
-      if v.VType.ElemSize = 16 then
-        result := GetExtended(pointer(ColumnUtf8(Col)))
-      else
-      begin
-        DecimalAt(v.VType, d, h);
-        result := h.Lower / DUCKDB_POW10[v.VType.Scale];
-      end;
-    DUCKDB_TYPE_BOOLEAN, DUCKDB_TYPE_TINYINT, DUCKDB_TYPE_SMALLINT,
-    DUCKDB_TYPE_INTEGER, DUCKDB_TYPE_BIGINT, DUCKDB_TYPE_UTINYINT,
-    DUCKDB_TYPE_USMALLINT, DUCKDB_TYPE_UINTEGER:
-      result := IntegralAt(v.VType.DuckType, d);
-  else
-    result := GetExtended(pointer(ColumnUtf8(Col)));
-  end;
 end;
 
 function TSqlDBQuackStatement.ColumnCurrency(Col: integer): currency;
 var
   v: TQuackVector;
   i: PtrInt;
-  d: PAnsiChar;
-  h: TDuckDBHugeInt;
-  c: Int64;
+  t: TQuackType;
 begin
   v := CheckCol(Col);
   result := 0;
   i := v.Stored(fChunkRow);
   if not v.IsStoredValid(i) then
     exit;
-  if v.VType.Storage <> qsFixed then
-  begin
+  t := v.VType;
+  if (t.Storage <> qsFixed) or
+     not DuckFixedToCurrency(t.DuckType, QuackInternal(t), t.Scale,
+           v.DataAt(i), result) then
     PInt64(@result)^ := StrToCurr64(pointer(ColumnUtf8(Col)));
-    exit;
-  end;
-  d := v.DataAt(i);
-  case v.VType.DuckType of
-    DUCKDB_TYPE_DECIMAL:
-      if (v.VType.ElemSize < 16) and
-         (v.VType.Scale <= 4) then
-      begin
-        DecimalAt(v.VType, d, h);
-        c := h.Lower * DUCKDB_POW10[4 - v.VType.Scale];
-        result := PCurrency(@c)^;
-      end
-      else
-        PInt64(@result)^ := StrToCurr64(pointer(ColumnUtf8(Col)));
-    DUCKDB_TYPE_FLOAT, DUCKDB_TYPE_DOUBLE:
-      result := ColumnDouble(Col);
-    DUCKDB_TYPE_BOOLEAN, DUCKDB_TYPE_TINYINT, DUCKDB_TYPE_SMALLINT,
-    DUCKDB_TYPE_INTEGER, DUCKDB_TYPE_BIGINT, DUCKDB_TYPE_UTINYINT,
-    DUCKDB_TYPE_USMALLINT, DUCKDB_TYPE_UINTEGER:
-      result := IntegralAt(v.VType.DuckType, d);
-  else
-    PInt64(@result)^ := StrToCurr64(pointer(ColumnUtf8(Col)));
-  end;
 end;
 
 function TSqlDBQuackStatement.ColumnDateTime(Col: integer): TDateTime;
 var
   v: TQuackVector;
   i: PtrInt;
-  d: PAnsiChar;
-  us: Int64;
-  offs: integer;
 begin
   v := CheckCol(Col);
   result := 0;
   i := v.Stored(fChunkRow);
   if not v.IsStoredValid(i) then
     exit;
-  if v.VType.Storage <> qsFixed then
-  begin
+  if (v.VType.Storage <> qsFixed) or
+     not DuckFixedToDateTime(v.VType.DuckType, v.DataAt(i), result) then
     result := Iso8601ToDateTime(ColumnUtf8(Col));
-    exit;
-  end;
-  d := v.DataAt(i);
-  case v.VType.DuckType of
-    DUCKDB_TYPE_DATE:
-      result := QuackInt32(d) + DUCKDB_UNIXDATE_DELTA;
-    DUCKDB_TYPE_TIME:
-      result := QuackInt64(d) / DUCKDB_MICROSPERDAY;
-    DUCKDB_TYPE_TIME_NS:
-      result := (QuackInt64(d) div 1000) / DUCKDB_MICROSPERDAY;
-    DUCKDB_TYPE_TIME_TZ:
-      begin
-        DuckTimeTzDecode(QuackInt64(d), us, offs);
-        result := us / DUCKDB_MICROSPERDAY;
-      end;
-    DUCKDB_TYPE_TIMESTAMP, DUCKDB_TYPE_TIMESTAMP_TZ, DUCKDB_TYPE_TIMESTAMP_S,
-    DUCKDB_TYPE_TIMESTAMP_MS, DUCKDB_TYPE_TIMESTAMP_NS:
-      result := DuckTimestampToDateTime(
-        DuckTimestampMicros(v.VType.DuckType, QuackInt64(d)));
-  else
-    result := Iso8601ToDateTime(ColumnUtf8(Col));
-  end;
 end;
-
 function TSqlDBQuackStatement.ColumnUtf8(Col: integer): RawUtf8;
 begin
   QuackValueToText(CheckCol(Col), fChunkRow, result);
