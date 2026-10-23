@@ -83,6 +83,17 @@ type
     procedure CloseDatabase;
     /// the DuckDB library version, e.g. 'v1.4.1'
     function LibraryVersion: RawUtf8;
+    /// start a Quack server (DuckDB client-server protocol over HTTP)
+    // - runs CALL quack_serve(aEndpoint, token=aToken), the quack extension being autoloaded
+    // - aEndpoint is e.g. 'quack:localhost' or 'quack:localhost:9494'
+    // - the Quack extension is experimental, and needs to be downloadable
+    // by DuckDB, unless it is already installed locally
+    // - see https://duckdb.org/2026/05/12/quack-remote-protocol
+    procedure QuackServe(const aEndpoint, aToken: RawUtf8);
+    /// attach a remote Quack server as a database of this instance
+    // - runs CREATE SECRET (TYPE quack, TOKEN ..) then ATTACH aEndpoint AS aAlias
+    // - remote tables can then be accessed as aAlias.main.tablename
+    procedure QuackAttach(const aEndpoint, aToken, aAlias: RawUtf8);
   published
     /// DuckDB configuration options, applied when the database is opened
     // - format is 'name1=value1;name2=value2', e.g. 'threads=4;memory_limit=2GB'
@@ -873,6 +884,30 @@ begin
   finally
     fDatabaseLock.UnLock;
   end;
+end;
+
+procedure TSqlDBDuckDBConnectionProperties.QuackServe(
+  const aEndpoint, aToken: RawUtf8);
+begin
+  (ThreadSafeConnection as TSqlDBDuckDBConnection).ExecuteScript(
+    'CALL quack_serve(' + QuotedStr(aEndpoint) +
+    ', token = ' + QuotedStr(aToken) + ')');
+end;
+
+procedure TSqlDBDuckDBConnectionProperties.QuackAttach(
+  const aEndpoint, aToken, aAlias: RawUtf8);
+var
+  i: PtrInt;
+begin
+  if aAlias = '' then
+    ESqlDBDuckDB.RaiseUtf8('%.QuackAttach: void alias', [self]);
+  for i := 1 to length(aAlias) do // alias is not quoted: validate it
+    if not (aAlias[i] in ['a'..'z', 'A'..'Z', '0'..'9', '_']) then
+      ESqlDBDuckDB.RaiseUtf8('%.QuackAttach: invalid alias [%]', [self, aAlias]);
+  (ThreadSafeConnection as TSqlDBDuckDBConnection).ExecuteScript(
+    'CREATE OR REPLACE SECRET (TYPE quack, TOKEN ' +
+    QuotedStr(aToken) + ', SCOPE ' + QuotedStr(aEndpoint) + '); ATTACH ' +
+    QuotedStr(aEndpoint) + ' AS ' + aAlias);
 end;
 
 procedure TSqlDBDuckDBConnectionProperties.GetForeignKeys;
