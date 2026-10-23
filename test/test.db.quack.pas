@@ -29,12 +29,10 @@ uses
   mormot.db.core,
   mormot.db.sql,
   mormot.db.raw.duckdb,
-  mormot.db.raw.quack,
-  mormot.db.sql.duckdb,
-  mormot.db.sql.quack;
+  mormot.db.sql.duckdb;
 
 type
-  /// regression tests for mormot.db.raw.quack.pas and mormot.db.sql.quack.pas
+  /// regression tests for the Quack client of mormot.db.raw.duckdb.pas and mormot.db.sql.duckdb.pas
   TTestQuack = class(TSynTestCase)
   protected
     fMock: THttpServer;

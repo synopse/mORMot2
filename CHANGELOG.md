@@ -13,7 +13,7 @@ Details are available [on out GitHub repository](https://github.com/synopse/mORM
 - HTTP Proxy Cache
 - HTTP over TFTP proxy
 - SChannel rewrite with full server-side support
-- DuckDB support (`mormot.db.sql.duckdb.pas`), including a native client of the DuckDB Quack protocol (`mormot.db.sql.quack.pas`)
+- DuckDB support (`mormot.db.sql.duckdb.pas`), including a native client of the DuckDB Quack protocol
 ### Changed
 - refactored main units to reduce their size: you may need to explicitly add `mormot.core.fmt`, `mormot.core.datetime` or `mormot.core.search` to your uses clause now
 - refactored cross-platform and cross-cpu conditionals (e.g. new internal `ASM*` definitions)
