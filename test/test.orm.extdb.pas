@@ -31,6 +31,8 @@ uses
   mormot.db.nosql.bson,
   mormot.db.raw.sqlite3,
   mormot.db.raw.sqlite3.static,
+  mormot.db.raw.duckdb,
+  mormot.db.sql.duckdb,
   mormot.db.proxy,
   mormot.orm.base,
   mormot.orm.core,
@@ -102,6 +104,10 @@ type
     /// test external DB implementation via faster REST calls and change tracking
     // - a TOrmHistory table will be used to store record history
     procedure ExternalViaRESTWithChangeTracking;
+    /// test an external DuckDB database via direct REST calls
+    // - DuckDB is an OLAP engine, very slow for single row INSERT/UPDATE: this
+    // is a small test, and the Virtual Table (one row per statement) is not used
+    procedure ExternalDuckDB;
     {$ifdef CPU32}
     {$ifdef OSWINDOWS}
     /// test external DB using the JET engine
@@ -702,6 +708,127 @@ end;
 procedure TTestExternalDatabase.ExternalViaRESTWithChangeTracking;
 begin
   Test(true, true);
+end;
+
+procedure TTestExternalDatabase.ExternalDuckDB;
+const
+  COUNT = 2000;
+  BLOB_COUNT = 100;
+var
+  props: TSqlDBConnectionProperties;
+  client: TRestClientDB;
+  ext: TOrmPeopleExt;
+  blob: TOrmOnlyBlob;
+  ids: TIDDynArray;
+  i: integer;
+begin
+  props := nil;
+  {$ifdef CPU64}
+  // the DuckDB library should be within the main executable folder
+  if FileExists(Executable.ProgramFilePath + DuckDBLibraryName) then
+  begin
+    TSynLog.Family.ExceptionIgnoreCurrentThread := true;
+    try
+      if DuckDBLibraryAvailable then
+        props := TSqlDBDuckDBConnectionProperties.Create(':memory:', '', '', '');
+    finally
+      TSynLog.Family.ExceptionIgnoreCurrentThread := false;
+    end;
+  end;
+  {$endif CPU64}
+  if props = nil then
+  begin
+    NotifyProgress(['DuckDB library not available - test skipped']);
+    exit;
+  end;
+  // map the same tables as Test(): TOrmPeopleExt has renamed fields, so its
+  // batch uses the multi-values INSERT, whereas TOrmOnlyBlob may use the Appender
+  Check(OrmMapExternal(fExternalModel, TOrmPeopleExt, props, 'PeopleExternal').
+    MapField('ID', 'Key').
+    MapField('YearOfDeath', 'YOD').
+    MapAutoKeywordFields <> nil);
+  Check(OrmMapExternal(fExternalModel, TOrmOnlyBlob, props, 'OnlyBlobExternal') <> nil);
+  Check(OrmMapExternal(fExternalModel, TOrmTestJoin, props, 'TestJoinExternal') <> nil);
+  Check(OrmMapExternal(fExternalModel, TOrmASource,  props, 'SourceExternal')   <> nil);
+  Check(OrmMapExternal(fExternalModel, TOrmADest,    props, 'DestExternal')     <> nil);
+  Check(OrmMapExternal(fExternalModel, TOrmADests,   props, 'DestsExternal')    <> nil);
+  DeleteFile('testExternal.db3');
+  client := TRestClientDB.Create(
+    fExternalModel, nil, 'testExternal.db3', TRestServerDB);
+  try
+    client.Server.Server.SetStaticVirtualTableDirect(true);
+    client.Server.Server.CreateMissingTables;
+    ext := TOrmPeopleExt.Create;
+    blob := TOrmOnlyBlob.Create;
+    try
+      // batch insert
+      CheckEqual(client.Orm.TableRowCount(TOrmPeopleExt), 0);
+      client.Client.BatchStart(TOrmPeopleExt);
+      for i := 1 to COUNT do
+      begin
+        ext.FirstName := FormatUtf8('First%', [i]);
+        ext.LastName := FormatUtf8('Last%', [i mod 10]);
+        ext.YearOfBirth := 1800 + i mod 100;
+        ext.YearOfDeath := 1900 + i mod 100;
+        ext.Value := ValuesToVariantDynArray(['text', i]);
+        client.Client.BatchAdd(ext, true);
+      end;
+      CheckEqual(client.Client.BatchSend(ids), HTTP_SUCCESS);
+      CheckEqual(length(ids), COUNT);
+      CheckEqual(ids[0], 1);
+      CheckEqual(ids[COUNT - 1], COUNT);
+      CheckEqual(client.Orm.TableRowCount(TOrmPeopleExt), COUNT);
+      CheckEqual(client.Orm.TableMaxID(TOrmPeopleExt), COUNT);
+      // retrieve
+      for i := 1 to COUNT do
+        if i mod 97 = 0 then
+        begin
+          ext.ClearProperties;
+          Check(client.Orm.Retrieve(i, ext));
+          CheckEqual(ext.FirstName, FormatUtf8('First%', [i]));
+          CheckEqual(ext.YearOfBirth, 1800 + i mod 100);
+          CheckEqual(VariantDynArrayToJson(ext.Value),
+            FormatUtf8('["text",%]', [i]));
+        end;
+      // query
+      ext.FillPrepare(client.Orm, 'LastName=? and YearOfBirth=?', ['Last3', 1803]);
+      CheckEqual(ext.FillTable.RowCount, COUNT div 100); // i mod 100 = 3 -> mod 10 = 3
+      // update and delete
+      Check(client.Orm.Retrieve(10, ext));
+      ext.YearOfBirth := 1;
+      Check(client.Orm.Update(ext));
+      ext.ClearProperties;
+      Check(client.Orm.Retrieve(10, ext));
+      CheckEqual(ext.YearOfBirth, 1);
+      CheckEqual(ext.YearOfDeath, 1910);
+      Check(client.Orm.Delete(TOrmPeopleExt, 10));
+      Check(not client.Orm.Retrieve(10, ext));
+      CheckEqual(client.Orm.TableRowCount(TOrmPeopleExt), COUNT - 1);
+      // BLOB batch
+      client.Client.ForceBlobTransfertTable[TOrmOnlyBlob] := true;
+      client.Client.BatchStart(TOrmOnlyBlob);
+      for i := 1 to BLOB_COUNT do
+      begin
+        blob.Data := Int32ToUtf8(i);
+        client.Client.BatchAdd(blob, true, false, ALL_FIELDS); // include the BLOB
+      end;
+      CheckEqual(client.Client.BatchSend(ids), HTTP_SUCCESS);
+      CheckEqual(length(ids), BLOB_COUNT);
+      for i := 1 to BLOB_COUNT do
+        if i mod 7 = 0 then
+        begin
+          blob.ClearProperties;
+          Check(client.Orm.Retrieve(i, blob));
+          CheckEqual(GetInteger(pointer(blob.Data)), i);
+        end;
+    finally
+      blob.Free;
+      ext.Free;
+    end;
+  finally
+    client.Free;
+    props.Free;
+  end;
 end;
 
 {$ifdef OSWINDOWS}
