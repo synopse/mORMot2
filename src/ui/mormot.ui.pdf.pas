@@ -4858,7 +4858,7 @@ begin
           inc(B, 2);
         end;
       #8:
-        PWord(B)^ := ord('\') + ord('B') shl 8;
+        PWord(B)^ := ord('\') + ord('b') shl 8;
       #9:
         PWord(B)^ := ord('\') + ord('t') shl 8;
       #10:

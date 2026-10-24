@@ -32,6 +32,7 @@ type
     procedure MultiplePages;
     procedure PDFMetadata;
     procedure UnicodeWidth;
+    procedure EscapeBackspace;
   end;
 
 implementation
@@ -574,6 +575,25 @@ begin
   finally
     pdf.Free;
   end;
+end;
+
+procedure TTestUiPdf.EscapeBackspace;
+var
+  pdf: TPdfDocument;
+  s: RawByteString;
+begin
+  pdf := TPdfDocument.Create;
+  try
+    pdf.GeneratePDF15File := false;
+    pdf.CompressionMethod := cmNone;
+    pdf.Info.Subject := 'a'#8'b';
+    pdf.AddPage;
+    s := SavedPdf(pdf);
+  finally
+    pdf.Free;
+  end;
+  // ISO 32000-1 7.3.4.2 defines \b - a reader takes \B as a plain B
+  Check(PosEx('/Subject(a\bb)', s) > 0, 'backspace escaped as \b');
 end;
 
 {$else}
