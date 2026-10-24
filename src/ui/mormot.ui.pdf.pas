@@ -5314,7 +5314,8 @@ begin
   // 3. get Visual Order, i.e. how to render the content from left to right
   SetLength(level, count);
   for i := 0 to count - 1 do
-    level[i] := items[i].a.s.uBidiLevel;
+    // without the state bits above the five level bits
+    level[i] := items[i].a.s.uBidiLevel and $1f;
   SetLength(VisualToLogical, count);
   if ScriptLayout(count, pointer(level), pointer(VisualToLogical), nil) <> 0 then
     exit;

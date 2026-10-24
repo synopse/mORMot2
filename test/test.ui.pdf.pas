@@ -42,6 +42,7 @@ type
     procedure JpegColorSpace;
     procedure ZeroAdvanceMeasured;
     procedure ReducedFontChecksum;
+    procedure BidiEmbeddingOrder;
   end;
 
 implementation
@@ -981,6 +982,76 @@ begin
     inc(i, 4);
   end;
   CheckEqual(sum, $B1B0AFBA, 'head.checkSumAdjustment');
+end;
+{$else}
+begin
+end;
+{$endif NO_USE_UNISCRIBE}
+
+function Hex4(v: word): RawUtf8;
+const
+  HEX: array[0..15] of AnsiChar = '0123456789ABCDEF';
+begin
+  SetLength(result, 4);
+  result[1] := HEX[v shr 12];
+  result[2] := HEX[(v shr 8) and 15];
+  result[3] := HEX[(v shr 4) and 15];
+  result[4] := HEX[v and 15];
+end;
+
+{$ifdef FPC} // not in the Windows unit of FPC
+function GetGlyphIndicesW(DC: HDC; Text: PWideChar; Count: integer;
+  Glyphs: PWord; Flags: cardinal): cardinal; stdcall; external 'gdi32.dll';
+{$endif FPC}
+
+procedure TTestUiPdf.BidiEmbeddingOrder;
+{$ifndef NO_USE_UNISCRIBE}
+const
+  // x RLO ab LRE cd PDF ef PDF z: the embedding levels 0 1 2 1 0, where
+  // Uniscribe also sets the override bit of the state above the level bits
+  TXT: array[0..14] of WideChar = ('x', ' ', WideChar($202E), 'a', 'b',
+    WideChar($202A), 'c', 'd', WideChar($202C), 'e', 'f', WideChar($202C),
+    ' ', 'z', #0);
+  ECA: array[0..2] of WideChar = ('e', 'c', 'a');
+var
+  pdf: TPdfDocument;
+  s: RawByteString;
+  dc: HDC;
+  font, old: HFONT;
+  g: array[0..2] of word;
+  p, pe, pc, pa: integer;
+begin
+  dc := CreateCompatibleDC(0);
+  font := CreateFont(-100, 0, 0, 0, FW_NORMAL, 0, 0, 0, ANSI_CHARSET,
+    OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY, 0, 'Arial');
+  old := SelectObject(dc, font);
+  GetGlyphIndicesW(dc, @ECA, 3, @g, 0);
+  SelectObject(dc, old);
+  DeleteObject(font);
+  DeleteDC(dc);
+  pdf := TPdfDocument.Create;
+  try
+    pdf.GeneratePDF15File := false;
+    pdf.CompressionMethod := cmNone;
+    pdf.UseUniscribe := true;
+    pdf.AddPage;
+    pdf.Canvas.SetFont('Arial', 10, []);
+    pdf.Canvas.TextOutW(20, 700, @TXT);
+    s := SavedPdf(pdf);
+  finally
+    pdf.Free;
+  end;
+  // visual order: x, then the runs ef, cd, ab - in the text object only
+  p := PosEx('BT'#10, s);
+  if not Check(p > 0, 'text object') then
+    exit;
+  s := copy(s, p, PosEx('ET'#10, s, p) - p);
+  pe := PosEx(Hex4(g[0]), s);
+  pc := PosEx(Hex4(g[1]), s);
+  pa := PosEx(Hex4(g[2]), s);
+  CheckUtf8((pe > 0) and
+            (pe < pc) and
+            (pc < pa), 'visual order ef, cd, ab: % % %', [pe, pc, pa]);
 end;
 {$else}
 begin
