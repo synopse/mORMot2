@@ -10,6 +10,9 @@ unit mormot.db.sql.duckdb;
     - TSqlDBDuckDBConnectionProperties: one shared duckdb_database instance
     - TSqlDBDuckDBConnection: one duckdb_connection per (thread) connection
     - TSqlDBDuckDBStatement: prepared statements and chunk-based row access
+    - TSqlDBQuackConnectionProperties: native client of a DuckDB Quack server
+    - TSqlDBQuackConnection: one HTTP keep-alive socket per (thread) connection
+    - TSqlDBQuackStatement: remote execution and chunk-based row access
 
   *****************************************************************************
 
@@ -41,6 +44,9 @@ uses
   mormot.core.json,
   mormot.core.rtti,
   mormot.core.log,
+  mormot.net.sock,
+  mormot.net.http,
+  mormot.net.client,
   mormot.db.core,
   mormot.db.sql,
   mormot.db.raw.duckdb;
@@ -82,6 +88,17 @@ type
     procedure CloseDatabase;
     /// the DuckDB library version, e.g. 'v1.4.1'
     function LibraryVersion: RawUtf8;
+    /// start a Quack server (DuckDB client-server protocol over HTTP)
+    // - runs CALL quack_serve(aEndpoint, token=aToken), the quack extension being autoloaded
+    // - aEndpoint is e.g. 'quack:localhost' or 'quack:localhost:9494'
+    // - the Quack extension is experimental, and needs to be downloadable
+    // by DuckDB, unless it is already installed locally
+    // - see https://duckdb.org/2026/05/12/quack-remote-protocol
+    procedure QuackServe(const aEndpoint, aToken: RawUtf8);
+    /// attach a remote Quack server as a database of this instance
+    // - runs CREATE SECRET (TYPE quack, TOKEN ..) then ATTACH aEndpoint AS aAlias
+    // - remote tables can then be accessed as aAlias.main.tablename
+    procedure QuackAttach(const aEndpoint, aToken, aAlias: RawUtf8);
   published
     /// DuckDB configuration options, applied when the database is opened
     // - format is 'name1=value1;name2=value2', e.g. 'threads=4;memory_limit=2GB'
@@ -156,7 +173,6 @@ type
     function NextChunk: boolean;
     function CheckCol(Col: integer): PDuckDBColumnInfo;
       {$ifdef HASINLINE} inline; {$endif}
-    function DecimalMantissa(c: PDuckDBColumnInfo; out hi: Int64): Int64;
   public
     /// release all associated DuckDB handles
     destructor Destroy; override;
@@ -265,17 +281,190 @@ function DuckDBVectorValueToTextBuf(vec: TDuckDBVector; T: PDuckDBTypeInfo;
   row: PtrInt; var Buffer: TTemp47): PtrInt;
 
 
+
+{ ************ TSqlDBQuackConnection* and TSqlDBQuackStatement Classes }
+
+type
+  /// how the HTTP transport of a Quack connection is encrypted
+  // - qtmAuto follows DuckDB: plain HTTP for localhost, HTTPS otherwise
+  TSqlDBQuackTlsMode = (
+    qtmAuto,
+    qtmOn,
+    qtmOff);
+
+  /// connection properties to a remote DuckDB Quack server
+  // - aServerName is the Quack server URI, e.g. 'quack:localhost' or
+  // 'quack://db.example.org:9494' - the default port is 9494
+  // - aPassWord is the Quack authentication token
+  // - aUserID is the optional client identifier, sent to the server
+  // (4 characters minimum if set)
+  // - aDatabaseName is ignored
+  TSqlDBQuackConnectionProperties = class(TSqlDBConnectionPropertiesThreadSafe)
+  protected
+    fHost: RawUtf8;
+    fPort: integer;
+    fTlsMode: TSqlDBQuackTlsMode;
+    fIgnoreTlsErrors: boolean;
+    fHeartbeatSeconds: cardinal;
+    fTimeOutMs: cardinal;
+    fProtocolVersion: cardinal;
+    function GetUseTls: boolean;
+    procedure GetForeignKeys; override;
+  public
+    /// initialize the properties - the server is contacted on first connection
+    constructor Create(const aServerName, aDatabaseName, aUserID, aPassWord: RawUtf8);
+      override;
+    /// create a new connection - caller should free it
+    function NewConnection: TSqlDBConnection; override;
+    /// the server host name, as parsed from ServerName
+    property Host: RawUtf8
+      read fHost;
+    /// the server TCP port, as parsed from ServerName
+    property Port: integer
+      read fPort;
+    /// true if HTTPS is used, depending on TlsMode and the server Host
+    property UseTls: boolean
+      read GetUseTls;
+  published
+    /// how the HTTP transport is encrypted - qtmAuto by default
+    property TlsMode: TSqlDBQuackTlsMode
+      read fTlsMode write fTlsMode;
+    /// let HTTPS accept any certificate, e.g. a self-signed server certificate
+    // - disable the server authentication so should be used only for tests
+    property IgnoreTlsErrors: boolean
+      read fIgnoreTlsErrors write fIgnoreTlsErrors;
+    /// the lease duration, in seconds, requested to the server
+    // - a connection idle for longer will be released by the server
+    // - default is 60 seconds
+    property HeartbeatSeconds: cardinal
+      read fHeartbeatSeconds write fHeartbeatSeconds;
+    /// the connection and response timeout, in milliseconds
+    // - default is 30000, i.e. 30 seconds
+    property TimeOutMs: cardinal
+      read fTimeOutMs write fTimeOutMs;
+    /// the Quack protocol version to use, or 0 to detect it on connection
+    // - the released DuckDB 1.5 quack extension uses version 1, and the
+    // development branch uses version 3
+    property ProtocolVersion: cardinal
+      read fProtocolVersion write fProtocolVersion;
+  end;
+
+  /// one connection to a Quack server
+  // - uses its own HTTP keep-alive socket and server-side connection
+  TSqlDBQuackConnection = class(TSqlDBConnectionThreadSafe)
+  protected
+    fSocket: THttpClientSocket;
+    fConnectionId: RawUtf8;
+    fLeaseSeconds: cardinal;
+    fLastRequestSec: cardinal;
+    fVersion: cardinal;
+    function Post(const Body: RawByteString): TQuackResponse;
+    procedure CheckLease;
+  public
+    /// connect to the server, i.e. open the socket and send CONNECTION_REQUEST
+    procedure Connect; override;
+    /// send a DISCONNECT_MESSAGE and close the socket
+    procedure Disconnect; override;
+    /// return TRUE if Connect has been already successfully called
+    function IsConnected: boolean; override;
+    /// initialize a new SQL query statement for this connection
+    function NewStatement: TSqlDBStatement; override;
+    /// BEGIN TRANSACTION
+    procedure StartTransaction; override;
+    /// COMMIT
+    procedure Commit; override;
+    /// ROLLBACK
+    procedure Rollback; override;
+    /// send a request to the server, and check the type of its response
+    // - raise ESqlDBQuack if the server returned an error, or any other type
+    // of message than the Expected one
+    // - the caller should release the returned instance
+    function Request(const Body: RawByteString; Expected: byte): TQuackResponse;
+    /// send a request to the server, ignoring any error
+    // - used to cancel or acknowledge a query
+    procedure RequestSilently(const Body: RawByteString);
+    /// execute a SQL statement without parameters on the server
+    // - e.g. for DDL scripts, COPY, ATTACH, INSTALL/LOAD, PRAGMA...
+    // - returns the number of changed rows, or 0 for a SELECT
+    function ExecuteScript(const aSql: RawUtf8): Int64;
+    /// the server-side connection identifier
+    property ConnectionId: RawUtf8
+      read fConnectionId;
+    /// the Quack protocol version negotiated with the server
+    property Version: cardinal
+      read fVersion;
+  end;
+
+  /// a statement executed on a Quack server
+  TSqlDBQuackStatement = class(TSqlDBStatementWithParamsAndColumns)
+  protected
+    fResponse: TQuackResponse;
+    fChunk: TQuackChunk;
+    fChunkIndex: integer;
+    fChunkRow: PtrInt;
+    fQueryUuid: TDuckDBHugeInt;
+    fNextBatch: cardinal;
+    fMoreToFetch: boolean;
+    fExecuted: boolean;
+    fUpdateCount: integer;
+    function BuildSql: RawUtf8;
+    procedure AddParam(W: TJsonWriter; Index: integer);
+    procedure ReleaseResult;
+    procedure FetchNext;
+    function NextChunk: boolean;
+    function CheckCol(Col: integer): TQuackVector;
+  public
+    /// release all associated resources, and cancel any running query
+    destructor Destroy; override;
+    /// prepare an UTF-8 encoded SQL statement with ? parameters
+    // - nothing is sent to the server until ExecutePrepared is called
+    procedure Prepare(const aSql: RawUtf8; ExpectResults: boolean = false);
+      overload; override;
+    /// execute the prepared statement with the bound parameters
+    procedure ExecutePrepared; override;
+    /// number of rows changed by the last INSERT/UPDATE/DELETE
+    function UpdateCount: integer; override;
+    /// reset the statement for a new execution with new parameters
+    procedure Reset; override;
+    /// release the current result set
+    procedure ReleaseRows; override;
+    /// move to the next row of the result set
+    // - will send a FETCH_REQUEST to the server when needed
+    function Step(SeekFirst: boolean = false): boolean; override;
+    /// returns TRUE if the column contains NULL
+    function ColumnNull(Col: integer): boolean; override;
+    /// return a column integer value (BOOLEAN as 0/1)
+    function ColumnInt(Col: integer): Int64; override;
+    /// return a column floating point value
+    function ColumnDouble(Col: integer): double; override;
+    /// return a column date/time value
+    function ColumnDateTime(Col: integer): TDateTime; override;
+    /// return a column currency value - exact for DECIMAL(n,<=4)
+    function ColumnCurrency(Col: integer): currency; override;
+    /// return a column as UTF-8 text, in DuckDB native text format
+    // - LIST/STRUCT/MAP/ARRAY/UNION are returned as JSON
+    function ColumnUtf8(Col: integer): RawUtf8; override;
+    /// return a column as binary content
+    function ColumnBlob(Col: integer): RawByteString; override;
+    /// append a column value as JSON
+    procedure ColumnToJson(Col: integer; W: TJsonWriter); override;
+  end;
+
+
+/// append the value of a Quack vector at a given row as JSON
+// - handles all scalar types, and nested LIST/ARRAY/STRUCT/MAP/UNION
+procedure QuackValueToJson(V: TQuackVector; Row: PtrInt; W: TJsonWriter);
+
+/// return the value of a Quack vector at a given row as text
+// - scalar values in DuckDB text format, nested values as JSON
+procedure QuackValueToText(V: TQuackVector; Row: PtrInt; var Result: RawUtf8);
+
 implementation
 
 
 { ************ Vector Value Conversion }
 
 const
-  POW10: array[0..18] of Int64 = (1, 10, 100, 1000, 10000, 100000, 1000000,
-    10000000, 100000000, 1000000000, 10000000000, 100000000000,
-    1000000000000, 10000000000000, 100000000000000, 1000000000000000,
-    10000000000000000, 100000000000000000, 1000000000000000000);
-
   // integer types which can be read by ReadIntegral() as Int64
   DUCKDB_INT_TYPES = [DUCKDB_TYPE_BOOLEAN, DUCKDB_TYPE_TINYINT,
     DUCKDB_TYPE_SMALLINT, DUCKDB_TYPE_INTEGER, DUCKDB_TYPE_BIGINT,
@@ -286,20 +475,6 @@ function IsValid(validity: PDuckI64Array; row: PtrInt): boolean;
 begin
   result := (validity = nil) or
             ((validity^[row shr 6] shr (row and 63)) and 1 <> 0);
-end;
-
-function TimestampMicros(typeid: TDuckDBType; v: Int64): Int64;
-begin
-  case typeid of
-    DUCKDB_TYPE_TIMESTAMP_S:
-      result := v * 1000000;
-    DUCKDB_TYPE_TIMESTAMP_MS:
-      result := v * 1000;
-    DUCKDB_TYPE_TIMESTAMP_NS:
-      result := v div 1000;
-  else
-    result := v;
-  end;
 end;
 
 function ReadIntegral(typeid: TDuckDBType; data: pointer; row: PtrInt): Int64;
@@ -322,113 +497,18 @@ begin
   end;
 end;
 
-procedure DecimalValue(T: PDuckDBTypeInfo; data: pointer; row: PtrInt;
-  var mantissa: TDuckDBHugeInt; var scale: integer);
-var
-  v: Int64;
-begin
-  scale := T^.Scale;
-  case T^.Internal of
-    DUCKDB_TYPE_HUGEINT:
-      begin
-        mantissa := PDuckDBHugeInt(PAnsiChar(data) + row * SizeOf(TDuckDBHugeInt))^;
-        exit;
-      end;
-    DUCKDB_TYPE_SMALLINT:
-      v := PDuckI16Array(data)^[row];
-    DUCKDB_TYPE_INTEGER:
-      v := PDuckI32Array(data)^[row];
-  else
-    v := PDuckI64Array(data)^[row];
-  end;
-  mantissa.Lower := v;
-  if v < 0 then
-    mantissa.Upper := -1
-  else
-    mantissa.Upper := 0;
-end;
-
 function DuckDBVectorValueToTextBuf(vec: TDuckDBVector; T: PDuckDBTypeInfo;
   row: PtrInt; var Buffer: TTemp47): PtrInt;
-var
-  data: pointer;
-  typeid: TDuckDBType;
-  scale: integer;
-  p, num: PAnsiChar;
-  h: TDuckDBHugeInt;
-  d: double;
-  tmp: ShortString;
 begin
-  result := 0;
-  Buffer[0] := #0;
   if not IsValid(DuckDB.vector_get_validity(vec), row) then
+  begin
+    Buffer[0] := #0;
+    result := 0;
     exit;
-  data := DuckDB.vector_get_data(vec);
-  typeid := T^.TypeId;
-  num := nil;
-  case typeid of
-    DUCKDB_TYPE_BOOLEAN:
-      begin
-        p := @BOOL_STR[PDuckU8Array(data)^[row] <> 0]; // 'false'/'true'
-        PInt64(@Buffer)^ := PInt64(p + 1)^;            // include ending #0
-        result := ord(p[0]);
-      end;
-    DUCKDB_TYPE_TINYINT, DUCKDB_TYPE_SMALLINT,
-    DUCKDB_TYPE_INTEGER, DUCKDB_TYPE_BIGINT,
-    DUCKDB_TYPE_UTINYINT, DUCKDB_TYPE_USMALLINT,
-    DUCKDB_TYPE_UINTEGER:
-      num := StrInt64(@Buffer[high(Buffer)],
-        ReadIntegral(typeid, data, row));
-    DUCKDB_TYPE_UBIGINT:
-      num := StrUInt64(@Buffer[high(Buffer)],
-        QWord(PDuckI64Array(data)^[row]));
-    DUCKDB_TYPE_HUGEINT, DUCKDB_TYPE_UHUGEINT:
-      result := DuckHugeIntToTextBuf(
-        PDuckDBHugeInt(PAnsiChar(data) + row * 16)^,
-        typeid = DUCKDB_TYPE_HUGEINT, 0, Buffer);
-    DUCKDB_TYPE_DECIMAL:
-      begin
-        DecimalValue(T, data, row, h, scale);
-        result := DuckHugeIntToTextBuf(h, true, scale, Buffer);
-      end;
-    DUCKDB_TYPE_FLOAT, DUCKDB_TYPE_DOUBLE:
-      begin
-        if typeid = DUCKDB_TYPE_FLOAT then
-          d := PDuckSingleArray(data)^[row]
-        else
-          d := PDuckDoubleArray(data)^[row];
-        if PInt64(@d)^ = 0 then
-        begin
-          PCardinal(@Buffer)^ := ord('0');
-          result := 1;
-        end
-        else
-        begin
-          result := DoubleToShort(@tmp, d);
-          if result > high(Buffer) then
-            result := -1 // very unlikely
-          else
-          begin
-            MoveFast(tmp[1], Buffer[0], result);
-            Buffer[result] := #0;
-          end;
-        end;
-      end;
-    DUCKDB_TYPE_UUID:
-      result := DuckUuidToTextBuf(
-        PDuckDBHugeInt(PAnsiChar(data) + row * 16)^, Buffer);
-    DUCKDB_TYPE_SQLNULL:
-      ; // NULL -> empty buffer
-  else
-    // Dates, times, intervals, ENUM, VARCHAR, DUCKDB_TYPE_BIT and nested types
-    result := -1;
   end;
-  // normalize the backward-generated 64-bit integer text
-  if num = nil then
-   exit;
-  result := @Buffer[high(Buffer)] - num;
-  MoveFast(num^, Buffer[0], result);
-  Buffer[result] := #0;
+  result := DuckFixedToTextBuf(T^.TypeId, T^.Internal, T^.Scale,
+    PAnsiChar(DuckDB.vector_get_data(vec)) +
+      row * T^.Size, Buffer);
 end;
 
 procedure ComplexDuckDBVectorValueToText(vec: TDuckDBVector;
@@ -450,66 +530,16 @@ procedure DuckDBVectorValueToText(vec: TDuckDBVector;
   T: PDuckDBTypeInfo; row: PtrInt; var result: RawUtf8);
 var
   typeid: TDuckDBType;
-  len, offs: integer;
+  len: integer;
   data: PAnsiChar;
   p: pointer;
-  us: Int64;
-  d: double;
-  buf: TTemp47;
 begin
-  len := DuckDBVectorValueToTextBuf(vec, T, row, buf);
-  if len >= 0 then
-  begin
-    FastSetString(result, @buf[0], len); // most simple types
-    exit;
-  end;
   FastAssignNew(result);
+  if not IsValid(DuckDB.vector_get_validity(vec), row) then
+    exit;
   data := DuckDB.vector_get_data(vec);
   typeid := T^.TypeId;
   case typeid of
-    DUCKDB_TYPE_FLOAT, DUCKDB_TYPE_DOUBLE:
-      begin
-        if typeid = DUCKDB_TYPE_FLOAT then
-          d := PDuckSingleArray(data)^[row]
-        else
-          d := PDuckDoubleArray(data)^[row];
-        DoubleToStr(d, result);
-      end;
-    DUCKDB_TYPE_DATE:
-      DuckDateToText(PDuckI32Array(data)^[row], result);
-    DUCKDB_TYPE_TIME:
-      DuckTimeToText(PDuckI64Array(data)^[row], result);
-    DUCKDB_TYPE_TIME_NS:
-      DuckTimeToText(PDuckI64Array(data)^[row] div 1000, result);
-    DUCKDB_TYPE_TIME_TZ:
-      begin
-        DuckTimeTzDecode(PDuckI64Array(data)^[row], us, offs);
-        DuckTimeToText(us, result);
-        if offs < 0 then
-          result := result + '-'
-        else
-          result := result + '+';
-        offs := abs(offs);
-        AppendShortToUtf8(UInt2DigitsToShortFast(offs div 3600), result);
-        if offs mod 3600 <> 0 then
-        begin
-          result := result + ':';
-          AppendShortToUtf8(
-            UInt2DigitsToShortFast((offs div 60) mod 60), result);
-        end;
-      end;
-    DUCKDB_TYPE_TIMESTAMP, DUCKDB_TYPE_TIMESTAMP_S,
-    DUCKDB_TYPE_TIMESTAMP_MS, DUCKDB_TYPE_TIMESTAMP_NS:
-      DuckTimestampToText(
-        TimestampMicros(typeid, PDuckI64Array(data)^[row]), result);
-    DUCKDB_TYPE_TIMESTAMP_TZ:
-      begin
-        DuckTimestampToText(PDuckI64Array(data)^[row], result);
-        result := result + '+00'; // stored as UTC
-      end;
-    DUCKDB_TYPE_INTERVAL:
-      DuckIntervalToText(
-        PDuckDBInterval(data + row * 16)^, result);
     DUCKDB_TYPE_VARCHAR, DUCKDB_TYPE_BLOB:
       begin
         p := DuckStringPtr(DuckStringAt(data, row), len);
@@ -523,28 +553,23 @@ begin
     DUCKDB_TYPE_ENUM:
       result := DuckDBEnumValue(T^,
         ReadIntegral(T^.Internal, data, row));
+    DUCKDB_TYPE_LIST, DUCKDB_TYPE_ARRAY, DUCKDB_TYPE_STRUCT,
+    DUCKDB_TYPE_MAP, DUCKDB_TYPE_UNION:
+      ComplexDuckDBVectorValueToText(vec, T, row, result); // as JSON
   else
-    // LIST, ARRAY, STRUCT, MAP, UNION -> JSON
-    ComplexDuckDBVectorValueToText(vec, T, row, result);
+    DuckFixedToText(typeid, T^.Internal, T^.Scale,
+      data + row * T^.Size, result);
   end;
 end;
 
 procedure AddVectorValueAsJsonString(vec: TDuckDBVector; T: PDuckDBTypeInfo;
   row: PtrInt; W: TJsonWriter);
 var
-  n: PtrInt;
-  buf: TTemp47;
   txt: RawUtf8;
 begin
+  DuckDBVectorValueToText(vec, T, row, txt); // ENUM and BIT
   W.AddDirect('"');
-  n := DuckDBVectorValueToTextBuf(vec, T, row, buf);
-  if n >= 0 then
-    W.AddJsonEscape(@buf[0], n) // no transient RawUtf8 for UUID, numbers...
-  else
-  begin
-    DuckDBVectorValueToText(vec, T, row, txt); // dates, ENUM, INTERVAL, BIT
-    W.AddJsonEscape(pointer(txt), length(txt));
-  end;
+  W.AddJsonEscape(pointer(txt), length(txt));
   W.AddDirect('"');
 end;
 
@@ -557,45 +582,38 @@ var
   buf: TTemp47;
   txt: RawUtf8;
 begin
-  case T^.TypeId of
-    DUCKDB_TYPE_LIST:
-      begin
-        e := PDuckDBListEntry(data + row * SizeOf(TDuckDBListEntry));
-        child := DuckDB.list_vector_get_child(vec);
-        W.AddDirect('[');
-        for i := PtrInt(e^.Offset) to PtrInt(e^.Offset + e^.Length) - 1 do
-        begin
-          DuckDBVectorValueToJson(child, @T^.Children^[0], i, W);
-          W.AddComma;
-        end;
-        W.CancelLastComma(']');
-      end;
-    DUCKDB_TYPE_MAP:
-      begin
-        // MAP = LIST(STRUCT(key, value)) -> JSON object
-        e := PDuckDBListEntry(data + row * SizeOf(TDuckDBListEntry));
-        child := DuckDB.list_vector_get_child(vec);
-        kvec := DuckDB.struct_vector_get_child(child, 0);
-        vvec := DuckDB.struct_vector_get_child(child, 1);
-        W.AddDirect('{');
-        for i := PtrInt(e^.Offset) to PtrInt(e^.Offset + e^.Length) - 1 do
-        begin
-          n := DuckDBVectorValueToTextBuf(kvec, @T^.Children^[0], i, buf);
-          if n >= 0 then
-            W.AddProp(@buf[0], n)
-          else
-          begin
-            DuckDBVectorValueToText(kvec, @T^.Children^[0], i, txt);
-            W.AddProp(pointer(txt), length(txt));
-          end;
-          DuckDBVectorValueToJson(vvec, @T^.Children^[1], i, W);
-          W.AddComma;
-        end;
-        W.CancelLastComma('}');
-      end;
+  e := PDuckDBListEntry(data + row * SizeOf(TDuckDBListEntry));
+  child := DuckDB.list_vector_get_child(vec);
+  if T^.TypeId = DUCKDB_TYPE_LIST then
+  begin
+    W.AddDirect('[');
+    for i := PtrInt(e^.Offset) to PtrInt(e^.Offset + e^.Length) - 1 do
+    begin
+      DuckDBVectorValueToJson(child, @T^.Children^[0], i, W);
+      W.AddComma;
+    end;
+    W.CancelLastComma(']');
+  end
   else
-    // ENUM, UUID, dates, INTERVAL, BIT -> JSON string
-    AddVectorValueAsJsonString(vec, T, row, W);
+  begin
+    // MAP = LIST(STRUCT(key, value)) -> JSON object
+    kvec := DuckDB.struct_vector_get_child(child, 0);
+    vvec := DuckDB.struct_vector_get_child(child, 1);
+    W.AddDirect('{');
+    for i := PtrInt(e^.Offset) to PtrInt(e^.Offset + e^.Length) - 1 do
+    begin
+      n := DuckDBVectorValueToTextBuf(kvec, @T^.Children^[0], i, buf);
+      if n >= 0 then
+        W.AddProp(@buf[0], n)
+      else
+      begin
+        DuckDBVectorValueToText(kvec, @T^.Children^[0], i, txt);
+        W.AddProp(pointer(txt), length(txt));
+      end;
+      DuckDBVectorValueToJson(vvec, @T^.Children^[1], i, W);
+      W.AddComma;
+    end;
+    W.CancelLastComma('}');
   end;
 end;
 
@@ -605,12 +623,10 @@ var
   data: PAnsiChar;
   p: pointer;
   typeid: TDuckDBType;
-  i, n, size: PtrInt; // no Int64 for-loop variable on Delphi 7
-  len, scale: integer; // not PtrInt
-  h: TDuckDBHugeInt;
+  i, size: PtrInt; // no Int64 for-loop variable on Delphi 7
+  len: integer; // not PtrInt
   tag: integer;
   child: TDuckDBVector;
-  buf: TTemp47;
 begin
   if not IsValid(DuckDB.vector_get_validity(vec), row) then
   begin
@@ -620,27 +636,20 @@ begin
   data := DuckDB.vector_get_data(vec);
   typeid := T^.TypeId;
   case typeid of
-    DUCKDB_TYPE_BOOLEAN:
-      W.Add(PDuckU8Array(data)^[row] <> 0);
-    DUCKDB_TYPE_TINYINT, DUCKDB_TYPE_SMALLINT, DUCKDB_TYPE_INTEGER,
-    DUCKDB_TYPE_BIGINT, DUCKDB_TYPE_UTINYINT, DUCKDB_TYPE_USMALLINT,
-    DUCKDB_TYPE_UINTEGER:
-      W.Add(ReadIntegral(typeid, data, row));
-    DUCKDB_TYPE_UBIGINT, DUCKDB_TYPE_HUGEINT, DUCKDB_TYPE_UHUGEINT:
+    DUCKDB_TYPE_VARCHAR:
       begin
-        n := DuckDBVectorValueToTextBuf(vec, T, row, buf);
-        W.AddNoJsonEscape(@buf[0], n);
+        p := DuckStringPtr(DuckStringAt(data, row), len);
+        W.AddDirect('"');
+        W.AddJsonEscape(p, len);
+        W.AddDirect('"');
       end;
-    DUCKDB_TYPE_FLOAT:
-      W.AddSingle(PDuckSingleArray(data)^[row]);
-    DUCKDB_TYPE_DOUBLE:
-      W.AddDouble(PDuckDoubleArray(data)^[row]);
-    DUCKDB_TYPE_DECIMAL:
+    DUCKDB_TYPE_BLOB:
       begin
-        DecimalValue(T, data, row, h, scale);
-        n := DuckHugeIntToTextBuf(h, true, scale, buf);
-        W.AddNoJsonEscape(@buf[0], n);
+        p := DuckStringPtr(DuckStringAt(data, row), len);
+        W.WrBase64(p, len, {withmagic=}true);
       end;
+    DUCKDB_TYPE_LIST, DUCKDB_TYPE_MAP:
+      ComplexDuckDBVectorValueToJson(vec, data, T, row, W);
     DUCKDB_TYPE_ARRAY:
       begin
         child := DuckDB.array_vector_get_child(vec);
@@ -673,22 +682,11 @@ begin
         DuckDBVectorValueToJson(DuckDB.struct_vector_get_child(vec, tag + 1),
           @T^.Children^[tag], row, W);
       end;
-    DUCKDB_TYPE_BLOB:
-      begin
-        p := DuckStringPtr(DuckStringAt(data, row), len);
-        W.WrBase64(p, len, {withmagic=}true);
-      end;
-    DUCKDB_TYPE_SQLNULL:
-      W.AddNull;
-    DUCKDB_TYPE_VARCHAR:
-      begin
-        p := DuckStringPtr(DuckStringAt(data, row), len);
-        W.AddDirect('"');
-        W.AddJsonEscape(p, len);
-        W.AddDirect('"');
-      end
+    DUCKDB_TYPE_ENUM, DUCKDB_TYPE_BIT:
+      AddVectorValueAsJsonString(vec, T, row, W);
   else
-    ComplexDuckDBVectorValueToJson(vec, data, T, row, W);
+    DuckFixedToJson(typeid, T^.Internal, T^.Scale,
+      data + row * T^.Size, W);
   end;
 end;
 
@@ -859,6 +857,30 @@ begin
   finally
     fDatabaseLock.UnLock;
   end;
+end;
+
+procedure TSqlDBDuckDBConnectionProperties.QuackServe(
+  const aEndpoint, aToken: RawUtf8);
+begin
+  (ThreadSafeConnection as TSqlDBDuckDBConnection).ExecuteScript(
+    'CALL quack_serve(' + QuotedStr(aEndpoint) +
+    ', token = ' + QuotedStr(aToken) + ')');
+end;
+
+procedure TSqlDBDuckDBConnectionProperties.QuackAttach(
+  const aEndpoint, aToken, aAlias: RawUtf8);
+var
+  i: PtrInt;
+begin
+  if aAlias = '' then
+    ESqlDBDuckDB.RaiseUtf8('%.QuackAttach: void alias', [self]);
+  for i := 1 to length(aAlias) do // alias is not quoted: validate it
+    if not (aAlias[i] in ['a'..'z', 'A'..'Z', '0'..'9', '_']) then
+      ESqlDBDuckDB.RaiseUtf8('%.QuackAttach: invalid alias [%]', [self, aAlias]);
+  (ThreadSafeConnection as TSqlDBDuckDBConnection).ExecuteScript(
+    'CREATE OR REPLACE SECRET (TYPE quack, TOKEN ' +
+    QuotedStr(aToken) + ', SCOPE ' + QuotedStr(aEndpoint) + '); ATTACH ' +
+    QuotedStr(aEndpoint) + ' AS ' + aAlias);
 end;
 
 procedure TSqlDBDuckDBConnectionProperties.GetForeignKeys;
@@ -1205,159 +1227,62 @@ begin
     result := not IsValid(Validity, fChunkRow);
 end;
 
-function TSqlDBDuckDBStatement.DecimalMantissa(c: PDuckDBColumnInfo;
-  out hi: Int64): Int64;
-var
-  h: PDuckDBHugeInt;
-begin
-  case c^.Info.Internal of
-    DUCKDB_TYPE_SMALLINT:
-      result := PDuckI16Array(c^.Data)^[fChunkRow];
-    DUCKDB_TYPE_INTEGER:
-      result := PDuckI32Array(c^.Data)^[fChunkRow];
-    DUCKDB_TYPE_HUGEINT:
-      begin
-        h := PDuckDBHugeInt(PAnsiChar(c^.Data) + fChunkRow * 16);
-        hi := h^.Upper;
-        result := h^.Lower;
-        exit;
-      end;
-  else
-    result := PDuckI64Array(c^.Data)^[fChunkRow];
-  end;
-  if result < 0 then
-    hi := -1
-  else
-    hi := 0;
-end;
-
 function TSqlDBDuckDBStatement.ColumnInt(Col: integer): Int64;
 var
   c: PDuckDBColumnInfo;
-  hi: Int64;
-  h: TDuckDBHugeInt;
 begin
   c := CheckCol(Col);
   result := 0;
   if not IsValid(c^.Validity, fChunkRow) then
     exit;
-  case c^.Info.TypeId of
-    DUCKDB_TYPE_BOOLEAN, DUCKDB_TYPE_TINYINT, DUCKDB_TYPE_SMALLINT,
-    DUCKDB_TYPE_INTEGER, DUCKDB_TYPE_BIGINT, DUCKDB_TYPE_UTINYINT,
-    DUCKDB_TYPE_USMALLINT, DUCKDB_TYPE_UINTEGER, DUCKDB_TYPE_UBIGINT:
-      result := ReadIntegral(c^.Info.TypeId, c^.Data, fChunkRow);
-    DUCKDB_TYPE_HUGEINT, DUCKDB_TYPE_UHUGEINT:
-      begin
-        h := PDuckDBHugeInt(PAnsiChar(c^.Data) + fChunkRow * 16)^;
-        if not DuckHugeIntIsInt64(h, c^.Info.TypeId = DUCKDB_TYPE_HUGEINT) then
-          ESqlDBDuckDB.RaiseUtf8('%.ColumnInt(%): 128-bit overflow',
-            [self, Col]);
-        result := h.Lower;
-      end;
-    DUCKDB_TYPE_DECIMAL:
-      if c^.Info.Internal = DUCKDB_TYPE_HUGEINT then
-        result := GetInt64(pointer(ColumnUtf8(Col))) // integer part
-      else
-        result := DecimalMantissa(c, hi) div POW10[c^.Info.Scale];
-    DUCKDB_TYPE_FLOAT, DUCKDB_TYPE_DOUBLE:
-      result := trunc(ColumnDouble(Col));
-    DUCKDB_TYPE_DATE:
-      result := PDuckI32Array(c^.Data)^[fChunkRow];
-    DUCKDB_TYPE_TIME, DUCKDB_TYPE_TIMESTAMP, DUCKDB_TYPE_TIMESTAMP_TZ,
-    DUCKDB_TYPE_TIMESTAMP_S, DUCKDB_TYPE_TIMESTAMP_MS, DUCKDB_TYPE_TIMESTAMP_NS:
-      result := PDuckI64Array(c^.Data)^[fChunkRow];
-  else
-    result := GetInt64(pointer(ColumnUtf8(Col)));
-  end;
+  with c^.Info do
+    case DuckFixedToInt64(TypeId, Internal, Scale,
+           PAnsiChar(c^.Data) + fChunkRow * Size, result) of
+      dcOk:
+        exit;
+      dcOverflow:
+        ESqlDBDuckDB.RaiseUtf8('%.ColumnInt(%): 128-bit overflow', [self, Col]);
+    end;
+  result := GetInt64(pointer(ColumnUtf8(Col)));
 end;
 
 function TSqlDBDuckDBStatement.ColumnDouble(Col: integer): double;
 var
   c: PDuckDBColumnInfo;
-  hi: Int64;
 begin
   c := CheckCol(Col);
   result := 0;
-  if not IsValid(c^.Validity, fChunkRow) then
-    exit;
-  case c^.Info.TypeId of
-    DUCKDB_TYPE_FLOAT:
-      result := PDuckSingleArray(c^.Data)^[fChunkRow];
-    DUCKDB_TYPE_DOUBLE:
-      result := PDuckDoubleArray(c^.Data)^[fChunkRow];
-    DUCKDB_TYPE_DECIMAL:
-      if c^.Info.Internal = DUCKDB_TYPE_HUGEINT then
-        result := GetExtended(pointer(ColumnUtf8(Col)))
-      else
-        result := DecimalMantissa(c, hi) / POW10[c^.Info.Scale];
-  else
-    if c^.Info.TypeId in DUCKDB_INT_TYPES then
-      result := ReadIntegral(c^.Info.TypeId, c^.Data, fChunkRow)
-    else
-      result := GetExtended(pointer(ColumnUtf8(Col)));
-  end;
+  if IsValid(c^.Validity, fChunkRow) then
+    with c^.Info do
+      if not DuckFixedToDouble(TypeId, Internal, Scale,
+               PAnsiChar(c^.Data) + fChunkRow * Size, result) then
+        result := GetExtended(pointer(ColumnUtf8(Col)));
 end;
 
 function TSqlDBDuckDBStatement.ColumnCurrency(Col: integer): currency;
 var
   c: PDuckDBColumnInfo;
-  hi, v: Int64;
 begin
   c := CheckCol(Col);
   result := 0;
-  if not IsValid(c^.Validity, fChunkRow) then
-    exit;
-  case c^.Info.TypeId of
-    DUCKDB_TYPE_DECIMAL:
-      if (c^.Info.Internal <> DUCKDB_TYPE_HUGEINT) and
-         (c^.Info.Scale <= 4) then
-      begin
-        v := DecimalMantissa(c, hi) * POW10[4 - c^.Info.Scale];
-        result := PCurrency(@v)^;
-      end
-      else
+  if IsValid(c^.Validity, fChunkRow) then
+    with c^.Info do
+      if not DuckFixedToCurrency(TypeId, Internal, Scale,
+               PAnsiChar(c^.Data) + fChunkRow * Size, result) then
         PInt64(@result)^ := StrToCurr64(pointer(ColumnUtf8(Col)));
-    DUCKDB_TYPE_FLOAT, DUCKDB_TYPE_DOUBLE:
-      result := ColumnDouble(Col);
-  else
-    if c^.Info.TypeId in DUCKDB_INT_TYPES then
-      result := ReadIntegral(c^.Info.TypeId, c^.Data, fChunkRow)
-    else
-      PInt64(@result)^ := StrToCurr64(pointer(ColumnUtf8(Col)));
-  end;
 end;
 
 function TSqlDBDuckDBStatement.ColumnDateTime(Col: integer): TDateTime;
 var
   c: PDuckDBColumnInfo;
-  us: Int64;
-  offs: integer;
 begin
   c := CheckCol(Col);
   result := 0;
-  if not IsValid(c^.Validity, fChunkRow) then
-    exit;
-  case c^.Info.TypeId of
-    DUCKDB_TYPE_DATE:
-      result := PDuckI32Array(c^.Data)^[fChunkRow] + DUCKDB_UNIXDATE_DELTA;
-    DUCKDB_TYPE_TIME:
-      result := PDuckI64Array(c^.Data)^[fChunkRow] / DUCKDB_MICROSPERDAY;
-    DUCKDB_TYPE_TIME_NS:
-      result := (PDuckI64Array(c^.Data)^[fChunkRow] div 1000) / DUCKDB_MICROSPERDAY;
-    DUCKDB_TYPE_TIME_TZ:
-      begin
-        DuckTimeTzDecode(PDuckI64Array(c^.Data)^[fChunkRow], us, offs);
-        result := us / DUCKDB_MICROSPERDAY;
-      end;
-    DUCKDB_TYPE_TIMESTAMP, DUCKDB_TYPE_TIMESTAMP_TZ, DUCKDB_TYPE_TIMESTAMP_S,
-    DUCKDB_TYPE_TIMESTAMP_MS, DUCKDB_TYPE_TIMESTAMP_NS:
-      result := DuckTimestampToDateTime(
-        TimestampMicros(c^.Info.TypeId, PDuckI64Array(c^.Data)^[fChunkRow]));
-  else
-    result := Iso8601ToDateTime(ColumnUtf8(Col));
-  end;
+  if IsValid(c^.Validity, fChunkRow) then
+    if not DuckFixedToDateTime(c^.Info.TypeId,
+             PAnsiChar(c^.Data) + fChunkRow * c^.Info.Size, result) then
+      result := Iso8601ToDateTime(ColumnUtf8(Col));
 end;
-
 function TSqlDBDuckDBStatement.ColumnUtf8(Col: integer): RawUtf8;
 var
   c: PDuckDBColumnInfo;
@@ -1623,7 +1548,926 @@ begin
 end;
 
 
+
+{ ************ Vector Value Conversion }
+
+function EnumIndexAt(T: TQuackType; D: PAnsiChar): PtrInt;
+begin
+  case T.ElemSize of
+    1:
+      result := PByte(D)^;
+    2:
+      result := word(QuackInt16(D));
+  else
+    result := cardinal(QuackInt32(D));
+  end;
+end;
+
+function QuackInternal(T: TQuackType): TDuckDBType;
+begin
+  // storage type of a DECIMAL
+  case T.ElemSize of
+    2:
+      result := DUCKDB_TYPE_SMALLINT;
+    4:
+      result := DUCKDB_TYPE_INTEGER;
+    8:
+      result := DUCKDB_TYPE_BIGINT;
+  else
+    result := DUCKDB_TYPE_HUGEINT;
+  end;
+end;
+
+procedure QuackValueToText(V: TQuackVector; Row: PtrInt; var Result: RawUtf8);
+var
+  i: PtrInt;
+  t: TQuackType;
+  p: PUtf8Char;
+  len: integer;
+  us: Int64;
+  W: TJsonWriter;
+  tmp: TTextWriterStackBuffer;
+begin
+  FastAssignNew(Result);
+  i := V.Stored(Row);
+  if not V.IsStoredValid(i) then
+    exit;
+  t := V.VType;
+  case t.Storage of
+    qsString:
+      begin
+        p := V.StringAt(i, len);
+        if t.DuckType = DUCKDB_TYPE_BIT then
+          DuckBitToText(pointer(p), len, Result)
+        else
+          FastSetString(Result, p, len);
+      end;
+    qsFixed:
+      if t.DuckType = DUCKDB_TYPE_ENUM then
+      begin
+        us := EnumIndexAt(t, V.DataAt(i));
+        if us < length(t.EnumValues) then
+          Result := t.EnumValues[us];
+      end
+      else
+        DuckFixedToText(t.DuckType, QuackInternal(t), t.Scale,
+          V.DataAt(i), Result);
+    qsStruct, qsList, qsArray:
+      begin
+        // LIST, ARRAY, STRUCT, MAP, UNION -> JSON
+        W := TJsonWriter.CreateOwnedStream(tmp);
+        try
+          QuackValueToJson(V, Row, W);
+          W.SetText(Result);
+        finally
+          W.Free;
+        end;
+      end;
+  end;
+end;
+
+procedure QuackValueToJson(V: TQuackVector; Row: PtrInt; W: TJsonWriter);
+var
+  i, k, n: PtrInt;
+  t: TQuackType;
+  p: PUtf8Char;
+  len: integer;
+  e: PDuckDBListEntry;
+  txt: RawUtf8;
+  sv: TQuackVector;
+begin
+  i := V.Stored(Row);
+  if not V.IsStoredValid(i) then
+  begin
+    W.AddNull;
+    exit;
+  end;
+  t := V.VType;
+  case t.Storage of
+    qsString:
+      case t.DuckType of
+        DUCKDB_TYPE_VARCHAR:
+          begin
+            p := V.StringAt(i, len);
+            W.Add('"');
+            W.AddJsonEscape(p, len);
+            W.Add('"');
+          end;
+        DUCKDB_TYPE_BLOB:
+          begin
+            p := V.StringAt(i, len);
+            W.WrBase64(PAnsiChar(p), len, {withmagic=}true);
+          end;
+      else
+        begin // BIT, BIGNUM
+          QuackValueToText(V, Row, txt);
+          W.Add('"');
+          W.AddJsonEscape(pointer(txt), length(txt));
+          W.Add('"');
+        end;
+      end;
+    qsFixed:
+      if t.DuckType = DUCKDB_TYPE_ENUM then
+      begin
+        QuackValueToText(V, Row, txt);
+        W.Add('"');
+        W.AddJsonEscape(pointer(txt), length(txt));
+        W.Add('"');
+      end
+      else
+        DuckFixedToJson(t.DuckType, QuackInternal(t), t.Scale, V.DataAt(i), W);
+    qsArray:
+      begin
+        k := i * PtrInt(t.ArraySize);
+        W.Add('[');
+        for n := 0 to integer(t.ArraySize) - 1 do
+        begin
+          QuackValueToJson(V.Child, k + n, W);
+          W.AddComma;
+        end;
+        W.CancelLastComma(']');
+      end;
+    qsStruct:
+      if t.DuckType = DUCKDB_TYPE_UNION then
+      begin
+        // UNION = STRUCT(tag UTINYINT, member1, member2, ...)
+        k := PByte(V.Children[0].DataAt(V.Children[0].Stored(i)))^;
+        if k + 1 < length(V.Children) then
+          QuackValueToJson(V.Children[k + 1], i, W)
+        else
+          W.AddNull;
+      end
+      else
+      begin
+        W.Add('{');
+        for n := 0 to high(V.Children) do
+        begin
+          W.AddProp(pointer(t.ChildNames[n]), length(t.ChildNames[n]));
+          QuackValueToJson(V.Children[n], i, W);
+          W.AddComma;
+        end;
+        W.CancelLastComma('}');
+      end;
+    qsList:
+      begin
+        e := PDuckDBListEntry(PAnsiChar(V.Entries) + i * SizeOf(TDuckDBListEntry));
+        if t.DuckType = DUCKDB_TYPE_MAP then
+        begin
+          // MAP = LIST(STRUCT(key, value)) -> JSON object
+          W.Add('{');
+          for k := PtrInt(e^.Offset) to PtrInt(e^.Offset + e^.Length) - 1 do
+          begin
+            sv := V.Child;
+            n := sv.Stored(k);
+            QuackValueToText(sv.Children[0], n, txt);
+            W.AddProp(pointer(txt), length(txt));
+            QuackValueToJson(sv.Children[1], n, W);
+            W.AddComma;
+          end;
+          W.CancelLastComma('}');
+        end
+        else
+        begin
+          W.Add('[');
+          for k := PtrInt(e^.Offset) to PtrInt(e^.Offset + e^.Length) - 1 do
+          begin
+            QuackValueToJson(V.Child, k, W);
+            W.AddComma;
+          end;
+          W.CancelLastComma(']');
+        end;
+      end;
+  end;
+end;
+
+
+{ ************ TSqlDBQuackConnection* and TSqlDBQuackStatement Classes }
+
+{ TSqlDBQuackConnectionProperties }
+
+constructor TSqlDBQuackConnectionProperties.Create(
+  const aServerName, aDatabaseName, aUserID, aPassWord: RawUtf8);
+begin
+  fDbms := dDuckDB; // PostgreSQL-like SQL dialect
+  inherited Create(aServerName, aDatabaseName, aUserID, aPassWord);
+  fEngineName := 'Quack';
+  ForcedSchemaName := 'main'; // DuckDB default schema, for metadata queries
+  fHeartbeatSeconds := 60;
+  fTimeOutMs := 30000;
+  if not QuackUriParse(aServerName, fHost, fPort) then
+    ESqlDBQuack.RaiseUtf8('%.Create: invalid Quack server [%]',
+      [self, aServerName]);
+end;
+
+function TSqlDBQuackConnectionProperties.GetUseTls: boolean;
+begin
+  case fTlsMode of
+    qtmOn:
+      result := true;
+    qtmOff:
+      result := false;
+  else
+    result := not QuackHostIsLocal(fHost);
+  end;
+end;
+
+procedure TSqlDBQuackConnectionProperties.GetForeignKeys;
+begin
+  with Execute('select table_name || ''.'' || constraint_column_names[1], ' +
+         'referenced_table || ''.'' || referenced_column_names[1] ' +
+         'from duckdb_constraints() where constraint_type = ''FOREIGN KEY''',
+         []) do
+    while Step do
+      fForeignKeys.Add(ColumnUtf8(0), ColumnUtf8(1));
+end;
+
+function TSqlDBQuackConnectionProperties.NewConnection: TSqlDBConnection;
+begin
+  result := TSqlDBQuackConnection.Create(self);
+  TSqlDBQuackConnection(result).InternalProcess(speCreated);
+end;
+
+
+{ TSqlDBQuackConnection }
+
+function TSqlDBQuackConnection.Post(const Body: RawByteString): TQuackResponse;
+var
+  status: integer;
+begin
+  status := fSocket.Request(QUACK_HTTP_PATH, 'POST', 60000, '', Body,
+    QUACK_CONTENT_TYPE);
+  if status <> HTTP_SUCCESS then
+    ESqlDBQuack.RaiseUtf8('%: HTTP error % on %', [self, status,
+      TSqlDBQuackConnectionProperties(fProperties).ServerName]);
+  result := TQuackResponse.Create(fSocket.Http.Content, fVersion);
+  fLastRequestSec := GetTickSec;
+end;
+
+procedure TSqlDBQuackConnection.Connect;
+var
+  props: TSqlDBQuackConnectionProperties;
+  tls: TNetTlsContext;
+  resp: TQuackResponse;
+  token, msg, port: RawUtf8;
+  version: cardinal;
+begin
+  Disconnect;
+  props := fProperties as TSqlDBQuackConnectionProperties;
+  token := props.PassWord;
+  if token = '' then
+    ESqlDBQuack.RaiseUtf8('%.Connect: missing Quack token', [self]);
+  InitNetTlsContext(tls);
+  tls.IgnoreCertificateErrors := props.IgnoreTlsErrors;
+  port := UInt32ToUtf8(props.Port);
+  try
+    fSocket := THttpClientSocket.Open(props.Host, port,
+      nlTcp, props.TimeOutMs, props.UseTls, @tls);
+  except
+    on ENetSock do
+      if IdemPropNameU(props.Host, 'localhost') then
+        // a Quack server may listen only on the IPv6 loopback
+        fSocket := THttpClientSocket.Open('::1', port,
+          nlTcp, props.TimeOutMs, props.UseTls, @tls)
+      else
+        raise;
+  end;
+  try
+    // the protocol version is detected, starting with the released one
+    version := props.ProtocolVersion;
+    if version = 0 then
+      version := QUACK_VERSION_1;
+    repeat
+      fVersion := version;
+      resp := Post(QuackConnectionRequest(token, props.UserID,
+        props.HeartbeatSeconds, version));
+      try
+        if resp.MessageType = QUACK_CONNECTION_RESPONSE then
+          break;
+        msg := TrimU(resp.ErrorType + ' ' + resp.ErrorMessage);
+      finally
+        if resp.MessageType <> QUACK_CONNECTION_RESPONSE then
+          FreeAndNil(resp);
+      end;
+      if (props.ProtocolVersion = 0) and
+         (version < QUACK_VERSION) and
+         (PosEx('version', msg) > 0) then
+        version := QUACK_VERSION // try again with the newest protocol
+      else
+        ESqlDBQuack.RaiseUtf8('%.Connect: % on %', [self, msg, props.ServerName]);
+    until false;
+    try
+      if resp.QuackVersion <> version then
+        ESqlDBQuack.RaiseUtf8('%.Connect: unexpected Quack protocol ' +
+          'version % (server) vs % (client)', [self, resp.QuackVersion, version]);
+      fConnectionId := resp.ConnectionId;
+      fLeaseSeconds := resp.HeartbeatSeconds;
+    finally
+      resp.Free;
+    end;
+  except
+    FreeAndNil(fSocket);
+    raise;
+  end;
+  inherited Connect; // notify any re-connection
+end;
+
+procedure TSqlDBQuackConnection.Disconnect;
+begin
+  try
+    inherited Disconnect; // flush any cached statement
+  finally
+    if fSocket <> nil then
+    begin
+      if fConnectionId <> '' then
+        RequestSilently(QuackSimpleRequest(
+          QUACK_DISCONNECT_MESSAGE, fConnectionId));
+      FreeAndNil(fSocket);
+    end;
+    fConnectionId := '';
+  end;
+end;
+
+function TSqlDBQuackConnection.IsConnected: boolean;
+begin
+  result := fSocket <> nil;
+end;
+
+function TSqlDBQuackConnection.NewStatement: TSqlDBStatement;
+begin
+  result := TSqlDBQuackStatement.Create(self);
+end;
+
+procedure TSqlDBQuackConnection.CheckLease;
+var
+  resp: TQuackResponse;
+begin
+  if (fVersion < QUACK_VERSION) or // no lease in the version 1 protocol
+     (fLeaseSeconds = 0) or
+     (GetTickSec - fLastRequestSec < fLeaseSeconds div 2) then
+    exit;
+  // renew the lease, or recreate the connection if the server forgot us
+  try
+    resp := Post(QuackSimpleRequest(QUACK_HEARTBEAT_REQUEST, fConnectionId));
+    try
+      if resp.MessageType <> QUACK_SUCCESS_RESPONSE then
+        ESqlDBQuack.RaiseUtf8('%: %', [self, resp.ErrorMessage]);
+    finally
+      resp.Free;
+    end;
+  except
+    if fTransactionCount > 0 then
+      raise; // the transaction was lost
+    fConnectionId := ''; // no DISCONNECT_MESSAGE
+    Connect;
+  end;
+end;
+
+function TSqlDBQuackConnection.Request(const Body: RawByteString;
+  Expected: byte): TQuackResponse;
+var
+  msg: RawUtf8;
+begin
+  if not IsConnected then
+    Connect
+  else
+    CheckLease;
+  result := Post(Body);
+  if result.MessageType = Expected then
+    exit;
+  if result.MessageType = QUACK_ERROR_RESPONSE then
+    if result.ErrorType = '' then // no exception type with the version 1
+      msg := result.ErrorMessage
+    else
+      msg := result.ErrorType + ' Error: ' + result.ErrorMessage
+  else
+    FormatUtf8('unexpected response type %', [result.MessageType], msg);
+  FreeAndNil(result);
+  ESqlDBQuack.RaiseUtf8('%: %', [self, msg]);
+end;
+
+procedure TSqlDBQuackConnection.RequestSilently(const Body: RawByteString);
+begin
+  try
+    if fSocket <> nil then
+      Post(Body).Free;
+  except
+    // ignore any error: the server will release its resources by itself
+  end;
+end;
+
+function TSqlDBQuackConnection.ExecuteScript(const aSql: RawUtf8): Int64;
+var
+  uuid: TDuckDBHugeInt;
+  resp: TQuackResponse;
+begin
+  QuackNewQueryUuid(uuid);
+  resp := Request(QuackPrepareRequest(fConnectionId, aSql, uuid, fVersion),
+    QUACK_PREPARE_RESPONSE);
+  try
+    result := 0;
+    if resp.IsCountResult then
+      with resp.Chunks[0].Vectors[0] do
+        result := QuackInt64(DataAt(Stored(0)));
+    if resp.NeedsMoreFetch and
+       (fVersion >= QUACK_VERSION) then
+      RequestSilently(QuackQueryRequest(
+        QUACK_CANCEL_REQUEST, fConnectionId, resp.QueryUuid));
+  finally
+    resp.Free;
+  end;
+end;
+
+procedure TSqlDBQuackConnection.StartTransaction;
+begin
+  inherited StartTransaction;
+  try
+    ExecuteScript('BEGIN TRANSACTION');
+  except
+    dec(fTransactionCount);
+    raise;
+  end;
+end;
+
+procedure TSqlDBQuackConnection.Commit;
+begin
+  inherited Commit;
+  try
+    ExecuteScript('COMMIT');
+  except
+    inc(fTransactionCount); // the transaction is still active
+    raise;
+  end;
+end;
+
+procedure TSqlDBQuackConnection.Rollback;
+begin
+  inherited Rollback;
+  ExecuteScript('ROLLBACK');
+end;
+
+
+{ TSqlDBQuackStatement }
+
+destructor TSqlDBQuackStatement.Destroy;
+begin
+  try
+    ReleaseResult;
+  finally
+    inherited Destroy;
+  end;
+end;
+
+procedure TSqlDBQuackStatement.ReleaseResult;
+begin
+  if fMoreToFetch and
+     (fConnection <> nil) and
+     (TSqlDBQuackConnection(fConnection).fVersion >= QUACK_VERSION) then
+    // the result was not fully retrieved: stop its processing on the server
+    TSqlDBQuackConnection(fConnection).RequestSilently(QuackQueryRequest(
+      QUACK_CANCEL_REQUEST, TSqlDBQuackConnection(fConnection).fConnectionId,
+      fQueryUuid));
+  fMoreToFetch := false;
+  FreeAndNil(fResponse);
+  fChunk := nil;
+  fChunkIndex := -1;
+  fChunkRow := 0;
+  fExecuted := false;
+end;
+
+procedure TSqlDBQuackStatement.Prepare(const aSql: RawUtf8;
+  ExpectResults: boolean);
+begin
+  SqlLogBegin(sllDB);
+  inherited Prepare(aSql, ExpectResults); // set fSql + Connect if necessary
+  SqlLogEnd;
+end;
+
+function NextParam(P: PUtf8Char): PUtf8Char;
+var
+  quote: AnsiChar;
+begin
+  // find the next ? place holder, ignoring quoted text and identifiers
+  repeat
+    case P^ of
+      #0, '?':
+        break;
+      '''', '"':
+        begin
+          quote := P^;
+          inc(P);
+          while P^ <> #0 do
+            if P^ <> quote then
+              inc(P)
+            else if P[1] = quote then
+              inc(P, 2) // escaped quote
+            else
+              break;
+          if P^ = #0 then
+            break;
+        end;
+    end;
+    inc(P);
+  until false;
+  result := P;
+end;
+
+procedure AddBlobLiteral(W: TJsonWriter; P: PByteArray; Len: PtrInt);
+const
+  HEX: array[0..15] of AnsiChar = '0123456789abcdef';
+var
+  i: PtrInt;
+begin
+  // DuckDB blob literals use '\xAA\xBB' escapes, with one \x per byte
+  W.Add('''');
+  for i := 0 to Len - 1 do
+  begin
+    W.Add('\');
+    W.Add('x');
+    W.Add(HEX[P^[i] shr 4]);
+    W.Add(HEX[P^[i] and 15]);
+  end;
+  W.AddShort('''::BLOB');
+end;
+
+procedure TSqlDBQuackStatement.AddParam(W: TJsonWriter; Index: integer);
+var
+  p: PSqlDBParam;
+  bits: Int64;
+begin
+  p := @fParams[Index];
+  case p^.VType of
+    ftNull:
+      W.AddShort('null');
+    ftInt64:
+      W.Add(p^.VInt64);
+    ftDouble:
+      begin
+        bits := p^.VInt64;
+        if (bits shr 52) and $7ff = $7ff then // NaN or Infinity
+          if bits and $000fffffffffffff <> 0 then
+            W.AddShort('''nan''::DOUBLE')
+          else if bits < 0 then
+            W.AddShort('''-inf''::DOUBLE')
+          else
+            W.AddShort('''inf''::DOUBLE')
+        else
+          W.AddDouble(unaligned(PDouble(@p^.VInt64)^));
+      end;
+    ftCurrency:
+      W.AddCurr64(@p^.VInt64);
+    ftDate:
+      begin
+        W.AddShort('TIMESTAMP ''');
+        W.AddDateTime(unaligned(PDateTime(@p^.VInt64)^), {withms=}true);
+        W.Add('''');
+      end;
+    ftUtf8:
+      W.AddQuotedStr(pointer(p^.VData), length(p^.VData), '''');
+    ftBlob:
+      AddBlobLiteral(W, pointer(p^.VData), length(p^.VData));
+  else
+    ESqlDBQuack.RaiseUtf8('%: cannot bind parameter #% type %',
+      [self, Index + 1, ord(p^.VType)]);
+  end;
+end;
+
+function TSqlDBQuackStatement.BuildSql: RawUtf8;
+var
+  P, B: PUtf8Char;
+  n: integer;
+  W: TJsonWriter;
+  tmp: TTextWriterStackBuffer;
+begin
+  // the Quack protocol has no bound parameters: inline them as SQL literals
+  if fParamCount = 0 then
+  begin
+    result := fSql;
+    exit;
+  end;
+  W := TJsonWriter.CreateOwnedStream(tmp);
+  try
+    P := pointer(fSql);
+    n := 0;
+    repeat
+      B := P;
+      P := NextParam(P);
+      W.AddNoJsonEscape(B, P - B);
+      if P^ = #0 then
+        break;
+      inc(P); // jump P^='?'
+      if n >= fParamCount then
+        ESqlDBQuack.RaiseUtf8('%: missing parameter #% in [%]',
+          [self, n + 1, fSql]);
+      AddParam(W, n);
+      inc(n);
+    until false;
+    if n <> fParamCount then
+      ESqlDBQuack.RaiseUtf8('%: % bound parameters for % ? in [%]',
+        [self, fParamCount, n, fSql]);
+    W.SetText(result);
+  finally
+    W.Free;
+  end;
+end;
+
+procedure TSqlDBQuackStatement.ExecutePrepared;
+var
+  i: PtrInt;
+  conn: TSqlDBQuackConnection;
+  resp: TQuackResponse;
+  col: PSqlDBColumnProperty;
+  sql: RawUtf8;
+begin
+  SqlLogBegin(sllSQL);
+  inherited ExecutePrepared; // set fConnection.fLastAccessTicks
+  ReleaseResult;
+  ClearColumns;
+  fColumnCount := 0;
+  fCurrentRow := 0;
+  fUpdateCount := 0;
+  if fParamsArrayCount > 0 then
+    ESqlDBQuack.RaiseUtf8('%.ExecutePrepared: BindArray() is not supported - ' +
+      'use OnBatchInsert or a transaction', [self]);
+  conn := TSqlDBQuackConnection(fConnection);
+  sql := BuildSql;
+  QuackNewQueryUuid(fQueryUuid);
+  try
+    // PREPARE_REQUEST also runs the query on the server
+    fResponse := conn.Request(QuackPrepareRequest(conn.fConnectionId, sql,
+      fQueryUuid, conn.fVersion), QUACK_PREPARE_RESPONSE);
+  except
+    on E: Exception do
+    begin
+      SqlLogEnd;
+      ESqlDBQuack.RaiseUtf8('%.ExecutePrepared: % [%]', [self, E.Message, fSql]);
+    end;
+  end;
+  resp := fResponse;
+  if (resp.QueryUuid.Lower <> 0) or
+     (resp.QueryUuid.Upper <> 0) then
+    fQueryUuid := resp.QueryUuid;
+  fMoreToFetch := resp.NeedsMoreFetch;
+  fNextBatch := 1;
+  fExecuted := true;
+  fChunkIndex := -1;
+  // retrieve the columns description
+  for i := 0 to length(resp.ColumnTypes) - 1 do
+  begin
+    col := AddColumn(resp.ColumnNames[i]);
+    col^.ColumnType := resp.ColumnTypes[i].FieldType;
+    col^.ColumnAttr := resp.ColumnTypes[i].DuckType;
+  end;
+  // DML statements return a single "Count" BIGINT row
+  if resp.IsCountResult then
+    with resp.Chunks[0].Vectors[0] do
+      fUpdateCount := QuackInt64(DataAt(Stored(0)));
+  SqlLogEnd;
+end;
+
+function TSqlDBQuackStatement.UpdateCount: integer;
+begin
+  result := fUpdateCount;
+end;
+
+procedure TSqlDBQuackStatement.Reset;
+begin
+  ReleaseResult;
+  fUpdateCount := 0;
+  inherited Reset;
+end;
+
+procedure TSqlDBQuackStatement.ReleaseRows;
+begin
+  ReleaseResult;
+  inherited ReleaseRows;
+end;
+
+procedure TSqlDBQuackStatement.FetchNext;
+var
+  conn: TSqlDBQuackConnection;
+  resp: TQuackResponse;
+begin
+  conn := TSqlDBQuackConnection(fConnection);
+  resp := conn.Request(QuackFetchRequest(conn.fConnectionId, fQueryUuid,
+    fNextBatch, fNextBatch - 1, conn.fVersion), QUACK_FETCH_RESPONSE);
+  FreeAndNil(fResponse);
+  fResponse := resp;
+  fChunkIndex := -1;
+  if length(resp.Chunks) = 0 then
+  begin
+    // an empty response means that all batches have been received
+    fMoreToFetch := false;
+    if conn.fVersion >= QUACK_VERSION then
+      conn.RequestSilently(QuackQueryRequest(
+        QUACK_ACKNOWLEDGEMENT, conn.fConnectionId, fQueryUuid));
+  end
+  else if conn.fVersion < QUACK_VERSION then
+    exit // the version 1 protocol has no batch index
+  else if resp.BatchIndex <> fNextBatch then
+    ESqlDBQuack.RaiseUtf8('%: FETCH batch % received instead of %',
+      [self, resp.BatchIndex, fNextBatch])
+  else
+    inc(fNextBatch);
+end;
+
+function TSqlDBQuackStatement.NextChunk: boolean;
+begin
+  result := false;
+  repeat
+    inc(fChunkIndex);
+    while (fResponse <> nil) and
+          (fChunkIndex >= length(fResponse.Chunks)) do
+    begin
+      if not fMoreToFetch then
+      begin
+        fChunk := nil;
+        exit;
+      end;
+      FetchNext; // sets fChunkIndex := -1
+      inc(fChunkIndex);
+    end;
+    if fResponse = nil then
+      exit;
+    fChunk := fResponse.Chunks[fChunkIndex];
+  until fChunk.RowCount > 0;
+  fChunkRow := 0;
+  result := true;
+end;
+
+function TSqlDBQuackStatement.Step(SeekFirst: boolean): boolean;
+begin
+  result := false;
+  if SeekFirst and
+     (fCurrentRow > 0) then
+    ESqlDBQuack.RaiseUtf8('%.Step(SeekFirst=true) not implemented', [self]);
+  if not fExecuted or
+     (fColumnCount = 0) then
+    exit;
+  if fChunk <> nil then
+    inc(fChunkRow);
+  if (fChunk = nil) or
+     (fChunkRow >= fChunk.RowCount) then
+    if not NextChunk then
+    begin
+      fCurrentRow := 0;
+      ReleaseResult; // release memory ASAP
+      exit;
+    end;
+  inc(fCurrentRow);
+  inc(fTotalRowsRetrieved);
+  result := true;
+end;
+
+function TSqlDBQuackStatement.CheckCol(Col: integer): TQuackVector;
+begin
+  if (fChunk = nil) or
+     (cardinal(Col) >= cardinal(length(fChunk.Vectors))) then
+    ESqlDBQuack.RaiseUtf8('%: invalid Column(%) or no current row',
+      [self, Col]);
+  result := fChunk.Vectors[Col];
+end;
+
+function TSqlDBQuackStatement.ColumnNull(Col: integer): boolean;
+begin
+  result := not CheckCol(Col).IsValid(fChunkRow);
+end;
+
+function TSqlDBQuackStatement.ColumnInt(Col: integer): Int64;
+var
+  v: TQuackVector;
+  i: PtrInt;
+  t: TQuackType;
+begin
+  v := CheckCol(Col);
+  result := 0;
+  i := v.Stored(fChunkRow);
+  if not v.IsStoredValid(i) then
+    exit;
+  t := v.VType;
+  if t.Storage = qsFixed then
+    case DuckFixedToInt64(t.DuckType, QuackInternal(t), t.Scale,
+           v.DataAt(i), result) of
+      dcOk:
+        exit;
+      dcOverflow:
+        ESqlDBQuack.RaiseUtf8('%.ColumnInt(%): 128-bit overflow', [self, Col]);
+    end;
+  result := GetInt64(pointer(ColumnUtf8(Col)));
+end;
+
+function TSqlDBQuackStatement.ColumnDouble(Col: integer): double;
+var
+  v: TQuackVector;
+  i: PtrInt;
+  t: TQuackType;
+begin
+  v := CheckCol(Col);
+  result := 0;
+  i := v.Stored(fChunkRow);
+  if not v.IsStoredValid(i) then
+    exit;
+  t := v.VType;
+  if (t.Storage <> qsFixed) or
+     not DuckFixedToDouble(t.DuckType, QuackInternal(t), t.Scale,
+           v.DataAt(i), result) then
+    result := GetExtended(pointer(ColumnUtf8(Col)));
+end;
+
+function TSqlDBQuackStatement.ColumnCurrency(Col: integer): currency;
+var
+  v: TQuackVector;
+  i: PtrInt;
+  t: TQuackType;
+begin
+  v := CheckCol(Col);
+  result := 0;
+  i := v.Stored(fChunkRow);
+  if not v.IsStoredValid(i) then
+    exit;
+  t := v.VType;
+  if (t.Storage <> qsFixed) or
+     not DuckFixedToCurrency(t.DuckType, QuackInternal(t), t.Scale,
+           v.DataAt(i), result) then
+    PInt64(@result)^ := StrToCurr64(pointer(ColumnUtf8(Col)));
+end;
+
+function TSqlDBQuackStatement.ColumnDateTime(Col: integer): TDateTime;
+var
+  v: TQuackVector;
+  i: PtrInt;
+begin
+  v := CheckCol(Col);
+  result := 0;
+  i := v.Stored(fChunkRow);
+  if not v.IsStoredValid(i) then
+    exit;
+  if (v.VType.Storage <> qsFixed) or
+     not DuckFixedToDateTime(v.VType.DuckType, v.DataAt(i), result) then
+    result := Iso8601ToDateTime(ColumnUtf8(Col));
+end;
+function TSqlDBQuackStatement.ColumnUtf8(Col: integer): RawUtf8;
+begin
+  QuackValueToText(CheckCol(Col), fChunkRow, result);
+end;
+
+function TSqlDBQuackStatement.ColumnBlob(Col: integer): RawByteString;
+var
+  v: TQuackVector;
+  i: PtrInt;
+  p: PUtf8Char;
+  len: integer;
+begin
+  v := CheckCol(Col);
+  FastAssignNew(result);
+  i := v.Stored(fChunkRow);
+  if not v.IsStoredValid(i) then
+    exit;
+  if v.VType.DuckType in [DUCKDB_TYPE_BLOB, DUCKDB_TYPE_VARCHAR] then
+  begin
+    p := v.StringAt(i, len);
+    FastSetRawByteString(result, p, len);
+  end
+  else
+    result := ColumnUtf8(Col);
+end;
+
+procedure TSqlDBQuackStatement.ColumnToJson(Col: integer; W: TJsonWriter);
+var
+  v: TQuackVector;
+  i: PtrInt;
+begin
+  v := CheckCol(Col);
+  i := v.Stored(fChunkRow);
+  if not v.IsStoredValid(i) then
+  begin
+    W.AddNull;
+    exit;
+  end;
+  case v.VType.DuckType of
+    DUCKDB_TYPE_BOOLEAN:
+      W.Add(PByte(v.DataAt(i))^); // boolean as 0/1
+    DUCKDB_TYPE_BLOB:
+      if dsfForceBlobAsNull in fFlags then
+        W.AddNull
+      else
+        QuackValueToJson(v, fChunkRow, W);
+    DUCKDB_TYPE_DATE, DUCKDB_TYPE_TIME, DUCKDB_TYPE_TIME_TZ,
+    DUCKDB_TYPE_TIME_NS, DUCKDB_TYPE_TIMESTAMP, DUCKDB_TYPE_TIMESTAMP_S,
+    DUCKDB_TYPE_TIMESTAMP_MS, DUCKDB_TYPE_TIMESTAMP_NS,
+    DUCKDB_TYPE_TIMESTAMP_TZ:
+      begin
+        W.Add('"');
+        W.AddDateTime(ColumnDateTime(Col), dsfForceDateWithMS in fFlags);
+        W.Add('"');
+      end;
+  else
+    QuackValueToJson(v, fChunkRow, W);
+  end;
+end;
+
+
 initialization
   TSqlDBDuckDBConnectionProperties.RegisterClassNameForDefinition;
+  TSqlDBQuackConnectionProperties.RegisterClassNameForDefinition;
 
 end.

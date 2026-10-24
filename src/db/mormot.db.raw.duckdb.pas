@@ -11,8 +11,27 @@ unit mormot.db.raw.duckdb;
     - DuckDB C API Types and Constants
     - TDuckDBLib Dynamic Library Loader
     - Value Conversion Helpers (hugeint, decimal, date/time, string_t)
+    - DuckDB Logical Type Cache
+    - Quack Client/Server Wire Protocol Encoding and Decoding
 
   *****************************************************************************
+
+  Quack notes:
+  - Quack is the DuckDB client/server protocol, see
+    https://duckdb.org/docs/current/quack/overview and
+    https://github.com/duckdb/duckdb-quack
+  - messages are HTTP POST to /quack, with a "application/vnd.duckdb" body
+    using the DuckDB "BinarySerializer" format: 16-bit field ids, LEB128
+    variable-length integers, and every object ending with a 0xFFFF id
+  - result rows are sent as DuckDB DataChunk vectors: they are decoded
+    "in place", i.e. with no memory copy of the fixed-size values, the strings
+    or the validity masks, which are accessed directly from the HTTP response
+    buffer - so a TQuackResponse instance owns the memory of its chunks
+  - the released quack extension (DuckDB 1.5) uses the protocol version 1, and
+    its development branch uses the version 3: both are supported, the main
+    differences being in CONNECTION_REQUEST, PREPARE_REQUEST, FETCH_REQUEST
+    and FETCH_RESPONSE messages
+  - no sockets here: see mormot.db.sql.duckdb for the TSqlDB* classes
 }
 
 interface
@@ -25,7 +44,9 @@ uses
   mormot.core.os,
   mormot.core.unicode,
   mormot.core.text,
+  mormot.core.buffers,
   mormot.core.datetime,
+  mormot.core.json,
   mormot.db.core,
   mormot.db.sql;
 
@@ -395,6 +416,18 @@ procedure DuckBitToText(P: PDuckU8Array; Len: integer; var result: RawUtf8);
 /// decode a DuckDB TIME_TZ 64-bit value into micros and offset in seconds
 procedure DuckTimeTzDecode(Bits: Int64; out Micros: Int64; out OffsetSec: integer);
 
+/// convert a DuckDB TIME_TZ 64-bit value into 'hh:mm:ss[.ffffff]+hh[:mm]'
+procedure DuckTimeTzToText(Bits: Int64; var result: RawUtf8);
+
+/// convert a DuckDB TIMESTAMP_S/MS/NS value into microseconds
+function DuckTimestampMicros(TypeId: TDuckDBType; Value: Int64): Int64;
+
+const
+  /// powers of 10 up to the Int64 limit, e.g. to scale a DECIMAL mantissa
+  DUCKDB_POW10: array[0..18] of Int64 = (1, 10, 100, 1000, 10000, 100000,
+    1000000, 10000000, 100000000, 1000000000, 10000000000, 100000000000,
+    1000000000000, 10000000000000, 100000000000000, 1000000000000000,
+    10000000000000000, 100000000000000000, 1000000000000000000);
 
 { ************ DuckDB Logical Type Cache }
 
@@ -412,6 +445,8 @@ type
     Internal: TDuckDBType;
     /// number of decimals of a DECIMAL, or fixed size of an ARRAY
     Scale: integer;
+    /// size in bytes of a fixed-size value, 0 for variable-size types
+    Size: PtrInt;
     /// number of nested types in Children[]
     ChildCount: integer;
     /// the DuckDB logical type handle, owned by this structure
@@ -440,7 +475,388 @@ function DuckDBEnumValue(var Info: TDuckDBTypeInfo; Index: PtrInt): RawUtf8;
 function DuckDBTypeToField(TypeId: TDuckDBType; Scale: integer): TSqlDBFieldType;
 
 
-implementation
+
+{ ************ Quack Constants and Exception }
+
+type
+  /// exception raised by the Quack client and its protocol decoding
+  ESqlDBQuack = class(ESqlDBException);
+
+const
+  /// the latest Quack wire-protocol version implemented by this unit
+  // - as used by the development version of the DuckDB quack extension
+  QUACK_VERSION = 3;
+
+  /// the Quack wire-protocol version of the quack extension of DuckDB 1.5
+  // - this version has no lease, no batch numbers and no query cancellation
+  QUACK_VERSION_1 = 1;
+
+  /// default TCP port of a Quack server
+  QUACK_DEFAULT_PORT = 9494;
+
+  /// the HTTP URI path of the Quack server end point
+  QUACK_HTTP_PATH = '/quack';
+
+  /// the HTTP content-type of Quack requests and responses
+  QUACK_CONTENT_TYPE = 'application/vnd.duckdb';
+
+  /// Quack message types - as sent in the header of every message
+  QUACK_CONNECTION_REQUEST  = 1;
+  QUACK_CONNECTION_RESPONSE = 2;
+  QUACK_PREPARE_REQUEST     = 3;
+  QUACK_PREPARE_RESPONSE    = 4;
+  QUACK_FETCH_REQUEST       = 7;
+  QUACK_FETCH_RESPONSE      = 8;
+  QUACK_SEND_DATA_REQUEST   = 9;
+  QUACK_SUCCESS_RESPONSE    = 10;
+  QUACK_DISCONNECT_MESSAGE  = 11;
+  QUACK_CANCEL_REQUEST      = 12;
+  QUACK_SEND_DATA_RESPONSE  = 14;
+  QUACK_ACKNOWLEDGEMENT     = 15;
+  QUACK_HEARTBEAT_REQUEST   = 16;
+  QUACK_ERROR_RESPONSE      = 100;
+
+  /// DuckDB LogicalTypeId values, as serialized by Quack
+  QTYPE_SQLNULL          = 1;
+  QTYPE_BOOLEAN          = 10;
+  QTYPE_TINYINT          = 11;
+  QTYPE_SMALLINT         = 12;
+  QTYPE_INTEGER          = 13;
+  QTYPE_BIGINT           = 14;
+  QTYPE_DATE             = 15;
+  QTYPE_TIME             = 16;
+  QTYPE_TIMESTAMP_SEC    = 17;
+  QTYPE_TIMESTAMP_MS     = 18;
+  QTYPE_TIMESTAMP        = 19;
+  QTYPE_TIMESTAMP_NS     = 20;
+  QTYPE_DECIMAL          = 21;
+  QTYPE_FLOAT            = 22;
+  QTYPE_DOUBLE           = 23;
+  QTYPE_CHAR             = 24;
+  QTYPE_VARCHAR          = 25;
+  QTYPE_BLOB             = 26;
+  QTYPE_INTERVAL         = 27;
+  QTYPE_UTINYINT         = 28;
+  QTYPE_USMALLINT        = 29;
+  QTYPE_UINTEGER         = 30;
+  QTYPE_UBIGINT          = 31;
+  QTYPE_TIMESTAMP_TZ     = 32;
+  QTYPE_TIMESTAMP_TZ_NS  = 33;
+  QTYPE_TIME_TZ          = 34;
+  QTYPE_TIME_NS          = 35;
+  QTYPE_BIT              = 36;
+  QTYPE_BIGNUM           = 39;
+  QTYPE_UHUGEINT         = 49;
+  QTYPE_HUGEINT          = 50;
+  QTYPE_POINTER          = 51;
+  QTYPE_UUID             = 54;
+  QTYPE_GEOMETRY         = 60;
+  QTYPE_STRUCT           = 100;
+  QTYPE_LIST             = 101;
+  QTYPE_MAP              = 102;
+  QTYPE_ENUM             = 104;
+  QTYPE_UNION            = 107;
+  QTYPE_ARRAY            = 108;
+  QTYPE_VARIANT          = 109;
+  QTYPE_TUPLE            = 110;
+
+
+{ ************ TQuackType Logical Types Description }
+
+type
+  /// how the values of a given type are stored in a Quack vector
+  TQuackStorage = (
+    qsUnsupported,
+    qsFixed,
+    qsString,
+    qsStruct,
+    qsList,
+    qsArray);
+
+  /// a DuckDB logical type, as sent in the Quack result description
+  // - owned by its TQuackResponse, including its Children
+  TQuackType = class
+  public
+    /// the DuckDB LogicalTypeId, e.g. QTYPE_INTEGER
+    Id: byte;
+    /// how the values are stored in the vectors
+    Storage: TQuackStorage;
+    /// the number of bytes of each value for qsFixed storage
+    ElemSize: byte;
+    /// the equivalent DUCKDB_TYPE_* C API value (as in mormot.db.raw.duckdb)
+    DuckType: TDuckDBType;
+    /// DECIMAL width
+    Width: byte;
+    /// DECIMAL scale
+    Scale: byte;
+    /// number of items of an ARRAY
+    ArraySize: cardinal;
+    /// optional type name, e.g. 'JSON'
+    Alias: RawUtf8;
+    /// ENUM values
+    EnumValues: TRawUtf8DynArray;
+    /// STRUCT and UNION members names
+    ChildNames: TRawUtf8DynArray;
+    /// STRUCT and UNION members types - or [0] for LIST, MAP and ARRAY
+    Children: array of TQuackType;
+    /// the TSqlDBFieldType used to publish this column
+    function FieldType: TSqlDBFieldType;
+    /// guess Storage, ElemSize and DuckType from Id, Width and EnumValues
+    procedure SetStorage;
+  end;
+  PQuackType = ^TQuackType;
+  TQuackTypeDynArray = array of TQuackType;
+
+
+{ ************ TQuackVector and TQuackChunk Result Data Access }
+
+type
+  /// how a TQuackVector maps its rows to the stored values
+  TQuackVectorMode = (
+    qvmFlat,
+    qvmConstant,
+    qvmDictionary);
+
+  /// one column of a TQuackChunk
+  // - the content is a view over the HTTP response buffer, with no copy
+  TQuackVector = class
+  protected
+    fOwned: RawByteString;
+  public
+    /// the type of this vector
+    VType: TQuackType;
+    /// how rows are mapped to the stored values
+    Mode: TQuackVectorMode;
+    /// the number of rows of this vector
+    Count: PtrInt;
+    /// the number of stored values (differs from Count if not qvmFlat)
+    StoredCount: PtrInt;
+    /// bit mask of the stored values validity - nil if there is no NULL
+    Validity: PByteArray;
+    /// fixed-size values (may be unaligned)
+    Data: PAnsiChar;
+    /// StoredCount offsets, then StoredCount lengths of the strings
+    StrOffs: PCardinalArray;
+    /// strings content, as referenced by StrOffs
+    StrBytes: PAnsiChar;
+    /// qvmDictionary 32-bit selection indexes (may be unaligned)
+    Sel: PAnsiChar;
+    /// LIST entries (offset, length), for each stored value
+    Entries: PDuckDBListEntry;
+    /// the child of a LIST or ARRAY
+    Child: TQuackVector;
+    /// the members of a STRUCT
+    Children: array of TQuackVector;
+    /// release the children and any owned memory
+    destructor Destroy; override;
+    /// return the stored value index of a given row
+    function Stored(Row: PtrInt): PtrInt;
+      {$ifdef HASINLINE} inline; {$endif}
+    /// return true if a stored value is not NULL
+    function IsStoredValid(Index: PtrInt): boolean;
+      {$ifdef HASINLINE} inline; {$endif}
+    /// return true if the row is not NULL
+    function IsValid(Row: PtrInt): boolean;
+      {$ifdef HASINLINE} inline; {$endif}
+    /// return a pointer to a stored fixed-size value
+    function DataAt(Index: PtrInt): PAnsiChar;
+      {$ifdef HASINLINE} inline; {$endif}
+    /// return a pointer and the length of a stored string
+    function StringAt(Index: PtrInt; out Len: integer): PUtf8Char;
+  end;
+  TQuackVectorDynArray = array of TQuackVector;
+
+  /// one set of up to 2048 rows of a Quack result
+  TQuackChunk = class
+  public
+    /// number of rows
+    RowCount: PtrInt;
+    /// one vector per column
+    Vectors: TQuackVectorDynArray;
+    /// release all vectors
+    destructor Destroy; override;
+  end;
+  TQuackChunkDynArray = array of TQuackChunk;
+
+/// read a 16-bit/32-bit/64-bit value which may be unaligned in the response
+function QuackInt16(P: pointer): integer;
+function QuackInt32(P: pointer): integer;
+function QuackInt64(P: pointer): Int64;
+function QuackDouble(P: pointer): double;
+
+
+{ ************ TQuackResponse Messages Decoding }
+
+type
+  /// a decoded Quack response message
+  // - owns the HTTP response body, and all types and chunks it contains
+  TQuackResponse = class
+  protected
+    fBody: RawByteString;
+    fTypePool: TQuackTypeDynArray;
+    fTypePoolCount: integer;
+    fLastTypes: TQuackTypeDynArray;
+    fLastTypesStart: PAnsiChar;
+    fLastTypesLen: PtrInt;
+    fTypeDepth: integer;
+    fVersion: cardinal;
+    function NewType: TQuackType;
+    function ReadType(var R: TFastReader): TQuackType;
+    function ReadTypes(var R: TFastReader): TQuackTypeDynArray;
+    function ReadChunk(var R: TFastReader): TQuackChunk;
+    function ReadVector(var R: TFastReader; T: TQuackType;
+      Count: PtrInt): TQuackVector;
+    procedure ReadVectorBody(var R: TFastReader; V: TQuackVector; Count: PtrInt);
+    procedure ReadChunks(var R: TFastReader);
+    procedure ReadPrepare(var R: TFastReader);
+    procedure ReadFetch(var R: TFastReader);
+    procedure ReadConnection(var R: TFastReader);
+    procedure ReadError(var R: TFastReader);
+  public
+    /// the QUACK_*_RESPONSE type of this message
+    MessageType: byte;
+    /// the server-side connection identifier
+    ConnectionId: RawUtf8;
+    /// CONNECTION_RESPONSE: the server DuckDB version
+    ServerVersion: RawUtf8;
+    /// CONNECTION_RESPONSE: the server platform
+    ServerPlatform: RawUtf8;
+    /// CONNECTION_RESPONSE: the server Quack protocol version
+    QuackVersion: cardinal;
+    /// CONNECTION_RESPONSE: the heartbeat lease duration in seconds
+    HeartbeatSeconds: cardinal;
+    /// PREPARE_RESPONSE: the result columns types
+    ColumnTypes: TQuackTypeDynArray;
+    /// PREPARE_RESPONSE: the result columns names
+    ColumnNames: TRawUtf8DynArray;
+    /// PREPARE_RESPONSE: true if some FETCH_REQUEST are needed to get all rows
+    NeedsMoreFetch: boolean;
+    /// PREPARE_RESPONSE: the query identifier
+    QueryUuid: TDuckDBHugeInt;
+    /// FETCH_RESPONSE: the batch number of the chunks (from 1)
+    BatchIndex: Int64;
+    /// FETCH_RESPONSE: the number of batches - only set on the last response
+    TotalBatches: Int64;
+    /// PREPARE_RESPONSE or FETCH_RESPONSE: the rows
+    Chunks: TQuackChunkDynArray;
+    /// ERROR_RESPONSE: the error message
+    ErrorMessage: RawUtf8;
+    /// ERROR_RESPONSE: the DuckDB exception type
+    ErrorType: RawUtf8;
+    /// ERROR_RESPONSE: true if the server database is not usable any more
+    MustInvalidate: boolean;
+    /// PREPARE_RESPONSE: true if the result is the "Count" of a DML statement
+    function IsCountResult: boolean;
+    /// decode a response HTTP body
+    // - Version is the protocol version negotiated with the server
+    // - raise ESqlDBQuack on any malformed content
+    constructor Create(const Body: RawByteString;
+      Version: cardinal = QUACK_VERSION);
+    /// release all types and chunks
+    destructor Destroy; override;
+  end;
+
+
+{ ************ Quack Requests Encoding }
+
+/// encode a CONNECTION_REQUEST message
+// - ClientId and HeartbeatSeconds are only sent for the protocol version 3
+function QuackConnectionRequest(const Token, ClientId: RawUtf8;
+  HeartbeatSeconds, Version: cardinal): RawByteString;
+
+/// encode a PREPARE_REQUEST message, which also runs the SQL on the server
+// - the QueryUuid is only sent for the protocol version 3
+function QuackPrepareRequest(const ConnectionId, Sql: RawUtf8;
+  const QueryUuid: TDuckDBHugeInt; Version: cardinal): RawByteString;
+
+/// encode a FETCH_REQUEST message
+// - BatchIndex starts at 1, and AckIndex is the last batch received - they are
+// only sent for the protocol version 3
+function QuackFetchRequest(const ConnectionId: RawUtf8;
+  const QueryUuid: TDuckDBHugeInt;
+  BatchIndex, AckIndex, Version: cardinal): RawByteString;
+
+/// encode a DISCONNECT_MESSAGE or HEARTBEAT_REQUEST message
+function QuackSimpleRequest(MessageType: byte;
+  const ConnectionId: RawUtf8): RawByteString;
+
+/// encode a CANCEL_REQUEST or ACKNOWLEDGEMENT message
+function QuackQueryRequest(MessageType: byte; const ConnectionId: RawUtf8;
+  const QueryUuid: TDuckDBHugeInt): RawByteString;
+
+/// compute a random query identifier
+procedure QuackNewQueryUuid(out QueryUuid: TDuckDBHugeInt);
+
+/// parse a Quack server URI into its host name and port
+// - recognize 'quack:host', 'quack:host:9494', 'quack://[::1]:9494' or 'host'
+// - the port is QUACK_DEFAULT_PORT if not specified
+// - returns false if the URI is not valid
+function QuackUriParse(const Uri: RawUtf8; out Host: RawUtf8;
+  out Port: integer): boolean;
+
+/// return true for the local host names, which use HTTP instead of HTTPS
+function QuackHostIsLocal(const Host: RawUtf8): boolean;
+
+
+{ ************ DuckDB Fixed-Size Values Conversion }
+
+/// the size in bytes of a DuckDB fixed-size value, 0 for variable-size types
+// - Internal is the storage type of a DECIMAL or an ENUM
+function DuckFixedSize(TypeId, Internal: TDuckDBType): PtrInt;
+
+/// decode a BOOLEAN, DATE or integer value as Int64, from a possibly unaligned P
+// - UBIGINT is returned as its two's complement Int64 bits
+function DuckFixedInt(TypeId: TDuckDBType; P: PAnsiChar): Int64;
+
+/// convert a fixed-size value into a text buffer, with no memory allocation
+// - handles BOOLEAN, integers, HUGEINT, DECIMAL, FLOAT, DOUBLE and UUID
+// - returns the text length, 0 for SQLNULL, or -1 for other types
+// - P may be unaligned: it is the address of the value, not of its vector
+function DuckFixedToTextBuf(TypeId, Internal: TDuckDBType; Scale: integer;
+  P: PAnsiChar; var Buffer: TTemp47): PtrInt;
+
+/// convert a fixed-size value into its DuckDB text representation
+// - handles DuckFixedToTextBuf() types, dates, times, timestamps and INTERVAL
+// - returns '' for other types, e.g. ENUM which needs its dictionary
+procedure DuckFixedToText(TypeId, Internal: TDuckDBType; Scale: integer;
+  P: PAnsiChar; var result: RawUtf8);
+
+/// append a fixed-size value as JSON: number, boolean or quoted text
+// - handles all DuckFixedToText() types but not ENUM
+procedure DuckFixedToJson(TypeId, Internal: TDuckDBType; Scale: integer;
+  P: PAnsiChar; W: TJsonWriter);
+
+type
+  /// result of DuckFixedToInt64()
+  TDuckConvert = (
+    dcFallback,
+    dcOk,
+    dcOverflow);
+
+/// convert a fixed-size value into an Int64
+// - handles integers, BOOLEAN, HUGEINT, DECIMAL, floats, dates and times:
+// the 64-bit date/time kinds are returned as their raw integer value
+// - returns dcFallback if the value type should be converted from its text,
+// or dcOverflow if a 128-bit value does not fit in an Int64
+function DuckFixedToInt64(TypeId, Internal: TDuckDBType; Scale: integer;
+  P: PAnsiChar; out Value: Int64): TDuckConvert;
+
+/// convert a fixed-size value into a double
+// - handles BOOLEAN, integers (but UBIGINT), FLOAT, DOUBLE and DECIMAL
+// - returns false if the value type should be converted from its text
+function DuckFixedToDouble(TypeId, Internal: TDuckDBType; Scale: integer;
+  P: PAnsiChar; out Value: double): boolean;
+
+/// convert a fixed-size value into a currency, with no precision loss for
+// DECIMAL with up to 4 decimals
+// - returns false if the value type should be converted from its text
+function DuckFixedToCurrency(TypeId, Internal: TDuckDBType; Scale: integer;
+  P: PAnsiChar; out Value: currency): boolean;
+
+/// convert a fixed-size date, time or timestamp value into a TDateTime
+// - returns false if the value type should be converted from its text
+function DuckFixedToDateTime(TypeId: TDuckDBType; P: PAnsiChar;
+  out Value: TDateTime): boolean;implementation
 
 
 { ************ TDuckDBLib Dynamic Library Loader }
@@ -988,6 +1404,38 @@ begin
   OffsetSec := MAX_OFFSET - integer(Bits and $ffffff);
 end;
 
+procedure DuckTimeTzToText(Bits: Int64; var result: RawUtf8);
+var
+  us: Int64;
+  offs: integer;
+begin
+  DuckTimeTzDecode(Bits, us, offs);
+  DuckTimeToText(us, result);
+  if offs < 0 then
+    result := result + '-'
+  else
+    result := result + '+';
+  offs := abs(offs);
+  AppendShortToUtf8(UInt2DigitsToShortFast(offs div 3600), result);
+  if offs mod 3600 <> 0 then
+  begin
+    result := result + ':';
+    AppendShortToUtf8(UInt2DigitsToShortFast((offs div 60) mod 60), result);
+  end;
+end;
+function DuckTimestampMicros(TypeId: TDuckDBType; Value: Int64): Int64;
+begin
+  case TypeId of
+    DUCKDB_TYPE_TIMESTAMP_S:
+      result := Value * 1000000;
+    DUCKDB_TYPE_TIMESTAMP_MS:
+      result := Value * 1000;
+    DUCKDB_TYPE_TIMESTAMP_NS:
+      result := Value div 1000;
+  else
+    result := Value;
+  end;
+end;
 
 { ************ DuckDB Logical Type Cache }
 
@@ -1056,6 +1504,7 @@ begin
             DuckDB.union_type_member_type(Handle, i));
       end;
   end;
+  Info.Size := DuckFixedSize(Info.TypeId, Info.Internal);
 end;
 
 procedure DuckDBTypeInfoDone(var Info: TDuckDBTypeInfo);
@@ -1121,6 +1570,1593 @@ begin
   end;
 end;
 
+
+{ ************ Quack Constants and Exception }
+
+const
+  FIELD_END = $ffff; // MESSAGE_TERMINATOR_FIELD_ID
+
+  // vector_type of a serialized vector
+  VECTOR_FLAT       = 0;
+  VECTOR_CONSTANT   = 2;
+  VECTOR_DICTIONARY = 3;
+  VECTOR_SEQUENCE   = 4;
+
+  // LogicalTypeInfoType
+  INFO_DECIMAL = 2;
+  INFO_STRING  = 3;
+  INFO_LIST    = 4;
+  INFO_STRUCT  = 5;
+  INFO_ENUM    = 6;
+  INFO_ARRAY   = 9;
+
+
+{ ************ Low-Level Reading Functions }
+
+procedure RaiseQuack(const Msg: RawUtf8; const Args: array of const);
+begin
+  ESqlDBQuack.RaiseUtf8(Msg, Args);
+end;
+
+function PeekField(var R: TFastReader): cardinal;
+  {$ifdef HASINLINE} inline; {$endif}
+begin
+  if R.P + 1 >= R.Last then
+    R.ErrorOverflow;
+  result := PWord(R.P)^;
+end;
+
+procedure ExpectField(var R: TFastReader; Id: cardinal);
+var
+  f: cardinal;
+begin
+  f := R.Next2;
+  if f <> Id then
+    RaiseQuack('unexpected field % instead of %', [f, Id]);
+end;
+
+procedure ExpectEnd(var R: TFastReader);
+begin
+  ExpectField(R, FIELD_END);
+end;
+
+function ReadLen(var R: TFastReader): PtrInt;
+var
+  v: QWord;
+begin
+  v := R.VarUInt64;
+  if (Int64(v) < 0) or
+     (Int64(v) > R.Last - R.P) then
+    RaiseQuack('length % overflow', [Int64(v)]);
+  result := v;
+end;
+
+function ReadCount(var R: TFastReader; MinBytesPerItem: PtrInt): PtrInt;
+var
+  v: QWord;
+begin
+  // a list count can't be bigger than the remaining bytes
+  v := R.VarUInt64;
+  if (Int64(v) < 0) or
+     (Int64(v) > (R.Last - R.P) div MinBytesPerItem) then
+    RaiseQuack('list count % overflow', [Int64(v)]);
+  result := v;
+end;
+
+function ReadStr(var R: TFastReader): RawUtf8;
+var
+  len: PtrInt;
+begin
+  len := ReadLen(R);
+  FastSetString(result, R.Next(len), len);
+end;
+
+function ReadIdx(var R: TFastReader): Int64;
+begin
+  result := Int64(R.VarUInt64); // optional_idx: stored as idx_t
+end;
+
+// signed LEB128, which differs from the zigzag TFastReader.VarInt64
+function ReadSVarInt64(var R: TFastReader): Int64;
+var
+  shift: integer;
+  b: cardinal;
+begin
+  result := 0;
+  shift := 0;
+  repeat
+    b := R.NextByte;
+    if shift < 64 then
+      result := result or (Int64(b and $7f) shl shift);
+    inc(shift, 7);
+  until b < $80;
+  if (shift < 64) and
+     (b and $40 <> 0) then
+    result := result or (Int64(-1) shl shift); // sign extension
+end;
+
+procedure ReadHugeInt(var R: TFastReader; out V: TDuckDBHugeInt);
+begin
+  V.Upper := ReadSVarInt64(R);
+  V.Lower := Int64(R.VarUInt64);
+end;
+
+function QuackInt16(P: pointer): integer;
+begin
+  result := SmallInt(PWord(P)^);
+end;
+
+function QuackInt32(P: pointer): integer;
+begin
+  result := PInteger(P)^;
+end;
+
+function QuackInt64(P: pointer): Int64;
+begin
+  result := PInt64(P)^;
+end;
+
+function QuackDouble(P: pointer): double;
+begin
+  PInt64(@result)^ := PInt64(P)^; // as integer, not as FPU register
+end;
+
+
+{ ************ TQuackType Logical Types Description }
+
+{ TQuackType }
+
+function TQuackType.FieldType: TSqlDBFieldType;
+begin
+  result := DuckDBTypeToField(DuckType, Scale); // same mapping as the C API
+end;
+
+type
+  TQuackFixedType = record
+    Id: byte;
+    DuckType: byte;
+  end;
+  PQuackFixedType = ^TQuackFixedType;
+
+const
+  // the fixed-size types, with their DUCKDB_TYPE_* equivalent
+  FIXED_TYPES: array[0..26] of TQuackFixedType = (
+    (Id: QTYPE_SQLNULL;          DuckType: DUCKDB_TYPE_SQLNULL),
+    (Id: QTYPE_BOOLEAN;          DuckType: DUCKDB_TYPE_BOOLEAN),
+    (Id: QTYPE_TINYINT;          DuckType: DUCKDB_TYPE_TINYINT),
+    (Id: QTYPE_UTINYINT;         DuckType: DUCKDB_TYPE_UTINYINT),
+    (Id: QTYPE_SMALLINT;         DuckType: DUCKDB_TYPE_SMALLINT),
+    (Id: QTYPE_USMALLINT;        DuckType: DUCKDB_TYPE_USMALLINT),
+    (Id: QTYPE_INTEGER;          DuckType: DUCKDB_TYPE_INTEGER),
+    (Id: QTYPE_UINTEGER;         DuckType: DUCKDB_TYPE_UINTEGER),
+    (Id: QTYPE_DATE;             DuckType: DUCKDB_TYPE_DATE),
+    (Id: QTYPE_FLOAT;            DuckType: DUCKDB_TYPE_FLOAT),
+    (Id: QTYPE_BIGINT;           DuckType: DUCKDB_TYPE_BIGINT),
+    (Id: QTYPE_UBIGINT;          DuckType: DUCKDB_TYPE_UBIGINT),
+    (Id: QTYPE_POINTER;          DuckType: DUCKDB_TYPE_UBIGINT),
+    (Id: QTYPE_DOUBLE;           DuckType: DUCKDB_TYPE_DOUBLE),
+    (Id: QTYPE_TIME;             DuckType: DUCKDB_TYPE_TIME),
+    (Id: QTYPE_TIME_NS;          DuckType: DUCKDB_TYPE_TIME_NS),
+    (Id: QTYPE_TIME_TZ;          DuckType: DUCKDB_TYPE_TIME_TZ),
+    (Id: QTYPE_TIMESTAMP;        DuckType: DUCKDB_TYPE_TIMESTAMP),
+    (Id: QTYPE_TIMESTAMP_SEC;    DuckType: DUCKDB_TYPE_TIMESTAMP_S),
+    (Id: QTYPE_TIMESTAMP_MS;     DuckType: DUCKDB_TYPE_TIMESTAMP_MS),
+    (Id: QTYPE_TIMESTAMP_NS;     DuckType: DUCKDB_TYPE_TIMESTAMP_NS),
+    (Id: QTYPE_TIMESTAMP_TZ;     DuckType: DUCKDB_TYPE_TIMESTAMP_TZ),
+    (Id: QTYPE_TIMESTAMP_TZ_NS;  DuckType: DUCKDB_TYPE_TIMESTAMP_TZ),
+    (Id: QTYPE_INTERVAL;         DuckType: DUCKDB_TYPE_INTERVAL),
+    (Id: QTYPE_HUGEINT;          DuckType: DUCKDB_TYPE_HUGEINT),
+    (Id: QTYPE_UHUGEINT;         DuckType: DUCKDB_TYPE_UHUGEINT),
+    (Id: QTYPE_UUID;             DuckType: DUCKDB_TYPE_UUID));
+
+procedure TQuackType.SetStorage;
+var
+  i, n: PtrInt;
+  f: PQuackFixedType;
+begin
+  Storage := qsFixed;
+  case Id of
+    QTYPE_DECIMAL: // the storage depends on the width
+      begin
+        DuckType := DUCKDB_TYPE_DECIMAL;
+        if Width <= 4 then
+          ElemSize := 2
+        else if Width <= 9 then
+          ElemSize := 4
+        else if Width <= 18 then
+          ElemSize := 8
+        else
+          ElemSize := 16;
+        exit;
+      end;
+    QTYPE_ENUM: // the storage depends on the dictionary size
+      begin
+        DuckType := DUCKDB_TYPE_ENUM;
+        n := length(EnumValues);
+        if n <= $100 then
+          ElemSize := 1
+        else if n <= $10000 then
+          ElemSize := 2
+        else
+          ElemSize := 4;
+        exit;
+      end;
+  end;
+  f := @FIXED_TYPES;
+  for i := 1 to length(FIXED_TYPES) do
+    if f^.Id = Id then
+    begin
+      DuckType := f^.DuckType;
+      ElemSize := DuckFixedSize(DuckType, DUCKDB_TYPE_INVALID);
+      exit;
+    end
+    else
+      inc(f);
+  // variable-length or nested storage
+  case Id of
+    QTYPE_CHAR, QTYPE_VARCHAR:
+      begin
+        Storage := qsString;
+        DuckType := DUCKDB_TYPE_VARCHAR;
+      end;
+    QTYPE_BLOB, QTYPE_GEOMETRY:
+      begin
+        Storage := qsString;
+        DuckType := DUCKDB_TYPE_BLOB;
+      end;
+    QTYPE_BIT:
+      begin
+        Storage := qsString;
+        DuckType := DUCKDB_TYPE_BIT;
+      end;
+    QTYPE_BIGNUM:
+      begin
+        Storage := qsString;
+        DuckType := DUCKDB_TYPE_BIGNUM;
+      end;
+    QTYPE_STRUCT, QTYPE_TUPLE:
+      begin
+        Storage := qsStruct;
+        DuckType := DUCKDB_TYPE_STRUCT;
+      end;
+    QTYPE_UNION:
+      begin
+        Storage := qsStruct;
+        DuckType := DUCKDB_TYPE_UNION;
+      end;
+    QTYPE_LIST:
+      begin
+        Storage := qsList;
+        DuckType := DUCKDB_TYPE_LIST;
+      end;
+    QTYPE_MAP:
+      begin
+        Storage := qsList;
+        DuckType := DUCKDB_TYPE_MAP;
+      end;
+    QTYPE_ARRAY:
+      begin
+        Storage := qsArray;
+        DuckType := DUCKDB_TYPE_ARRAY;
+      end;
+  else
+    Storage := qsUnsupported; // e.g. VARIANT
+  end;
+  if (Storage in [qsList, qsArray]) and
+     (length(Children) <> 1) then
+    Storage := qsUnsupported;
+end;
+
+
+{ ************ TQuackVector and TQuackChunk Result Data Access }
+
+{ TQuackVector }
+
+destructor TQuackVector.Destroy;
+begin
+  Child.Free;
+  ObjArrayClear(Children);
+  inherited Destroy;
+end;
+
+function TQuackVector.Stored(Row: PtrInt): PtrInt;
+begin
+  case Mode of
+    qvmConstant:
+      result := 0;
+    qvmDictionary:
+      result := cardinal(QuackInt32(Sel + Row * 4));
+  else
+    result := Row;
+  end;
+end;
+
+function TQuackVector.IsStoredValid(Index: PtrInt): boolean;
+begin
+  result := (Validity = nil) or
+            (((Validity^[Index shr 3] shr (Index and 7)) and 1) <> 0);
+end;
+
+function TQuackVector.IsValid(Row: PtrInt): boolean;
+begin
+  result := IsStoredValid(Stored(Row));
+end;
+
+function TQuackVector.DataAt(Index: PtrInt): PAnsiChar;
+begin
+  result := Data + Index * VType.ElemSize;
+end;
+
+function TQuackVector.StringAt(Index: PtrInt; out Len: integer): PUtf8Char;
+begin
+  result := PUtf8Char(StrBytes + StrOffs^[Index]);
+  Len := StrOffs^[StoredCount + Index];
+end;
+
+{ TQuackChunk }
+
+destructor TQuackChunk.Destroy;
+begin
+  ObjArrayClear(Vectors);
+  inherited Destroy;
+end;
+
+
+{ ************ TQuackResponse Messages Decoding }
+
+{ TQuackResponse }
+
+function TQuackResponse.NewType: TQuackType;
+begin
+  result := TQuackType.Create;
+  if fTypePoolCount = length(fTypePool) then
+    SetLength(fTypePool, fTypePoolCount + 8 + fTypePoolCount shr 1);
+  fTypePool[fTypePoolCount] := result;
+  inc(fTypePoolCount);
+end;
+
+function TQuackResponse.ReadType(var R: TFastReader): TQuackType;
+var
+  f, n, infotype, w: cardinal;
+  i: PtrInt;
+begin
+  // a LogicalType is an object with its id and an optional LogicalTypeInfo
+  inc(fTypeDepth);
+  if fTypeDepth > 32 then
+    RaiseQuack('types nesting overflow', []);
+  result := NewType;
+  ExpectField(R, 100);
+  n := R.VarUInt32;
+  if n > 255 then
+    RaiseQuack('unexpected type %', [n]);
+  result.Id := n;
+  infotype := 0;
+  repeat
+    f := R.Next2;
+    case f of
+      FIELD_END:
+        break;
+      101: // type_info as a nullable object
+        begin
+          if R.NextByte = 0 then
+            continue;
+          repeat
+            f := R.Next2;
+            case f of
+              FIELD_END:
+                break;
+              100:
+                infotype := R.VarUInt32;
+              101:
+                result.Alias := ReadStr(R);
+              103:
+                RaiseQuack('unsupported extension type %', [result.Alias]);
+              200:
+                case infotype of
+                  INFO_DECIMAL:
+                    result.Width := R.VarUInt32;
+                  INFO_STRING:
+                    ReadStr(R); // collation
+                  INFO_LIST, INFO_ARRAY:
+                    begin
+                      SetLength(result.Children, 1);
+                      result.Children[0] := ReadType(R);
+                    end;
+                  INFO_STRUCT:
+                    begin
+                      n := ReadCount(R, 4);
+                      SetLength(result.ChildNames, n);
+                      SetLength(result.Children, n);
+                      for i := 0 to n - 1 do
+                      begin
+                        ExpectField(R, 0);
+                        result.ChildNames[i] := ReadStr(R);
+                        ExpectField(R, 1);
+                        result.Children[i] := ReadType(R);
+                        ExpectEnd(R);
+                      end;
+                    end;
+                  INFO_ENUM:
+                    begin
+                      n := R.VarUInt32; // values_count
+                      if n > cardinal(R.Last - R.P) then
+                        RaiseQuack('enum size % overflow', [n]);
+                      SetLength(result.EnumValues, n);
+                    end;
+                else
+                  RaiseQuack('unsupported type info %', [infotype]);
+                end;
+              201:
+                case infotype of
+                  INFO_DECIMAL:
+                    result.Scale := R.VarUInt32;
+                  INFO_ARRAY:
+                    result.ArraySize := R.VarUInt32;
+                  INFO_ENUM:
+                    begin
+                      w := ReadCount(R, 1);
+                      if w <> cardinal(length(result.EnumValues)) then
+                        RaiseQuack('enum values count mismatch', []);
+                      for i := 0 to w - 1 do
+                        result.EnumValues[i] := ReadStr(R);
+                    end;
+                else
+                  RaiseQuack('unsupported type info % field', [infotype]);
+                end;
+            else
+              RaiseQuack('unexpected type info field %', [f]);
+            end;
+          until false;
+        end;
+    else
+      RaiseQuack('unexpected type field %', [f]);
+    end;
+  until false;
+  result.SetStorage;
+  dec(fTypeDepth);
+end;
+
+function TQuackResponse.ReadTypes(var R: TFastReader): TQuackTypeDynArray;
+var
+  n, i: PtrInt;
+begin
+  n := ReadCount(R, 3);
+  SetLength(result, n);
+  for i := 0 to n - 1 do
+    result[i] := ReadType(R);
+end;
+
+procedure TQuackResponse.ReadVectorBody(var R: TFastReader; V: TQuackVector;
+  Count: PtrInt);
+var
+  t: TQuackType;
+  i, n, len: PtrInt;
+  lens: PAnsiChar;
+  total, acc: Int64;
+  o: PCardinalArray;
+  e: PDuckDBListEntry;
+begin
+  t := V.VType;
+  V.StoredCount := Count;
+  if t.Storage = qsUnsupported then
+    RaiseQuack('unsupported type %', [t.Id]);
+  if t.Id = QTYPE_GEOMETRY then
+    if PeekField(R) = 99 then
+    begin
+      R.Next2;
+      R.VarUInt32; // geometry_format: WKB as plain blob
+    end;
+  ExpectField(R, 100);
+  if R.NextByte <> 0 then // has_validity_mask
+  begin
+    ExpectField(R, 101);
+    len := ReadLen(R);
+    if len <> ((Count + 63) shr 6) * 8 then
+      RaiseQuack('validity size mismatch', []);
+    V.Validity := R.Next(len);
+  end;
+  case t.Storage of
+    qsFixed:
+      begin
+        ExpectField(R, 102);
+        len := ReadLen(R);
+        if len <> Count * t.ElemSize then
+          RaiseQuack('data size mismatch for type %', [t.Id]);
+        V.Data := R.Next(len);
+      end;
+    qsString:
+      begin
+        o := FastNewRawByteString(V.fOwned, Count * 8 + 8);
+        V.StrOffs := o;
+        if PeekField(R) = 107 then
+        begin
+          // lengths and bytes as two blobs
+          R.Next2;
+          total := ReadIdx(R);
+          ExpectField(R, 108);
+          len := ReadLen(R);
+          if len <> Count * 4 then
+            RaiseQuack('string lengths size mismatch', []);
+          lens := R.Next(len);
+          ExpectField(R, 109);
+          len := ReadLen(R);
+          if len <> total then
+            RaiseQuack('string bytes size mismatch', []);
+          V.StrBytes := R.Next(len);
+          acc := 0;
+          for i := 0 to Count - 1 do
+          begin
+            o^[i] := acc;
+            o^[Count + i] := cardinal(QuackInt32(lens + i * 4));
+            inc(acc, o^[Count + i]);
+            if acc > total then
+              RaiseQuack('string lengths overflow', []);
+          end;
+          if acc <> total then
+            RaiseQuack('string lengths mismatch', []);
+        end
+        else
+        begin
+          // older format: a list of strings (e.g. from the version 1 server)
+          ExpectField(R, 102);
+          n := ReadCount(R, 1);
+          if n <> Count then
+            RaiseQuack('strings count mismatch', []);
+          V.StrBytes := R.P;
+          for i := 0 to Count - 1 do
+          begin
+            len := ReadLen(R);
+            o^[i] := R.P - V.StrBytes;
+            o^[Count + i] := len;
+            R.Next(len);
+          end;
+        end;
+      end;
+    qsStruct:
+      begin
+        ExpectField(R, 103);
+        n := ReadCount(R, 2);
+        if n <> length(t.Children) then
+          RaiseQuack('struct children count mismatch', []);
+        SetLength(V.Children, n);
+        for i := 0 to n - 1 do
+        begin
+          V.Children[i] := ReadVector(R, t.Children[i], Count);
+          ExpectEnd(R);
+        end;
+      end;
+    qsList:
+      begin
+        ExpectField(R, 104);
+        total := Int64(R.VarUInt64); // list_size
+        if (total < 0) or
+           (total > MaxInt) then
+          RaiseQuack('list size overflow', []);
+        ExpectField(R, 105);
+        n := ReadCount(R, 6);
+        if n <> Count then
+          RaiseQuack('list entries count mismatch', []);
+        e := FastNewRawByteString(V.fOwned, n * SizeOf(TDuckDBListEntry));
+        V.Entries := e;
+        for i := 0 to n - 1 do
+        begin
+          ExpectField(R, 100);
+          e^.Offset := Int64(R.VarUInt64);
+          ExpectField(R, 101);
+          e^.Length := Int64(R.VarUInt64);
+          ExpectEnd(R);
+          if (e^.Offset < 0) or
+             (e^.Length < 0) or
+             (e^.Offset > total) or
+             (e^.Length > total - e^.Offset) then
+            if V.IsStoredValid(i) then // 0,0 on NULL
+              RaiseQuack('list entry out of range', []);
+          inc(e);
+        end;
+        ExpectField(R, 106);
+        V.Child := ReadVector(R, t.Children[0], total);
+        ExpectEnd(R);
+      end;
+    qsArray:
+      begin
+        ExpectField(R, 103);
+        if Int64(R.VarUInt64) <> t.ArraySize then
+          RaiseQuack('array size mismatch', []);
+        ExpectField(R, 104);
+        if Int64(Count) * t.ArraySize > MaxInt then
+          RaiseQuack('array size overflow', []);
+        V.Child := ReadVector(R, t.Children[0], Count * integer(t.ArraySize));
+        ExpectEnd(R);
+      end;
+  end;
+end;
+
+function TQuackResponse.ReadVector(var R: TFastReader; T: TQuackType;
+  Count: PtrInt): TQuackVector;
+var
+  vt: cardinal;
+  len, i: PtrInt;
+  start, step, v: Int64;
+  d: PAnsiChar;
+begin
+  result := TQuackVector.Create;
+  try
+    result.VType := T;
+    result.Count := Count;
+    vt := VECTOR_FLAT;
+    if PeekField(R) = 90 then
+    begin
+      R.Next2;
+      vt := R.VarUInt32;
+    end;
+    case vt of
+      VECTOR_FLAT:
+        ReadVectorBody(R, result, Count);
+      VECTOR_CONSTANT:
+        begin
+          result.Mode := qvmConstant;
+          ReadVectorBody(R, result, 1); // a single stored value
+        end;
+      VECTOR_DICTIONARY:
+        begin
+          result.Mode := qvmDictionary;
+          ExpectField(R, 91);
+          len := ReadLen(R);
+          if len <> Count * 4 then
+            RaiseQuack('dictionary selection size mismatch', []);
+          result.Sel := R.Next(len);
+          ExpectField(R, 92);
+          len := Int64(R.VarUInt64); // dict_count
+          if (len < 0) or
+             (len > R.Last - R.P) then
+            RaiseQuack('dictionary size overflow', []);
+          ReadVectorBody(R, result, len);
+          for i := 0 to Count - 1 do
+            if cardinal(QuackInt32(result.Sel + i * 4)) >= cardinal(len) then
+              RaiseQuack('dictionary index out of range', []);
+        end;
+      VECTOR_SEQUENCE:
+        begin
+          // materialize the sequence as a regular flat vector
+          ExpectField(R, 91);
+          start := ReadSVarInt64(R);
+          ExpectField(R, 92);
+          step := ReadSVarInt64(R);
+          if (T.Storage <> qsFixed) or
+             (T.ElemSize > 8) then
+            RaiseQuack('unsupported sequence type %', [T.Id]);
+          d := FastNewRawByteString(result.fOwned, Count * T.ElemSize);
+          result.Data := d;
+          result.StoredCount := Count;
+          v := start;
+          for i := 0 to Count - 1 do
+          begin
+            MoveFast(v, d^, T.ElemSize); // little endian truncation
+            inc(d, T.ElemSize);
+            inc(v, step);
+          end;
+        end;
+    else
+      RaiseQuack('unsupported vector type %', [vt]);
+    end;
+  except
+    result.Free;
+    raise;
+  end;
+end;
+
+function TQuackResponse.ReadChunk(var R: TFastReader): TQuackChunk;
+var
+  i, n: PtrInt;
+  start: PAnsiChar;
+  types: TQuackTypeDynArray;
+begin
+  result := TQuackChunk.Create;
+  try
+    ExpectField(R, 100);
+    result.RowCount := R.VarUInt32;
+    ExpectField(R, 101);
+    start := R.P;
+    types := nil;
+    if (fLastTypesStart <> nil) and
+       (R.P + fLastTypesLen <= R.Last) and
+       CompareMem(R.P, fLastTypesStart, fLastTypesLen) then
+    begin
+      // same types than the previous chunk or the response: no need to parse
+      types := fLastTypes;
+      inc(R.P, fLastTypesLen);
+    end
+    else
+    begin
+      types := ReadTypes(R);
+      fLastTypes := types;
+      fLastTypesStart := start;
+      fLastTypesLen := R.P - start;
+    end;
+    ExpectField(R, 102);
+    n := ReadCount(R, 2);
+    if n <> length(types) then
+      RaiseQuack('chunk columns count mismatch', []);
+    SetLength(result.Vectors, n);
+    for i := 0 to n - 1 do
+    begin
+      result.Vectors[i] := ReadVector(R, types[i], result.RowCount);
+      ExpectEnd(R);
+    end;
+    ExpectEnd(R);
+  except
+    result.Free;
+    raise;
+  end;
+end;
+
+procedure TQuackResponse.ReadChunks(var R: TFastReader);
+var
+  i, n: PtrInt;
+begin
+  // a list of nullable DataChunkWrapper objects
+  n := ReadCount(R, 4);
+  SetLength(Chunks, n);
+  for i := 0 to n - 1 do
+  begin
+    if R.NextByte = 0 then
+      RaiseQuack('unexpected void chunk', []);
+    ExpectField(R, 300);
+    Chunks[i] := ReadChunk(R);
+    ExpectEnd(R);
+  end;
+end;
+
+procedure TQuackResponse.ReadPrepare(var R: TFastReader);
+var
+  f: cardinal;
+  i, n: PtrInt;
+  start: PAnsiChar;
+begin
+  repeat
+    f := R.Next2;
+    case f of
+      FIELD_END:
+        break;
+      1: // result_types
+        begin
+          start := R.P;
+          ColumnTypes := ReadTypes(R);
+          fLastTypes := ColumnTypes;
+          fLastTypesStart := start;
+          fLastTypesLen := R.P - start;
+        end;
+      2: // result_names
+        begin
+          n := ReadCount(R, 1);
+          SetLength(ColumnNames, n);
+          for i := 0 to n - 1 do
+            ColumnNames[i] := ReadStr(R);
+        end;
+      3:
+        NeedsMoreFetch := R.NextByte <> 0;
+      4:
+        ReadChunks(R);
+      5:
+        ReadHugeInt(R, QueryUuid);
+    else
+      RaiseQuack('unexpected prepare response field %', [f]);
+    end;
+  until false;
+  if length(ColumnNames) <> length(ColumnTypes) then
+    RaiseQuack('columns names and types count mismatch', []);
+end;
+
+procedure TQuackResponse.ReadFetch(var R: TFastReader);
+var
+  f: cardinal;
+  i, count: PtrInt;
+begin
+  if fVersion < 3 then
+  begin
+    // version 1: the chunks are inlined, and no more chunks means the end
+    repeat
+      f := R.Next2;
+      case f of
+        FIELD_END:
+          break;
+        1:
+          ReadChunks(R);
+        2:
+          BatchIndex := ReadIdx(R);
+      else
+        RaiseQuack('unexpected fetch response field %', [f]);
+      end;
+    until false;
+    exit;
+  end;
+  count := 0;
+  repeat
+    f := R.Next2;
+    case f of
+      FIELD_END:
+        break;
+      1:
+        count := ReadCount(R, 4);
+      2:
+        TotalBatches := ReadIdx(R);
+      3:
+        BatchIndex := ReadIdx(R);
+    else
+      RaiseQuack('unexpected fetch response field %', [f]);
+    end;
+  until false;
+  // the chunks are sent as raw objects just after the message
+  SetLength(Chunks, count);
+  for i := 0 to count - 1 do
+    Chunks[i] := ReadChunk(R);
+end;
+
+procedure TQuackResponse.ReadConnection(var R: TFastReader);
+var
+  f: cardinal;
+begin
+  repeat
+    f := R.Next2;
+    case f of
+      FIELD_END:
+        break;
+      1:
+        ServerVersion := ReadStr(R);
+      2:
+        ServerPlatform := ReadStr(R);
+      3:
+        QuackVersion := R.VarUInt32;
+      4:
+        HeartbeatSeconds := R.VarUInt32;
+    else
+      RaiseQuack('unexpected connection response field %', [f]);
+    end;
+  until false;
+end;
+
+procedure TQuackResponse.ReadError(var R: TFastReader);
+var
+  f: cardinal;
+  i, n: PtrInt;
+begin
+  repeat
+    f := R.Next2;
+    case f of
+      FIELD_END:
+        break;
+      1:
+        ErrorMessage := ReadStr(R);
+      2:
+        ErrorType := ReadStr(R);
+      3: // extra_info map as a list of key/value objects: ignored
+        begin
+          n := ReadCount(R, 2);
+          for i := 0 to n - 1 do
+          begin
+            ExpectField(R, 0);
+            ReadStr(R);
+            ExpectField(R, 1);
+            ReadStr(R);
+            ExpectEnd(R);
+          end;
+        end;
+      4:
+        MustInvalidate := R.NextByte <> 0;
+    else
+      RaiseQuack('unexpected error response field %', [f]);
+    end;
+  until false;
+end;
+
+function TQuackResponse.IsCountResult: boolean;
+begin
+  // a single "Count" BIGINT column with the number of changed rows
+  result := (length(ColumnTypes) = 1) and
+            (ColumnTypes[0].Id = QTYPE_BIGINT) and
+            (length(ColumnNames) = 1) and
+            (ColumnNames[0] = 'Count') and
+            (length(Chunks) > 0) and
+            (Chunks[0].RowCount = 1) and
+            Chunks[0].Vectors[0].IsValid(0);
+end;
+
+constructor TQuackResponse.Create(const Body: RawByteString;
+  Version: cardinal);
+var
+  R: TFastReader;
+  f: cardinal;
+begin
+  fBody := Body;
+  fVersion := Version;
+  BatchIndex := -1;
+  TotalBatches := -1;
+  R.Init(fBody);
+  try
+    // message header object
+    ExpectField(R, 1);
+    MessageType := R.VarUInt32;
+    repeat
+      f := R.Next2;
+      case f of
+        FIELD_END:
+          break;
+        2:
+          ConnectionId := ReadStr(R);
+        3:
+          ReadIdx(R); // client_query_id
+      else
+        RaiseQuack('unexpected header field %', [f]);
+      end;
+    until false;
+    // message body object
+    case MessageType of
+      QUACK_CONNECTION_RESPONSE:
+        ReadConnection(R);
+      QUACK_PREPARE_RESPONSE:
+        ReadPrepare(R);
+      QUACK_FETCH_RESPONSE:
+        ReadFetch(R);
+      QUACK_ERROR_RESPONSE:
+        ReadError(R);
+      QUACK_SUCCESS_RESPONSE, QUACK_SEND_DATA_RESPONSE:
+        begin
+          while R.Next2 <> FIELD_END do
+            RaiseQuack('unexpected response field', []);
+        end;
+    else
+      RaiseQuack('unexpected response message type %', [MessageType]);
+    end;
+  except
+    on E: EFastReader do // the destructor is called by the exception
+      RaiseQuack('malformed response (%)', [E.Message]);
+  end;
+end;
+
+destructor TQuackResponse.Destroy;
+var
+  i: PtrInt;
+begin
+  for i := 0 to high(Chunks) do
+    Chunks[i].Free;
+  Chunks := nil;
+  for i := 0 to fTypePoolCount - 1 do
+    fTypePool[i].Free;
+  fTypePool := nil;
+  fTypePoolCount := 0;
+  inherited Destroy;
+end;
+
+
+{ ************ Quack Requests Encoding }
+
+procedure WriteField(W: TBufferWriter; Id: cardinal);
+begin
+  W.Write2(Id); // raw 16-bit little endian field id
+end;
+
+procedure WriteString(W: TBufferWriter; Id: cardinal; const Value: RawUtf8);
+begin
+  if Value = '' then
+    exit; // default values are not serialized
+  WriteField(W, Id);
+  W.WriteVarUInt32(length(Value));
+  W.Write(pointer(Value), length(Value));
+end;
+
+procedure WriteSVarInt64(W: TBufferWriter; Value: Int64);
+var
+  b: cardinal;
+begin
+  repeat
+    b := Value and $7f;
+    if Value < 0 then
+      Value := not (not Value shr 7) // arithmetic shift
+    else
+      Value := Value shr 7;
+    if ((Value = 0) and
+        (b and $40 = 0)) or
+       ((Value = -1) and
+        (b and $40 <> 0)) then
+    begin
+      W.Write1(b);
+      exit;
+    end;
+    W.Write1(b or $80);
+  until false;
+end;
+
+procedure WriteHugeInt(W: TBufferWriter; Id: cardinal;
+  const Value: TDuckDBHugeInt);
+begin
+  WriteField(W, Id);
+  WriteSVarInt64(W, Value.Upper);
+  W.WriteVarUInt64(QWord(Value.Lower));
+end;
+
+procedure WriteHeader(W: TBufferWriter; MessageType: byte;
+  const ConnectionId: RawUtf8);
+const
+  // client_query_id is always serialized, as an unset optional_idx (~0)
+  NO_QUERY_ID: array[0..9] of byte = (
+    $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff, $01);
+begin
+  WriteField(W, 1);
+  W.WriteVarUInt32(MessageType);
+  WriteString(W, 2, ConnectionId);
+  WriteField(W, 3);
+  W.Write(@NO_QUERY_ID, SizeOf(NO_QUERY_ID));
+  WriteField(W, FIELD_END);
+end;
+
+function QuackConnectionRequest(const Token, ClientId: RawUtf8;
+  HeartbeatSeconds, Version: cardinal): RawByteString;
+var
+  W: TBufferWriter;
+  tmp: TTextWriterStackBuffer;
+begin
+  W := TBufferWriter.Create(tmp);
+  try
+    WriteHeader(W, QUACK_CONNECTION_REQUEST, '');
+    WriteString(W, 1, Token);
+    WriteString(W, 2, 'mORMot2');
+    WriteString(W, 3, 'mormot2');
+    WriteField(W, 4); // min_supported_quack_version
+    W.WriteVarUInt32(Version);
+    WriteField(W, 5); // max_supported_quack_version
+    W.WriteVarUInt32(Version);
+    if Version >= 3 then
+    begin
+      WriteString(W, 6, ClientId);
+      WriteField(W, 7);
+      W.WriteVarUInt32(HeartbeatSeconds);
+    end;
+    WriteField(W, FIELD_END);
+    result := W.FlushTo;
+  finally
+    W.Free;
+  end;
+end;
+
+function QuackPrepareRequest(const ConnectionId, Sql: RawUtf8;
+  const QueryUuid: TDuckDBHugeInt; Version: cardinal): RawByteString;
+var
+  W: TBufferWriter;
+  tmp: TTextWriterStackBuffer;
+begin
+  W := TBufferWriter.Create(tmp);
+  try
+    WriteHeader(W, QUACK_PREPARE_REQUEST, ConnectionId);
+    WriteString(W, 1, Sql);
+    if Version >= 3 then
+      WriteHugeInt(W, 2, QueryUuid);
+    WriteField(W, FIELD_END);
+    result := W.FlushTo;
+  finally
+    W.Free;
+  end;
+end;
+
+function QuackFetchRequest(const ConnectionId: RawUtf8;
+  const QueryUuid: TDuckDBHugeInt;
+  BatchIndex, AckIndex, Version: cardinal): RawByteString;
+var
+  W: TBufferWriter;
+  tmp: TTextWriterStackBuffer;
+begin
+  W := TBufferWriter.Create(tmp);
+  try
+    WriteHeader(W, QUACK_FETCH_REQUEST, ConnectionId);
+    WriteHugeInt(W, 1, QueryUuid);
+    if Version >= 3 then
+    begin
+      if BatchIndex <> 0 then
+      begin
+        WriteField(W, 2);
+        W.WriteVarUInt32(BatchIndex);
+      end;
+      if AckIndex <> 0 then
+      begin
+        WriteField(W, 3);
+        W.WriteVarUInt32(AckIndex);
+      end;
+    end;
+    WriteField(W, FIELD_END);
+    result := W.FlushTo;
+  finally
+    W.Free;
+  end;
+end;
+
+function QuackSimpleRequest(MessageType: byte;
+  const ConnectionId: RawUtf8): RawByteString;
+var
+  W: TBufferWriter;
+  tmp: TTextWriterStackBuffer;
+begin
+  W := TBufferWriter.Create(tmp);
+  try
+    WriteHeader(W, MessageType, ConnectionId);
+    WriteField(W, FIELD_END); // void body
+    result := W.FlushTo;
+  finally
+    W.Free;
+  end;
+end;
+
+function QuackQueryRequest(MessageType: byte; const ConnectionId: RawUtf8;
+  const QueryUuid: TDuckDBHugeInt): RawByteString;
+var
+  W: TBufferWriter;
+  tmp: TTextWriterStackBuffer;
+begin
+  W := TBufferWriter.Create(tmp);
+  try
+    WriteHeader(W, MessageType, ConnectionId);
+    WriteHugeInt(W, 1, QueryUuid);
+    WriteField(W, FIELD_END);
+    result := W.FlushTo;
+  finally
+    W.Free;
+  end;
+end;
+
+procedure QuackNewQueryUuid(out QueryUuid: TDuckDBHugeInt);
+begin
+  QueryUuid.Lower := Int64(Random64);
+  QueryUuid.Upper := Int64(Random64 shr 1) or 1; // not 0: this is a wildcard
+end;
+
+function QuackUriParse(const Uri: RawUtf8; out Host: RawUtf8;
+  out Port: integer): boolean;
+var
+  s, ports: RawUtf8;
+  p: PtrInt;
+begin
+  result := false;
+  Port := QUACK_DEFAULT_PORT;
+  s := TrimU(Uri);
+  if IdemPChar(pointer(s), 'QUACK://') then
+    delete(s, 1, 8)
+  else if IdemPChar(pointer(s), 'QUACK:') then
+    delete(s, 1, 6);
+  ports := '';
+  if (s <> '') and
+     (s[1] = '[') then
+  begin
+    // IPv6 address
+    p := PosExChar(']', s);
+    if p = 0 then
+      exit;
+    Host := copy(s, 2, p - 2);
+    if p < length(s) then
+      if s[p + 1] = ':' then
+        ports := copy(s, p + 2, 100)
+      else
+        exit;
+  end
+  else
+  begin
+    p := PosExChar(':', s);
+    if p = 0 then
+      Host := s
+    else
+    begin
+      Host := copy(s, 1, p - 1);
+      ports := copy(s, p + 1, 100);
+    end;
+  end;
+  if Host = '' then
+    exit;
+  if ports <> '' then
+  begin
+    p := GetCardinalDef(pointer(ports), 0);
+    if (p <= 0) or
+       (p > 65535) or
+       (UInt32ToUtf8(p) <> ports) then
+      exit;
+    Port := p;
+  end;
+  result := true;
+end;
+
+function QuackHostIsLocal(const Host: RawUtf8): boolean;
+begin
+  result := IdemPropNameU(Host, 'localhost') or
+            (Host = '127.0.0.1') or
+            (Host = '::1');
+end;
+
+
+{ ************ DuckDB Fixed-Size Values Conversion }
+
+function DuckFixedSize(TypeId, Internal: TDuckDBType): PtrInt;
+begin
+  case TypeId of
+    DUCKDB_TYPE_SQLNULL, DUCKDB_TYPE_BOOLEAN, DUCKDB_TYPE_TINYINT,
+    DUCKDB_TYPE_UTINYINT:
+      result := 1;
+    DUCKDB_TYPE_SMALLINT, DUCKDB_TYPE_USMALLINT:
+      result := 2;
+    DUCKDB_TYPE_INTEGER, DUCKDB_TYPE_UINTEGER, DUCKDB_TYPE_FLOAT,
+    DUCKDB_TYPE_DATE:
+      result := 4;
+    DUCKDB_TYPE_BIGINT, DUCKDB_TYPE_UBIGINT, DUCKDB_TYPE_DOUBLE,
+    DUCKDB_TYPE_TIME, DUCKDB_TYPE_TIME_NS, DUCKDB_TYPE_TIME_TZ,
+    DUCKDB_TYPE_TIMESTAMP, DUCKDB_TYPE_TIMESTAMP_S, DUCKDB_TYPE_TIMESTAMP_MS,
+    DUCKDB_TYPE_TIMESTAMP_NS, DUCKDB_TYPE_TIMESTAMP_TZ:
+      result := 8;
+    DUCKDB_TYPE_HUGEINT, DUCKDB_TYPE_UHUGEINT, DUCKDB_TYPE_UUID,
+    DUCKDB_TYPE_INTERVAL:
+      result := 16;
+    DUCKDB_TYPE_DECIMAL, DUCKDB_TYPE_ENUM:
+      result := DuckFixedSize(Internal, DUCKDB_TYPE_INVALID);
+  else
+    result := 0;
+  end;
+end;
+
+function DuckFixedInt(TypeId: TDuckDBType; P: PAnsiChar): Int64;
+begin
+  case TypeId of
+    DUCKDB_TYPE_BOOLEAN, DUCKDB_TYPE_UTINYINT:
+      result := PByte(P)^;
+    DUCKDB_TYPE_TINYINT:
+      result := PShortInt(P)^;
+    DUCKDB_TYPE_SMALLINT:
+      result := QuackInt16(P);
+    DUCKDB_TYPE_USMALLINT:
+      result := word(QuackInt16(P));
+    DUCKDB_TYPE_INTEGER, DUCKDB_TYPE_DATE:
+      result := QuackInt32(P);
+    DUCKDB_TYPE_UINTEGER:
+      result := cardinal(QuackInt32(P));
+  else // BIGINT, UBIGINT and the 64-bit date/time kinds
+    result := QuackInt64(P);
+  end;
+end;
+
+procedure DuckFixedHuge(P: PAnsiChar; var H: TDuckDBHugeInt);
+begin
+  H.Lower := QuackInt64(P);
+  H.Upper := QuackInt64(P + 8);
+end;
+
+function DuckFixedToTextBuf(TypeId, Internal: TDuckDBType; Scale: integer;
+  P: PAnsiChar; var Buffer: TTemp47): PtrInt;
+var
+  b, num: PAnsiChar;
+  h: TDuckDBHugeInt;
+  s: single;
+  d: double;
+  tmp: ShortString;
+begin
+  result := 0;
+  Buffer[0] := #0;
+  num := nil;
+  case TypeId of
+    DUCKDB_TYPE_BOOLEAN:
+      begin
+        b := @BOOL_STR[P^ <> #0]; // 'false'/'true'
+        PInt64(@Buffer)^ := PInt64(b + 1)^; // include ending #0
+        result := ord(b[0]);
+      end;
+    DUCKDB_TYPE_TINYINT, DUCKDB_TYPE_SMALLINT, DUCKDB_TYPE_INTEGER,
+    DUCKDB_TYPE_BIGINT, DUCKDB_TYPE_UTINYINT, DUCKDB_TYPE_USMALLINT,
+    DUCKDB_TYPE_UINTEGER:
+      num := StrInt64(@Buffer[high(Buffer)], DuckFixedInt(TypeId, P));
+    DUCKDB_TYPE_UBIGINT:
+      num := StrUInt64(@Buffer[high(Buffer)], QWord(QuackInt64(P)));
+    DUCKDB_TYPE_HUGEINT, DUCKDB_TYPE_UHUGEINT:
+      begin
+        DuckFixedHuge(P, h);
+        result := DuckHugeIntToTextBuf(h, TypeId = DUCKDB_TYPE_HUGEINT, 0, Buffer);
+      end;
+    DUCKDB_TYPE_DECIMAL:
+      begin
+        case Internal of
+          DUCKDB_TYPE_HUGEINT:
+            DuckFixedHuge(P, h);
+          DUCKDB_TYPE_SMALLINT,
+          DUCKDB_TYPE_INTEGER:
+            begin
+              h.Lower := DuckFixedInt(Internal, P);
+              if h.Lower < 0 then
+                h.Upper := -1 // sign extension
+              else
+                h.Upper := 0;
+            end;
+        else
+          begin
+            h.Lower := QuackInt64(P);
+            if h.Lower < 0 then
+              h.Upper := -1
+            else
+              h.Upper := 0;
+          end;
+        end;
+        result := DuckHugeIntToTextBuf(h, true, Scale, Buffer);
+      end;
+    DUCKDB_TYPE_FLOAT, DUCKDB_TYPE_DOUBLE:
+      begin
+        if TypeId = DUCKDB_TYPE_FLOAT then
+        begin
+          MoveFast(P^, s, SizeOf(s));
+          d := s;
+        end
+        else
+          d := QuackDouble(P);
+        if PInt64(@d)^ = 0 then
+        begin
+          PCardinal(@Buffer)^ := ord('0');
+          result := 1;
+        end
+        else
+        begin
+          result := DoubleToShort(@tmp, d);
+          if result > high(Buffer) then
+            result := -1 // very unlikely
+          else
+          begin
+            MoveFast(tmp[1], Buffer[0], result);
+            Buffer[result] := #0;
+          end;
+        end;
+      end;
+    DUCKDB_TYPE_UUID:
+      begin
+        DuckFixedHuge(P, h);
+        result := DuckUuidToTextBuf(h, Buffer);
+      end;
+    DUCKDB_TYPE_SQLNULL:
+      ; // NULL -> empty buffer
+  else
+    result := -1; // dates, times, intervals, ENUM, VARCHAR, BIT and nested types
+  end;
+  // normalize the backward-generated 64-bit integer text
+  if num = nil then
+    exit;
+  result := @Buffer[high(Buffer)] - num;
+  MoveFast(num^, Buffer[0], result);
+  Buffer[result] := #0;
+end;
+
+procedure DuckFixedToText(TypeId, Internal: TDuckDBType; Scale: integer;
+  P: PAnsiChar; var result: RawUtf8);
+var
+  len: PtrInt;
+  iv: TDuckDBInterval;
+  s: single;
+  d: double;
+  buf: TTemp47;
+begin
+  len := DuckFixedToTextBuf(TypeId, Internal, Scale, P, buf);
+  if len >= 0 then
+  begin
+    FastSetString(result, @buf[0], len); // most simple types
+    exit;
+  end;
+  FastAssignNew(result);
+  case TypeId of
+    DUCKDB_TYPE_FLOAT, DUCKDB_TYPE_DOUBLE:
+      begin
+        if TypeId = DUCKDB_TYPE_FLOAT then
+        begin
+          MoveFast(P^, s, SizeOf(s));
+          d := s;
+        end
+        else
+          d := QuackDouble(P);
+        DoubleToStr(d, result); // very long text
+      end;
+    DUCKDB_TYPE_DATE:
+      DuckDateToText(QuackInt32(P), result);
+    DUCKDB_TYPE_TIME:
+      DuckTimeToText(QuackInt64(P), result);
+    DUCKDB_TYPE_TIME_NS:
+      DuckTimeToText(QuackInt64(P) div 1000, result);
+    DUCKDB_TYPE_TIME_TZ:
+      DuckTimeTzToText(QuackInt64(P), result);
+    DUCKDB_TYPE_TIMESTAMP, DUCKDB_TYPE_TIMESTAMP_S,
+    DUCKDB_TYPE_TIMESTAMP_MS, DUCKDB_TYPE_TIMESTAMP_NS:
+      DuckTimestampToText(DuckTimestampMicros(TypeId, QuackInt64(P)), result);
+    DUCKDB_TYPE_TIMESTAMP_TZ:
+      begin
+        DuckTimestampToText(QuackInt64(P), result);
+        result := result + '+00'; // stored as UTC
+      end;
+    DUCKDB_TYPE_INTERVAL:
+      begin
+        iv.Months := QuackInt32(P);
+        iv.Days := QuackInt32(P + 4);
+        iv.Micros := QuackInt64(P + 8);
+        DuckIntervalToText(iv, result);
+      end;
+  end;
+end;
+
+procedure DuckFixedToJson(TypeId, Internal: TDuckDBType; Scale: integer;
+  P: PAnsiChar; W: TJsonWriter);
+var
+  n: PtrInt;
+  s: single;
+  buf: TTemp47;
+  txt: RawUtf8;
+begin
+  case TypeId of
+    DUCKDB_TYPE_BOOLEAN:
+      W.Add(P^ <> #0);
+    DUCKDB_TYPE_TINYINT, DUCKDB_TYPE_SMALLINT, DUCKDB_TYPE_INTEGER,
+    DUCKDB_TYPE_BIGINT, DUCKDB_TYPE_UTINYINT, DUCKDB_TYPE_USMALLINT,
+    DUCKDB_TYPE_UINTEGER:
+      W.Add(DuckFixedInt(TypeId, P));
+    DUCKDB_TYPE_FLOAT:
+      begin
+        MoveFast(P^, s, SizeOf(s));
+        W.AddSingle(s);
+      end;
+    DUCKDB_TYPE_DOUBLE:
+      W.AddDouble(QuackDouble(P));
+    DUCKDB_TYPE_SQLNULL:
+      W.AddNull;
+    DUCKDB_TYPE_UBIGINT, DUCKDB_TYPE_HUGEINT, DUCKDB_TYPE_UHUGEINT,
+    DUCKDB_TYPE_DECIMAL:
+      begin
+        n := DuckFixedToTextBuf(TypeId, Internal, Scale, P, buf);
+        W.AddNoJsonEscape(@buf[0], n);
+      end;
+  else
+    begin
+      // UUID, dates, times, INTERVAL -> JSON string
+      W.AddDirect('"');
+      n := DuckFixedToTextBuf(TypeId, Internal, Scale, P, buf);
+      if n >= 0 then
+        W.AddJsonEscape(@buf[0], n)
+      else
+      begin
+        DuckFixedToText(TypeId, Internal, Scale, P, txt);
+        W.AddJsonEscape(pointer(txt), length(txt));
+      end;
+      W.AddDirect('"');
+    end;
+  end;
+end;
+
+function DuckDecimalMantissa(Internal: TDuckDBType; P: PAnsiChar): Int64;
+begin
+  case Internal of
+    DUCKDB_TYPE_SMALLINT:
+      result := QuackInt16(P);
+    DUCKDB_TYPE_INTEGER:
+      result := QuackInt32(P);
+  else
+    result := QuackInt64(P);
+  end;
+end;
+
+function DuckFixedToInt64(TypeId, Internal: TDuckDBType; Scale: integer;
+  P: PAnsiChar; out Value: Int64): TDuckConvert;
+var
+  h: TDuckDBHugeInt;
+  d: double;
+begin
+  result := dcOk;
+  case TypeId of
+    DUCKDB_TYPE_BOOLEAN, DUCKDB_TYPE_TINYINT, DUCKDB_TYPE_SMALLINT,
+    DUCKDB_TYPE_INTEGER, DUCKDB_TYPE_BIGINT, DUCKDB_TYPE_UTINYINT,
+    DUCKDB_TYPE_USMALLINT, DUCKDB_TYPE_UINTEGER, DUCKDB_TYPE_UBIGINT,
+    DUCKDB_TYPE_DATE, DUCKDB_TYPE_TIME, DUCKDB_TYPE_TIMESTAMP,
+    DUCKDB_TYPE_TIMESTAMP_TZ, DUCKDB_TYPE_TIMESTAMP_S,
+    DUCKDB_TYPE_TIMESTAMP_MS, DUCKDB_TYPE_TIMESTAMP_NS:
+      Value := DuckFixedInt(TypeId, P);
+    DUCKDB_TYPE_HUGEINT, DUCKDB_TYPE_UHUGEINT:
+      begin
+        DuckFixedHuge(P, h);
+        Value := h.Lower;
+        if not DuckHugeIntIsInt64(h, TypeId = DUCKDB_TYPE_HUGEINT) then
+          result := dcOverflow;
+      end;
+    DUCKDB_TYPE_DECIMAL:
+      if Internal = DUCKDB_TYPE_HUGEINT then
+        result := dcFallback // integer part from the text
+      else
+        Value := DuckDecimalMantissa(Internal, P) div DUCKDB_POW10[Scale];
+    DUCKDB_TYPE_FLOAT, DUCKDB_TYPE_DOUBLE:
+      begin
+        DuckFixedToDouble(TypeId, Internal, Scale, P, d);
+        Value := trunc(d);
+      end;
+  else
+    result := dcFallback;
+  end;
+end;
+
+function DuckFixedToDouble(TypeId, Internal: TDuckDBType; Scale: integer;
+  P: PAnsiChar; out Value: double): boolean;
+var
+  s: single;
+begin
+  result := true;
+  case TypeId of
+    DUCKDB_TYPE_FLOAT:
+      begin
+        MoveFast(P^, s, SizeOf(s));
+        Value := s;
+      end;
+    DUCKDB_TYPE_DOUBLE:
+      Value := QuackDouble(P);
+    DUCKDB_TYPE_DECIMAL:
+      if Internal = DUCKDB_TYPE_HUGEINT then
+        result := false
+      else
+        Value := DuckDecimalMantissa(Internal, P) / DUCKDB_POW10[Scale];
+    DUCKDB_TYPE_BOOLEAN, DUCKDB_TYPE_TINYINT, DUCKDB_TYPE_SMALLINT,
+    DUCKDB_TYPE_INTEGER, DUCKDB_TYPE_BIGINT, DUCKDB_TYPE_UTINYINT,
+    DUCKDB_TYPE_USMALLINT, DUCKDB_TYPE_UINTEGER:
+      Value := DuckFixedInt(TypeId, P);
+  else
+    result := false;
+  end;
+end;
+
+function DuckFixedToCurrency(TypeId, Internal: TDuckDBType; Scale: integer;
+  P: PAnsiChar; out Value: currency): boolean;
+var
+  v: Int64;
+  d: double;
+begin
+  result := true;
+  case TypeId of
+    DUCKDB_TYPE_DECIMAL:
+      if (Internal <> DUCKDB_TYPE_HUGEINT) and
+         (Scale <= 4) then
+      begin
+        v := DuckDecimalMantissa(Internal, P) * DUCKDB_POW10[4 - Scale];
+        Value := PCurrency(@v)^;
+      end
+      else
+        result := false;
+    DUCKDB_TYPE_FLOAT, DUCKDB_TYPE_DOUBLE:
+      begin
+        DuckFixedToDouble(TypeId, Internal, Scale, P, d);
+        Value := d;
+      end;
+    DUCKDB_TYPE_BOOLEAN, DUCKDB_TYPE_TINYINT, DUCKDB_TYPE_SMALLINT,
+    DUCKDB_TYPE_INTEGER, DUCKDB_TYPE_BIGINT, DUCKDB_TYPE_UTINYINT,
+    DUCKDB_TYPE_USMALLINT, DUCKDB_TYPE_UINTEGER:
+      Value := DuckFixedInt(TypeId, P);
+  else
+    result := false;
+  end;
+end;
+
+function DuckFixedToDateTime(TypeId: TDuckDBType; P: PAnsiChar;
+  out Value: TDateTime): boolean;
+var
+  us: Int64;
+  offs: integer;
+begin
+  result := true;
+  case TypeId of
+    DUCKDB_TYPE_DATE:
+      Value := QuackInt32(P) + DUCKDB_UNIXDATE_DELTA;
+    DUCKDB_TYPE_TIME:
+      Value := QuackInt64(P) / DUCKDB_MICROSPERDAY;
+    DUCKDB_TYPE_TIME_NS:
+      Value := (QuackInt64(P) div 1000) / DUCKDB_MICROSPERDAY;
+    DUCKDB_TYPE_TIME_TZ:
+      begin
+        DuckTimeTzDecode(QuackInt64(P), us, offs);
+        Value := us / DUCKDB_MICROSPERDAY;
+      end;
+    DUCKDB_TYPE_TIMESTAMP, DUCKDB_TYPE_TIMESTAMP_TZ, DUCKDB_TYPE_TIMESTAMP_S,
+    DUCKDB_TYPE_TIMESTAMP_MS, DUCKDB_TYPE_TIMESTAMP_NS:
+      Value := DuckTimestampToDateTime(
+        DuckTimestampMicros(TypeId, QuackInt64(P)));
+  else
+    result := false;
+  end;
+end;
 
 initialization
 
