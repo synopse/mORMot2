@@ -719,7 +719,11 @@ type
     // - Ansi to Unicode conversion uses the CodePage set by Create() constructor
     function AddToUnicodeHex(const Text: PdfString): TPdfWrite;
     /// write some unicode text as as Big-Endian 4 hexadecimal characters
+    // - never encrypted: AddUnicodeHexString writes the text string of an object
     function AddUnicodeHex(PW: PWideChar; WideCharCount: integer): TPdfWrite;
+    /// write a text string of an object as <FEFF...>: the BOM and the
+    // UTF-16BE characters, encrypted together when the document is
+    function AddUnicodeHexString(PW: PWideChar; WideCharCount: integer): TPdfWrite;
     /// convert some text into unicode characters, then write it as PDF Text
     // - Ansi to Unicode conversion uses the CodePage set by Create() constructor
     // - use (...) for all WinAnsi characters, or <..hexa..> for Unicode characters
@@ -2590,6 +2594,9 @@ type
     // - WinAnsi characters are taken from fWinAnsiWidth[], unicode chars from
     // fUsedWide[].Width
     function GetWideCharWidth(aWideChar: WideChar): integer;
+    /// true when GetWideCharWidth returns 0 for a character the face lacks,
+    // not for a glyph whose advance is 0 (a combining mark)
+    function WideCharMissing(aWideChar: WideChar): boolean;
     /// is set to true if the PDF used any true type encoding
     property WideCharUsed: boolean
       read GetWideCharUsed;
@@ -4031,12 +4038,18 @@ end;
 { TPdfText }
 
 procedure TPdfText.InternalWriteTo(W: TPdfWrite);
+var
+  tmp: TSynTempBuffer;
 begin
   // if the value has multibyte character, convert the value to hex unicode.
   // otherwise, escape characters.
   if SysLocale.FarEast and
     HasMultiByteString(pointer(fValue)) then
-    W.Add('<FEFF').AddToUnicodeHex(fValue).Add('>')
+  begin
+    W.ToWideChar(fValue, tmp);
+    W.AddUnicodeHexString(tmp.buf, tmp.len);
+    tmp.Done;
+  end
   else
     W.Add('(').AddEscapeContent(fValue).Add(')');
 end;
@@ -4072,7 +4085,7 @@ begin
   else
   begin
     utf16 := Utf8DecodeToUnicodeRawByteString(fValue);
-    W.Add('<FEFF').AddUnicodeHex(pointer(utf16), Length(utf16) shr 1).Add('>');
+    W.AddUnicodeHexString(pointer(utf16), Length(utf16) shr 1);
   end;
 end;
 
@@ -4629,7 +4642,9 @@ end;
 
 destructor TPdfStream.Destroy;
 begin
-  fWriter.fDestStream.Free;
+  // nil when a constructor of TPdfImage raised before inherited Create
+  if fWriter <> nil then
+    fWriter.fDestStream.Free;
   fWriter.Free;
   fAttributes.Free;
   inherited;
@@ -4858,7 +4873,7 @@ begin
           inc(B, 2);
         end;
       #8:
-        PWord(B)^ := ord('\') + ord('B') shl 8;
+        PWord(B)^ := ord('\') + ord('b') shl 8;
       #9:
         PWord(B)^ := ord('\') + ord('t') shl 8;
       #10:
@@ -5141,20 +5156,9 @@ function TPdfWrite.AddUnicodeHex(PW: PWideChar; WideCharCount: integer): TPdfWri
 
 var
   L: PtrInt;
-  {$ifdef USE_PDFSECURITY}
-  sectmp: TSynTempBuffer;
-  {$endif USE_PDFSECURITY}
 begin
   if WideCharCount > 0 then
   begin
-    {$ifdef USE_PDFSECURITY}
-    if fDoc.fEncryption <> nil then
-    begin
-      sectmp.Init(WideCharCount * 2);
-      fDoc.fEncryption.EncodeBuffer(PW^, sectmp.buf^, WideCharCount * 2);
-      PW := sectmp.buf;
-    end;
-    {$endif USE_PDFSECURITY}
     repeat
       L := WideCharCount;
       if BEnd - B <= L * 4 then
@@ -5168,12 +5172,38 @@ begin
       inc(B, L * 4);
       dec(WideCharCount, L);
     until WideCharCount = 0;
-    {$ifdef USE_PDFSECURITY}
-    if fDoc.fEncryption <> nil then
-      sectmp.Done;
-    {$endif USE_PDFSECURITY}
   end;
   result := self;
+end;
+
+function TPdfWrite.AddUnicodeHexString(PW: PWideChar;
+  WideCharCount: integer): TPdfWrite;
+{$ifdef USE_PDFSECURITY}
+var
+  be: RawByteString;
+  p: PByteArray;
+  i: PtrInt;
+{$endif USE_PDFSECURITY}
+begin
+  {$ifdef USE_PDFSECURITY}
+  if fDoc.fEncryption <> nil then
+  begin
+    // ISO 32000-1 7.6.2: the whole string is encrypted, its BOM included
+    SetLength(be, WideCharCount * 2 + 2);
+    p := pointer(be);
+    p[0] := $fe;
+    p[1] := $ff;
+    for i := 0 to WideCharCount - 1 do
+    begin
+      p[i * 2 + 2] := PWordArray(PW)[i] shr 8;
+      p[i * 2 + 3] := PWordArray(PW)[i] and $ff;
+    end;
+    fDoc.fEncryption.EncodeBuffer(p^, p^, length(be)); // RC4 works in place
+    result := Add('<').AddHex(be).Add('>');
+    exit;
+  end;
+  {$endif USE_PDFSECURITY}
+  result := Add('<FEFF').AddUnicodeHex(PW, WideCharCount).Add('>');
 end;
 
 const
@@ -5284,7 +5314,8 @@ begin
   // 3. get Visual Order, i.e. how to render the content from left to right
   SetLength(level, count);
   for i := 0 to count - 1 do
-    level[i] := items[i].a.s.uBidiLevel;
+    // without the state bits above the five level bits
+    level[i] := items[i].a.s.uBidiLevel and $1f;
   SetLength(VisualToLogical, count);
   if ScriptLayout(count, pointer(level), pointer(VisualToLogical), nil) <> 0 then
     exit;
@@ -5311,10 +5342,12 @@ var
   changed: boolean;
   fnt: TPdfFontTrueType;
   Glyph: word;
+  ndx: integer;
 begin
   assert((Ttf <> nil) and not Ttf.Unicode);
   changed := fAddGlyphFont = fNone;
-  Glyph := Ttf.fUsedWide[Ttf.FindOrAddUsedWideChar(Char)].Glyph;
+  ndx := Ttf.FindOrAddUsedWideChar(Char); // may reallocate fUsedWide[]
+  Glyph := Ttf.fUsedWide[ndx].Glyph;
   with Canvas.fDoc do
     if (fPdfA <> pdfaNone) and
        (Glyph = 0) and
@@ -5331,7 +5364,8 @@ begin
       fnt := Canvas.SetFont('', Canvas.fPage.FontSize, Ttf.fStyle, -1,
         fFontFallBackIndex) as TPdfFontTrueType;
       assert(not fnt.Unicode);
-      Glyph := fnt.fUsedWide[fnt.FindOrAddUsedWideChar(Char)].Glyph;
+      ndx := fnt.FindOrAddUsedWideChar(Char);
+      Glyph := fnt.fUsedWide[ndx].Glyph;
     end
     else
     begin
@@ -6119,6 +6153,7 @@ end;
 function TPdfFontTrueType.GetAndMarkGlyphAsUsed(aGlyph: word): word;
 var
   i: PtrInt;
+  ndx: integer;
 begin
   result := aGlyph; // fallback to raw glyph index if nothing explicit
   // 1. check if not already registered as used
@@ -6131,8 +6166,10 @@ begin
     for i := 0 to fUsedWideChar.Count - 1 do
       if fUsedWide[i].Glyph = aGlyph then
       begin
-        result := WinAnsiFont.fUsedWide[FindOrAddUsedWideChar(
-          WideChar(fUsedWideChar.Values[i]))].Glyph;
+        // FindOrAddUsedWideChar may reallocate fUsedWide[]: call it before
+        // indexing, or FPC reads the array address first and it gets stale
+        ndx := FindOrAddUsedWideChar(WideChar(fUsedWideChar.Values[i]));
+        result := WinAnsiFont.fUsedWide[ndx].Glyph;
         exit; // result may be 0 if this glyph doesn't exist in the CMAP content
       end;
 end;
@@ -6259,6 +6296,8 @@ begin
 end;
 
 function TPdfFontTrueType.GetWideCharWidth(aWideChar: WideChar): integer;
+var
+  i: integer;
 begin
   if fUnicode then
   begin // we need fUsedWide[] to be the used glyphs
@@ -6273,7 +6312,25 @@ begin
     else
       result := fDefaultWidth
   else
-    result := fUsedWide[FindOrAddUsedWideChar(aWideChar)].Width;
+  begin
+    i := FindOrAddUsedWideChar(aWideChar); // may reallocate fUsedWide[]
+    result := fUsedWide[i].Width;
+  end;
+end;
+
+function TPdfFontTrueType.WideCharMissing(aWideChar: WideChar): boolean;
+var
+  i: integer;
+begin
+  if fUnicode then
+    result := WinAnsiFont.WideCharMissing(aWideChar)
+  else if WideCharToWinAnsi(ord(aWideChar)) >= 0 then
+    result := true // a WinAnsi character measured 0, as before
+  else
+  begin
+    i := FindOrAddUsedWideChar(aWideChar); // may reallocate fUsedWide[]
+    result := fUsedWide[i].Glyph = 0;
+  end;
 end;
 
 type
@@ -6365,7 +6422,7 @@ begin
   end;
   // finalize the generated content
   for i := 0 to ((SizeOf(dir^) + (n * SizeOf(e^))) shr 2) - 1 do
-    inc(checksum, PCardinalArray(ttf)[i]);
+    inc(checksum, bswap32(PCardinalArray(ttf)[i])); // big-endian words
   if head <> nil then
     head^.checkSumAdjustment := bswap32($B1B0AFBA - checksum);
   {%H-}PStrLen(PtrUInt(ttf) - _STRLEN)^ := PtrUInt(d) - PtrUInt(ttf); // resize
@@ -6374,7 +6431,7 @@ end;
 procedure TPdfFontTrueType.PrepareForSaving;
 var
   c: AnsiChar;
-  i, n, L, ndx, count: integer;
+  i, n, L, ndx, count, done: integer;
   fonts: TPdfArray;
   font, info: TPdfDictionary;
   tounicode: TPdfStream;
@@ -6592,13 +6649,29 @@ begin
         for c := AnsiChar(fFirstChar) to AnsiChar(fLastChar) do
           if c in fWinAnsiUsed then
             inc(count);
-        tounicode.Writer.Add(count).Add(' beginbfchar'#10);
+        // at most 100 entries per block (Adobe CMap specification 5014, 7.4)
+        done := 0;
         for c := AnsiChar(fFirstChar) to AnsiChar(fLastChar) do
           if c in fWinAnsiUsed then
+          begin
+            if done mod 99 = 0 then
+            begin
+              if done > 0 then
+                tounicode.Writer.Add('endbfchar'#10);
+              if count - done > 99 then
+                tounicode.Writer.Add(99)
+              else
+                tounicode.Writer.Add(count - done);
+              tounicode.Writer.Add(' beginbfchar'#10);
+            end;
             tounicode.Writer.Add('<').Add(HexChars[ord(c) shr 4]).
               Add(HexChars[ord(c) and $F]).Add('> <').
               AddHex4(WinAnsiConvert.AnsiToWide[ord(c)]).Add('>'#10);
-        tounicode.Writer.Add('endbfchar'#10'endcmap'#10 +
+            inc(done);
+          end;
+        if done > 0 then
+          tounicode.Writer.Add('endbfchar'#10);
+        tounicode.Writer.Add('endcmap'#10 +
           'CMapName currentdict /CMap defineresource pop'#10'end'#10'end');
         Data.AddItem('ToUnicode', tounicode);
       end;
@@ -6752,13 +6825,16 @@ begin
     raise EPdfInvalidValue.Create('CreateEntry');
   fParent := AParent;
   fDoc := AParent.Doc;
+  // before registering: a failed constructor frees itself, and an entry in
+  // fObjectList would be freed a second time by the document
+  if (TopPosition >= 0) and
+     (fDoc.Canvas.fPage = nil) then
+    fDoc.RaiseInvalidOperation;
   Data := TPdfDictionary.Create(fDoc.fXRef);
   fDoc.fXRef.AddObject(Data);
   fDoc.fObjectList.Add(Self);
   if TopPosition >= 0 then
   begin
-    if fDoc.Canvas.fPage = nil then
-      fDoc.RaiseInvalidOperation;
     fDest := fDoc.CreateDestination;
     fDest.DestinationType := dtXYZ;
     fDest.Zoom := 0; // will leave Zoom factor unchanged
@@ -6778,6 +6854,7 @@ function TPdfOutlineEntry.AddChild(TopPosition: integer): TPdfOutlineEntry;
 var
   TmpEntry: TPdfOutlineEntry;
 begin
+  result := TPdfOutlineEntry.Create(Self, TopPosition); // may raise
   // increment total Count variable
   inc(fCount);
   TmpEntry := Parent;
@@ -6786,7 +6863,6 @@ begin
     TmpEntry.fCount := TmpEntry.fCount + 1;
     TmpEntry := TmpEntry.Parent;
   end;
-  result := TPdfOutlineEntry.Create(Self, TopPosition);
   if fFirst = nil then
     fFirst := result;
   if fLast <> nil then
@@ -7205,6 +7281,19 @@ begin
   fBookMarks.Clear;
   fMissingBookmarks.Clear;
   FreeDoc;
+  // freed with the objects above: a later test of them must see nil
+  fMetaData := nil;
+  fOutputIntents := nil;
+  fOutlineRoot := nil;
+  {$ifdef USE_PDFSECURITY}
+  fEncryptionObject := nil; // was the /Encrypt value of the freed trailer
+  {$endif USE_PDFSECURITY}
+  if fCanvas <> nil then
+  begin
+    fCanvas.fPage := nil;
+    fCanvas.fContents := nil;
+    fCanvas.fPageFontList := nil;
+  end;
   fXRef := TPdfXref.Create;
   fTrailer := TPdfTrailer.Create(fXRef);
   fFontList := TSynList.Create;
@@ -7351,12 +7440,32 @@ begin
 end;
 
 function TPdfDocument.AddTrueTypeFont(const TtfName: RawUtf8): boolean;
+var
+  fallback: RawUtf8;
+  i, ins: PtrInt;
+  f: TPdfFont;
 begin
   result := GetTrueTypeFontIndex(TtfName) < 0;
   if not result then
     exit;
+  if fFontFallBackIndex >= 0 then
+    fallback := fTrueTypeFonts[fFontFallBackIndex];
   AddRawUtf8(fTrueTypeFonts, TtfName);
   QuickSortRawUtf8(fTrueTypeFonts, length(fTrueTypeFonts), nil, @StrIComp);
+  // the sort moves the indexes: the cached one, the fallback's, and those
+  // of the fonts already created (1-based, 0 for no TrueType font)
+  fTrueTypeFontLastName := '';
+  if fallback <> '' then
+    fFontFallBackIndex := GetTrueTypeFontIndex(fallback);
+  if fCanvas <> nil then
+    fCanvas.fPreviousRasterFontName := ''; // its index moved too
+  ins := GetTrueTypeFontIndex(TtfName);
+  for i := 0 to fFontList.Count - 1 do
+  begin
+    f := fFontList.List[i];
+    if f.fTrueTypeFontsIndex > ins then
+      inc(f.fTrueTypeFontsIndex);
+  end;
 end;
 
 procedure TPdfDocument.FreeDoc;
@@ -7740,12 +7849,11 @@ var
   PW: pointer;
 begin
   aFontName := fTrueTypeFonts[aFontIndex];
+  // also when the face has no English (3,1) PostScript name
+  result := TrueTypeFontName(aFontName, AStyle);
   if IsAnsiCompatible(aFontName) or
      (AFont = nil) then
-  begin
-    result := TrueTypeFontName(aFontName, AStyle);
     exit; // no need to search for the PostScript name field in Ttf content
-  end;
   name := GetTtfData(GetDCWithFont(AFont), 'name', fName);
   if (name = nil) or
      (name^.format <> 0) then
@@ -9187,6 +9295,7 @@ function TPdfCanvas.UnicodeTextWidth(PW: PWideChar): single;
 var
   s: PdfString;
   i, w, w2: integer;
+  fallback: TPdfFontTrueType;
 begin
   w := 0;
   if PW <> nil then
@@ -9208,13 +9317,22 @@ begin
         while PW^ <> #0 do
         begin
           w2 := GetWideCharWidth(PW^);
+          // 0 is also the advance of a combining mark: only a glyph the font
+          // lacks is measured in the fallback font, or as DEFAULT_PDF_WIDTH
           if (w2 = 0) and
-             (fDoc.fUseFontFallBack) and
-             (fDoc.fFontFallBackIndex >= 0) then
-            w2 := (SetFont('', fPage.FontSize, fStyle, -1,
-              fDoc.fFontFallBackIndex) as TPdfFontTrueType).GetWideCharWidth(PW^);
-          if w2 = 0 then
-            w2 := DEFAULT_PDF_WIDTH;
+             WideCharMissing(PW^) then
+            if (fDoc.fUseFontFallBack) and
+               (fDoc.fFontFallBackIndex >= 0) then
+            begin
+              fallback := SetFont('', fPage.FontSize, fStyle, -1,
+                fDoc.fFontFallBackIndex) as TPdfFontTrueType;
+              w2 := fallback.GetWideCharWidth(PW^);
+              if (w2 = 0) and
+                 fallback.WideCharMissing(PW^) then
+                w2 := DEFAULT_PDF_WIDTH;
+            end
+            else
+              w2 := DEFAULT_PDF_WIDTH;
           inc(w, w2);
           inc(PW);
         end;
@@ -9482,7 +9600,7 @@ end;
 
 function TPdfDictionaryWrapper.GetHasData: boolean;
 begin
-  result := (fData = nil);
+  result := fData <> nil;
 end;
 
 
@@ -9615,7 +9733,7 @@ var
   s: PdfString;
 begin
   result := pmUseNone;
-  d := fData.PdfDictionaryByName('NonFullScreenPageMode');
+  d := fData.PdfDictionaryByName('ViewerPreferences'); // where the setter writes
   if d = nil then
     exit;
   m := d.PdfNameByName('NonFullScreenPageMode');
@@ -9761,6 +9879,34 @@ var
   entry: array of TPaletteEntry;
   ca: TPdfArray;
   transcolor: TPdfColorRGB;
+  jpeg: TMemoryStream;
+  jw, jh, jbits: integer;
+
+  function SavedJpeg: TMemoryStream;
+  begin
+    result := TMemoryStream.Create;
+    try
+      with TJpegImage(aImage) do
+      begin
+        if aDoc.ForceJPEGCompression <> 0 then
+          CompressionQuality := aDoc.ForceJPEGCompression;
+        {$ifdef USE_SYNGDIPLUS}
+        if aDoc.ForceJPEGCompression = 0 then // recompression only if necessary
+          SaveInternalToStream(result)
+        else
+        {$endif USE_SYNGDIPLUS}
+          SaveToStream(result); // with CompressionQuality recompress
+      end;
+      // the colour space of the components the data says, RGB if unrecognized
+      if not GetJpegSize(result.Memory, result.Size, jw, jh, jbits) then
+        jbits := 24;
+      if jbits = 32 then
+        EPdfInvalidValue.RaiseUtf8('TPdfImage.Create: CMYK JPEG not supported', []);
+    except
+      result.Free;
+      raise;
+    end;
+  end;
 
   procedure NeedBitmap(PF: TPixelFormat);
   begin
@@ -9794,28 +9940,32 @@ var
   end;
 
 begin
-  inherited Create(aDoc, DontAddToFXref);
-  fPixelWidth := aImage.Width;
-  fPixelHeight := aImage.Height;
-  fAttributes.AddItem('Type', 'XObject');
-  fAttributes.AddItem('Subtype', 'Image');
+  jbits := 24;
+  jpeg := nil;
   if aImage.InheritsFrom(TJpegImage) then
-  begin
-    fAttributes.AddItem('ColorSpace', 'DeviceRGB');
+    jpeg := SavedJpeg; // before inherited Create: a raise leaves no xref entry
+  try
+    inherited Create(aDoc, DontAddToFXref);
+    fPixelWidth := aImage.Width;
+    fPixelHeight := aImage.Height;
+    fAttributes.AddItem('Type', 'XObject');
+    fAttributes.AddItem('Subtype', 'Image');
+  except
+    jpeg.Free;
+    raise;
+  end;
+  if jpeg <> nil then
+  try
+    if jbits = 8 then
+      fAttributes.AddItem('ColorSpace', 'DeviceGray')
+    else
+      fAttributes.AddItem('ColorSpace', 'DeviceRGB');
     fFilter := 'DCTDecode';
     fWriter.Save; // flush to allow direct access to fDestStream
-    with TJpegImage(aImage) do
-    begin
-      if aDoc.ForceJPEGCompression <> 0 then
-        CompressionQuality := aDoc.ForceJPEGCompression;
-      {$ifdef USE_SYNGDIPLUS}
-      if aDoc.ForceJPEGCompression = 0 then // recompression only if necessary
-        SaveInternalToStream(fWriter.fDestStream)
-      else
-      {$endif USE_SYNGDIPLUS}
-        SaveToStream(fWriter.fDestStream); // with CompressionQuality recompress
-    end;
+    fWriter.fDestStream.WriteBuffer(jpeg.Memory^, jpeg.Size);
     fWriter.fDestStreamPosition := fWriter.fDestStream.Position;
+  finally
+    jpeg.Free;
   end
   else
   begin
@@ -9895,12 +10045,20 @@ end;
 constructor TPdfImage.CreateJpegDirect(aDoc: TPdfDocument;
   aJpegFile: TMemoryStream; DontAddToFXref: boolean);
 var
-  len, bits: integer;
+  len, w, h, bits: integer;
 begin
-  inherited Create(aDoc, DontAddToFXref);
+  // before inherited Create: a raise there leaves nothing in the xref
   len := aJpegFile.Size;
-  if not GetJpegSize(aJpegFile.Memory, len, fPixelWidth, fPixelHeight, bits) then
-    exit; // JPEG format expected
+  if not GetJpegSize(aJpegFile.Memory, len, w, h, bits) then
+    EPdfInvalidValue.RaiseUtf8('TPdfImage.CreateJpegDirect: no JPEG (% bytes)',
+      [len]);
+  if (bits <> 8) and
+     (bits <> 24) then
+    EPdfInvalidValue.RaiseUtf8(
+      'TPdfImage.CreateJpegDirect: % components not supported', [bits shr 3]);
+  inherited Create(aDoc, DontAddToFXref);
+  fPixelWidth := w;
+  fPixelHeight := h;
   fAttributes.AddItem('Type', 'XObject');
   fAttributes.AddItem('Subtype', 'Image');
   fFilter := 'DCTDecode';
@@ -9909,12 +10067,10 @@ begin
   fWriter.fDestStreamPosition := fWriter.fDestStream.Position;
   fAttributes.AddItem('Width', fPixelWidth);
   fAttributes.AddItem('Height', fPixelHeight);
-  case bits of
-    8:
-      fAttributes.AddItem('ColorSpace', 'DeviceGray');
-    24:
-      fAttributes.AddItem('ColorSpace', 'DeviceRGB');
-  end;
+  if bits = 8 then
+    fAttributes.AddItem('ColorSpace', 'DeviceGray')
+  else
+    fAttributes.AddItem('ColorSpace', 'DeviceRGB');
   fAttributes.AddItem('BitsPerComponent', 8);
 end;
 
