@@ -33,6 +33,7 @@ type
     procedure PDFMetadata;
     procedure UnicodeWidth;
     procedure EscapeBackspace;
+    procedure EncryptedUnicodeString;
   end;
 
 implementation
@@ -595,6 +596,46 @@ begin
   // ISO 32000-1 7.3.4.2 defines \b - a reader takes \B as a plain B
   Check(PosEx('/Subject(a\bb)', s) > 0, 'backspace escaped as \b');
 end;
+
+procedure TTestUiPdf.EncryptedUnicodeString;
+{$ifndef NO_USE_PDFSECURITY}
+const
+  KNOWN = 'ABCDEFGHIJKLMNOPQRSTUVWX';
+var
+  pdf: TPdfDocument;
+  w: array[0..1] of WideChar;
+  s, sub, tit: RawByteString;
+  i: integer;
+begin
+  w[0] := WideChar($0416); // two Cyrillic letters: a <FEFF..> text string
+  w[1] := WideChar($0417);
+  pdf := TPdfDocument.Create(false, 0, pdfaNone,
+    TPdfEncryption.New(elRC4_40, '', 'owner', PDF_PERMISSION_ALL));
+  try
+    pdf.GeneratePDF15File := false;
+    pdf.CompressionMethod := cmNone;
+    pdf.Info.Subject := KNOWN;
+    pdf.Info.Data.AddItem('Title', TPdfTextUtf8.Create(RawUnicodeToUtf8(@w, 2)));
+    pdf.AddPage;
+    s := SavedPdf(pdf);
+  finally
+    pdf.Free;
+  end;
+  // RC4 restarts for each string of an object: the known Subject gives the
+  // key stream, which decrypts the Title of the same Info dictionary
+  sub := PdfStringAfter(s, '/Subject');
+  tit := PdfStringAfter(s, '/Title');
+  if not CheckEqual(length(sub), length(KNOWN), 'subject') or
+     not CheckEqual(length(tit), 6, 'title: BOM and two characters') then
+    exit;
+  for i := 1 to length(tit) do
+    tit[i] := AnsiChar(ord(tit[i]) xor ord(sub[i]) xor ord(KNOWN[i]));
+  Check(tit = #$fe#$ff#$04#$16#$04#$17, 'BOM and UTF-16BE encrypted together');
+end;
+{$else}
+begin
+end;
+{$endif NO_USE_PDFSECURITY}
 
 {$else}
 
