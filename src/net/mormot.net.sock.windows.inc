@@ -2926,8 +2926,12 @@ begin
   if Context.IgnoreCertificateErrors then
     f := f or SCH_CRED_MANUAL_CRED_VALIDATION
   else
+  begin
     f := f or SCH_CRED_REVOCATION_CHECK_CHAIN or
               SCH_CRED_IGNORE_REVOCATION_OFFLINE;
+    if Context.IgnoreNoRevocationCheck then
+      f := f or SCH_CRED_IGNORE_NO_REVOCATION_CHECK;
+  end;
   CredInit(cred, Context, f, nil, nil);
   CheckOK('AfterConnection AcquireCredentialsHandleW',
     AcquireCredentialsHandleW(nil, UNISP_NAME, SECPKG_CRED_OUTBOUND,
