@@ -7473,6 +7473,7 @@ procedure TPdfDocument.FreeDoc;
 var
   i: PtrInt;
 begin
+  FreeAndNil(fSaveToStreamWriter); // a SaveToStreamDirectBegin never ended
   if fXObjectList <> nil then
   begin
     FreeAndNil(fXObjectList);
@@ -10237,6 +10238,7 @@ begin
       md5.Full(@dig, SizeOf(dig), dig);
   SetLength(fInternalKey, HASHSIZE[fLevel]);
   MoveFast(dig, fInternalKey[0], HASHSIZE[fLevel]);
+  fLastObjectNumber := -1; // the cached object key is of the previous one
   // calc fUserPass content
   case fLevel of
     elRC4_40:

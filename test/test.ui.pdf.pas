@@ -39,6 +39,8 @@ type
     procedure AddFontKeepsIndexes;
     procedure NewDocDropsPage;
     procedure RasterFontCache;
+    procedure NewDocRenewsKey;
+    procedure NewDocEndsDirectSave;
     procedure CatalogGetters;
     procedure JpegColorSpace;
     procedure ZeroAdvanceMeasured;
@@ -833,6 +835,60 @@ begin
   finally
     pdf.Free;
   end;
+end;
+
+procedure TTestUiPdf.NewDocRenewsKey;
+{$ifndef NO_USE_PDFSECURITY}
+var
+  pdf: TPdfDocument;
+  first, second: RawByteString;
+begin
+  pdf := TPdfDocument.Create(false, 0, pdfaNone,
+    TPdfEncryption.New(elRC4_128, '', 'owner', PDF_PERMISSION_ALL));
+  try
+    pdf.CompressionMethod := cmNone;
+    pdf.Info.Subject := 'AAAAAAAA';
+    pdf.AddPage;
+    first := PdfStringAfter(SavedPdf(pdf), '/Subject');
+    pdf.NewDoc; // a new file ID, so a new key
+    pdf.Info.Subject := 'AAAAAAAA';
+    pdf.AddPage;
+    second := PdfStringAfter(SavedPdf(pdf), '/Subject');
+  finally
+    pdf.Free;
+  end;
+  // with empty pages, the Info dictionary is the last object encrypted by one
+  // save and the first by the next: the RC4 key cached for it was the old one
+  CheckEqual(length(second), 8, 'subject');
+  Check(second <> first, 'encrypted with the key of the new document');
+end;
+{$else}
+begin
+end;
+{$endif NO_USE_PDFSECURITY}
+
+procedure TTestUiPdf.NewDocEndsDirectSave;
+var
+  pdf: TPdfDocument;
+  left: TMemoryStream;
+  s: RawByteString;
+begin
+  left := TMemoryStream.Create;
+  try
+    pdf := TPdfDocument.Create;
+    try
+      pdf.AddPage;
+      pdf.SaveToStreamDirectBegin(left); // never ended
+      pdf.NewDoc;
+      pdf.AddPage;
+      s := SavedPdf(pdf); // raised "SaveToStreamDirectBegin called twice"
+    finally
+      pdf.Free;
+    end;
+  finally
+    left.Free;
+  end;
+  Check(PosEx('%%EOF', s) > 0, 'saved after NewDoc');
 end;
 
 procedure TTestUiPdf.CatalogGetters;
