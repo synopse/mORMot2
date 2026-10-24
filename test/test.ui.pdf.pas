@@ -41,6 +41,7 @@ type
     procedure CatalogGetters;
     procedure JpegColorSpace;
     procedure ZeroAdvanceMeasured;
+    procedure ReducedFontChecksum;
   end;
 
 implementation
@@ -930,6 +931,61 @@ begin
     pdf.Free;
   end;
 end;
+
+procedure TTestUiPdf.ReducedFontChecksum;
+{$ifndef NO_USE_UNISCRIBE}
+var
+  pdf: TPdfDocument;
+  s: RawByteString;
+  p, len, i: integer;
+  sum: cardinal;
+begin
+  pdf := TPdfDocument.Create;
+  try
+    pdf.GeneratePDF15File := false;
+    pdf.CompressionMethod := cmNone;
+    pdf.EmbeddedTtf := true;
+    pdf.AddPage;
+    pdf.Canvas.SetFont('Arial', 10, []);
+    pdf.Canvas.TextOut(20, 700, 'Hello');
+    s := SavedPdf(pdf);
+  finally
+    pdf.Free;
+  end;
+  // the subset of a hinted face keeps 10 tables, so ReduceTTF rebuilds it
+  p := PosEx('/Length1 ', s);
+  if not Check(p > 0, 'FontFile2') then
+    exit;
+  len := GetInteger(@s[p + 9]);
+  p := PosEx('stream', s, p);
+  if not Check(p > 0, 'stream') then
+    exit;
+  inc(p, 6);
+  if s[p] = #13 then
+    inc(p);
+  inc(p); // #10
+  if not Check(p + len - 1 <= length(s), 'font data') then
+    exit;
+  // the whole font sums to $B1B0AFBA, its tables read as big-endian words
+  sum := 0;
+  i := 0;
+  while i < len do
+  begin
+    sum := sum + cardinal(ord(s[p + i])) shl 24;
+    if i + 1 < len then
+      sum := sum + cardinal(ord(s[p + i + 1])) shl 16;
+    if i + 2 < len then
+      sum := sum + cardinal(ord(s[p + i + 2])) shl 8;
+    if i + 3 < len then
+      sum := sum + cardinal(ord(s[p + i + 3]));
+    inc(i, 4);
+  end;
+  CheckEqual(sum, $B1B0AFBA, 'head.checkSumAdjustment');
+end;
+{$else}
+begin
+end;
+{$endif NO_USE_UNISCRIBE}
 
 {$else}
 

@@ -6421,7 +6421,7 @@ begin
   end;
   // finalize the generated content
   for i := 0 to ((SizeOf(dir^) + (n * SizeOf(e^))) shr 2) - 1 do
-    inc(checksum, PCardinalArray(ttf)[i]);
+    inc(checksum, bswap32(PCardinalArray(ttf)[i])); // big-endian words
   if head <> nil then
     head^.checkSumAdjustment := bswap32($B1B0AFBA - checksum);
   {%H-}PStrLen(PtrUInt(ttf) - _STRLEN)^ := PtrUInt(d) - PtrUInt(ttf); // resize
