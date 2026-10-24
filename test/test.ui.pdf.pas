@@ -40,6 +40,7 @@ type
     procedure NewDocDropsPage;
     procedure CatalogGetters;
     procedure JpegColorSpace;
+    procedure ZeroAdvanceMeasured;
   end;
 
 implementation
@@ -904,6 +905,28 @@ begin
     Check(raised, 'not a JPEG');
   finally
     ms.Free;
+    pdf.Free;
+  end;
+end;
+
+procedure TTestUiPdf.ZeroAdvanceMeasured;
+var
+  pdf: TPdfDocument;
+  w: array[0..2] of WideChar;
+  w1, w2: single;
+begin
+  pdf := TPdfDocument.Create;
+  try
+    pdf.AddPage;
+    pdf.Canvas.SetFont('Arial', 10, []);
+    w[0] := 'a';
+    w[1] := #0;
+    w1 := pdf.Canvas.UnicodeTextWidth(@w);
+    w[1] := WideChar($0301); // combining acute accent: advances by 0
+    w[2] := #0;
+    w2 := pdf.Canvas.UnicodeTextWidth(@w);
+    CheckSame(w1, w2, 1E-6, 'a combining mark adds no width');
+  finally
     pdf.Free;
   end;
 end;

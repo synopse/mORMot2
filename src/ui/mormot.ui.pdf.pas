@@ -2594,6 +2594,9 @@ type
     // - WinAnsi characters are taken from fWinAnsiWidth[], unicode chars from
     // fUsedWide[].Width
     function GetWideCharWidth(aWideChar: WideChar): integer;
+    /// true when GetWideCharWidth returns 0 for a character the face lacks,
+    // not for a glyph whose advance is 0 (a combining mark)
+    function WideCharMissing(aWideChar: WideChar): boolean;
     /// is set to true if the PDF used any true type encoding
     property WideCharUsed: boolean
       read GetWideCharUsed;
@@ -6314,6 +6317,21 @@ begin
   end;
 end;
 
+function TPdfFontTrueType.WideCharMissing(aWideChar: WideChar): boolean;
+var
+  i: integer;
+begin
+  if fUnicode then
+    result := WinAnsiFont.WideCharMissing(aWideChar)
+  else if WideCharToWinAnsi(ord(aWideChar)) >= 0 then
+    result := true // a WinAnsi character measured 0, as before
+  else
+  begin
+    i := FindOrAddUsedWideChar(aWideChar); // may reallocate fUsedWide[]
+    result := fUsedWide[i].Glyph = 0;
+  end;
+end;
+
 type
   TTtfTableDirectory = packed record
     sfntVersion: cardinal; // 0x00010000 for version 1.0
@@ -9276,6 +9294,7 @@ function TPdfCanvas.UnicodeTextWidth(PW: PWideChar): single;
 var
   s: PdfString;
   i, w, w2: integer;
+  fallback: TPdfFontTrueType;
 begin
   w := 0;
   if PW <> nil then
@@ -9297,13 +9316,22 @@ begin
         while PW^ <> #0 do
         begin
           w2 := GetWideCharWidth(PW^);
+          // 0 is also the advance of a combining mark: only a glyph the font
+          // lacks is measured in the fallback font, or as DEFAULT_PDF_WIDTH
           if (w2 = 0) and
-             (fDoc.fUseFontFallBack) and
-             (fDoc.fFontFallBackIndex >= 0) then
-            w2 := (SetFont('', fPage.FontSize, fStyle, -1,
-              fDoc.fFontFallBackIndex) as TPdfFontTrueType).GetWideCharWidth(PW^);
-          if w2 = 0 then
-            w2 := DEFAULT_PDF_WIDTH;
+             WideCharMissing(PW^) then
+            if (fDoc.fUseFontFallBack) and
+               (fDoc.fFontFallBackIndex >= 0) then
+            begin
+              fallback := SetFont('', fPage.FontSize, fStyle, -1,
+                fDoc.fFontFallBackIndex) as TPdfFontTrueType;
+              w2 := fallback.GetWideCharWidth(PW^);
+              if (w2 = 0) and
+                 fallback.WideCharMissing(PW^) then
+                w2 := DEFAULT_PDF_WIDTH;
+            end
+            else
+              w2 := DEFAULT_PDF_WIDTH;
           inc(w, w2);
           inc(PW);
         end;
