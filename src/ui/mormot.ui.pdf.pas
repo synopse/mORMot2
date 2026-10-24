@@ -9569,7 +9569,7 @@ end;
 
 function TPdfDictionaryWrapper.GetHasData: boolean;
 begin
-  result := (fData = nil);
+  result := fData <> nil;
 end;
 
 
@@ -9702,7 +9702,7 @@ var
   s: PdfString;
 begin
   result := pmUseNone;
-  d := fData.PdfDictionaryByName('NonFullScreenPageMode');
+  d := fData.PdfDictionaryByName('ViewerPreferences'); // where the setter writes
   if d = nil then
     exit;
   m := d.PdfNameByName('NonFullScreenPageMode');

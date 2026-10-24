@@ -38,6 +38,7 @@ type
     procedure OutlineBeforePage;
     procedure AddFontKeepsIndexes;
     procedure NewDocDropsPage;
+    procedure CatalogGetters;
   end;
 
 implementation
@@ -794,6 +795,21 @@ begin
     pdf.Free;
   end;
   {$endif NO_USE_PDFSECURITY}
+end;
+
+procedure TTestUiPdf.CatalogGetters;
+var
+  pdf: TPdfDocument;
+begin
+  pdf := TPdfDocument.Create;
+  try
+    Check(pdf.Info.HasData, 'HasData');
+    pdf.Root.NonFullScreenPageMode := pmUseOutlines;
+    Check(pdf.Root.NonFullScreenPageMode = pmUseOutlines,
+      'NonFullScreenPageMode reads ViewerPreferences');
+  finally
+    pdf.Free;
+  end;
 end;
 
 {$else}
