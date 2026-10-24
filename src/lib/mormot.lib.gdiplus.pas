@@ -1134,6 +1134,7 @@ const
   EMR_SAVEDC = 33;
   EMR_RESTOREDC = 34;
   EMR_SETWORLDTRANSFORM = 35;
+  EMR_MODIFYWORLDTRANSFORM = 36;
   EMR_SELECTOBJECT = 37;
   EMR_CREATEPEN = 38;
   EMR_CREATEBRUSHINDIRECT = 39;
@@ -1152,6 +1153,7 @@ const
   EMR_POLYBEZIER16 = 85;
   EMR_POLYGON16 = 86;
   EMR_POLYLINE16 = 87;
+  EMR_EXTCREATEPEN = 95;
 
 type
   TEMRExtTextOut = TEMREXTTEXTOUTW;
@@ -1185,6 +1187,7 @@ type
     fontColor, fontAlign: integer;
     fontSpec: TFontSpec;
     BkMode, BkColor: cardinal;
+    WorldTransform: TXForm;
   end;
 
   /// internal data used by EnumEmfCallback() callback function
@@ -1231,7 +1234,7 @@ type
     Temp: TSynTempBuffer;
     procedure SaveDC;
     procedure RestoreDC;
-    procedure ScaleMatrix(matrixOrg: THandle);
+    procedure ScaleMatrix;
     procedure CreatePenObj(index: integer; Color, Width, Style: cardinal);
     procedure DeleteObj(index: integer);
     procedure EnumerateEnd;
@@ -1309,8 +1312,16 @@ var
 begin
   PI := temp.Init(n * 8);
   for i := 0 to n * 2 - 1 do
-    PI^[i] := PW^[i];
+    PI^[i] := smallint(PW^[i]);
 end;
+
+{$ifdef FPC}
+// FPC declares CombineTransform(LPXFORM; var XFORM; var XFORM): match Delphi
+function CombineTransform(var dest: TXForm; const a, b: TXForm): BOOL;
+begin
+  result := Windows.CombineTransform(@dest, PXForm(@a)^, PXForm(@b)^);
+end;
+{$endif FPC}
 
 // EMF enumeration callback function, called from GDI
 // - draw most content with GDI+ functions via the TGdiplusEnum state machine
@@ -1318,7 +1329,7 @@ function EnumEmfCallback(DC: HDC; var Table: THandleTable; Rec: PEnhMetaRecord;
   NumObjects: DWord; var E: TGdiplusEnum): LongBool; stdcall;
 var
   x: TXForm;
-  mtx, path: THandle;
+  path: THandle;
 begin
   result := true;
   with E.DC[E.nDC] do
@@ -1349,10 +1360,27 @@ begin
         BkColor := PEMRSetBkColor(Rec)^.crColor;
       EMR_SETWORLDTRANSFORM:
         begin
-          with PEMRSetWorldTransform(Rec)^.xform do
-            E.gdip.CreateMatrix2(eM11, eM12, eM21, eM22, eDx, eDy, mtx);
-          E.ScaleMatrix(mtx);
-          E.gdip.DeleteMatrix(mtx);
+          WorldTransform := PEMRSetWorldTransform(Rec)^.xform;
+          E.ScaleMatrix;
+        end;
+      EMR_MODIFYWORLDTRANSFORM:
+        begin
+          with PEMRModifyWorldTransform(Rec)^ do
+            case iMode of
+              MWT_IDENTITY:
+                begin
+                  FillCharFast(WorldTransform, SizeOf(WorldTransform), 0);
+                  WorldTransform.eM11 := 1;
+                  WorldTransform.eM22 := 1;
+                end;
+              MWT_LEFTMULTIPLY:
+                CombineTransform(WorldTransform, xform, WorldTransform);
+              MWT_RIGHTMULTIPLY:
+                CombineTransform(WorldTransform, WorldTransform, xform);
+            else
+              WorldTransform := xform; // MWT_SET
+            end;
+          E.ScaleMatrix;
         end;
       EMR_EXTCREATEFONTINDIRECTW:
         with PEMRExtCreateFontIndirect(Rec)^ do
@@ -1375,6 +1403,18 @@ begin
           E.DeleteObj(ihPen - 1);
           E.CreatePenObj(
             ihPen - 1, lopn.lopnColor, lopn.lopnWidth.x, lopn.lopnStyle);
+        end;
+      EMR_EXTCREATEPEN:
+        // approximated: only the color, width and dash style are handled
+        with PEMRExtCreatePen(Rec)^ do
+        begin
+          E.DeleteObj(ihPen - 1);
+          if elp.elpPenStyle and PS_TYPE_MASK = PS_COSMETIC then
+            E.CreatePenObj(ihPen - 1, elp.elpColor, 0,
+              elp.elpPenStyle and PS_STYLE_MASK)
+          else
+            E.CreatePenObj(ihPen - 1, elp.elpColor, elp.elpWidth,
+              elp.elpPenStyle and PS_STYLE_MASK);
         end;
       EMR_CREATEBRUSHINDIRECT:
         with PEMRCreateBrushIndirect(Rec)^ do
@@ -1602,7 +1642,7 @@ begin
     EMR_SETWINDOWORGEX,
     EMR_SETVIEWPORTEXTEX,
     EMR_SETVIEWPORTORGEX:
-      E.ScaleMatrix(0);
+      E.ScaleMatrix;
   end;
 end;
 
@@ -1943,7 +1983,7 @@ begin
     gdip.DeleteRegion(ClipRegion);
   end;
   dec(nDC);
-  ScaleMatrix(0);
+  ScaleMatrix;
 //  with DC[nDC] do
 //    Gdip.SetWorldTransform(Graphics,destMatrix);
 end;
@@ -1960,10 +2000,10 @@ begin
   end;
 end;
 
-procedure TGdiplusEnum.ScaleMatrix(matrixOrg: THandle);
+procedure TGdiplusEnum.ScaleMatrix;
 var
   P: TPoint;
-  mtx: THandle;
+  mtx, world: THandle;
 begin
   with DC[nDC] do
   begin
@@ -1972,8 +2012,10 @@ begin
     gdip.CreateMatrix2(
       ViewSize.cx / WinSize.cx, 0, 0, ViewSize.cy / WinSize.cy, P.X, P.Y, mtx);
     gdip.MultiplyMatrix(mtx, destMatrix);
-    if matrixOrg <> 0 then
-      gdip.MultiplyMatrix(mtx, matrixOrg);
+    with WorldTransform do
+      gdip.CreateMatrix2(eM11, eM12, eM21, eM22, eDx, eDy, world);
+    gdip.MultiplyMatrix(mtx, world);
+    gdip.DeleteMatrix(world);
     gdip.SetWorldTransform(gr, mtx);
     gdip.DeleteMatrix(mtx);
   end;
@@ -2070,6 +2112,8 @@ begin
     begin
       PInt64(@WinSize)^ := PInt64(@R.Width)^;
       ViewSize := WinSize;
+      WorldTransform.eM11 := 1;
+      WorldTransform.eM22 := 1;
     end;
     E.dest := CreateCompatibleDC(Dest);
     E.gdip.Lock;
