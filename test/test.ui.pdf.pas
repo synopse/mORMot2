@@ -36,6 +36,7 @@ type
     procedure EncryptedUnicodeString;
     procedure WinAnsiToUnicodeBlocks;
     procedure OutlineBeforePage;
+    procedure AddFontKeepsIndexes;
   end;
 
 implementation
@@ -715,6 +716,37 @@ begin
       raised := true;
     end;
     Check(not raised, 'document freed');
+  end;
+end;
+
+type
+  TPdfDocumentAccess = class(TPdfDocument); // GetTrueTypeFontIndex
+
+procedure TTestUiPdf.AddFontKeepsIndexes;
+var
+  pdf: TPdfDocumentAccess;
+  verdana: TPdfFont;
+  i: integer;
+begin
+  pdf := TPdfDocumentAccess.Create;
+  try
+    pdf.FontFallBackName := 'Tahoma';
+    i := pdf.GetTrueTypeFontIndex('Verdana');
+    if not Check(i >= 0, 'Verdana installed') then
+      exit;
+    pdf.AddPage;
+    verdana := pdf.Canvas.SetFont('Verdana', 10, []); // created before the insert
+    pdf.Canvas.SetFont('No Such mORMot Font', 10, []); // resolved and cached
+    // sorts first: every index after it moves
+    Check(pdf.AddTrueTypeFont('AAA mORMot Test Font'));
+    CheckEqual(pdf.FontFallBackName, 'Tahoma', 'fallback kept');
+    CheckEqual(pdf.GetTrueTypeFontIndex('Verdana'), i + 1, 'name cache');
+    Check(pdf.Canvas.SetFont('Verdana', 10, []) = verdana, 'created font reused');
+    // a style not created yet: made from the cached index of the raster font
+    Check(pdf.Canvas.SetFont('No Such mORMot Font', 10, [pfsBold]) =
+          pdf.Canvas.SetFont('Tahoma', 10, [pfsBold]), 'raster font');
+  finally
+    pdf.Free;
   end;
 end;
 

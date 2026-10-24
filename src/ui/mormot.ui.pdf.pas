@@ -7406,12 +7406,32 @@ begin
 end;
 
 function TPdfDocument.AddTrueTypeFont(const TtfName: RawUtf8): boolean;
+var
+  fallback: RawUtf8;
+  i, ins: PtrInt;
+  f: TPdfFont;
 begin
   result := GetTrueTypeFontIndex(TtfName) < 0;
   if not result then
     exit;
+  if fFontFallBackIndex >= 0 then
+    fallback := fTrueTypeFonts[fFontFallBackIndex];
   AddRawUtf8(fTrueTypeFonts, TtfName);
   QuickSortRawUtf8(fTrueTypeFonts, length(fTrueTypeFonts), nil, @StrIComp);
+  // the sort moves the indexes: the cached one, the fallback's, and those
+  // of the fonts already created (1-based, 0 for no TrueType font)
+  fTrueTypeFontLastName := '';
+  if fallback <> '' then
+    fFontFallBackIndex := GetTrueTypeFontIndex(fallback);
+  if fCanvas <> nil then
+    fCanvas.fPreviousRasterFontName := ''; // its index moved too
+  ins := GetTrueTypeFontIndex(TtfName);
+  for i := 0 to fFontList.Count - 1 do
+  begin
+    f := fFontList.List[i];
+    if f.fTrueTypeFontsIndex > ins then
+      inc(f.fTrueTypeFontsIndex);
+  end;
 end;
 
 procedure TPdfDocument.FreeDoc;
