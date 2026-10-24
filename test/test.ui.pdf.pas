@@ -38,6 +38,7 @@ type
     procedure OutlineBeforePage;
     procedure AddFontKeepsIndexes;
     procedure NewDocDropsPage;
+    procedure RasterFontCache;
     procedure CatalogGetters;
     procedure JpegColorSpace;
     procedure ZeroAdvanceMeasured;
@@ -802,6 +803,36 @@ begin
     pdf.Free;
   end;
   {$endif NO_USE_PDFSECURITY}
+end;
+
+procedure TTestUiPdf.RasterFontCache;
+const
+  UNKNOWN = 'No Such mORMot Font';
+var
+  pdf: TPdfDocument;
+  form: TPdfFormWithCanvas;
+begin
+  pdf := TPdfDocument.Create;
+  try
+    pdf.FontFallBackName := 'Tahoma';
+    form := TPdfFormWithCanvas.Create(pdf, 200, 100);
+    pdf.AddXObject('FormR', form); // owned by the document from here
+    form.Canvas.SetFont(UNKNOWN, 10, []); // resolved and cached
+    // sorts first: every index after it moves
+    Check(pdf.AddTrueTypeFont('AAA mORMot Test Font'));
+    Check(form.Canvas.SetFont(UNKNOWN, 10, [pfsItalic]) =
+          form.Canvas.SetFont('Tahoma', 10, [pfsItalic]), 'form canvas');
+    form.CloseCanvas;
+    pdf.AddPage;
+    pdf.Canvas.SetFont(UNKNOWN, 10, []); // resolved and cached
+    pdf.FontFallBackName := 'Verdana';
+    Check(pdf.Canvas.SetFont(UNKNOWN, 10, []) =
+          pdf.Canvas.SetFont('Verdana', 10, []), 'new fallback');
+    Check(pdf.Canvas.SetFont(UNKNOWN, 10, [], -1, -1, true) =
+          pdf.Canvas.SetFont('Courier New', 10, []), 'fixed width');
+  finally
+    pdf.Free;
+  end;
 end;
 
 procedure TTestUiPdf.CatalogGetters;

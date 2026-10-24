@@ -1325,6 +1325,11 @@ type
     fTrueTypeFonts: TRawUtf8DynArray;
     fTrueTypeFontLastName: RawUtf8;
     fTrueTypeFontLastIndex: integer;
+    // the index an unknown (raster) font name was resolved to, shared by the
+    // canvases of the document and of its forms
+    fPreviousRasterFontName: RawUtf8;
+    fPreviousRasterFontIndex: integer;
+    fPreviousRasterFontFixed: boolean;
     fDC: HDC;
     fScreenLogPixels: integer;
     fPrinterPxPerInch: TPoint;
@@ -1834,9 +1839,6 @@ type
     fUseMetaFileTextClipping: TPdfCanvasRenderMetaFileTextClipping;
     fKerningHScaleBottom: single;
     fKerningHScaleTop: single;
-    // some cache
-    fPreviousRasterFontName: RawUtf8;
-    fPreviousRasterFontIndex: integer;
     // result := fOffsetX + (X * fFactorX);
     function I2X(X: integer): single;
     function S2X(X: single): single;
@@ -7457,8 +7459,7 @@ begin
   fTrueTypeFontLastName := '';
   if fallback <> '' then
     fFontFallBackIndex := GetTrueTypeFontIndex(fallback);
-  if fCanvas <> nil then
-    fCanvas.fPreviousRasterFontName := ''; // its index moved too
+  fPreviousRasterFontName := ''; // its index moved too
   ins := GetTrueTypeFontIndex(TtfName);
   for i := 0 to fFontList.Count - 1 do
   begin
@@ -8208,6 +8209,7 @@ end;
 procedure TPdfDocument.SetFontFallBackName(const Value: string);
 begin
   fFontFallBackIndex := GetTrueTypeFontIndex(StringToUtf8(Value));
+  fPreviousRasterFontName := ''; // it may have been resolved to the fallback
 end;
 
 function TPdfDocument.GetFontFallBackName: string;
@@ -8675,9 +8677,10 @@ begin
             exit; // we got a standard/embedded font
         end;
     end;
-    if (fPreviousRasterFontName <> '') and
-       (fPreviousRasterFontName = AName) then
-      ndx := fPreviousRasterFontIndex
+    if (fDoc.fPreviousRasterFontName <> '') and
+       (fDoc.fPreviousRasterFontName = AName) and
+       (fDoc.fPreviousRasterFontFixed = AIsFixedWidth) then
+      ndx := fDoc.fPreviousRasterFontIndex
     else
     begin
       // search the font in the global system-wide true type fonts list
@@ -8699,8 +8702,9 @@ begin
           if ndx < 0 then
             exit;
         end;
-        fPreviousRasterFontName := AName;
-        fPreviousRasterFontIndex := ndx;
+        fDoc.fPreviousRasterFontName := AName;
+        fDoc.fPreviousRasterFontIndex := ndx;
+        fDoc.fPreviousRasterFontFixed := AIsFixedWidth;
       end;
     end;
   end;
