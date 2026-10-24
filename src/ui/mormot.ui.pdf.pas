@@ -4639,7 +4639,9 @@ end;
 
 destructor TPdfStream.Destroy;
 begin
-  fWriter.fDestStream.Free;
+  // nil when a constructor of TPdfImage raised before inherited Create
+  if fWriter <> nil then
+    fWriter.fDestStream.Free;
   fWriter.Free;
   fAttributes.Free;
   inherited;
@@ -9848,6 +9850,34 @@ var
   entry: array of TPaletteEntry;
   ca: TPdfArray;
   transcolor: TPdfColorRGB;
+  jpeg: TMemoryStream;
+  jw, jh, jbits: integer;
+
+  function SavedJpeg: TMemoryStream;
+  begin
+    result := TMemoryStream.Create;
+    try
+      with TJpegImage(aImage) do
+      begin
+        if aDoc.ForceJPEGCompression <> 0 then
+          CompressionQuality := aDoc.ForceJPEGCompression;
+        {$ifdef USE_SYNGDIPLUS}
+        if aDoc.ForceJPEGCompression = 0 then // recompression only if necessary
+          SaveInternalToStream(result)
+        else
+        {$endif USE_SYNGDIPLUS}
+          SaveToStream(result); // with CompressionQuality recompress
+      end;
+      // the colour space of the components the data says, RGB if unrecognized
+      if not GetJpegSize(result.Memory, result.Size, jw, jh, jbits) then
+        jbits := 24;
+      if jbits = 32 then
+        EPdfInvalidValue.RaiseUtf8('TPdfImage.Create: CMYK JPEG not supported', []);
+    except
+      result.Free;
+      raise;
+    end;
+  end;
 
   procedure NeedBitmap(PF: TPixelFormat);
   begin
@@ -9881,28 +9911,32 @@ var
   end;
 
 begin
-  inherited Create(aDoc, DontAddToFXref);
-  fPixelWidth := aImage.Width;
-  fPixelHeight := aImage.Height;
-  fAttributes.AddItem('Type', 'XObject');
-  fAttributes.AddItem('Subtype', 'Image');
+  jbits := 24;
+  jpeg := nil;
   if aImage.InheritsFrom(TJpegImage) then
-  begin
-    fAttributes.AddItem('ColorSpace', 'DeviceRGB');
+    jpeg := SavedJpeg; // before inherited Create: a raise leaves no xref entry
+  try
+    inherited Create(aDoc, DontAddToFXref);
+    fPixelWidth := aImage.Width;
+    fPixelHeight := aImage.Height;
+    fAttributes.AddItem('Type', 'XObject');
+    fAttributes.AddItem('Subtype', 'Image');
+  except
+    jpeg.Free;
+    raise;
+  end;
+  if jpeg <> nil then
+  try
+    if jbits = 8 then
+      fAttributes.AddItem('ColorSpace', 'DeviceGray')
+    else
+      fAttributes.AddItem('ColorSpace', 'DeviceRGB');
     fFilter := 'DCTDecode';
     fWriter.Save; // flush to allow direct access to fDestStream
-    with TJpegImage(aImage) do
-    begin
-      if aDoc.ForceJPEGCompression <> 0 then
-        CompressionQuality := aDoc.ForceJPEGCompression;
-      {$ifdef USE_SYNGDIPLUS}
-      if aDoc.ForceJPEGCompression = 0 then // recompression only if necessary
-        SaveInternalToStream(fWriter.fDestStream)
-      else
-      {$endif USE_SYNGDIPLUS}
-        SaveToStream(fWriter.fDestStream); // with CompressionQuality recompress
-    end;
+    fWriter.fDestStream.WriteBuffer(jpeg.Memory^, jpeg.Size);
     fWriter.fDestStreamPosition := fWriter.fDestStream.Position;
+  finally
+    jpeg.Free;
   end
   else
   begin
@@ -9982,12 +10016,20 @@ end;
 constructor TPdfImage.CreateJpegDirect(aDoc: TPdfDocument;
   aJpegFile: TMemoryStream; DontAddToFXref: boolean);
 var
-  len, bits: integer;
+  len, w, h, bits: integer;
 begin
-  inherited Create(aDoc, DontAddToFXref);
+  // before inherited Create: a raise there leaves nothing in the xref
   len := aJpegFile.Size;
-  if not GetJpegSize(aJpegFile.Memory, len, fPixelWidth, fPixelHeight, bits) then
-    exit; // JPEG format expected
+  if not GetJpegSize(aJpegFile.Memory, len, w, h, bits) then
+    EPdfInvalidValue.RaiseUtf8('TPdfImage.CreateJpegDirect: no JPEG (% bytes)',
+      [len]);
+  if (bits <> 8) and
+     (bits <> 24) then
+    EPdfInvalidValue.RaiseUtf8(
+      'TPdfImage.CreateJpegDirect: % components not supported', [bits shr 3]);
+  inherited Create(aDoc, DontAddToFXref);
+  fPixelWidth := w;
+  fPixelHeight := h;
   fAttributes.AddItem('Type', 'XObject');
   fAttributes.AddItem('Subtype', 'Image');
   fFilter := 'DCTDecode';
@@ -9996,12 +10038,10 @@ begin
   fWriter.fDestStreamPosition := fWriter.fDestStream.Position;
   fAttributes.AddItem('Width', fPixelWidth);
   fAttributes.AddItem('Height', fPixelHeight);
-  case bits of
-    8:
-      fAttributes.AddItem('ColorSpace', 'DeviceGray');
-    24:
-      fAttributes.AddItem('ColorSpace', 'DeviceRGB');
-  end;
+  if bits = 8 then
+    fAttributes.AddItem('ColorSpace', 'DeviceGray')
+  else
+    fAttributes.AddItem('ColorSpace', 'DeviceRGB');
   fAttributes.AddItem('BitsPerComponent', 8);
 end;
 

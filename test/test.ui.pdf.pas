@@ -39,6 +39,7 @@ type
     procedure AddFontKeepsIndexes;
     procedure NewDocDropsPage;
     procedure CatalogGetters;
+    procedure JpegColorSpace;
   end;
 
 implementation
@@ -47,14 +48,17 @@ uses
 {$ifdef FPC}
   Windows,
   Graphics,
-  mormot.ui.core
+  mormot.ui.core,
+  {$ifdef NO_USE_SYNGDIPLUS} jpeg {$else} mormot.ui.gdiplus {$endif}
 {$else}
   {$ifdef NEEDVCLPREFIX}
   WinApi.Windows,
-  VCL.Graphics
+  VCL.Graphics,
+  {$ifdef NO_USE_SYNGDIPLUS} jpeg {$else} mormot.ui.gdiplus {$endif}
   {$else}
   Windows,
-  Graphics
+  Graphics,
+  {$ifdef NO_USE_SYNGDIPLUS} jpeg {$else} mormot.ui.gdiplus {$endif}
   {$endif NEEDVCLPREFIX}
 {$endif FPC}
   ;
@@ -808,6 +812,98 @@ begin
     Check(pdf.Root.NonFullScreenPageMode = pmUseOutlines,
       'NonFullScreenPageMode reads ViewerPreferences');
   finally
+    pdf.Free;
+  end;
+end;
+
+const
+  // 8 x 8 pixels, one component (grayscale) and four (CMYK)
+  JPEG_GRAY = '/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDABALDA4MChAODQ4SERATGCgaGBYWGDEj' +
+    'JR0oOjM9PDkzODdASFxOQERXRTc4UG1RV19iZ2hnPk1xeXBkeFxlZ2P/wAALCAAIAAgBAREA' +
+    '/8QAFAABAAAAAAAAAAAAAAAAAAAAAP/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8A' +
+    'P//Z';
+  JPEG_CMYK = '/9j/7gAOQWRvYmUAZAAAAAAA/9sAQwAQCwwODAoQDg0OEhEQExgoGhgWFhgxIyUd' +
+    'KDozPTw5Mzg3QEhcTkBEV0U3OFBtUVdfYmdoZz5NcXlwZHhcZWdj/8AAFAgACAAIBEMRAE0R' +
+    'AFkRAEsRAP/EABUAAQEAAAAAAAAAAAAAAAAAAAcB/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/a' +
+    'AA4EQwBNAFkASwAAPwBAQfkB/9k=';
+
+procedure TTestUiPdf.JpegColorSpace;
+var
+  pdf: TPdfDocument;
+  jpg: TJpegImage;
+  ms: TMemoryStream;
+  img: TPdfImage;
+  raised: boolean;
+  nojpeg: RawByteString;
+
+  procedure Load(const b64: RawUtf8);
+  var
+    bin: RawByteString;
+  begin
+    bin := Base64ToBin(b64);
+    ms.Clear;
+    ms.WriteBuffer(pointer(bin)^, length(bin));
+    ms.Position := 0;
+  end;
+
+begin
+  pdf := TPdfDocument.Create;
+  ms := TMemoryStream.Create;
+  try
+    pdf.AddPage;
+    // a grayscale TJpegImage is not RGB
+    Load(JPEG_GRAY);
+    jpg := TJpegImage.Create;
+    try
+      jpg.LoadFromStream(ms);
+      img := TPdfImage.Create(pdf, jpg, true);
+      try
+        CheckEqual(img.Attributes.PdfNameByName('ColorSpace').Value,
+          'DeviceGray', 'TJpegImage');
+      finally
+        img.Free;
+      end;
+    finally
+      jpg.Free;
+    end;
+    // what cannot be written raises, nothing incomplete is left
+    Load(JPEG_CMYK);
+    jpg := TJpegImage.Create;
+    try
+      jpg.LoadFromStream(ms);
+      raised := false;
+      try
+        TPdfImage.Create(pdf, jpg, true).Free;
+      except
+        on EPdfInvalidValue do
+          raised := true;
+      end;
+      Check(raised, 'CMYK TJpegImage');
+    finally
+      jpg.Free;
+    end;
+    Load(JPEG_CMYK);
+    raised := false;
+    try
+      TPdfImage.CreateJpegDirect(pdf, ms, true).Free;
+    except
+      on EPdfInvalidValue do
+        raised := true;
+    end;
+    Check(raised, 'CMYK JPEG');
+    nojpeg := 'some text, not a JPEG';
+    ms.Clear;
+    ms.WriteBuffer(pointer(nojpeg)^, length(nojpeg));
+    raised := false;
+    try
+      TPdfImage.CreateJpegDirect(pdf, ms, true).Free;
+    except
+      on EPdfInvalidValue do
+        raised := true;
+    end;
+    Check(raised, 'not a JPEG');
+  finally
+    ms.Free;
     pdf.Free;
   end;
 end;
