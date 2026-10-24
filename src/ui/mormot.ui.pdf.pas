@@ -6410,7 +6410,7 @@ end;
 procedure TPdfFontTrueType.PrepareForSaving;
 var
   c: AnsiChar;
-  i, n, L, ndx, count: integer;
+  i, n, L, ndx, count, done: integer;
   fonts: TPdfArray;
   font, info: TPdfDictionary;
   tounicode: TPdfStream;
@@ -6628,13 +6628,29 @@ begin
         for c := AnsiChar(fFirstChar) to AnsiChar(fLastChar) do
           if c in fWinAnsiUsed then
             inc(count);
-        tounicode.Writer.Add(count).Add(' beginbfchar'#10);
+        // at most 100 entries per block (Adobe CMap specification 5014, 7.4)
+        done := 0;
         for c := AnsiChar(fFirstChar) to AnsiChar(fLastChar) do
           if c in fWinAnsiUsed then
+          begin
+            if done mod 99 = 0 then
+            begin
+              if done > 0 then
+                tounicode.Writer.Add('endbfchar'#10);
+              if count - done > 99 then
+                tounicode.Writer.Add(99)
+              else
+                tounicode.Writer.Add(count - done);
+              tounicode.Writer.Add(' beginbfchar'#10);
+            end;
             tounicode.Writer.Add('<').Add(HexChars[ord(c) shr 4]).
               Add(HexChars[ord(c) and $F]).Add('> <').
               AddHex4(WinAnsiConvert.AnsiToWide[ord(c)]).Add('>'#10);
-        tounicode.Writer.Add('endbfchar'#10'endcmap'#10 +
+            inc(done);
+          end;
+        if done > 0 then
+          tounicode.Writer.Add('endbfchar'#10);
+        tounicode.Writer.Add('endcmap'#10 +
           'CMapName currentdict /CMap defineresource pop'#10'end'#10'end');
         Data.AddItem('ToUnicode', tounicode);
       end;

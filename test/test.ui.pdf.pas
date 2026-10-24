@@ -34,6 +34,7 @@ type
     procedure UnicodeWidth;
     procedure EscapeBackspace;
     procedure EncryptedUnicodeString;
+    procedure WinAnsiToUnicodeBlocks;
   end;
 
 implementation
@@ -636,6 +637,45 @@ end;
 begin
 end;
 {$endif NO_USE_PDFSECURITY}
+
+procedure TTestUiPdf.WinAnsiToUnicodeBlocks;
+var
+  pdf: TPdfDocument;
+  txt: PdfString;
+  s: RawByteString;
+  c, p, q, n, blocks: integer;
+begin
+  txt := '';
+  for c := 33 to 255 do
+    if (c < 127) or
+       (c > 160) then
+      txt := txt + AnsiChar(c);
+  pdf := TPdfDocument.Create(false, 0, pdfa1B);
+  try
+    pdf.CompressionMethod := cmNone;
+    pdf.AddPage;
+    pdf.Canvas.SetFont('Arial', 10, []);
+    pdf.Canvas.TextOut(20, 700, txt);
+    s := SavedPdf(pdf);
+  finally
+    pdf.Free;
+  end;
+  // at most 100 entries per bfchar block (Adobe CMap specification, 7.4)
+  blocks := 0;
+  p := PosEx(' beginbfchar', s);
+  while p > 0 do
+  begin
+    q := p;
+    while (q > 1) and
+          (s[q - 1] in ['0'..'9']) do
+      dec(q);
+    n := GetInteger(@s[q]);
+    CheckUtf8(n <= 100, 'beginbfchar %', [n]);
+    inc(blocks);
+    p := PosEx(' beginbfchar', s, p + 1);
+  end;
+  Check(blocks > 1, 'the WinAnsi /ToUnicode needs several blocks');
+end;
 
 {$else}
 
