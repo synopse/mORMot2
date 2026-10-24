@@ -35,6 +35,7 @@ type
     procedure EscapeBackspace;
     procedure EncryptedUnicodeString;
     procedure WinAnsiToUnicodeBlocks;
+    procedure OutlineBeforePage;
   end;
 
 implementation
@@ -675,6 +676,46 @@ begin
     p := PosEx(' beginbfchar', s, p + 1);
   end;
   Check(blocks > 1, 'the WinAnsi /ToUnicode needs several blocks');
+end;
+
+procedure TTestUiPdf.OutlineBeforePage;
+var
+  pdf: TPdfDocument;
+  s: RawByteString;
+  p, q: integer;
+  raised: boolean;
+begin
+  pdf := TPdfDocument.Create(true);
+  try
+    pdf.GeneratePDF15File := false;
+    pdf.CompressionMethod := cmNone;
+    raised := false;
+    try
+      pdf.CreateOutline('no page yet', 0, 100);
+    except
+      on EPdfInvalidOperation do
+        raised := true;
+    end;
+    Check(raised, 'an outline with a position needs a page');
+    Check(pdf.OutlineRoot.First = nil, 'no entry left');
+    pdf.AddPage;
+    pdf.CreateOutline('on a page', 0, 100);
+    Check(pdf.OutlineRoot.First <> nil);
+    s := SavedPdf(pdf);
+    // the root counts the one entry, not the failed one too
+    p := PosEx('/Type/Outlines', s);
+    q := PosEx('>>', s, p);
+    if Check((p > 0) and (q > p), 'Outlines dictionary') then
+      Check(PosEx('/Count 1', copy(s, p, q - p)) > 0, 'one entry counted');
+  finally
+    raised := false;
+    try
+      pdf.Free; // the failed entry must not be freed a second time
+    except
+      raised := true;
+    end;
+    Check(not raised, 'document freed');
+  end;
 end;
 
 {$else}
