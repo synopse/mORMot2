@@ -37,6 +37,7 @@ type
     procedure WinAnsiToUnicodeBlocks;
     procedure OutlineBeforePage;
     procedure AddFontKeepsIndexes;
+    procedure NewDocDropsPage;
   end;
 
 implementation
@@ -748,6 +749,51 @@ begin
   finally
     pdf.Free;
   end;
+end;
+
+procedure TTestUiPdf.NewDocDropsPage;
+var
+  pdf: TPdfDocument;
+  page: TPdfPage;
+  raised: boolean;
+  s: RawByteString;
+begin
+  pdf := TPdfDocument.Create;
+  try
+    pdf.AddPage;
+    Check(pdf.Canvas.Page <> nil);
+    pdf.NewDoc; // frees the page and its content stream
+    raised := false;
+    try
+      page := pdf.Canvas.Page; // raises without a page
+      Check(page = nil);
+    except
+      on EPdfInvalidOperation do
+        raised := true;
+    end;
+    Check(raised, 'no reference to the freed page');
+  finally
+    pdf.Free;
+  end;
+  {$ifndef NO_USE_PDFSECURITY}
+  // the /Encrypt dictionary was freed with the trailer of the first document
+  pdf := TPdfDocument.Create(false, 0, pdfaNone,
+    TPdfEncryption.New(elRC4_40, '', 'owner', PDF_PERMISSION_ALL));
+  try
+    pdf.AddPage;
+    pdf.NewDoc;
+    pdf.AddPage;
+    raised := false;
+    try
+      s := SavedPdf(pdf);
+    except
+      raised := true;
+    end;
+    Check(not raised and (PosEx('/Encrypt', s) > 0), 'encrypted after NewDoc');
+  finally
+    pdf.Free;
+  end;
+  {$endif NO_USE_PDFSECURITY}
 end;
 
 {$else}

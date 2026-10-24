@@ -7260,6 +7260,19 @@ begin
   fBookMarks.Clear;
   fMissingBookmarks.Clear;
   FreeDoc;
+  // freed with the objects above: a later test of them must see nil
+  fMetaData := nil;
+  fOutputIntents := nil;
+  fOutlineRoot := nil;
+  {$ifdef USE_PDFSECURITY}
+  fEncryptionObject := nil; // was the /Encrypt value of the freed trailer
+  {$endif USE_PDFSECURITY}
+  if fCanvas <> nil then
+  begin
+    fCanvas.fPage := nil;
+    fCanvas.fContents := nil;
+    fCanvas.fPageFontList := nil;
+  end;
   fXRef := TPdfXref.Create;
   fTrailer := TPdfTrailer.Create(fXRef);
   fFontList := TSynList.Create;
