@@ -38,6 +38,9 @@ type
     procedure OutlineBeforePage;
     procedure AddFontKeepsIndexes;
     procedure NewDocDropsPage;
+    procedure RasterFontCache;
+    procedure NewDocRenewsKey;
+    procedure NewDocEndsDirectSave;
     procedure CatalogGetters;
     procedure JpegColorSpace;
     procedure ZeroAdvanceMeasured;
@@ -802,6 +805,90 @@ begin
     pdf.Free;
   end;
   {$endif NO_USE_PDFSECURITY}
+end;
+
+procedure TTestUiPdf.RasterFontCache;
+const
+  UNKNOWN = 'No Such mORMot Font';
+var
+  pdf: TPdfDocument;
+  form: TPdfFormWithCanvas;
+begin
+  pdf := TPdfDocument.Create;
+  try
+    pdf.FontFallBackName := 'Tahoma';
+    form := TPdfFormWithCanvas.Create(pdf, 200, 100);
+    pdf.AddXObject('FormR', form); // owned by the document from here
+    form.Canvas.SetFont(UNKNOWN, 10, []); // resolved and cached
+    // sorts first: every index after it moves
+    Check(pdf.AddTrueTypeFont('AAA mORMot Test Font'));
+    Check(form.Canvas.SetFont(UNKNOWN, 10, [pfsItalic]) =
+          form.Canvas.SetFont('Tahoma', 10, [pfsItalic]), 'form canvas');
+    form.CloseCanvas;
+    pdf.AddPage;
+    pdf.Canvas.SetFont(UNKNOWN, 10, []); // resolved and cached
+    pdf.FontFallBackName := 'Verdana';
+    Check(pdf.Canvas.SetFont(UNKNOWN, 10, []) =
+          pdf.Canvas.SetFont('Verdana', 10, []), 'new fallback');
+    Check(pdf.Canvas.SetFont(UNKNOWN, 10, [], -1, -1, true) =
+          pdf.Canvas.SetFont('Courier New', 10, []), 'fixed width');
+  finally
+    pdf.Free;
+  end;
+end;
+
+procedure TTestUiPdf.NewDocRenewsKey;
+{$ifndef NO_USE_PDFSECURITY}
+var
+  pdf: TPdfDocument;
+  first, second: RawByteString;
+begin
+  pdf := TPdfDocument.Create(false, 0, pdfaNone,
+    TPdfEncryption.New(elRC4_128, '', 'owner', PDF_PERMISSION_ALL));
+  try
+    pdf.CompressionMethod := cmNone;
+    pdf.Info.Subject := 'AAAAAAAA';
+    pdf.AddPage;
+    first := PdfStringAfter(SavedPdf(pdf), '/Subject');
+    pdf.NewDoc; // a new file ID, so a new key
+    pdf.Info.Subject := 'AAAAAAAA';
+    pdf.AddPage;
+    second := PdfStringAfter(SavedPdf(pdf), '/Subject');
+  finally
+    pdf.Free;
+  end;
+  // with empty pages, the Info dictionary is the last object encrypted by one
+  // save and the first by the next: the RC4 key cached for it was the old one
+  CheckEqual(length(second), 8, 'subject');
+  Check(second <> first, 'encrypted with the key of the new document');
+end;
+{$else}
+begin
+end;
+{$endif NO_USE_PDFSECURITY}
+
+procedure TTestUiPdf.NewDocEndsDirectSave;
+var
+  pdf: TPdfDocument;
+  left: TMemoryStream;
+  s: RawByteString;
+begin
+  left := TMemoryStream.Create;
+  try
+    pdf := TPdfDocument.Create;
+    try
+      pdf.AddPage;
+      pdf.SaveToStreamDirectBegin(left); // never ended
+      pdf.NewDoc;
+      pdf.AddPage;
+      s := SavedPdf(pdf); // raised "SaveToStreamDirectBegin called twice"
+    finally
+      pdf.Free;
+    end;
+  finally
+    left.Free;
+  end;
+  Check(PosEx('%%EOF', s) > 0, 'saved after NewDoc');
 end;
 
 procedure TTestUiPdf.CatalogGetters;
