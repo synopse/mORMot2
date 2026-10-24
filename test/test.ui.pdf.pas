@@ -31,6 +31,7 @@ type
     procedure TextInsertion;
     procedure MultiplePages;
     procedure PDFMetadata;
+    procedure UnicodeWidth;
   end;
 
 implementation
@@ -462,6 +463,116 @@ begin
       'PDF metadata keywords field is incorrect or missing');
   finally
     PdfStream.Free;
+  end;
+end;
+
+function SavedPdf(Doc: TPdfDocument): RawByteString;
+var
+  ms: TMemoryStream;
+begin
+  ms := TMemoryStream.Create;
+  try
+    Doc.SaveToStream(ms, FIXED_DATE);
+    SetString(result, PAnsiChar(ms.Memory), ms.Size);
+  finally
+    ms.Free;
+  end;
+end;
+
+function Nibble(c: AnsiChar): integer;
+begin
+  case c of
+    '0'..'9':
+      result := ord(c) - ord('0');
+    'A'..'F':
+      result := ord(c) - (ord('A') - 10);
+    'a'..'f':
+      result := ord(c) - (ord('a') - 10);
+  else
+    result := 0;
+  end;
+end;
+
+// the bytes of the (literal) or <hex> string written after Key
+function PdfStringAfter(const s, Key: RawByteString): RawByteString;
+var
+  p: integer;
+begin
+  result := '';
+  p := PosEx(Key, s);
+  if p = 0 then
+    exit;
+  inc(p, length(Key));
+  while (p <= length(s)) and
+        (s[p] = ' ') do
+    inc(p);
+  if p > length(s) then
+    exit;
+  if s[p] = '<' then
+  begin
+    inc(p);
+    while (p < length(s)) and
+          (s[p] <> '>') do
+    begin
+      result := result + AnsiChar(Nibble(s[p]) shl 4 + Nibble(s[p + 1]));
+      inc(p, 2);
+    end;
+  end
+  else if s[p] = '(' then
+  begin
+    inc(p);
+    while (p <= length(s)) and
+          (s[p] <> ')') do
+    begin
+      if s[p] = '\' then
+      begin
+        inc(p);
+        case s[p] of
+          'n':
+            result := result + #10;
+          'r':
+            result := result + #13;
+          't':
+            result := result + #9;
+          'b':
+            result := result + #8;
+          'f':
+            result := result + #12;
+          '0'..'7':
+            begin
+              result := result + AnsiChar((ord(s[p]) - 48) * 64 +
+                (ord(s[p + 1]) - 48) * 8 + (ord(s[p + 2]) - 48));
+              inc(p, 2);
+            end;
+        else
+          result := result + s[p];
+        end;
+      end
+      else
+        result := result + s[p];
+      inc(p);
+    end;
+  end;
+end;
+
+procedure TTestUiPdf.UnicodeWidth;
+var
+  pdf: TPdfDocument;
+  w: array[0..1] of WideChar;
+begin
+  // FPC read fUsedWide[] before FindOrAddUsedWideChar reallocated it
+  pdf := TPdfDocument.Create;
+  try
+    pdf.AddPage;
+    pdf.Canvas.SetFont('Arial', 10, []);
+    w[1] := #0;
+    w[0] := WideChar($0418); // not WinAnsi: drawn before it was ever measured
+    pdf.Canvas.TextOutW(20, 700, @w);
+    w[0] := WideChar($0416);
+    Check(pdf.Canvas.UnicodeTextWidth(@w) > 0, 'measured');
+    Check(SavedPdf(pdf) <> '', 'saved');
+  finally
+    pdf.Free;
   end;
 end;
 

@@ -5311,10 +5311,12 @@ var
   changed: boolean;
   fnt: TPdfFontTrueType;
   Glyph: word;
+  ndx: integer;
 begin
   assert((Ttf <> nil) and not Ttf.Unicode);
   changed := fAddGlyphFont = fNone;
-  Glyph := Ttf.fUsedWide[Ttf.FindOrAddUsedWideChar(Char)].Glyph;
+  ndx := Ttf.FindOrAddUsedWideChar(Char); // may reallocate fUsedWide[]
+  Glyph := Ttf.fUsedWide[ndx].Glyph;
   with Canvas.fDoc do
     if (fPdfA <> pdfaNone) and
        (Glyph = 0) and
@@ -5331,7 +5333,8 @@ begin
       fnt := Canvas.SetFont('', Canvas.fPage.FontSize, Ttf.fStyle, -1,
         fFontFallBackIndex) as TPdfFontTrueType;
       assert(not fnt.Unicode);
-      Glyph := fnt.fUsedWide[fnt.FindOrAddUsedWideChar(Char)].Glyph;
+      ndx := fnt.FindOrAddUsedWideChar(Char);
+      Glyph := fnt.fUsedWide[ndx].Glyph;
     end
     else
     begin
@@ -6119,6 +6122,7 @@ end;
 function TPdfFontTrueType.GetAndMarkGlyphAsUsed(aGlyph: word): word;
 var
   i: PtrInt;
+  ndx: integer;
 begin
   result := aGlyph; // fallback to raw glyph index if nothing explicit
   // 1. check if not already registered as used
@@ -6131,8 +6135,10 @@ begin
     for i := 0 to fUsedWideChar.Count - 1 do
       if fUsedWide[i].Glyph = aGlyph then
       begin
-        result := WinAnsiFont.fUsedWide[FindOrAddUsedWideChar(
-          WideChar(fUsedWideChar.Values[i]))].Glyph;
+        // FindOrAddUsedWideChar may reallocate fUsedWide[]: call it before
+        // indexing, or FPC reads the array address first and it gets stale
+        ndx := FindOrAddUsedWideChar(WideChar(fUsedWideChar.Values[i]));
+        result := WinAnsiFont.fUsedWide[ndx].Glyph;
         exit; // result may be 0 if this glyph doesn't exist in the CMAP content
       end;
 end;
@@ -6259,6 +6265,8 @@ begin
 end;
 
 function TPdfFontTrueType.GetWideCharWidth(aWideChar: WideChar): integer;
+var
+  i: integer;
 begin
   if fUnicode then
   begin // we need fUsedWide[] to be the used glyphs
@@ -6273,7 +6281,10 @@ begin
     else
       result := fDefaultWidth
   else
-    result := fUsedWide[FindOrAddUsedWideChar(aWideChar)].Width;
+  begin
+    i := FindOrAddUsedWideChar(aWideChar); // may reallocate fUsedWide[]
+    result := fUsedWide[i].Width;
+  end;
 end;
 
 type
