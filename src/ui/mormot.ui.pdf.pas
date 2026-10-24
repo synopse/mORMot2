@@ -7815,12 +7815,11 @@ var
   PW: pointer;
 begin
   aFontName := fTrueTypeFonts[aFontIndex];
+  // also when the face has no English (3,1) PostScript name
+  result := TrueTypeFontName(aFontName, AStyle);
   if IsAnsiCompatible(aFontName) or
      (AFont = nil) then
-  begin
-    result := TrueTypeFontName(aFontName, AStyle);
     exit; // no need to search for the PostScript name field in Ttf content
-  end;
   name := GetTtfData(GetDCWithFont(AFont), 'name', fName);
   if (name = nil) or
      (name^.format <> 0) then
