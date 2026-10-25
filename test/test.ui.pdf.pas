@@ -31,6 +31,21 @@ type
     procedure TextInsertion;
     procedure MultiplePages;
     procedure PDFMetadata;
+    procedure UnicodeWidth;
+    procedure EscapeBackspace;
+    procedure EncryptedUnicodeString;
+    procedure WinAnsiToUnicodeBlocks;
+    procedure OutlineBeforePage;
+    procedure AddFontKeepsIndexes;
+    procedure NewDocDropsPage;
+    procedure RasterFontCache;
+    procedure NewDocRenewsKey;
+    procedure NewDocEndsDirectSave;
+    procedure CatalogGetters;
+    procedure JpegColorSpace;
+    procedure ZeroAdvanceMeasured;
+    procedure ReducedFontChecksum;
+    procedure BidiEmbeddingOrder;
   end;
 
 implementation
@@ -39,14 +54,17 @@ uses
 {$ifdef FPC}
   Windows,
   Graphics,
-  mormot.ui.core
+  mormot.ui.core,
+  {$ifdef NO_USE_SYNGDIPLUS} jpeg {$else} mormot.ui.gdiplus {$endif}
 {$else}
   {$ifdef NEEDVCLPREFIX}
   WinApi.Windows,
-  VCL.Graphics
+  VCL.Graphics,
+  {$ifdef NO_USE_SYNGDIPLUS} jpeg {$else} mormot.ui.gdiplus {$endif}
   {$else}
   Windows,
-  Graphics
+  Graphics,
+  {$ifdef NO_USE_SYNGDIPLUS} jpeg {$else} mormot.ui.gdiplus {$endif}
   {$endif NEEDVCLPREFIX}
 {$endif FPC}
   ;
@@ -464,6 +482,668 @@ begin
     PdfStream.Free;
   end;
 end;
+
+function SavedPdf(Doc: TPdfDocument): RawByteString;
+var
+  ms: TMemoryStream;
+begin
+  ms := TMemoryStream.Create;
+  try
+    Doc.SaveToStream(ms, FIXED_DATE);
+    SetString(result, PAnsiChar(ms.Memory), ms.Size);
+  finally
+    ms.Free;
+  end;
+end;
+
+function Nibble(c: AnsiChar): integer;
+begin
+  case c of
+    '0'..'9':
+      result := ord(c) - ord('0');
+    'A'..'F':
+      result := ord(c) - (ord('A') - 10);
+    'a'..'f':
+      result := ord(c) - (ord('a') - 10);
+  else
+    result := 0;
+  end;
+end;
+
+// the bytes of the (literal) or <hex> string written after Key
+function PdfStringAfter(const s, Key: RawByteString): RawByteString;
+var
+  p: integer;
+begin
+  result := '';
+  p := PosEx(Key, s);
+  if p = 0 then
+    exit;
+  inc(p, length(Key));
+  while (p <= length(s)) and
+        (s[p] = ' ') do
+    inc(p);
+  if p > length(s) then
+    exit;
+  if s[p] = '<' then
+  begin
+    inc(p);
+    while (p < length(s)) and
+          (s[p] <> '>') do
+    begin
+      result := result + AnsiChar(Nibble(s[p]) shl 4 + Nibble(s[p + 1]));
+      inc(p, 2);
+    end;
+  end
+  else if s[p] = '(' then
+  begin
+    inc(p);
+    while (p <= length(s)) and
+          (s[p] <> ')') do
+    begin
+      if s[p] = '\' then
+      begin
+        inc(p);
+        case s[p] of
+          'n':
+            result := result + #10;
+          'r':
+            result := result + #13;
+          't':
+            result := result + #9;
+          'b':
+            result := result + #8;
+          'f':
+            result := result + #12;
+          '0'..'7':
+            begin
+              result := result + AnsiChar((ord(s[p]) - 48) * 64 +
+                (ord(s[p + 1]) - 48) * 8 + (ord(s[p + 2]) - 48));
+              inc(p, 2);
+            end;
+        else
+          result := result + s[p];
+        end;
+      end
+      else
+        result := result + s[p];
+      inc(p);
+    end;
+  end;
+end;
+
+procedure TTestUiPdf.UnicodeWidth;
+var
+  pdf: TPdfDocument;
+  w: array[0..1] of WideChar;
+begin
+  // FPC read fUsedWide[] before FindOrAddUsedWideChar reallocated it
+  pdf := TPdfDocument.Create;
+  try
+    pdf.AddPage;
+    pdf.Canvas.SetFont('Arial', 10, []);
+    w[1] := #0;
+    w[0] := WideChar($0418); // not WinAnsi: drawn before it was ever measured
+    pdf.Canvas.TextOutW(20, 700, @w);
+    w[0] := WideChar($0416);
+    Check(pdf.Canvas.UnicodeTextWidth(@w) > 0, 'measured');
+    Check(SavedPdf(pdf) <> '', 'saved');
+  finally
+    pdf.Free;
+  end;
+end;
+
+procedure TTestUiPdf.EscapeBackspace;
+var
+  pdf: TPdfDocument;
+  s: RawByteString;
+begin
+  pdf := TPdfDocument.Create;
+  try
+    pdf.GeneratePDF15File := false;
+    pdf.CompressionMethod := cmNone;
+    pdf.Info.Subject := 'a'#8'b';
+    pdf.AddPage;
+    s := SavedPdf(pdf);
+  finally
+    pdf.Free;
+  end;
+  // ISO 32000-1 7.3.4.2 defines \b - a reader takes \B as a plain B
+  Check(PosEx('/Subject(a\bb)', s) > 0, 'backspace escaped as \b');
+end;
+
+procedure TTestUiPdf.EncryptedUnicodeString;
+{$ifndef NO_USE_PDFSECURITY}
+const
+  KNOWN = 'ABCDEFGHIJKLMNOPQRSTUVWX';
+var
+  pdf: TPdfDocument;
+  w: array[0..1] of WideChar;
+  s, sub, tit: RawByteString;
+  i: integer;
+begin
+  w[0] := WideChar($0416); // two Cyrillic letters: a <FEFF..> text string
+  w[1] := WideChar($0417);
+  pdf := TPdfDocument.Create(false, 0, pdfaNone,
+    TPdfEncryption.New(elRC4_40, '', 'owner', PDF_PERMISSION_ALL));
+  try
+    pdf.GeneratePDF15File := false;
+    pdf.CompressionMethod := cmNone;
+    pdf.Info.Subject := KNOWN;
+    pdf.Info.Data.AddItem('Title', TPdfTextUtf8.Create(RawUnicodeToUtf8(@w, 2)));
+    pdf.AddPage;
+    s := SavedPdf(pdf);
+  finally
+    pdf.Free;
+  end;
+  // RC4 restarts for each string of an object: the known Subject gives the
+  // key stream, which decrypts the Title of the same Info dictionary
+  sub := PdfStringAfter(s, '/Subject');
+  tit := PdfStringAfter(s, '/Title');
+  if not CheckEqual(length(sub), length(KNOWN), 'subject') or
+     not CheckEqual(length(tit), 6, 'title: BOM and two characters') then
+    exit;
+  for i := 1 to length(tit) do
+    tit[i] := AnsiChar(ord(tit[i]) xor ord(sub[i]) xor ord(KNOWN[i]));
+  Check(tit = #$fe#$ff#$04#$16#$04#$17, 'BOM and UTF-16BE encrypted together');
+end;
+{$else}
+begin
+end;
+{$endif NO_USE_PDFSECURITY}
+
+procedure TTestUiPdf.WinAnsiToUnicodeBlocks;
+var
+  pdf: TPdfDocument;
+  txt: PdfString;
+  s: RawByteString;
+  c, p, q, n, blocks: integer;
+begin
+  txt := '';
+  for c := 33 to 255 do
+    if (c < 127) or
+       (c > 160) then
+      txt := txt + AnsiChar(c);
+  pdf := TPdfDocument.Create(false, 0, pdfa1B);
+  try
+    pdf.CompressionMethod := cmNone;
+    pdf.AddPage;
+    pdf.Canvas.SetFont('Arial', 10, []);
+    pdf.Canvas.TextOut(20, 700, txt);
+    s := SavedPdf(pdf);
+  finally
+    pdf.Free;
+  end;
+  // at most 100 entries per bfchar block (Adobe CMap specification, 7.4)
+  blocks := 0;
+  p := PosEx(' beginbfchar', s);
+  while p > 0 do
+  begin
+    q := p;
+    while (q > 1) and
+          (s[q - 1] in ['0'..'9']) do
+      dec(q);
+    n := GetInteger(@s[q]);
+    CheckUtf8(n <= 100, 'beginbfchar %', [n]);
+    inc(blocks);
+    p := PosEx(' beginbfchar', s, p + 1);
+  end;
+  Check(blocks > 1, 'the WinAnsi /ToUnicode needs several blocks');
+end;
+
+procedure TTestUiPdf.OutlineBeforePage;
+var
+  pdf: TPdfDocument;
+  s: RawByteString;
+  p, q: integer;
+  raised: boolean;
+begin
+  pdf := TPdfDocument.Create(true);
+  try
+    pdf.GeneratePDF15File := false;
+    pdf.CompressionMethod := cmNone;
+    raised := false;
+    try
+      pdf.CreateOutline('no page yet', 0, 100);
+    except
+      on EPdfInvalidOperation do
+        raised := true;
+    end;
+    Check(raised, 'an outline with a position needs a page');
+    Check(pdf.OutlineRoot.First = nil, 'no entry left');
+    pdf.AddPage;
+    pdf.CreateOutline('on a page', 0, 100);
+    Check(pdf.OutlineRoot.First <> nil);
+    s := SavedPdf(pdf);
+    // the root counts the one entry, not the failed one too
+    p := PosEx('/Type/Outlines', s);
+    q := PosEx('>>', s, p);
+    if Check((p > 0) and (q > p), 'Outlines dictionary') then
+      Check(PosEx('/Count 1', copy(s, p, q - p)) > 0, 'one entry counted');
+  finally
+    raised := false;
+    try
+      pdf.Free; // the failed entry must not be freed a second time
+    except
+      raised := true;
+    end;
+    Check(not raised, 'document freed');
+  end;
+end;
+
+type
+  TPdfDocumentAccess = class(TPdfDocument); // GetTrueTypeFontIndex
+
+procedure TTestUiPdf.AddFontKeepsIndexes;
+var
+  pdf: TPdfDocumentAccess;
+  verdana: TPdfFont;
+  i: integer;
+begin
+  pdf := TPdfDocumentAccess.Create;
+  try
+    pdf.FontFallBackName := 'Tahoma';
+    i := pdf.GetTrueTypeFontIndex('Verdana');
+    if not Check(i >= 0, 'Verdana installed') then
+      exit;
+    pdf.AddPage;
+    verdana := pdf.Canvas.SetFont('Verdana', 10, []); // created before the insert
+    pdf.Canvas.SetFont('No Such mORMot Font', 10, []); // resolved and cached
+    // sorts first: every index after it moves
+    Check(pdf.AddTrueTypeFont('AAA mORMot Test Font'));
+    CheckEqual(pdf.FontFallBackName, 'Tahoma', 'fallback kept');
+    CheckEqual(pdf.GetTrueTypeFontIndex('Verdana'), i + 1, 'name cache');
+    Check(pdf.Canvas.SetFont('Verdana', 10, []) = verdana, 'created font reused');
+    // a style not created yet: made from the cached index of the raster font
+    Check(pdf.Canvas.SetFont('No Such mORMot Font', 10, [pfsBold]) =
+          pdf.Canvas.SetFont('Tahoma', 10, [pfsBold]), 'raster font');
+  finally
+    pdf.Free;
+  end;
+end;
+
+procedure TTestUiPdf.NewDocDropsPage;
+var
+  pdf: TPdfDocument;
+  page: TPdfPage;
+  raised: boolean;
+  s: RawByteString;
+begin
+  pdf := TPdfDocument.Create;
+  try
+    pdf.AddPage;
+    Check(pdf.Canvas.Page <> nil);
+    pdf.NewDoc; // frees the page and its content stream
+    raised := false;
+    try
+      page := pdf.Canvas.Page; // raises without a page
+      Check(page = nil);
+    except
+      on EPdfInvalidOperation do
+        raised := true;
+    end;
+    Check(raised, 'no reference to the freed page');
+  finally
+    pdf.Free;
+  end;
+  {$ifndef NO_USE_PDFSECURITY}
+  // the /Encrypt dictionary was freed with the trailer of the first document
+  pdf := TPdfDocument.Create(false, 0, pdfaNone,
+    TPdfEncryption.New(elRC4_40, '', 'owner', PDF_PERMISSION_ALL));
+  try
+    pdf.AddPage;
+    pdf.NewDoc;
+    pdf.AddPage;
+    raised := false;
+    try
+      s := SavedPdf(pdf);
+    except
+      raised := true;
+    end;
+    Check(not raised and (PosEx('/Encrypt', s) > 0), 'encrypted after NewDoc');
+  finally
+    pdf.Free;
+  end;
+  {$endif NO_USE_PDFSECURITY}
+end;
+
+procedure TTestUiPdf.RasterFontCache;
+const
+  UNKNOWN = 'No Such mORMot Font';
+var
+  pdf: TPdfDocument;
+  form: TPdfFormWithCanvas;
+begin
+  pdf := TPdfDocument.Create;
+  try
+    pdf.FontFallBackName := 'Tahoma';
+    form := TPdfFormWithCanvas.Create(pdf, 200, 100);
+    pdf.AddXObject('FormR', form); // owned by the document from here
+    form.Canvas.SetFont(UNKNOWN, 10, []); // resolved and cached
+    // sorts first: every index after it moves
+    Check(pdf.AddTrueTypeFont('AAA mORMot Test Font'));
+    Check(form.Canvas.SetFont(UNKNOWN, 10, [pfsItalic]) =
+          form.Canvas.SetFont('Tahoma', 10, [pfsItalic]), 'form canvas');
+    form.CloseCanvas;
+    pdf.AddPage;
+    pdf.Canvas.SetFont(UNKNOWN, 10, []); // resolved and cached
+    pdf.FontFallBackName := 'Verdana';
+    Check(pdf.Canvas.SetFont(UNKNOWN, 10, []) =
+          pdf.Canvas.SetFont('Verdana', 10, []), 'new fallback');
+    Check(pdf.Canvas.SetFont(UNKNOWN, 10, [], -1, -1, true) =
+          pdf.Canvas.SetFont('Courier New', 10, []), 'fixed width');
+  finally
+    pdf.Free;
+  end;
+end;
+
+procedure TTestUiPdf.NewDocRenewsKey;
+{$ifndef NO_USE_PDFSECURITY}
+var
+  pdf: TPdfDocument;
+  first, second: RawByteString;
+begin
+  pdf := TPdfDocument.Create(false, 0, pdfaNone,
+    TPdfEncryption.New(elRC4_128, '', 'owner', PDF_PERMISSION_ALL));
+  try
+    pdf.CompressionMethod := cmNone;
+    pdf.Info.Subject := 'AAAAAAAA';
+    pdf.AddPage;
+    first := PdfStringAfter(SavedPdf(pdf), '/Subject');
+    pdf.NewDoc; // a new file ID, so a new key
+    pdf.Info.Subject := 'AAAAAAAA';
+    pdf.AddPage;
+    second := PdfStringAfter(SavedPdf(pdf), '/Subject');
+  finally
+    pdf.Free;
+  end;
+  // with empty pages, the Info dictionary is the last object encrypted by one
+  // save and the first by the next: the RC4 key cached for it was the old one
+  CheckEqual(length(second), 8, 'subject');
+  Check(second <> first, 'encrypted with the key of the new document');
+end;
+{$else}
+begin
+end;
+{$endif NO_USE_PDFSECURITY}
+
+procedure TTestUiPdf.NewDocEndsDirectSave;
+var
+  pdf: TPdfDocument;
+  left: TMemoryStream;
+  s: RawByteString;
+begin
+  left := TMemoryStream.Create;
+  try
+    pdf := TPdfDocument.Create;
+    try
+      pdf.AddPage;
+      pdf.SaveToStreamDirectBegin(left); // never ended
+      pdf.NewDoc;
+      pdf.AddPage;
+      s := SavedPdf(pdf); // raised "SaveToStreamDirectBegin called twice"
+    finally
+      pdf.Free;
+    end;
+  finally
+    left.Free;
+  end;
+  Check(PosEx('%%EOF', s) > 0, 'saved after NewDoc');
+end;
+
+procedure TTestUiPdf.CatalogGetters;
+var
+  pdf: TPdfDocument;
+begin
+  pdf := TPdfDocument.Create;
+  try
+    Check(pdf.Info.HasData, 'HasData');
+    pdf.Root.NonFullScreenPageMode := pmUseOutlines;
+    Check(pdf.Root.NonFullScreenPageMode = pmUseOutlines,
+      'NonFullScreenPageMode reads ViewerPreferences');
+  finally
+    pdf.Free;
+  end;
+end;
+
+const
+  // 8 x 8 pixels, one component (grayscale) and four (CMYK)
+  JPEG_GRAY = '/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDABALDA4MChAODQ4SERATGCgaGBYWGDEj' +
+    'JR0oOjM9PDkzODdASFxOQERXRTc4UG1RV19iZ2hnPk1xeXBkeFxlZ2P/wAALCAAIAAgBAREA' +
+    '/8QAFAABAAAAAAAAAAAAAAAAAAAAAP/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8A' +
+    'P//Z';
+  JPEG_CMYK = '/9j/7gAOQWRvYmUAZAAAAAAA/9sAQwAQCwwODAoQDg0OEhEQExgoGhgWFhgxIyUd' +
+    'KDozPTw5Mzg3QEhcTkBEV0U3OFBtUVdfYmdoZz5NcXlwZHhcZWdj/8AAFAgACAAIBEMRAE0R' +
+    'AFkRAEsRAP/EABUAAQEAAAAAAAAAAAAAAAAAAAcB/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/a' +
+    'AA4EQwBNAFkASwAAPwBAQfkB/9k=';
+
+procedure TTestUiPdf.JpegColorSpace;
+var
+  pdf: TPdfDocument;
+  jpg: TJpegImage;
+  ms: TMemoryStream;
+  img: TPdfImage;
+  raised: boolean;
+  nojpeg: RawByteString;
+
+  procedure Load(const b64: RawUtf8);
+  var
+    bin: RawByteString;
+  begin
+    bin := Base64ToBin(b64);
+    ms.Clear;
+    ms.WriteBuffer(pointer(bin)^, length(bin));
+    ms.Position := 0;
+  end;
+
+begin
+  pdf := TPdfDocument.Create;
+  ms := TMemoryStream.Create;
+  try
+    pdf.AddPage;
+    // a grayscale TJpegImage is not RGB
+    Load(JPEG_GRAY);
+    jpg := TJpegImage.Create;
+    try
+      jpg.LoadFromStream(ms);
+      img := TPdfImage.Create(pdf, jpg, true);
+      try
+        CheckEqual(img.Attributes.PdfNameByName('ColorSpace').Value,
+          'DeviceGray', 'TJpegImage');
+      finally
+        img.Free;
+      end;
+    finally
+      jpg.Free;
+    end;
+    // what cannot be written raises, nothing incomplete is left
+    Load(JPEG_CMYK);
+    jpg := TJpegImage.Create;
+    try
+      jpg.LoadFromStream(ms);
+      raised := false;
+      try
+        TPdfImage.Create(pdf, jpg, true).Free;
+      except
+        on EPdfInvalidValue do
+          raised := true;
+      end;
+      Check(raised, 'CMYK TJpegImage');
+    finally
+      jpg.Free;
+    end;
+    Load(JPEG_CMYK);
+    raised := false;
+    try
+      TPdfImage.CreateJpegDirect(pdf, ms, true).Free;
+    except
+      on EPdfInvalidValue do
+        raised := true;
+    end;
+    Check(raised, 'CMYK JPEG');
+    nojpeg := 'some text, not a JPEG';
+    ms.Clear;
+    ms.WriteBuffer(pointer(nojpeg)^, length(nojpeg));
+    raised := false;
+    try
+      TPdfImage.CreateJpegDirect(pdf, ms, true).Free;
+    except
+      on EPdfInvalidValue do
+        raised := true;
+    end;
+    Check(raised, 'not a JPEG');
+  finally
+    ms.Free;
+    pdf.Free;
+  end;
+end;
+
+procedure TTestUiPdf.ZeroAdvanceMeasured;
+var
+  pdf: TPdfDocument;
+  w: array[0..2] of WideChar;
+  w1, w2: single;
+begin
+  pdf := TPdfDocument.Create;
+  try
+    pdf.AddPage;
+    pdf.Canvas.SetFont('Arial', 10, []);
+    w[0] := 'a';
+    w[1] := #0;
+    w1 := pdf.Canvas.UnicodeTextWidth(@w);
+    w[1] := WideChar($0301); // combining acute accent: advances by 0
+    w[2] := #0;
+    w2 := pdf.Canvas.UnicodeTextWidth(@w);
+    CheckSame(w1, w2, 1E-6, 'a combining mark adds no width');
+  finally
+    pdf.Free;
+  end;
+end;
+
+procedure TTestUiPdf.ReducedFontChecksum;
+{$ifndef NO_USE_UNISCRIBE}
+var
+  pdf: TPdfDocument;
+  s: RawByteString;
+  p, len, i: integer;
+  sum: cardinal;
+begin
+  pdf := TPdfDocument.Create;
+  try
+    pdf.GeneratePDF15File := false;
+    pdf.CompressionMethod := cmNone;
+    pdf.EmbeddedTtf := true;
+    pdf.AddPage;
+    pdf.Canvas.SetFont('Arial', 10, []);
+    pdf.Canvas.TextOut(20, 700, 'Hello');
+    s := SavedPdf(pdf);
+  finally
+    pdf.Free;
+  end;
+  // the subset of a hinted face keeps 10 tables, so ReduceTTF rebuilds it
+  p := PosEx('/Length1 ', s);
+  if not Check(p > 0, 'FontFile2') then
+    exit;
+  len := GetInteger(@s[p + 9]);
+  p := PosEx('stream', s, p);
+  if not Check(p > 0, 'stream') then
+    exit;
+  inc(p, 6);
+  if s[p] = #13 then
+    inc(p);
+  inc(p); // #10
+  if not Check(p + len - 1 <= length(s), 'font data') then
+    exit;
+  // the whole font sums to $B1B0AFBA, its tables read as big-endian words
+  sum := 0;
+  i := 0;
+  while i < len do
+  begin
+    sum := sum + cardinal(ord(s[p + i])) shl 24;
+    if i + 1 < len then
+      sum := sum + cardinal(ord(s[p + i + 1])) shl 16;
+    if i + 2 < len then
+      sum := sum + cardinal(ord(s[p + i + 2])) shl 8;
+    if i + 3 < len then
+      sum := sum + cardinal(ord(s[p + i + 3]));
+    inc(i, 4);
+  end;
+  CheckEqual(sum, $B1B0AFBA, 'head.checkSumAdjustment');
+end;
+{$else}
+begin
+end;
+{$endif NO_USE_UNISCRIBE}
+
+function Hex4(v: word): RawUtf8;
+const
+  HEX: array[0..15] of AnsiChar = '0123456789ABCDEF';
+begin
+  SetLength(result, 4);
+  result[1] := HEX[v shr 12];
+  result[2] := HEX[(v shr 8) and 15];
+  result[3] := HEX[(v shr 4) and 15];
+  result[4] := HEX[v and 15];
+end;
+
+{$ifdef FPC} // not in the Windows unit of FPC
+function GetGlyphIndicesW(DC: HDC; Text: PWideChar; Count: integer;
+  Glyphs: PWord; Flags: cardinal): cardinal; stdcall; external 'gdi32.dll';
+{$endif FPC}
+
+procedure TTestUiPdf.BidiEmbeddingOrder;
+{$ifndef NO_USE_UNISCRIBE}
+const
+  // x RLO ab LRE cd PDF ef PDF z: the embedding levels 0 1 2 1 0, where
+  // Uniscribe also sets the override bit of the state above the level bits
+  TXT: array[0..14] of WideChar = ('x', ' ', WideChar($202E), 'a', 'b',
+    WideChar($202A), 'c', 'd', WideChar($202C), 'e', 'f', WideChar($202C),
+    ' ', 'z', #0);
+  ECA: array[0..2] of WideChar = ('e', 'c', 'a');
+var
+  pdf: TPdfDocument;
+  s: RawByteString;
+  dc: HDC;
+  font, old: HFONT;
+  g: array[0..2] of word;
+  p, pe, pc, pa: integer;
+begin
+  dc := CreateCompatibleDC(0);
+  font := CreateFont(-100, 0, 0, 0, FW_NORMAL, 0, 0, 0, ANSI_CHARSET,
+    OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY, 0, 'Arial');
+  old := SelectObject(dc, font);
+  GetGlyphIndicesW(dc, @ECA, 3, @g, 0);
+  SelectObject(dc, old);
+  DeleteObject(font);
+  DeleteDC(dc);
+  pdf := TPdfDocument.Create;
+  try
+    pdf.GeneratePDF15File := false;
+    pdf.CompressionMethod := cmNone;
+    pdf.UseUniscribe := true;
+    pdf.AddPage;
+    pdf.Canvas.SetFont('Arial', 10, []);
+    pdf.Canvas.TextOutW(20, 700, @TXT);
+    s := SavedPdf(pdf);
+  finally
+    pdf.Free;
+  end;
+  // visual order: x, then the runs ef, cd, ab - in the text object only
+  p := PosEx('BT'#10, s);
+  if not Check(p > 0, 'text object') then
+    exit;
+  s := copy(s, p, PosEx('ET'#10, s, p) - p);
+  pe := PosEx(Hex4(g[0]), s);
+  pc := PosEx(Hex4(g[1]), s);
+  pa := PosEx(Hex4(g[2]), s);
+  CheckUtf8((pe > 0) and
+            (pe < pc) and
+            (pc < pa), 'visual order ef, cd, ab: % % %', [pe, pc, pa]);
+end;
+{$else}
+begin
+end;
+{$endif NO_USE_UNISCRIBE}
 
 {$else}
 

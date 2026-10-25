@@ -81,6 +81,8 @@ type
     procedure NextIDSelectMaxFailure;
     /// regular Engine*() from another thread during a BATCH of this thread
     procedure BatchFromOtherThread;
+    /// SharedTransaction() when the actual Commit fails
+    procedure SharedTransactionCommitFailure;
     /// initialize needed RESTful client (and server) instances
     // - i.e. a RESTful direct access to an external DB
     procedure ExternalRecords;
@@ -1175,6 +1177,79 @@ begin
   finally
     props.Free;
     SynDBLog.Family.Level := level;
+  end;
+end;
+
+procedure TTestExternalDatabase.SharedTransactionCommitFailure;
+var
+  props: TSqlDBSQLite3ConnectionProperties;
+  conn: TSqlDBConnection;
+  raised: boolean;
+
+  function Count(const table: RawUtf8): integer;
+  begin
+    with props.Execute(FormatUtf8('select count(*) from %', [table]), []) do
+    begin
+      Check(Step, table);
+      result := ColumnInt(0);
+    end;
+  end;
+
+begin
+  // a failed COMMIT (here a SQLite3 deferred foreign key) left the connection
+  // with TransactionCount=1 and the database transaction open, whereas the
+  // shared transaction entry was already removed: nobody would ever close it
+  DeleteFile('sharedtx.db3');
+  props := TSqlDBSQLite3ConnectionProperties.Create('sharedtx.db3', '', '', '');
+  try
+    props.ExecuteNoResult('PRAGMA foreign_keys=ON', []);
+    props.ExecuteNoResult('CREATE TABLE p(id INTEGER PRIMARY KEY)', []);
+    props.ExecuteNoResult('CREATE TABLE c(pid INTEGER REFERENCES p(id) ' +
+      'DEFERRABLE INITIALLY DEFERRED)', []);
+    // the COMMIT failures below are expected: no exception logging
+    TSynLog.Family.ExceptionIgnoreCurrentThread := true;
+    try
+      conn := props.SharedTransaction(1, transBegin);
+      Check(conn <> nil, 'begin');
+      props.ExecuteNoResult('INSERT INTO c VALUES (999)', []);
+      Check(props.SharedTransaction(1, transCommitWithoutException) = nil, 'commit');
+      CheckEqual(conn.TransactionCount, 0, 'counter');
+      Check(not TSqlDBSQLite3Connection(conn).DB.TransactionActive, 'rolled back');
+      CheckEqual(Count('c'), 0, 'row rolled back');
+      // another transaction counted on the same connection is kept as such
+      conn := props.SharedTransaction(1, transBegin);
+      Check(conn <> nil, 'begin 2');
+      conn.StartTransaction;
+      props.ExecuteNoResult('INSERT INTO p VALUES (1)', []);
+      props.ExecuteNoResult('INSERT INTO c VALUES (999)', []);
+      Check(props.SharedTransaction(1, transCommitWithoutException) = nil, 'commit 2');
+      CheckEqual(conn.TransactionCount, 1, 'other transaction still counted');
+      Check(TSqlDBSQLite3Connection(conn).DB.TransactionActive, 'left to its owner');
+      conn.Rollback;
+      CheckEqual(conn.TransactionCount, 0, 'counter 2');
+      CheckEqual(Count('p'), 0, 'owner rolled back');
+      // with exception: same cleaning, and the error is propagated
+      conn := props.SharedTransaction(1, transBegin);
+      props.ExecuteNoResult('INSERT INTO c VALUES (999)', []);
+      raised := false;
+      try
+        props.SharedTransaction(1, transCommitWithException);
+      except
+        raised := true;
+      end;
+      Check(raised, 'commit 3 should raise');
+      CheckEqual(conn.TransactionCount, 0, 'counter 3');
+      Check(not TSqlDBSQLite3Connection(conn).DB.TransactionActive, 'rolled back 3');
+    finally
+      TSynLog.Family.ExceptionIgnoreCurrentThread := false;
+    end;
+    // and a new shared transaction works as usual
+    Check(props.SharedTransaction(1, transBegin) <> nil, 'begin again');
+    Check(props.SharedTransaction(1, transRollback) <> nil, 'rollback');
+    CheckEqual(conn.TransactionCount, 0, 'counter 4');
+  finally
+    props.Free;
+    DeleteFile('sharedtx.db3');
   end;
 end;
 

@@ -74,7 +74,6 @@
         <DCCReference Include="..\..\src\shared_types.pas"/>
         <DCCReference Include="..\..\src\app_config.pas"/>
         <DCCReference Include="..\..\src\app_settings.pas"/>
-        <DCCReference Include="..\..\src\dom\tasks\task.pas"/>
         <DCCReference Include="..\..\src\app\tasks\interface\task_query.pas"/>
         <DCCReference Include="..\..\src\app\tasks\interface\task_command.pas"/>
         <DCCReference Include="..\..\src\app\tasks\interface\task_dtos.pas"/>

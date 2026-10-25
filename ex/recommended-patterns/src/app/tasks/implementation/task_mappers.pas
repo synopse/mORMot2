@@ -37,9 +37,16 @@ procedure AddCommentDTOToComment(const aDto: TTaskAddCommentDTO;
 implementation
 
 uses
+  mormot.core.rtti,
   mormot.orm.core;
 
+var
+  /// TTaskComment (aggregate) -> TTaskCommentDTO (wire), set up once below
+  CommentMap: TRttiMap;
+
 function OrmToTaskViewDTO(aTask: TTask): TTaskViewDTO;
+var
+  comments: TTaskCommentDynArray;
 begin
   Result.ID := aTask.ID;
   Result.Title := aTask.Title;
@@ -51,9 +58,11 @@ begin
   Result.IsCompleted := aTask.IsCompleted;
   Result.CreatedAt := aTask.CreatedAt;
   Result.UpdatedAt := aTask.UpdatedAt;
-  Result.CommentCount := Length(aTask.Comments);
+  comments := aTask.Comments;
+  Result.CommentCount := Length(comments);
   Result.TagIDs := aTask.TagIDs;
-  Result.Comments := aTask.Comments;
+  // the DTO declares its own comment type: copy the array field by field
+  CommentMap.ToArrayB(comments, Result.Comments);
 end;
 
 function OrmToTaskListItemDTO(aTask: TTask): TTaskListItemDTO;
@@ -163,5 +172,10 @@ begin
   aComment.UpdatedAt := NowUtc;
   aComment.IsEdited := false;
 end;
+
+initialization
+  // after task and task_dtos registered both record types (used units are
+  // initialized first); TRttiMap is thread-safe once set up
+  CommentMap.Init(TypeInfo(TTaskComment), TypeInfo(TTaskCommentDTO)).AutoMap;
 
 end.
