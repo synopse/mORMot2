@@ -93,8 +93,6 @@ type
     fBatchMethod: TUriMethod;
     fBatchOptions: TRestBatchOptions;
     fBatchCapacity, fBatchCount: integer;
-    // the thread which called InternalBatchStart (and owns the storage lock)
-    fBatchThread: TThreadID;
     // BATCH sending uses TEXT storage for direct sending to database driver
     fBatchIDs: TIDDynArray;
     fBatchValues: TRawUtf8DynArray;
@@ -181,8 +179,8 @@ type
     /// true if the current thread is within its own InternalBatchStart/Stop
     // - a regular Engine*() call from another thread during this BATCH should
     // not see fBatchMethod, but wait for the storage lock as a regular call
+    // - fBatchMethod is read only within the (reentrant) storage lock
     function InBatchOfCurrentThread: boolean;
-      {$ifdef HASINLINE} inline; {$endif}
     /// TRestServer.Uri use it for Static.EngineList to by-pass virtual table
     // - overridden method to handle most potential simple queries, e.g. like
     // $ SELECT Field1,RowID FROM table WHERE RowID=... AND/OR/NOT Field2=
@@ -1040,7 +1038,6 @@ begin
       fBatchMethod := Method;
       fBatchOptions := BatchOptions;
       fBatchCount := 0;
-      fBatchThread := GetCurrentThreadId;
       result := true; // means BATCH mode is supported
     finally
       if not result then
@@ -1229,17 +1226,23 @@ begin
     fBatchCapacity := 0;
     fBatchMethod := mNone;
     fBatchOptions := [];
-    fBatchThread := TThreadID(0);
     StorageUnLock;
   end;
 end;
 
 function TRestStorageExternal.InBatchOfCurrentThread: boolean;
 begin
-  // fBatchThread is only set within StorageLock, so may equal the current
-  // thread ID only if this thread did actually start the BATCH
-  result := (fBatchMethod <> mNone) and
-            (fBatchThread = GetCurrentThreadId);
+  // the BATCH owner keeps the storage lock from InternalBatchStart to
+  // InternalBatchStop: since the lock is reentrant, the owner thread enters
+  // at once, whereas any other thread waits here for the BATCH to be sent
+  // - so once we own the lock, fBatchMethod <> mNone means that the current
+  // thread is the BATCH owner, with no unlocked read of a shared field
+  StorageLock(false {$ifdef DEBUGSTORAGELOCK}, 'ExtInBatch' {$endif});
+  try
+    result := fBatchMethod <> mNone;
+  finally
+    StorageUnLock;
+  end;
 end;
 
 procedure TRestStorageExternal.InternalBatchAppend(const aValue: RawUtf8;
