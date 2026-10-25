@@ -1859,6 +1859,13 @@ type
     procedure PointI(x, y: single);
       {$ifdef HASINLINE}inline;{$endif}
     function RectI(const Rect: TRect; Normalize: boolean): TPdfRect;
+    // size of one device pixel of the metafile, in logical units
+    function DevPixelX: single;
+    function DevPixelY: single;
+    // inclusive-inclusive GDI box (EMR_RECTANGLE, EMR_ELLIPSE)
+    function BoxInclI(Box: TRect): TPdfBox;
+    // exclusive GDI box (FillRect = EMR_BITBLT PATCOPY)
+    function BoxExclI(Box: TRect): TPdfBox;
     procedure DrawXObjectPrepare(const AXObjectName: PdfString);
     // wrappers about offset calculation
     function ViewOffsetX(X: single): single;
@@ -7914,6 +7921,7 @@ function TPdfDocument.CreateOrGetImage(
 var
   jpg: TJpegImage;
   img: TPdfImage;
+  usejpeg: boolean;
   hash: THash128Rec; // no DefaultHasher128() because AesNiHash128() makes GPF
   y, w, h, row: integer;
   palcount: cardinal;
@@ -7955,7 +7963,11 @@ begin
   if result = '' then
   begin
      // create new if no existing TPdfImage match
-    if ForceJPEGCompression = 0 then
+    // a colour-keyed bitmap (e.g. from EMR_TRANSPARENTBLT) must stay lossless:
+    // JPEG would drop its /Mask and alter the key colour
+    usejpeg := (ForceJPEGCompression <> 0) and
+               (B.TransparentMode <> tmFixed);
+    if not usejpeg then
       img := TPdfImage.Create(Canvas.fDoc, B, true)
     else
     begin
@@ -7970,7 +7982,7 @@ begin
     if not ForceNoBitmapReuse then
       img.fHash := hash;
     result := 'SynImg' + UInt32ToPdfString(fXObjectList.ItemCount);
-    if ForceJPEGCompression = 0 then
+    if not usejpeg then
       AddXObject(result, img)
     else
       RegisterXObject(img, result);
@@ -9498,8 +9510,11 @@ end;
 
 procedure TPdfCanvas.RoundRectI(x1, y1, x2, y2, cx, cy: integer);
 begin
-  RoundRect(I2X(x1), I2Y(y1), I2X(x2), I2Y(y2),
-    cx * fDevScaleX * fWorldFactorX, -cy * fDevScaleY * fWorldFactorY);
+  // the corner size goes through the same window/viewport mapping as the
+  // coordinates (MM_ANISOTROPIC metafiles), and the GDI box is
+  // inclusive-inclusive: one device pixel is added to the right/bottom edges
+  RoundRect(I2X(x1), I2Y(y1), S2X(x2 + DevPixelX), S2Y(y2 + DevPixelY),
+    I2X(x1 + cx) - I2X(x1), I2Y(y1 + cy) - I2Y(y1));
 end;
 
 procedure TPdfCanvas.ArcI(centerx, centery, W, H, Sx, Sy, Ex, Ey: integer;
@@ -9554,6 +9569,61 @@ begin
   result.Bottom := I2Y(Rect.Bottom - 1);
   if Normalize then
     NormalizeRect(result);
+end;
+
+function TPdfCanvas.DevPixelX: single;
+begin
+  if (fViewSize.cx <> 0) and
+     (fWinSize.cx <> 0) then
+    result := Abs(fWinSize.cx / fViewSize.cx)
+  else
+    result := 1;
+end;
+
+function TPdfCanvas.DevPixelY: single;
+begin
+  if (fViewSize.cy <> 0) and
+     (fWinSize.cy <> 0) then
+    result := Abs(fWinSize.cy / fViewSize.cy)
+  else
+    result := 1;
+end;
+
+function PdfRectToBox(r: TPdfRect): TPdfBox;
+begin
+  NormalizeRect(r);
+  result.Left   := r.Left;
+  result.Top    := r.Top;
+  result.Width  := r.Right - r.Left;
+  result.Height := r.Bottom - r.Top;
+end;
+
+// GDI records the Right/Bottom of Rectangle/Ellipse one DEVICE pixel inside
+// the shape, i.e. several logical units with a screen reference DC: RectI()
+// removed one logical unit instead, and shapes were too small
+function TPdfCanvas.BoxInclI(Box: TRect): TPdfBox;
+var
+  r: TPdfRect;
+begin
+  NormalizeRect(Box);
+  r.Left   := I2X(Box.Left);
+  r.Right  := S2X(Box.Right + DevPixelX);
+  r.Top    := I2Y(Box.Top);
+  r.Bottom := S2Y(Box.Bottom + DevPixelY);
+  result := PdfRectToBox(r);
+end;
+
+// FillRect() boxes are exclusive: no pixel nor unit to remove
+function TPdfCanvas.BoxExclI(Box: TRect): TPdfBox;
+var
+  r: TPdfRect;
+begin
+  NormalizeRect(Box);
+  r.Left   := I2X(Box.Left);
+  r.Right  := I2X(Box.Right);
+  r.Top    := I2Y(Box.Top);
+  r.Bottom := I2Y(Box.Bottom);
+  result := PdfRectToBox(r);
 end;
 
 procedure TPdfCanvas.BeginMarkedContent(Group: TPdfOptionalContentGroup);
@@ -10831,7 +10901,7 @@ begin
       EMR_ELLIPSE:
         begin
           E.NeedBrushAndPen;
-          with E.Canvas.BoxI(TRect(PEMRRectangle(R)^.rclBox), true) do
+          with E.Canvas.BoxInclI(TRect(PEMRRectangle(R)^.rclBox)) do
             case R^.iType of
               EMR_RECTANGLE:
                 E.Canvas.Rectangle(Left, Top, Width, Height);
@@ -11789,7 +11859,7 @@ begin
     exit;
   Canvas.NewPath;
   FillColor := DC[nDC].brush.color;
-  with Canvas.BoxI(Rect, true) do
+  with Canvas.BoxExclI(Rect) do
     Canvas.Rectangle(Left, Top, Width, Height);
   Canvas.Fill;
   if ResetNewPath then
