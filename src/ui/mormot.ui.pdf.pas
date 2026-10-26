@@ -10747,13 +10747,15 @@ type
            BrushNull: boolean;
            BrushStyle: integer);
     end;
-    // SaveDC/RestoreDC stack
+    // SaveDC/RestoreDC stack, as deep as the metafile saves it: SaveDC may
+    // reallocate it, so EnumEMFFunc must not use its "with E.DC[E.nDC]"
+    // scope after E.SaveDC
     nDC: integer;
-    DC: array[0..31] of TPdfEnumState;
+    DC: array of TPdfEnumState;
   public
     constructor Create(ACanvas: TPdfCanvas);
     procedure SaveDC;
-    procedure RestoreDC;
+    procedure RestoreDC(Relative: integer);
     procedure NeedPen;
     procedure NeedBrushAndPen;
     procedure FlushPenBrush;
@@ -10856,9 +10858,9 @@ begin
       EMR_EXTTEXTOUTW:
         E.TextOut(PEMRExtTextOut(R)^);
       EMR_SAVEDC:
-        E.SaveDC;
+        E.SaveDC; // may reallocate E.DC: nothing of this with-scope after it
       EMR_RESTOREDC:
-        E.RestoreDC;
+        E.RestoreDC(PEMRRestoreDC(R)^.iRelative);
       EMR_SETWORLDTRANSFORM:
         E.ScaleMatrix(@PEMRSetWorldTransform(R)^.xform, MWT_SET);
       EMR_CREATEPEN:
@@ -11612,6 +11614,7 @@ end;
 constructor TPdfEnum.Create(ACanvas: TPdfCanvas);
 begin
   Canvas := ACanvas;
+  SetLength(DC, 32);
   // set invalid colors or style -> force paint
   fFillColor := -1;
   fStrokeColor := -1;
@@ -12097,15 +12100,20 @@ begin
     end;
 end;
 
-procedure TPdfEnum.RestoreDC;
+procedure TPdfEnum.RestoreDC(Relative: integer);
 begin
-  Assert(nDC > 0);
-  dec(nDC);
+  // an EMF record restores relatively (-1 = the last saved); a state that
+  // was not saved is ignored, as the playback of GDI does
+  if (Relative >= 0) or
+     (Relative < -nDC) then
+    exit;
+  inc(nDC, Relative);
 end;
 
 procedure TPdfEnum.SaveDC;
 begin
-  Assert(nDC < high(DC));
+  if nDC >= high(DC) then
+    SetLength(DC, length(DC) * 2);
   DC[nDC + 1] := DC[nDC];
   inc(nDC);
 end;

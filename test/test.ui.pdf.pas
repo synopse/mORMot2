@@ -55,6 +55,7 @@ type
     procedure EmfPlusRecordLayout;
     procedure EmfAlphaBlendOpaque;
     procedure EmfPolyPolylineOpen;
+    procedure EmfRestoreDCDepth;
   end;
 
 implementation
@@ -1724,6 +1725,65 @@ begin
   end;
   // two open polylines of two segments in each record, two closed triangles
   CheckEqual(CountOccurrences(' l'#10, txt), 2 * 2 + 2 * 2 + 2 * 3, 'line segments');
+end;
+
+procedure TTestUiPdf.EmfRestoreDCDepth;
+var
+  mf: TMetaFile;
+  mc: TMetaFileCanvas;
+  bytes: RawByteString;
+  recs: TIntegerDynArray;
+  txt, rel: RawUtf8;
+  i: integer;
+
+  procedure Text(Y: integer; const Value: WideString);
+  begin
+    TextOutW(mc.Handle, 10, Y, pointer(Value), length(Value));
+  end;
+
+begin
+  { EMR_RESTOREDC popped one state whatever its iRelative, and the saved
+    states were an array of 32 guarded by Assert only }
+  mf := TMetaFile.Create;
+  try
+    mf.Width := 400;
+    mf.Height := 400;
+    mc := TMetaFileCanvas.Create(mf, 0);
+    try
+      SetTextColor(mc.Handle, RGB(255, 0, 0));
+      SaveDC(mc.Handle);
+      SetTextColor(mc.Handle, RGB(0, 255, 0));
+      SaveDC(mc.Handle);
+      SetTextColor(mc.Handle, RGB(0, 0, 255));
+      RestoreDC(mc.Handle, -2); // back to red
+      Text(10, 'Red');
+      for i := 1 to 40 do
+      begin
+        SetTextColor(mc.Handle, RGB(i * 6, 0, 0));
+        if i = 37 then
+          Text(40, 'Level');
+        SaveDC(mc.Handle);
+      end;
+      RestoreDC(mc.Handle, -4); // the state saved after Level
+      Text(70, 'Deep');
+    finally
+      mc.Free;
+    end;
+    bytes := MetaFileBytes(mf);
+    CheckEqual(length(EmfRecords(bytes, R_SAVEDC)), 42, 'the saves');
+    recs := EmfRecords(bytes, R_RESTOREDC); // the canvas adds one of its own
+    rel := '';
+    for i := 0 to high(recs) do
+      rel := rel + Int32ToUtf8(PInteger(@PByteArray(bytes)[recs[i] + 8])^) + ' ';
+    Check(PosEx('-2 -4 ', rel) = 1, 'the restores');
+    txt := RenderedEmf(mf);
+  finally
+    mf.Free;
+  end;
+  CheckEqual(OperandsBefore(txt, '(Red)', ' rg'), '1 0 0', 'RestoreDC(-2)');
+  Check(OperandsBefore(txt, '(Level)', ' rg') <> '', 'the colour of level 37');
+  CheckEqual(OperandsBefore(txt, '(Deep)', ' rg'),
+    OperandsBefore(txt, '(Level)', ' rg'), 'restored past 32 states');
 end;
 
 {$else}
