@@ -49,6 +49,9 @@ type
     procedure EmfPlusClipRestored;
     procedure EmfPlusRestoreDepth;
     procedure EmfPlusNullPen;
+    procedure EmfPlusViewportOrigin;
+    procedure EmfPlusPlaybackOrder;
+    procedure EmfPlusWindowOrigin;
   end;
 
 implementation
@@ -1427,6 +1430,77 @@ begin
   SetMapMode(result, MM_ANISOTROPIC);
   SetWindowExtEx(result, 50, 50, nil);
   SetViewportExtEx(result, 100, 100, nil);
+end;
+
+procedure TTestUiPdf.EmfPlusViewportOrigin;
+var
+  dc, expected: HDC;
+begin
+  // the viewport origin was taken in logical units: ViewOrg * Win / View
+  // instead of ViewOrg - WinOrg * View / Win; compared with the same
+  // rectangle moved by the logical units of the origin, rounded alike
+  if not Check(Gdip.Exists, 'GDI+') then
+    exit;
+  dc := DoubledEmf;
+  SetViewportOrgEx(dc, 30, 30, nil);
+  Rectangle(dc, 0, 0, 20, 20); // the device pixels 30..70
+  expected := DoubledEmf;
+  Rectangle(expected, 15, 15, 35, 35);
+  // GDI rounds the recorded right and bottom edges in logical units, so
+  // the two may differ by one device pixel there: without the fix they are
+  // 15 apart
+  Check(SameRedBounds(CloseEmf(dc), CloseEmf(expected)),
+    'at the viewport origin');
+end;
+
+procedure TTestUiPdf.EmfPlusPlaybackOrder;
+var
+  dc, expected: HDC;
+begin
+  // the transform EnumEnhMetaFile sets on the target - the bounds of the
+  // drawing mapped to the picture - was applied before the window/viewport
+  // mapping, not after it; without corners, the bounds are those of the
+  // rectangle, and the same rectangle drawn in device units must match
+  if not Check(Gdip.Exists, 'GDI+') then
+    exit;
+  dc := CreateEnhMetaFileW(0, nil, nil, nil);
+  SelectObject(dc, GetStockObject(NULL_PEN));
+  SelectObject(dc, CreateSolidBrush(RGB(255, 0, 0)));
+  SetMapMode(dc, MM_ANISOTROPIC);
+  SetWindowExtEx(dc, 50, 50, nil);
+  SetViewportExtEx(dc, 100, 100, nil);
+  SetViewportOrgEx(dc, 30, 30, nil);
+  Rectangle(dc, 0, 0, 20, 20); // the device pixels 30..70
+  expected := CreateEnhMetaFileW(0, nil, nil, nil);
+  SelectObject(expected, GetStockObject(NULL_PEN));
+  SelectObject(expected, CreateSolidBrush(RGB(255, 0, 0)));
+  Rectangle(expected, 30, 30, 70, 70);
+  Check(SameRedBounds(CloseEmf(dc), CloseEmf(expected)), 'mapped, then played');
+end;
+
+procedure TTestUiPdf.EmfPlusWindowOrigin;
+var
+  dc, expected: HDC;
+begin
+  // the window origin was rounded to device units before the playback
+  // transform scaled it: with a third of the size and no corners, the
+  // drawing is scaled 10 times to the picture, 2 / 3 rounded to 1 is 3 pixels
+  // off
+  if not Check(Gdip.Exists, 'GDI+') then
+    exit;
+  dc := CreateEnhMetaFileW(0, nil, nil, nil);
+  SelectObject(dc, GetStockObject(NULL_PEN));
+  SelectObject(dc, CreateSolidBrush(RGB(255, 0, 0)));
+  SetMapMode(dc, MM_ANISOTROPIC);
+  SetWindowExtEx(dc, 300, 300, nil);
+  SetViewportExtEx(dc, 100, 100, nil);
+  SetWindowOrgEx(dc, 2, 2, nil);
+  Rectangle(dc, 2, 2, 32, 32); // the device pixels 0..10
+  expected := CreateEnhMetaFileW(0, nil, nil, nil);
+  SelectObject(expected, GetStockObject(NULL_PEN));
+  SelectObject(expected, CreateSolidBrush(RGB(255, 0, 0)));
+  Rectangle(expected, 0, 0, 10, 10);
+  Check(SameRedBounds(CloseEmf(dc), CloseEmf(expected)), 'not rounded');
 end;
 
 {$else}
