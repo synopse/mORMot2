@@ -6397,8 +6397,8 @@ var
   dir: PTtfTableDirectory;
   d, e: PTtfTableEntry;
   head: ^TCmapHEAD;
-  n, i, len: PtrInt;
-  checksum: cardinal;
+  n, i, len, sel: PtrInt;
+  checksum, off, size: cardinal;
 begin
   SetLength(ttf, SubSetSize); // maximum size
   d := pointer(ttf);
@@ -6407,7 +6407,11 @@ begin
   e := SubSetData;
   inc(PTtfTableDirectory(e));
   n := 0;
-  if SubSetSize > SizeOf(PTtfTableDirectory) then
+  // the directory and its entries within the subset (FontSub output)
+  if (SubSetSize >= SizeOf(TTtfTableDirectory)) and
+     (SizeOf(TTtfTableDirectory) +
+      PtrInt(bswap16(PTtfTableDirectory(SubSetData)^.numTables)) *
+      SizeOf(TTtfTableEntry) <= SubSetSize) then
     for i := 1 to bswap16(PTtfTableDirectory(SubSetData)^.numTables) do
     begin
       if IntegerScanIndex(@TTF_SUBSET, length(TTF_SUBSET), e^.tag) >= 0 then
@@ -6418,7 +6422,8 @@ begin
       end;
       inc(e);
     end;
-  if n < 8 then // pdf expects 10 tables, and 8..15 for our fixed dir^ values
+  if (n < 8) or // pdf expects 10 tables
+     (n * SizeOf(TTtfTableEntry) > $ffff) then
   begin
     MoveFast(SubSetData^, pointer(ttf)^, SubSetSize); // paranoid
     exit;
@@ -6427,13 +6432,12 @@ begin
   dir := pointer(ttf);
   dir^.sfntVersion := PTtfTableDirectory(SubSetData)^.sfntVersion;
   dir^.numTables := bswap16(n);
-  //len := HighBit(n); // always 8 when n in 8..15
-  //dir^.searchRange := bswap16(len * 16);
-  //dir^.entrySelector := bswap16(Floor(log2(len))); // requires the Math unit
-  //dir^.rangeShift := bswap16((integer(n) - len) * 16);
-  dir^.searchRange := 32768; // pre-computed values for n in 8..15
-  dir^.entrySelector := 768;
-  dir^.rangeShift := 8192;
+  sel := 0; // the binary search fields of n tables: 128, 3, 32 for ten
+  while 2 shl sel <= n do
+    inc(sel);
+  dir^.searchRange := bswap16(16 shl sel);
+  dir^.entrySelector := bswap16(sel);
+  dir^.rangeShift := bswap16(n * 16 - 16 shl sel);
   // include the associated data
   checksum := 0;
   head := nil;
@@ -6441,8 +6445,22 @@ begin
   inc(PTtfTableDirectory(e));
   for i := 1 to n do
   begin
-    len := bswap32(e^.length);
-    MoveFast(PByteArray(SubSetData)[bswap32(e^.offset)], d^, len);
+    size := bswap32(e^.length);
+    off := bswap32(e^.offset);
+    // a table past the subset, more data than it held (entries sharing a
+    // table), or a head too short for checkSumAdjustment: the subset as it is
+    if (off > cardinal(SubSetSize)) or
+       (size > cardinal(SubSetSize) - off) or
+       ((e^.tag = HEAD_TABLE) and
+        (size < 12)) or
+       (cardinal(PtrUInt(d) - PtrUInt(ttf)) + ((size + 3) and not 3) >
+        cardinal(SubSetSize)) then
+    begin
+      MoveFast(SubSetData^, pointer(ttf)^, SubSetSize);
+      exit;
+    end;
+    len := size;
+    MoveFast(PByteArray(SubSetData)[off], d^, len);
     e^.offset := bswap32(PtrUInt(d) - PtrUInt(ttf));
     if e^.tag = HEAD_TABLE then // 'head'
       head := pointer(d);

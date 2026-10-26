@@ -61,6 +61,7 @@ type
     procedure EmfAnsiStockFont;
     procedure EmfDIBitsKept;
     procedure EmfPrinterResZero;
+    procedure ReducedFontSearchFields;
   end;
 
 implementation
@@ -2122,6 +2123,50 @@ begin
   Check(auto <> '', 'rendered');
   CheckEqual(zero, auto, 'asked again');
 end;
+
+procedure TTestUiPdf.ReducedFontSearchFields;
+{$ifndef NO_USE_UNISCRIBE}
+var
+  pdf: TPdfDocument;
+  s: RawByteString;
+  p: integer;
+begin
+  { ReduceTTF wrote the binary search fields of ten tables whatever their
+    number: Mongolian Baiti has no 'cvt ', its subset keeps nine tables }
+  pdf := TPdfDocument.Create;
+  try
+    if TPdfDocumentAccess(pdf).GetTrueTypeFontIndex('Mongolian Baiti') < 0 then
+    begin
+      Check(true, 'no Mongolian Baiti');
+      exit;
+    end;
+    pdf.GeneratePDF15File := false;
+    pdf.CompressionMethod := cmNone;
+    pdf.EmbeddedTtf := true;
+    pdf.AddPage;
+    pdf.Canvas.SetFont('Mongolian Baiti', 10, []);
+    pdf.Canvas.TextOut(20, 700, 'Hello');
+    s := SavedPdf(pdf);
+  finally
+    pdf.Free;
+  end;
+  p := PosEx('/Length1 ', s);
+  if not Check(p > 0, 'FontFile2') then
+    exit;
+  p := PosEx('stream', s, p);
+  if not Check(p > 0, 'stream') then
+    exit;
+  inc(p, 6);
+  if s[p] = #13 then
+    inc(p);
+  inc(p); // #10
+  // numTables 9, searchRange 128, entrySelector 3, rangeShift 16
+  CheckEqual(BinToHex(copy(s, p + 4, 8)), '0009008000030010', 'nine tables');
+end;
+{$else}
+begin
+end;
+{$endif NO_USE_UNISCRIBE}
 
 {$else}
 
