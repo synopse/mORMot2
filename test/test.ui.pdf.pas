@@ -56,6 +56,7 @@ type
     procedure EmfAlphaBlendOpaque;
     procedure EmfPolyPolylineOpen;
     procedure EmfRestoreDCDepth;
+    procedure EmfScaledRotation;
   end;
 
 implementation
@@ -1784,6 +1785,59 @@ begin
   Check(OperandsBefore(txt, '(Level)', ' rg') <> '', 'the colour of level 37');
   CheckEqual(OperandsBefore(txt, '(Deep)', ' rg'),
     OperandsBefore(txt, '(Level)', ' rg'), 'restored past 32 states');
+end;
+
+procedure TTestUiPdf.EmfScaledRotation;
+var
+  mf: TMetaFile;
+  mc: TMetaFileCanvas;
+  xf: TXForm;
+  txt, m: RawUtf8;
+  raised: boolean;
+begin
+  { ScaleMatrix took ArcSin(eM12) and TextOut ArcCos(eM11): with a rotation
+    scaled by 2 both get a value past 1 and raise (Delphi) or give NaN (FPC) }
+  mf := TMetaFile.Create;
+  try
+    mf.Width := 400;
+    mf.Height := 400;
+    mc := TMetaFileCanvas.Create(mf, 0);
+    try
+      mc.Font.Name := 'Arial';
+      mc.Font.Size := 10;
+      SetGraphicsMode(mc.Handle, GM_ADVANCED);
+      FillChar(xf, SizeOf(xf), 0);
+      xf.eM12 := 2; // 90 degrees, twice the size
+      xf.eM21 := -2;
+      xf.eDx := 200;
+      SetWorldTransform(mc.Handle, xf);
+      mc.TextOut(10, 10, 'Ninety');
+      xf.eM11 := -2; // 180 degrees, twice the size
+      xf.eM12 := 0;
+      xf.eM21 := 0;
+      xf.eM22 := -2;
+      xf.eDx := 300;
+      xf.eDy := 300;
+      SetWorldTransform(mc.Handle, xf);
+      mc.TextOut(10, 10, 'Turned');
+    finally
+      mc.Free;
+    end;
+    raised := false;
+    try
+      txt := RenderedEmf(mf);
+    except
+      raised := true;
+    end;
+  finally
+    mf.Free;
+  end;
+  Check(not raised, 'rendered');
+  Check(PosEx('(Ninety)', txt) > 0, 'the text at 90 degrees');
+  Check(PosEx('(Turned)', txt) > 0, 'the text at 180 degrees');
+  // FPC's ArcCos(-2) is NaN: the text took the negated matrix, drawn upright
+  m := OperandsBefore(txt, '(Turned)', ' Tm');
+  Check((m <> '') and (m[1] = '-'), 'turned by 180 degrees: ' + Utf8ToString(m));
 end;
 
 {$else}

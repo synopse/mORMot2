@@ -12248,7 +12248,8 @@ begin
     else if (xf.eM22 = xf.eM11) and
             (xf.eM21 = -xf.eM12) then
     begin // Rotate
-      fAngle := ArcSin(xf.eM12) * c180divPI;
+      // ArcTan2, not ArcSin: a scaled rotation has |eM12| > 1
+      fAngle := ArcTan2(xf.eM12, xf.eM11) * c180divPI;
       fWorldOffsetCos := xf.eM11;
       fWorldOffsetSin := xf.eM12;
     end
@@ -12653,12 +12654,15 @@ begin
               (WorldTransform.eM12 = -WorldTransform.eM21) and
               // a pure positive uniform scaling is no rotation: default branch below
               not ((WorldTransform.eM12 = 0) and (WorldTransform.eM11 > 0)) and
-              not SameValue(ArcCos(WorldTransform.eM11), 0, 0.0001) then
+              // the angle by ArcTan2: ArcCos(eM11) fails for a scaled rotation
+              not SameValue(ArcTan2(WorldTransform.eM12, WorldTransform.eM11),
+                0, 0.0001) then
       begin
         xs := 0;
         ys := 0;
-        if SameValue(ArcCos(WorldTransform.eM11), 0, 0.0001) or      // 0 grad
-           SameValue(ArcCos(WorldTransform.eM11), cPI, 0.0001) then  // 180 grad
+        a := Abs(ArcTan2(WorldTransform.eM12, WorldTransform.eM11));
+        if SameValue(a, 0, 0.0001) or    // 0 grad
+           SameValue(a, cPI, 0.0001) then // 180 grad
           Canvas.SetTextMatrix(WorldTransform.eM11, WorldTransform.eM12,
             WorldTransform.eM21, WorldTransform.eM22,
             Canvas.S2X(posi.X * WorldTransform.eM11 +
