@@ -3497,7 +3497,8 @@ begin
   result := ((r shr 8) or ((g shr 8) shl 8) or ((b shr 8) shl 16) or ((a shr 8) shl 24));
 end;
 
-function GetTtfData(aDC: HDC; aTableName: PAnsiChar; var Ref: TWordDynArray): pointer;
+function GetTtfData(aDC: HDC; aTableName: PAnsiChar; var Ref: TWordDynArray;
+  Size: PCardinal = nil): pointer;
 var
   L: cardinal;
 begin
@@ -3505,6 +3506,8 @@ begin
   L := windows.GetFontData(aDC, PCardinal(aTableName)^, 0, nil, 0);
   if L = GDI_ERROR then
     exit;
+  if Size <> nil then
+    Size^ := L; // the bytes of the table, without the word added below
   SetLength(Ref, L shr 1 + 1);
   if windows.GetFontData(aDC, PCardinal(aTableName)^, 0, pointer(Ref), L) = GDI_ERROR then
     exit;
@@ -5959,8 +5962,8 @@ var
   P: pointer;
   SubTable: ^TCmapSubTableArray absolute P;
   Header: ^TCmapHeader;
-  i, n, code, ndx: PtrInt;
-  off: cardinal;
+  i, n, code, ndx, ndx2: PtrInt;
+  off, len: cardinal;
   glyph: integer;
   delta, offs: PtrInt;
   W, numOfLongHorMetrics: word;
@@ -5969,10 +5972,14 @@ begin
   // retrieve the 'cmap' (character code mapping) table
   // see http://developer.apple.com/fonts/TTRefMan/RM06/Chap6cmap.html
   // and http://www.microsoft.com/typography/OTSPEC/cmap.htm
-  P := GetTtfData(aUnicodeTtf.fDoc.fDC, 'cmap', fcmap);
-  if P = nil then
+  P := GetTtfData(aUnicodeTtf.fDoc.fDC, 'cmap', fcmap, @len);
+  if (P = nil) or
+     (len < cardinal(SizeOf(TCmapHeader))) then
     exit;
   Header := P;
+  if cardinal(SizeOf(TCmapHeader)) +
+     cardinal(Header^.numberSubtables) * cardinal(SizeOf(SubTable^[0])) > len then
+    exit; // a directory past the table
   inc(PByte(P), SizeOf(TCmapHeader));
   off := 0;
   for i := 0 to Header^.numberSubtables - 1 do
@@ -5995,13 +6002,16 @@ begin
   i := LongRec(off).Lo; // offset swap to bswap conversion :)
   LongRec(off).Lo := LongRec(off).Hi;
   LongRec(off).Hi := i;
-  if off > cardinal(Length(fcmap) * 2) then
+  if (off > len) or
+     (len - off < cardinal(SizeOf(TCmapFmt4))) then
     exit; // avoid GPF
   fmt4 := pointer(PtrUInt(fcmap) + off);
   with fmt4^ do
   begin
     if format <> 4 then
       exit; // we handle only cmap table format 4
+    if len - off - cardinal(SizeOf(TCmapFmt4)) < cardinal(segCountX2) * 4 + 2 then
+      exit; // the four arrays and reservedPad past the table
     endCode := pointer(PtrUInt(@format) + SizeOf(TCmapFmt4));
     startCode := pointer(PtrUInt(endCode) + segCountX2 + 2); // +2 = reservedPad
     idDelta := pointer(PtrUInt(startCode) + segCountX2);
@@ -6024,7 +6034,8 @@ begin
   with aUnicodeTtf.fUsedWideChar do
   begin
     for i := 0 to n - 1 do
-      inc(Count, endCode[i] - startCode[i] + 1);
+      if startCode[i] <= endCode[i] then // a broken segment holds no code
+        inc(Count, endCode[i] - startCode[i] + 1);
     SetLength(Values, Count);
     SetLength(aUnicodeTtf.fUsedWide, Count);
   end;
@@ -6042,7 +6053,13 @@ begin
         glyph := code + delta
       else
       begin
-        glyph := glyphIndexArray[offs + code];
+        // within the table: a broken cmap is no glyph, not a GPF
+        ndx2 := offs + code;
+        if (PtrUInt(@glyphIndexArray[ndx2]) >= PtrUInt(fcmap)) and
+           (PtrUInt(@glyphIndexArray[ndx2]) + 2 <= PtrUInt(fcmap) + len) then
+          glyph := glyphIndexArray[ndx2]
+        else
+          glyph := 0;
         if glyph <> 0 then
           inc(glyph, delta);
       end;
