@@ -356,7 +356,7 @@ begin
         if CheckFailed(i <> 0) then
           exit;
         FillCharFast(S[i], 32, 32);
-        CheckHash(S, $FE2D27CA);
+        CheckHash(S, $456748FC); // the boxes of #686
       end;
     finally
       Free;
