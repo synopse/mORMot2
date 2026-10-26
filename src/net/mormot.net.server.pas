@@ -5388,9 +5388,7 @@ begin
     fServer.ParseRemoteIPConnID(Http.Headers, fRemoteIP, fRemoteConnectionID);
     if hfConnectionClose in Http.HeaderFlags then
       fKeepAliveClient := false;
-    if (Http.ContentLength < 0) and
-       (KeepAliveClient or
-        IsGet(Http.CommandMethod)) then
+    if Http.ContentLength < 0 then
       Http.ContentLength := 0; // HTTP/1.1 and no content length -> no eof
     if (headerMaxTix > 0) and
        (mormot.core.os.GetTickCount64 > headerMaxTix) then
