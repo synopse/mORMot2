@@ -576,6 +576,19 @@ function CurrentPrinterPaperSize: TPdfPaperSize;
 /// retrieve the current printer resolution
 function CurrentPrinterRes: TPoint;
 
+/// the code page ExtTextOutA reads the bytes of a font of this charset in
+// - CP_ACP for DEFAULT_CHARSET, CP_OEMCP for OEM_CHARSET, 42 (CP_SYMBOL) for
+// SYMBOL_CHARSET - as GDI records them, U+F020..U+F0FF - else the code page
+// of the charset (1252 for ANSI_CHARSET)
+function FontCharSetCodePage(CharSet: integer): cardinal;
+
+/// the code page ExtTextOutA reads the bytes of a stock font in
+// - from the charset of GetStockObject(StockFont) on this system, CP_ACP if
+// it gives none or StockFont is no font: ANSI_FIXED_FONT and ANSI_VAR_FONT
+// are ANSI_CHARSET (1252), OEM_FIXED_FONT is OEM_CHARSET, the system fonts
+// follow the system charset
+function StockFontCodePage(StockFont: integer): cardinal;
+
 
 {************ Internal classes mapping PDF objects }
 
@@ -3359,6 +3372,35 @@ begin
           result := psA3;
     end;
   end;
+end;
+
+function FontCharSetCodePage(CharSet: integer): cardinal;
+begin
+  case CharSet of
+    DEFAULT_CHARSET:
+      result := CP_ACP;
+    OEM_CHARSET:
+      result := CP_OEMCP;
+    SYMBOL_CHARSET:
+      result := 42; // CP_SYMBOL: $20..$FF as U+F020..U+F0FF, as GDI records them
+    CHINESEBIG5_CHARSET:
+      result := 950;
+  else
+    result := CharSetToCodePage(CharSet);
+  end;
+end;
+
+function StockFontCodePage(StockFont: integer): cardinal;
+var
+  h: HGDIOBJ;
+  lf: TLogFontW;
+begin
+  h := GetStockObject(StockFont);
+  if (GetObjectType(h) = OBJ_FONT) and
+     (GetObjectW(h, SizeOf(lf), @lf) <> 0) then
+    result := FontCharSetCodePage(lf.lfCharSet)
+  else
+    result := CP_ACP;
 end;
 
 function CurrentPrinterRes: TPoint;
@@ -10772,7 +10814,7 @@ type
       Spec: TFontSpec;
       // a font of the metafile is selected, not a stock font
       Selected: boolean;
-      // the code page of the stock font while none is: CP_ACP or CP_OEMCP
+      // the code page of the stock font while none is (StockFontCodePage)
       StockCodePage: cardinal;
       LogFont: TLogFontW; // better be the last entry in TPdfEnumState record
     end;
@@ -12004,10 +12046,7 @@ begin
             // its LogFont is not known: EMR_EXTTEXTOUTA decodes in the code
             // page of its charset, not in the one of the font selected before
             Font.Selected := false;
-            if iObject = OEM_FIXED_FONT then
-              Font.StockCodePage := CP_OEMCP
-            else
-              Font.StockCodePage := CP_ACP;
+            Font.StockCodePage := StockFontCodePage(iObject);
           end;
         NULL_PEN:
           begin
@@ -12551,18 +12590,7 @@ begin
         if not Font.Selected then
           cp := Font.StockCodePage // CP_ACP (0) at the start
         else
-          case Font.LogFont.lfCharSet of
-            DEFAULT_CHARSET:
-              cp := CP_ACP;
-            OEM_CHARSET:
-              cp := CP_OEMCP;
-            SYMBOL_CHARSET:
-              cp := 42; // CP_SYMBOL: $20..$FF as U+F020..U+F0FF, as GDI records them
-            CHINESEBIG5_CHARSET:
-              cp := 950;
-          else
-            cp := CharSetToCodePage(Font.LogFont.lfCharSet);
-          end;
+          cp := FontCharSetCodePage(Font.LogFont.lfCharSet);
         n := MultiByteToWideChar(cp, 0,
           pointer(PtrUInt(@R) + R.emrtext.offString), R.emrtext.nChars, nil, 0);
         if n = 0 then
