@@ -65,6 +65,7 @@ type
     procedure ReducedFontSearchFields;
     procedure EmfRecordLayout;
     procedure EmfMirroredBoxes;
+    procedure EmfClipRestoreDC;
   end;
 
 implementation
@@ -1591,7 +1592,8 @@ begin
 end;
 
 // the metafile rendered into one page of an uncompressed PDF
-function RenderedEmf(Mf: TMetaFile; PxX: integer = 0; PxY: integer = 0): RawUtf8;
+function RenderedEmf(Mf: TMetaFile; PxX: integer = 0; PxY: integer = 0;
+  TextClipping: TPdfCanvasRenderMetaFileTextClipping = tcAlwaysClip): RawUtf8;
 var
   doc: TPdfDocumentGdi;
 begin
@@ -1604,7 +1606,8 @@ begin
     TPdfDocumentAccess(TPdfDocument(doc)).fPrinterPxPerInch.X := PxX;
     TPdfDocumentAccess(TPdfDocument(doc)).fPrinterPxPerInch.Y := PxY;
     doc.AddPage;
-    RenderMetaFile(doc.Canvas, Mf, 1, 1, 0, 0);
+    RenderMetaFile(doc.Canvas, Mf, 1, 1, 0, 0, tpSetTextJustification,
+      99, 101, TextClipping);
     result := SavedPdf(doc);
   finally
     doc.Free;
@@ -2398,6 +2401,251 @@ begin
   SameAsPolygon(px, PathBox(px[0]), 'on the polygon');
   SameAsPolygon(Shapes(10, -100, 100), PathBox(px[0]), 'mirrored in X');
   SameAsPolygon(Shapes(10, -100, -100), PathBox(px[0]), 'mirrored in X and Y');
+end;
+
+// the position of the last Op before Marker in the content, 0 if none
+function PosBefore(const Txt, Marker, Op: RawUtf8): PtrInt;
+var
+  p, j: PtrInt;
+begin
+  result := 0;
+  p := PosEx(Marker, Txt);
+  j := PosEx(Op, Txt);
+  while (j <> 0) and
+        (j < p) do
+  begin
+    result := j;
+    j := PosEx(Op, Txt, j + 1);
+  end;
+end;
+
+// the number of q not closed by a Q before Marker in the content
+function OpenBefore(const Txt, Marker: RawUtf8): integer;
+var
+  s: RawUtf8;
+begin
+  s := copy(Txt, 1, PosEx(Marker, Txt));
+  result := CountOccurrences('q'#10, s) - CountOccurrences('Q'#10, s);
+end;
+
+// no q or Q within a path, no l or c without a current point
+function ValidPaths(const Txt: RawUtf8): boolean;
+var
+  p: PUtf8Char;
+  line, op: RawUtf8;
+  i: PtrInt;
+  inpath: boolean;
+begin
+  result := false;
+  inpath := false;
+  p := pointer(Txt);
+  while p <> nil do
+  begin
+    line := GetNextLine(p, p);
+    i := length(line);
+    while (i > 0) and
+          (line[i] <> ' ') do
+      dec(i);
+    op := copy(line, i + 1, length(line)); // case matters: M is the miter limit
+    if (op = 'm') or
+       (op = 're') then
+      inpath := true
+    else if (op = 'l') or
+            (op = 'c') then
+    begin
+      if not inpath then
+        exit;
+    end
+    else if (line = 'q') or
+            (line = 'Q') then
+    begin
+      if inpath then
+        exit;
+    end
+    else if (line = 'S') or
+            (line = 'f') or
+            (line = 'f*') or
+            (line = 'B') or
+            (line = 'B*') or
+            (line = 'n') then
+      inpath := false;
+  end;
+  result := true;
+end;
+
+procedure TTestUiPdf.EmfClipRestoreDC;
+var
+  mf, mf2: TMetaFile;
+  mc: TMetaFileCanvas;
+  pen: HPEN;
+  doc: TPdfDocumentGdi;
+  txt, meta, two: RawUtf8;
+
+  procedure Text(Y: integer; const Value: WideString);
+  begin
+    TextOutW(mc.Handle, 10, Y, pointer(Value), length(Value));
+  end;
+
+  procedure Clip(L, T, R, B: integer);
+  var
+    rgn: HRGN;
+  begin
+    rgn := CreateRectRgn(L, T, R, B);
+    SelectClipRgn(mc.Handle, rgn); // EMR_EXTSELECTCLIPRGN, RGN_COPY
+    DeleteObject(rgn);
+  end;
+
+begin
+  { EMR_RESTOREDC kept the clip of EMR_EXTSELECTCLIPRGN: the inner one stayed
+    and its q was left open; the Q of a new clip kept the pen of before }
+  mf := TMetaFile.Create;
+  try
+    mf.Width := 400;
+    mf.Height := 400;
+    mc := TMetaFileCanvas.Create(mf, 0);
+    try
+      SaveDC(mc.Handle);
+      Clip(150, 150, 200, 200);
+      Text(160, 'Saved');
+      RestoreDC(mc.Handle, -1); // no clip: its q closed
+      Clip(10, 10, 300, 300);
+      Text(20, 'Outer');
+      SaveDC(mc.Handle);
+      Clip(50, 50, 100, 100);
+      Text(60, 'Inner');
+      RestoreDC(mc.Handle, -1); // the outer clip again
+      Text(120, 'Back');
+      pen := CreatePen(PS_DASH, 3, RGB(255, 0, 0));
+      SelectObject(mc.Handle, pen);
+      MoveToEx(mc.Handle, 20, 200, nil);
+      LineTo(mc.Handle, 200, 200);
+      Clip(20, 20, 350, 350); // Q q: the pen set again
+      LineTo(mc.Handle, 200, 300);
+      Text(310, 'Pen');
+      SelectObject(mc.Handle, GetStockObject(BLACK_PEN));
+      DeleteObject(pen);
+    finally
+      mc.Free;
+    end;
+    txt := RenderedEmf(mf, 0, 0, tcNeverClip);
+  finally
+    mf.Free;
+  end;
+  mf := TMetaFile.Create;
+  try
+    mf.Width := 400;
+    mf.Height := 400;
+    mc := TMetaFileCanvas.Create(mf, 0);
+    try
+      SaveDC(mc.Handle);
+      Clip(10, 10, 100, 100);
+      SetMetaRgn(mc.Handle); // the clip stays, part of the meta region
+      Clip(0, 0, 300, 300);
+      Text(20, 'Meta');
+      RestoreDC(mc.Handle, -1); // before the meta region
+      Text(150, 'Free');
+      // a clip change within a path applies once the path is painted
+      SaveDC(mc.Handle);
+      Clip(10, 10, 300, 300);
+      BeginPath(mc.Handle);
+      MoveToEx(mc.Handle, 20, 200, nil);
+      LineTo(mc.Handle, 200, 200);
+      RestoreDC(mc.Handle, -1);
+      EndPath(mc.Handle);
+      StrokePath(mc.Handle);
+      SaveDC(mc.Handle);
+      Clip(10, 10, 300, 300);
+      BeginPath(mc.Handle);
+      MoveToEx(mc.Handle, 20, 210, nil);
+      LineTo(mc.Handle, 200, 210);
+      EndPath(mc.Handle);
+      RestoreDC(mc.Handle, -1);
+      StrokePath(mc.Handle);
+      BeginPath(mc.Handle);
+      MoveToEx(mc.Handle, 20, 220, nil);
+      LineTo(mc.Handle, 200, 220);
+      SaveDC(mc.Handle);
+      Clip(10, 10, 300, 300);
+      RestoreDC(mc.Handle, -1);
+      LineTo(mc.Handle, 200, 230);
+      EndPath(mc.Handle);
+      StrokePath(mc.Handle);
+      Text(250, 'Path');
+      BeginPath(mc.Handle); // SelectClipPath consumes the path
+      MoveToEx(mc.Handle, 20, 260, nil);
+      LineTo(mc.Handle, 200, 260);
+      MoveToEx(mc.Handle, 20, 265, nil);
+      EndPath(mc.Handle);
+      SelectClipPath(mc.Handle, RGN_COPY);
+      LineTo(mc.Handle, 200, 265); // after the path: a line of its own
+      Clip(0, 0, 350, 350);
+      Text(270, 'After');
+    finally
+      mc.Free;
+    end;
+    meta := RenderedEmf(mf, 0, 0, tcNeverClip);
+  finally
+    mf.Free;
+  end;
+  // a metafile ending in a path never painted, then another one
+  mf := TMetaFile.Create;
+  mf2 := TMetaFile.Create;
+  doc := TPdfDocumentGdi.Create;
+  try
+    mf.Width := 400;
+    mf.Height := 400;
+    mc := TMetaFileCanvas.Create(mf, 0);
+    try
+      BeginPath(mc.Handle);
+      MoveToEx(mc.Handle, 20, 20, nil);
+      LineTo(mc.Handle, 200, 20);
+      EndPath(mc.Handle);
+    finally
+      mc.Free;
+    end;
+    mf2.Width := 400;
+    mf2.Height := 400;
+    mc := TMetaFileCanvas.Create(mf2, 0);
+    try
+      MoveToEx(mc.Handle, 20, 40, nil);
+      LineTo(mc.Handle, 200, 40);
+    finally
+      mc.Free;
+    end;
+    doc.Info.CreationDate := FIXED_DATE;
+    doc.CompressionMethod := cmNone;
+    doc.EmbeddedTTF := false;
+    doc.StandardFontsReplace := true;
+    doc.AddPage;
+    RenderMetaFile(doc.Canvas, mf);
+    RenderMetaFile(doc.Canvas, mf2);
+    two := SavedPdf(doc);
+  finally
+    doc.Free;
+    mf2.Free;
+    mf.Free;
+  end;
+  CheckEqual(CountOccurrences('q'#10, txt), CountOccurrences('Q'#10, txt),
+    'q and Q balanced');
+  Check(OperandsBefore(txt, '(Inner)', ' re') <>
+    OperandsBefore(txt, '(Outer)', ' re'), 'the inner clip');
+  CheckEqual(OperandsBefore(txt, '(Back)', ' re'),
+    OperandsBefore(txt, '(Outer)', ' re'), 'the outer clip restored');
+  Check(PosBefore(txt, '(Pen)', ' RG'#10) > PosBefore(txt, '(Pen)', #10'Q'#10),
+    'the pen colour after Q');
+  Check(PosBefore(txt, '(Pen)', ' w'#10) > PosBefore(txt, '(Pen)', #10'Q'#10),
+    'the pen width after Q');
+  Check(PosBefore(txt, '(Pen)', ' d'#10) > PosBefore(txt, '(Pen)', #10'Q'#10),
+    'the pen dash after Q');
+  CheckEqual(CountOccurrences('q'#10, meta), CountOccurrences('Q'#10, meta),
+    'q and Q balanced with SetMetaRgn');
+  CheckEqual(OpenBefore(meta, '(Meta)'), 3, 'the meta region kept');
+  CheckEqual(OpenBefore(meta, '(Free)'), 1, 'the meta region restored');
+  Check(ValidPaths(meta), 'valid paths');
+  CheckEqual(CountOccurrences(' l'#10, meta), 6, 'every segment kept');
+  Check(PosBefore(meta, '(After)', ' re'#10) > PosBefore(meta, '(After)', ' l'#10),
+    'a clip after SelectClipPath');
+  Check(PosEx(' l'#10'S'#10, two) > 0, 'a line after a path never painted');
 end;
 
 {$else}
