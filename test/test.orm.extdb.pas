@@ -9,6 +9,7 @@ interface
 
 uses
   sysutils,
+  classes,
   mormot.core.base,
   mormot.core.os,
   mormot.core.text,
@@ -78,6 +79,8 @@ type
     procedure NewStatementFailure;
     /// EngineLockedNextID() when 'select max(ID)' fails (e.g. connection lost)
     procedure NextIDSelectMaxFailure;
+    /// regular Engine*() from another thread during a BATCH of this thread
+    procedure BatchFromOtherThread;
     /// SharedTransaction() when the actual Commit fails
     procedure SharedTransactionCommitFailure;
     /// initialize needed RESTful client (and server) instances
@@ -196,6 +199,30 @@ type
   public
     function NewConnection: TSqlDBConnection; override;
   end;
+
+  // a regular EngineUpdate() run from its own thread
+  TBatchOtherThreadUpdate = class(TThread)
+  protected
+    fExt: TRestStorageExternal;
+    fNdx: PtrInt;
+    procedure Execute; override;
+  public
+    Updated, Done: boolean;
+    constructor Create(aExt: TRestStorageExternal; aNdx: PtrInt);
+  end;
+
+constructor TBatchOtherThreadUpdate.Create(aExt: TRestStorageExternal; aNdx: PtrInt);
+begin
+  fExt := aExt;
+  fNdx := aNdx;
+  inherited Create({suspended=}false);
+end;
+
+procedure TBatchOtherThreadUpdate.Execute;
+begin
+  Updated := fExt.EngineUpdate(fNdx, 10, '{"FirstName":"after"}');
+  Done := true;
+end;
 
 function TSqlDBSQLite3ConnectionNoStatement.NewStatement: TSqlDBStatement;
 begin
@@ -1275,6 +1302,81 @@ begin
       finally
         props.Free;
         DeleteFile('maxidtest.db3');
+      end;
+    finally
+      server.Free;
+    end;
+  finally
+    model.Free;
+  end;
+end;
+
+procedure TTestExternalDatabase.BatchFromOtherThread;
+var
+  model: TOrmModel;
+  server: TRestServerFullMemory;
+  props: TSqlDBConnectionProperties;
+  ext: TRestStorageExternalHook;
+  ndx: PtrInt;
+  th: TBatchOtherThreadUpdate;
+  i: integer;
+begin
+  // EngineAdd/Update/Delete/DeleteWhere did check fBatchMethod BEFORE the
+  // storage lock: during a BATCH POST of one thread, a regular Update from
+  // another thread returned false at once - with no exception nor DB error
+  model := TOrmModel.Create([TOrmPeopleExt]);
+  try
+    server := TRestServerFullMemory.Create(model);
+    try
+      DeleteFile('batchthread.db3');
+      props := TSqlDBSQLite3ConnectionProperties.Create(
+        'batchthread.db3', '', '', '');
+      try
+        OrmMapExternal(model, TOrmPeopleExt, props, 'BatchThread');
+        ext := TRestStorageExternalHook.Create(
+          TOrmPeopleExt, server.OrmInstance as TRestOrmServer);
+        try
+          ndx := model.GetTableIndexExisting(TOrmPeopleExt);
+          props.ExecuteNoResult(
+            'insert into BatchThread (ID,FirstName) values (?,?)', [10, 'before']);
+          th := nil;
+          Check(ext.InternalBatchStart(encPost, []), 'batch');
+          try
+            // the BATCH thread itself still appends its own rows
+            CheckEqual(ext.EngineAdd(ndx, '{"ID":20,"FirstName":"batch"}'), 20, 'add');
+            th := TBatchOtherThreadUpdate.Create(ext, ndx);
+            try
+              for i := 1 to 20 do
+                if th.Done then
+                  break
+                else
+                  SleepHiRes(10);
+              // the other thread waits for the storage lock, as a regular update
+              Check(not th.Done, 'other thread waits for the batch');
+            finally
+              ext.InternalBatchStop;
+            end;
+            th.WaitFor;
+            Check(th.Updated, 'update from other thread after the batch');
+          finally
+            th.Free;
+          end;
+          with props.Execute('select FirstName from BatchThread where ID=?', [10]) do
+          begin
+            Check(Step, 'row 10');
+            CheckEqual(ColumnUtf8(0), 'after', 'updated');
+          end;
+          with props.Execute('select count(*) from BatchThread', []) do
+          begin
+            Check(Step, 'count');
+            CheckEqual(ColumnInt(0), 2, 'batch row');
+          end;
+        finally
+          ext.Free;
+        end;
+      finally
+        props.Free;
+        DeleteFile('batchthread.db3');
       end;
     finally
       server.Free;
