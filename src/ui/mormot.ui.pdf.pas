@@ -10710,6 +10710,25 @@ type
     Width: single;
   end;
 
+  /// EMR_CREATEBRUSHINDIRECT as the EMF stores it, with a 32-bit LOGBRUSH
+  // - the windows unit of FPC 3.2.2 declares lb as LOGBRUSH, whose ULONG_PTR
+  // lbHatch moves the fields on Win64: every brush was read as black there
+  TEmrCreateBrushIndirect32 = record
+    emr: TEMR;
+    ihBrush: cardinal;
+    lbStyle, lbColor, lbHatch: cardinal;
+  end;
+  PEmrCreateBrushIndirect32 = ^TEmrCreateBrushIndirect32;
+
+  /// EMR_EXTCREATEPEN as the EMF stores it, with a 32-bit EXTLOGPEN
+  // - the same with FPC 3.2.2 on Win64: elpHatch is a ULONG_PTR there
+  TEmrExtCreatePen32 = record
+    emr: TEMR;
+    ihPen, offBmi, cbBmi, offBits, cbBits: cardinal;
+    elpPenStyle, elpWidth, elpBrushStyle, elpColor, elpHatch: cardinal;
+  end;
+  PEmrExtCreatePen32 = ^TEmrExtCreatePen32;
+
   /// a state of the EMF enumeration engine, for the PDF canvas
   // - used also for the SaveDC/RestoreDC stack
   TPdfEnumState = record
@@ -10907,14 +10926,14 @@ begin
               PenStyle := lopn.lopnStyle;
             end;
       EMR_CREATEBRUSHINDIRECT:
-        with PEMRCreateBrushIndirect(R)^ do
+        with PEmrCreateBrushIndirect32(R)^ do
           if ihBrush - 1 < cardinal(length(E.Obj)) then
             with E.obj[ihBrush - 1] do
             begin
               kind := OBJ_BRUSH;
-              BrushColor := lb.lbColor;
-              BrushNull := (lb.lbStyle = BS_NULL);
-              BrushStyle := lb.lbStyle;
+              BrushColor := lbColor;
+              BrushNull := (lbStyle = BS_NULL);
+              BrushStyle := lbStyle;
             end;
       EMR_EXTCREATEFONTINDIRECTW:
         E.CreateFont(PEMRExtCreateFontIndirect(R));
@@ -11460,14 +11479,14 @@ begin
         with PEMRModifyWorldTransform(R)^ do
           E.ScaleMatrix(@xform, iMode);
       EMR_EXTCREATEPEN: // approx. - fast solution
-        with PEMRExtCreatePen(R)^ do
+        with PEmrExtCreatePen32(R)^ do
           if ihPen - 1 < cardinal(length(E.Obj)) then
             with E.obj[ihPen - 1] do
             begin
               kind := OBJ_PEN;
-              PenColor := elp.elpColor;
-              PenWidth := elp.elpWidth;
-              PenStyle := elp.elpPenStyle and (PS_STYLE_MASK or PS_ENDCAP_MASK);
+              PenColor := elpColor;
+              PenWidth := elpWidth;
+              PenStyle := elpPenStyle and (PS_STYLE_MASK or PS_ENDCAP_MASK);
             end;
       EMR_SETMITERLIMIT:
         if PEMRSetMiterLimit(R)^.eMiterLimit > 0.1 then

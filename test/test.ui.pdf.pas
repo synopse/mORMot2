@@ -62,6 +62,7 @@ type
     procedure EmfDIBitsKept;
     procedure EmfPrinterResZero;
     procedure ReducedFontSearchFields;
+    procedure EmfRecordLayout;
   end;
 
 implementation
@@ -2167,6 +2168,48 @@ end;
 begin
 end;
 {$endif NO_USE_UNISCRIBE}
+
+procedure TTestUiPdf.EmfRecordLayout;
+var
+  mf: TMetaFile;
+  mc: TMetaFileCanvas;
+  lb: TLogBrush;
+  bytes: RawByteString;
+  txt: RawUtf8;
+begin
+  { the windows unit of FPC 3.2.2 declares EMR_CREATEBRUSHINDIRECT and
+    EMR_EXTCREATEPEN with the native LOGBRUSH and EXTLOGPEN, whose ULONG_PTR
+    hatch moves the fields on Win64: every brush and extended pen was black }
+  mf := TMetaFile.Create;
+  try
+    mf.Width := 100;
+    mf.Height := 100;
+    mc := TMetaFileCanvas.Create(mf, 0);
+    try
+      DeleteObject(SelectObject(mc.Handle, CreateSolidBrush(RGB(255, 0, 0))));
+      Rectangle(mc.Handle, 10, 10, 50, 50);
+      lb.lbStyle := BS_SOLID;
+      lb.lbColor := RGB(0, 0, 255);
+      lb.lbHatch := 0;
+      DeleteObject(SelectObject(mc.Handle,
+        ExtCreatePen(PS_GEOMETRIC or PS_SOLID, 4, lb, 0, nil)));
+      MoveToEx(mc.Handle, 10, 80, nil);
+      LineTo(mc.Handle, 90, 80);
+    finally
+      mc.Free;
+    end;
+    bytes := MetaFileBytes(mf);
+    Check(length(EmfRecords(bytes, R_CREATEBRUSHINDIRECT)) > 0,
+      'recorded as EMR_CREATEBRUSHINDIRECT');
+    CheckEqual(length(EmfRecords(bytes, R_EXTCREATEPEN)), 1,
+      'recorded as EMR_EXTCREATEPEN');
+    txt := RenderedEmf(mf);
+  finally
+    mf.Free;
+  end;
+  Check(PosEx(#10'1 0 0 rg'#10, txt) > 0, 'the brush colour');
+  Check(PosEx(#10'0 0 1 RG'#10, txt) > 0, 'the extended pen colour');
+end;
 
 {$else}
 
