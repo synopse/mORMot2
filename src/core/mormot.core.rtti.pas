@@ -2879,6 +2879,8 @@ type
   // - is usually a TRttiJson class type once mormot.core.json.pas is linked
   TRttiCustomClass = class of TRttiCustom;
 
+  TRttiCustomDynArray = array of TRttiCustom;
+
   /// efficient PRttiInfo/TRttiCustom pairs for TRttiCustomList hash table
   // - as stored in TRttiCustomList.fHashInfo[RK_TOSLOT[TRttiKind]]
   TRttiCustomListPairs = record
@@ -2904,6 +2906,17 @@ type
     fInstances: array of TRttiCustom; // of Count length - released in Destroy
     fGlobalClass: TRttiCustomClass;
     fOwnedRtti: array of TRttiCustom; // for SetPropsFromText(NoRegister=true)
+    // pending recursion, protected by RegisterSafe
+    fPending: TRttiCustomDynArray;
+    fRegisteringThread: TThreadID;
+    fRegisterDepth: integer;
+    fRegisterFailed: boolean;
+    function FindPending(Info: PRttiInfo): TRttiCustom;
+    {$ifdef NOPATCHVMT}
+    function DoFindClass(ObjectClass: TClass): TRttiCustom;
+    {$endif NOPATCHVMT}
+    procedure PublishPending;
+    procedure CancelPending;
     function GetByClass(ObjectClass: TClass): TRttiCustom;
       {$ifdef HASINLINE}inline;{$endif}
     // called by FindOrRegister() for proper inlining
@@ -2921,6 +2934,10 @@ type
     /// how many TRttiCustom instances have been registered for a given type
     // - we include rkUnknown for safety
     Counts: array[TRttiKind] of integer;
+    /// registration owner, or zero
+    property RegisteringThread: TThreadID read fRegisteringThread;
+    /// registering-thread class lookup
+    function FindPendingClass(ObjectClass: TClass): TRttiCustom;
     /// initialize the RTTI list
     constructor Create;
     /// finalize the RTTI list
@@ -9049,23 +9066,8 @@ end;
 procedure TRttiCustom.SetValueClass(aClass: TClass; aInfo: PRttiInfo);
 var
   i: PtrInt;
-  {$ifndef NOPATCHVMT}
-  vmt: PPointer;
-  {$endif NOPATCHVMT}
 begin
   fCache.ValueClass := aClass;
-  // we need to register this class ASAP into RTTI list to avoid infinite calls
-  {$ifdef NOPATCHVMT}
-  Rtti.fHashInfo[RK_TOSLOT[rkClass]].LastInfo := self; // faster FindType()
-  {$else}
-  // set vmtAutoTable slot for efficient Find(TClass) - to be done asap
-  vmt := pointer(PAnsiChar(aClass) + vmtAutoTable);
-  if vmt^ = nil then
-    PatchPointer(pointer(vmt), PtrUInt(self));
-  if vmt^ <> self then
-    ERttiException.RaiseUtf8(
-      '%.SetValueClass(%): vmtAutoTable set to %', [self, aClass, vmt^]);
-  {$endif NOPATCHVMT}
   // recognize the main known classes as ValueRtlClass
   while aClass <> TObject do
   begin
@@ -10076,6 +10078,66 @@ begin
   // h := crc32cBy4(0, Info) and HASHINFO_MAX; // slower, not better
 end;
 
+function TRttiCustomList.FindPending(Info: PRttiInfo): TRttiCustom;
+var
+  i: PtrInt;
+begin // caller holds the reentrant RegisterSafe
+  for i := high(fPending) downto 0 do
+    if fPending[i].Info = Info then
+    begin
+      result := fPending[i];
+      exit;
+    end;
+  result := nil;
+end;
+
+{$ifdef NOPATCHVMT}
+function TRttiCustomList.DoFindClass(ObjectClass: TClass): TRttiCustom;
+var
+  i: PtrInt;
+begin
+  RegisterSafe.Lock;
+  try
+    // classes without native RTTI
+    for i := high(fPending) downto 0 do
+      if (fPending[i].Kind = rkClass) and
+         (fPending[i].fCache.ValueClass = ObjectClass) then
+      begin
+        result := fPending[i];
+        exit;
+      end;
+    for i := Count - 1 downto 0 do
+      if (fInstances[i].Kind = rkClass) and
+         (fInstances[i].fCache.ValueClass = ObjectClass) then
+      begin
+        result := fInstances[i];
+        exit;
+      end;
+    result := nil;
+  finally
+    RegisterSafe.UnLock;
+  end;
+end;
+
+{$endif NOPATCHVMT}
+
+function TRttiCustomList.FindPendingClass(ObjectClass: TClass): TRttiCustom;
+var
+  i: PtrInt;
+begin
+  result := nil;
+  if (fRegisteringThread = TThreadID(0)) or
+     (fRegisteringThread <> GetCurrentThreadId) then
+    exit;
+  for i := high(fPending) downto 0 do
+    if (fPending[i].Kind = rkClass) and
+       (fPending[i].ValueClass = ObjectClass) then
+    begin
+      result := fPending[i];
+      exit;
+    end;
+end;
+
 function TRttiCustomList.FindType(Info: PRttiInfo): TRttiCustom;
 var
   k: PRttiCustomListPairs;
@@ -10114,23 +10176,41 @@ begin // vmtAuto: 8894966/31321/1265 NOPATCHVMT: 10137568/312233/14624
       k^.LastInfo := result;   // aligned pointers are atomically accessed
       k^.LastHash[h] := result;
     end;
+    if (result = nil) and
+       (fRegisteringThread <> TThreadID(0)) and
+       (fRegisteringThread = GetCurrentThreadId) then
+      result := FindPending(Info);
   {$ifndef NOPATCHVMT}
   end
   else
-    // direct O(1) lookup of the vmtAutoTable slot for classes
+  begin
     result := PPointer(PAnsiChar(Info.RttiNonVoidClass.RttiClass) + vmtAutoTable)^;
+    if (result = nil) and
+       (fRegisteringThread <> TThreadID(0)) and
+       (fRegisteringThread = GetCurrentThreadId) then
+      result := FindPending(Info);
+  end;
   {$endif NOPATCHVMT}
 end;
 
 {$ifdef NOPATCHVMT}
 function TRttiCustomList.FindClass(ObjectClass: TClass): TRttiCustom;
+var
+  info: PRttiInfo;
 begin
-  result := FindType(PPointer(PAnsiChar(ObjectClass) + vmtTypeInfo)^);
+  info := PPointer(PAnsiChar(ObjectClass) + vmtTypeInfo)^;
+  if info <> nil then
+    result := FindType(info)
+  else
+    result := DoFindClass(ObjectClass);
 end;
 {$else}
 class function TRttiCustomList.FindClass(ObjectClass: TClass): TRttiCustom;
 begin
   result := PPointer(PAnsiChar(ObjectClass) + vmtAutoTable)^;
+  if (result = nil) and
+     (Rtti.RegisteringThread <> TThreadID(0)) then
+    result := Rtti.FindPendingClass(ObjectClass);
 end;
 {$endif NOPATCHVMT}
 
@@ -10190,6 +10270,8 @@ end;
 function TRttiCustomList.FindName(Name: PUtf8Char; NameLen: PtrInt): TRttiCustom;
 var
   p: PPointerArray;
+  i: PtrInt;
+  info: PRttiInfo;
 begin // seldom called: from RegisterFromText() or ORM model initialization
   result := nil;
   // quickly reject e.g. '' or 'TArray$1$crcA5831B1D'
@@ -10207,12 +10289,27 @@ begin // seldom called: from RegisterFromText() or ORM model initialization
   result := nil;
   p := @fHashName[RttiHashName(pointer(Name), NameLen)];
   RegisterSafe.Lock;
-  p := p^[0]; // read TPointerDynArray slot within the lock
-  if p <> nil then
-    result := LockedFindNameInPairs(p, Name, NameLen);
-  RegisterSafe.UnLock;
-  if result <> nil then
-    fLastHashName := result;
+  try
+    p := p^[0]; // read TPointerDynArray slot within the lock
+    if p <> nil then
+      result := LockedFindNameInPairs(p, Name, NameLen);
+    if result <> nil then
+      fLastHashName := result
+    else
+      for i := high(fPending) downto 0 do
+      begin
+        info := fPending[i].Info;
+        if (info <> nil) and
+           (ord(info.RawName[0]) = NameLen) and
+           IdemPropNameUSameLenNotNull(@info.RawName[1], Name, NameLen) then
+        begin
+          result := fPending[i]; // registering thread only, do not cache
+          break;
+        end;
+      end;
+  finally
+    RegisterSafe.UnLock;
+  end;
 end;
 
 function TRttiCustomList.FindName(Name: PUtf8Char; NameLen: PtrInt; Kind: TRttiKind): TRttiCustom;
@@ -10265,6 +10362,51 @@ begin
   k^.Safe.UnLock;
 end;
 
+procedure TRttiCustomList.CancelPending;
+begin
+  ObjArrayClear(fPending);
+  fRegisterFailed := false;
+end;
+
+procedure TRttiCustomList.PublishPending;
+var
+  i: PtrInt;
+  pending: TRttiCustomDynArray;
+  {$ifndef NOPATCHVMT}
+  vmt: PPointer;
+  {$endif NOPATCHVMT}
+begin // caller holds RegisterSafe, and every FromRtti has completed
+  {$ifndef NOPATCHVMT}
+  // Reject occupied slots before committing.
+  for i := 0 to high(fPending) do
+    if fPending[i].Kind = rkClass then
+    begin
+      vmt := pointer(PAnsiChar(fPending[i].ValueClass) + vmtAutoTable);
+      if (vmt^ <> nil) and
+         (vmt^ <> fPending[i]) then
+        ERttiException.RaiseUtf8('%.PublishPending(%): vmtAutoTable set to %',
+          [self, fPending[i].ValueClass, vmt^]);
+    end;
+  {$endif NOPATCHVMT}
+  // Detach before publishing: never register ownership twice.
+  pending := fPending;
+  fPending := nil;
+  for i := 0 to high(pending) do
+    AddToPairs(pending[i], pending[i].Info);
+  {$ifndef NOPATCHVMT}
+  for i := 0 to high(pending) do
+    if pending[i].Kind = rkClass then
+    begin
+      vmt := pointer(PAnsiChar(pending[i].ValueClass) + vmtAutoTable);
+      if vmt^ = nil then
+        PatchPointer(pointer(vmt), PtrUInt(pending[i]));
+      if vmt^ <> pending[i] then
+        ERttiException.RaiseUtf8('%.PublishPending(%): vmtAutoTable set to %',
+          [self, pending[i].ValueClass, vmt^]);
+    end;
+  {$endif NOPATCHVMT}
+end;
+
 function TRttiCustomList.DoRegisterInfo(Info: PRttiInfo): TRttiCustom;
 begin
   if Info = nil then
@@ -10275,30 +10417,84 @@ begin
   RegisterSafe.Lock;
   try
     result := FindType(Info);
-    if result <> nil then // unlikely race condition but better safe than sorry
+    if result <> nil then
       exit;
-    result := GlobalClass.Create;  // initialize a new TRttiCustom/TRttiJson
-    AddToPairs(result, Info); // register ASAP avoids endless FromRtti recursion
-    result.FromRtti(Info);    // now we can parse and process the RTTI
+    if fRegisterDepth = 0 then
+      fRegisteringThread := GetCurrentThreadId;
+    inc(fRegisterDepth);
+    try
+      try
+        result := GlobalClass.Create;
+        result.fCache.Info := Info; // recursive lookup identity
+        ObjArrayAdd(fPending, result);
+        result.FromRtti(Info);
+        if fRegisterFailed then
+          ERttiException.RaiseUtf8('%.DoRegister(%): nested registration failed',
+            [self, Info.RawName]);
+      except
+        fRegisterFailed := true;
+        if fRegisterDepth = 1 then
+          CancelPending;
+        raise;
+      end;
+    finally
+      dec(fRegisterDepth);
+    end;
+    if fRegisterDepth = 0 then
+      try
+        PublishPending;
+      except
+        CancelPending;
+        raise;
+      end;
   finally
+    if fRegisterDepth = 0 then
+      fRegisteringThread := TThreadID(0);
     RegisterSafe.UnLock;
   end;
-  if FindType(Info) <> result then // paranoid check
-    ERttiException.RaiseUtf8('%.DoRegister(%)?', [self, Info.RawName]);
 end;
 
 function TRttiCustomList.DoRegisterFakeRtti(ObjectClass: TClass): TRttiCustom;
-begin // generate fake RTTI for classes without {$M+} on Delphi 7/2007
+begin
   RegisterSafe.Lock;
   try
-    result := FindClass(ObjectClass); // search again (for thread safety)
+    result := FindClass(ObjectClass);
     if result <> nil then
-      exit; // already registered in the background
-    result := GlobalClass.Create;
-    result.FromRtti(nil); // just set rcfWithoutRtti flag
-    result.SetValueClass(ObjectClass, nil); // before NoRttiSetAndRegister()
-    result.NoRttiSetAndRegister(ptClass, ToText(ObjectClass));
+      exit;
+    if fRegisterDepth = 0 then
+      fRegisteringThread := GetCurrentThreadId;
+    inc(fRegisterDepth);
+    try
+      try
+        result := GlobalClass.Create;
+        result.fCache.Kind := rkClass;
+        result.fCache.ValueClass := ObjectClass; // fake RTTI recursion
+        ObjArrayAdd(fPending, result);
+        result.FromRtti(nil);
+        result.SetValueClass(ObjectClass, nil);
+        result.NoRttiSetAndRegister(ptClass, ToText(ObjectClass));
+        if fRegisterFailed then
+          ERttiException.RaiseUtf8('%.DoRegisterFakeRtti(%): nested registration failed',
+            [self, ObjectClass]);
+      except
+        fRegisterFailed := true;
+        if fRegisterDepth = 1 then
+          CancelPending;
+        raise;
+      end;
+    finally
+      dec(fRegisterDepth);
+    end;
+    if fRegisterDepth = 0 then
+      try
+        PublishPending;
+      except
+        CancelPending;
+        raise;
+      end;
   finally
+    if fRegisterDepth = 0 then
+      fRegisteringThread := TThreadID(0);
     RegisterSafe.UnLock;
   end;
 end;
@@ -10369,7 +10565,16 @@ end;
 procedure TRttiCustomList.AddToPairs(Instance: TRttiCustom; Info: PRttiInfo);
 var
   k: PRttiCustomListPairs;
+  i: PtrInt;
 begin
+  if fRegisterDepth <> 0 then
+  begin
+    for i := 0 to high(fPending) do
+      if fPending[i] = Instance then
+        exit;
+    ObjArrayAdd(fPending, Instance);
+    exit;
+  end;
   k := @fHashInfo[RK_TOSLOT[Info^.Kind]];
   k^.Safe.Lock; // needed when resizing k^.HashInfo[]
   try

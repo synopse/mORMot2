@@ -63,6 +63,7 @@ uses
   test.core.base           in '.\test.core.base.pas',
   test.core.threads        in '.\test.core.threads.pas',
   test.core.data           in '.\test.core.data.pas',
+  test.core.rtti.concurrent in '.\test.core.rtti.concurrent.pas',
   test.core.crypt          in '.\test.core.crypt.pas',
   test.core.ecc            in '.\test.core.ecc.pas',
   test.core.collections    in '.\test.core.collections.pas',
@@ -161,6 +162,7 @@ begin
   AddCase([
     TTestCoreBase,
     TTestCoreThreads,
+    TTestRttiConcurrent,
     TTestCoreProcess,
     {$ifdef HASGENERICS} // do-nothing on oldest compilers (e.g. <= Delphi XE7)
     TTestCoreCollections,
