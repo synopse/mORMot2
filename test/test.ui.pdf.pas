@@ -59,6 +59,7 @@ type
     procedure EmfScaledRotation;
     procedure EmfAnsiText;
     procedure EmfAnsiStockFont;
+    procedure EmfDIBitsKept;
   end;
 
 implementation
@@ -2030,6 +2031,58 @@ begin
   end;
   Check(w <> '', 'the W metafile rendered');
   CheckEqual(a, w, 'decoded in the code page of the stock font');
+end;
+
+procedure TTestUiPdf.EmfDIBitsKept;
+var
+  mf: TMetaFile;
+  mc: TMetaFileCanvas;
+  xf: TXForm;
+  bmi: TBitmapInfo;
+  pix: array[0..15] of cardinal;
+  before: RawByteString;
+  first, second: RawUtf8;
+  i: integer;
+begin
+  { with eM22 < 0, EMR_STRETCHDIBITS negated biHeight inside the record,
+    which EnumEnhMetaFile hands out read-only: a second rendering of the same
+    metafile drew the bitmap the other way round }
+  mf := TMetaFile.Create;
+  try
+    mf.Width := 200;
+    mf.Height := 200;
+    mc := TMetaFileCanvas.Create(mf, 0);
+    try
+      SetGraphicsMode(mc.Handle, GM_ADVANCED);
+      FillChar(xf, SizeOf(xf), 0);
+      xf.eM11 := 1;
+      xf.eM22 := -1;
+      xf.eDy := 150;
+      SetWorldTransform(mc.Handle, xf);
+      FillChar(bmi, SizeOf(bmi), 0);
+      bmi.bmiHeader.biSize := SizeOf(bmi.bmiHeader);
+      bmi.bmiHeader.biWidth := 4;
+      bmi.bmiHeader.biHeight := 4;
+      bmi.bmiHeader.biPlanes := 1;
+      bmi.bmiHeader.biBitCount := 32;
+      for i := 0 to high(pix) do
+        pix[i] := cardinal(i) * $00101010; // a top-bottom gradient
+      StretchDIBits(mc.Handle, 10, 10, 64, 64, 0, 0, 4, 4, @pix, bmi,
+        DIB_RGB_COLORS, SRCCOPY);
+    finally
+      mc.Free;
+    end;
+    before := MetaFileBytes(mf);
+    CheckEqual(length(EmfRecords(before, R_STRETCHDIBITS)), 1,
+      'recorded as EMR_STRETCHDIBITS');
+    first := RenderedEmf(mf);
+    second := RenderedEmf(mf);
+    Check(MetaFileBytes(mf) = before, 'the metafile unchanged');
+  finally
+    mf.Free;
+  end;
+  CheckEqual(CountOccurrences('/Subtype/Image', first), 1, 'the bitmap');
+  CheckEqual(second, first, 'drawn the same twice');
 end;
 
 {$else}

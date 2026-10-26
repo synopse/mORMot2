@@ -10816,6 +10816,8 @@ var
   i: PtrInt;
   InitTransX: XForm;
   polytypes: PByteArray;
+  bmi: PBitmapInfo;
+  bmicopy: RawByteString;
 begin
   result := true;
   with E.DC[E.nDC] do
@@ -11382,12 +11384,23 @@ begin
           if (offBmiSrc <> 0) and
              (offBitsSrc <> 0) then
           begin
+            bmi := pointer(PtrUInt(R) + offBmiSrc);
             if WorldTransform.eM22 < 0 then
-              with PBitmapInfo(PtrUInt(R) + offBmiSrc)^ do
-                bmiHeader.biHeight := -bmiHeader.biHeight;
-            E.DrawBitmap(xSrc, ySrc, cxSrc, cySrc, xDest, yDest, cxDest, cyDest,
-              iUsageSrc, pointer(PtrUInt(R) + offBmiSrc),
-              pointer(PtrUInt(R) + offBitsSrc), @rclBounds, nil, dwRop);
+              // flipped in a copy: the record belongs to the metafile
+              if (cbBmiSrc >= SizeOf(TBitmapInfoHeader)) and
+                 (offBmiSrc + cbBmiSrc <= R^.nSize) then
+              begin
+                SetLength(bmicopy, cbBmiSrc);
+                MoveFast(bmi^, pointer(bmicopy)^, cbBmiSrc);
+                bmi := pointer(bmicopy);
+                bmi^.bmiHeader.biHeight := -bmi^.bmiHeader.biHeight;
+              end
+              else
+                bmi := nil;
+            if bmi <> nil then
+              E.DrawBitmap(xSrc, ySrc, cxSrc, cySrc, xDest, yDest, cxDest, cyDest,
+                iUsageSrc, bmi, pointer(PtrUInt(R) + offBitsSrc), @rclBounds,
+                nil, dwRop);
           end;
       EMR_TRANSPARENTBLT:
         with PEMRTransparentBLT(R)^ do // only handle RGB bitmaps (no palette)
