@@ -63,6 +63,7 @@ type
     procedure EmfPrinterResZero;
     procedure ReducedFontSearchFields;
     procedure EmfRecordLayout;
+    procedure EmfMirroredBoxes;
   end;
 
 implementation
@@ -2209,6 +2210,180 @@ begin
   end;
   Check(PosEx(#10'1 0 0 rg'#10, txt) > 0, 'the brush colour');
   Check(PosEx(#10'0 0 1 RG'#10, txt) > 0, 'the extended pen colour');
+end;
+
+// the paths of the content that are painted, one item per path: its
+// construction lines (m, l, c, re); a path ended by n (a clip) is dropped
+function PaintedPaths(const Txt: RawUtf8): TRawUtf8DynArray;
+var
+  lines: TRawUtf8DynArray;
+  path, op: RawUtf8;
+  i, j, n: PtrInt;
+begin
+  result := nil;
+  lines := nil;
+  CsvToRawUtf8DynArray(pointer(Txt), lines, #10);
+  path := '';
+  for i := 0 to high(lines) do
+  begin
+    j := length(lines[i]);
+    while (j > 0) and
+          (lines[i][j] <> ' ') do
+      dec(j);
+    op := copy(lines[i], j + 1, maxInt);
+    if (op = 'm') or (op = 'l') or (op = 'c') or (op = 're') then
+      path := path + lines[i] + #10
+    else if op = 'n' then
+      path := ''
+    else if (op = 'f') or (op = 'f*') or (op = 'S') or (op = 's') or
+            (op = 'B') or (op = 'B*') or (op = 'b') or (op = 'b*') then
+    begin
+      if path <> '' then
+      begin
+        n := length(result);
+        SetLength(result, n + 1);
+        result[n] := path;
+      end;
+      path := '';
+    end;
+  end;
+end;
+
+// the box around the points of a path of PaintedPaths
+function PathBox(const Path: RawUtf8): TPdfBox;
+var
+  lines, v: TRawUtf8DynArray;
+  num: TDoubleDynArray;
+  x1, y1, x2, y2: double;
+  i, j, n: PtrInt;
+  first: boolean;
+begin
+  lines := nil;
+  CsvToRawUtf8DynArray(pointer(Path), lines, #10);
+  first := true;
+  x1 := 0;
+  y1 := 0;
+  x2 := 0;
+  y2 := 0;
+  for i := 0 to high(lines) do
+  begin
+    v := nil;
+    CsvToRawUtf8DynArray(pointer(lines[i]), v, ' ');
+    n := length(v) - 1; // the numbers, without the operator
+    SetLength(num, n);
+    for j := 0 to n - 1 do
+      num[j] := GetExtended(pointer(v[j]));
+    if v[n] = 're' then
+    begin
+      // x y w h: the second corner
+      num[2] := num[0] + num[2];
+      num[3] := num[1] + num[3];
+    end;
+    j := 0;
+    while j + 1 < n do
+    begin
+      if first or (num[j] < x1) then
+        x1 := num[j];
+      if first or (num[j] > x2) then
+        x2 := num[j];
+      if first or (num[j + 1] < y1) then
+        y1 := num[j + 1];
+      if first or (num[j + 1] > y2) then
+        y2 := num[j + 1];
+      first := false;
+      inc(j, 2);
+    end;
+  end;
+  result := PdfBox(x1, y1, x2 - x1, y2 - y1);
+end;
+
+procedure TTestUiPdf.EmfMirroredBoxes;
+
+  // the painted paths of a polygon and of four shapes on its corners,
+  // recorded at K logical units per pixel, VX and VY < 0 mirroring an axis
+  function Shapes(K, VX, VY: integer): TRawUtf8DynArray;
+  var
+    mf: TMetaFile;
+    mc: TMetaFileCanvas;
+    r: TRect;
+    pts: array[0..3] of TPoint;
+    i: integer;
+  begin
+    mf := TMetaFile.Create;
+    try
+      mf.Width := 100;
+      mf.Height := 100;
+      mc := TMetaFileCanvas.Create(mf, 0);
+      try
+        if K > 1 then
+        begin
+          SetMapMode(mc.Handle, MM_ANISOTROPIC);
+          SetWindowExtEx(mc.Handle, 100 * K, 100 * K, nil);
+          SetViewportExtEx(mc.Handle, VX, VY, nil);
+          SetViewportOrgEx(mc.Handle, 60 * ord(VX < 0), 60 * ord(VY < 0), nil);
+        end;
+        // the reference: GDI records the points of a polygon as they are
+        for i := 0 to 3 do
+        begin
+          pts[i].X := (10 + 40 * ord(i in [1, 2])) * K;
+          pts[i].Y := (10 + 40 * ord(i >= 2)) * K;
+        end;
+        Polygon(mc.Handle, pts, 4);
+        Rectangle(mc.Handle, 10 * K, 10 * K, 50 * K, 50 * K);
+        Ellipse(mc.Handle, 10 * K, 10 * K, 50 * K, 50 * K);
+        RoundRect(mc.Handle, 10 * K, 10 * K, 50 * K, 50 * K, 16 * K, 16 * K);
+        r.Left := 10 * K;
+        r.Top := 10 * K;
+        r.Right := 50 * K;
+        r.Bottom := 50 * K;
+        FillRect(mc.Handle, r, GetStockObject(BLACK_BRUSH));
+      finally
+        mc.Free;
+      end;
+      result := PaintedPaths(RenderedEmf(mf));
+    finally
+      mf.Free;
+    end;
+  end;
+
+  function SameBox(const A, B: TPdfBox): boolean;
+  begin
+    result := (Abs(A.Left - B.Left) < 0.02) and
+              (Abs(A.Top - B.Top) < 0.02) and
+              (Abs(A.Width - B.Width) < 0.02) and
+              (Abs(A.Height - B.Height) < 0.02);
+  end;
+
+  // the polygon of Paths on the device pixels of the unmirrored one, and
+  // each shape on it
+  procedure SameAsPolygon(const Paths: TRawUtf8DynArray; const Ref: TPdfBox;
+    const Msg: string);
+  var
+    i: integer;
+  begin
+    if CheckFailed(length(Paths) = 5, Msg) then
+      exit;
+    Check(SameBox(PathBox(Paths[0]), Ref), Msg);
+    for i := 1 to 4 do
+      Check(SameBox(PathBox(Paths[i]), Ref), Msg);
+  end;
+
+var
+  px: TRawUtf8DynArray;
+begin
+  { with an axis mirrored, GDI records the box of Rectangle, Ellipse and
+    RoundRect(100, 100, 500, 500) as 500,100,110,490 at 10 units per pixel:
+    the recorded Right is the smaller value. BoxInclI and RoundRectI
+    normalized first and added the device pixel on the other side, so the
+    shape moved by one pixel; the corners of RoundRectI took the sign of the
+    mapping }
+  px := Shapes(1, 100, 100);
+  if CheckFailed(length(px) = 5, 'the shapes') then
+    exit;
+  // mirrored at the origin 60: the polygons cover the same device pixels
+  SameAsPolygon(px, PathBox(px[0]), 'on the polygon');
+  SameAsPolygon(Shapes(10, -100, 100), PathBox(px[0]), 'mirrored in X');
+  SameAsPolygon(Shapes(10, -100, -100), PathBox(px[0]), 'mirrored in X and Y');
 end;
 
 {$else}

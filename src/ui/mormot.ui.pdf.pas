@@ -1859,7 +1859,8 @@ type
     procedure PointI(x, y: single);
       {$ifdef HASINLINE}inline;{$endif}
     function RectI(const Rect: TRect; Normalize: boolean): TPdfRect;
-    // size of one device pixel of the metafile, in logical units
+    // size of one device pixel of the metafile, in logical units - negative
+    // when the mapping mirrors that axis
     function DevPixelX: single;
     function DevPixelY: single;
     // inclusive-inclusive GDI box (EMR_RECTANGLE, EMR_ELLIPSE)
@@ -9553,12 +9554,20 @@ begin
 end;
 
 procedure TPdfCanvas.RoundRectI(x1, y1, x2, y2, cx, cy: integer);
+var
+  r: TPdfRect;
 begin
   // the corner size goes through the same window/viewport mapping as the
   // coordinates (MM_ANISOTROPIC metafiles), and the GDI box is
-  // inclusive-inclusive: one device pixel is added to the right/bottom edges
-  RoundRect(I2X(x1), I2Y(y1), S2X(x2 + DevPixelX), S2Y(y2 + DevPixelY),
-    I2X(x1 + cx) - I2X(x1), I2Y(y1 + cy) - I2Y(y1));
+  // inclusive-inclusive: one device pixel is added to the recorded
+  // right/bottom edges, before normalizing - see BoxInclI
+  r.Left   := I2X(x1);
+  r.Right  := S2X(x2 + DevPixelX);
+  r.Top    := I2Y(y1);
+  r.Bottom := S2Y(y2 + DevPixelY);
+  NormalizeRect(r);
+  RoundRect(r.Left, r.Bottom, r.Right, r.Top,
+    Abs(I2X(x1 + cx) - I2X(x1)), -Abs(I2Y(y1 + cy) - I2Y(y1)));
 end;
 
 procedure TPdfCanvas.ArcI(centerx, centery, W, H, Sx, Sy, Ex, Ey: integer;
@@ -9619,7 +9628,7 @@ function TPdfCanvas.DevPixelX: single;
 begin
   if (fViewSize.cx <> 0) and
      (fWinSize.cx <> 0) then
-    result := Abs(fWinSize.cx / fViewSize.cx)
+    result := fWinSize.cx / fViewSize.cx
   else
     result := 1;
 end;
@@ -9628,7 +9637,7 @@ function TPdfCanvas.DevPixelY: single;
 begin
   if (fViewSize.cy <> 0) and
      (fWinSize.cy <> 0) then
-    result := Abs(fWinSize.cy / fViewSize.cy)
+    result := fWinSize.cy / fViewSize.cy
   else
     result := 1;
 end;
@@ -9645,11 +9654,13 @@ end;
 // GDI records the Right/Bottom of Rectangle/Ellipse one DEVICE pixel inside
 // the shape, i.e. several logical units with a screen reference DC: RectI()
 // removed one logical unit instead, and shapes were too small
+// - under a mirrored mapping the recorded Right is the smaller value (500,110
+// for 100..500 at -10 units per pixel): the signed pixel is added before the
+// box is normalized
 function TPdfCanvas.BoxInclI(Box: TRect): TPdfBox;
 var
   r: TPdfRect;
 begin
-  NormalizeRect(Box);
   r.Left   := I2X(Box.Left);
   r.Right  := S2X(Box.Right + DevPixelX);
   r.Top    := I2Y(Box.Top);
@@ -10983,7 +10994,6 @@ begin
         end;
       EMR_ROUNDRECT:
         begin
-          NormalizeRect(PRect(@PEMRRoundRect(R)^.rclBox)^);
           E.NeedBrushAndPen;
           with PEMRRoundRect(R)^ do
             E.Canvas.RoundRectI(rclBox.left, rclBox.top, rclBox.right,
