@@ -1183,6 +1183,25 @@ type
     strikeout: boolean;
   end;
 
+  /// EMR_CREATEBRUSHINDIRECT as the EMF stores it, with a 32-bit LOGBRUSH
+  // - the windows unit of FPC 3.2.2 declares lb as LOGBRUSH, whose ULONG_PTR
+  // lbHatch moves the fields on Win64: every brush was read as black there
+  TEmrCreateBrushIndirect32 = record
+    emr: TEMR;
+    ihBrush: cardinal;
+    lbStyle, lbColor, lbHatch: cardinal;
+  end;
+  PEmrCreateBrushIndirect32 = ^TEmrCreateBrushIndirect32;
+
+  /// EMR_EXTCREATEPEN as the EMF stores it, with a 32-bit EXTLOGPEN
+  // - the same with FPC 3.2.2 on Win64: elpHatch is a ULONG_PTR there
+  TEmrExtCreatePen32 = record
+    emr: TEMR;
+    ihPen, offBmi, cbBmi, offBits, cbBits: cardinal;
+    elpPenStyle, elpWidth, elpBrushStyle, elpColor, elpHatch: cardinal;
+  end;
+  PEmrExtCreatePen32 = ^TEmrExtCreatePen32;
+
   /// one DC state properties
   TGdiplusEnumState = record
     pen, brush, font, ClipRegion: THandle;
@@ -1412,28 +1431,28 @@ begin
         end;
       EMR_EXTCREATEPEN:
         // approximated: only the color, width and dash style are handled
-        with PEMRExtCreatePen(Rec)^ do
+        with PEmrExtCreatePen32(Rec)^ do
         begin
           E.DeleteObj(ihPen - 1);
-          if elp.elpPenStyle and PS_TYPE_MASK = PS_COSMETIC then
-            E.CreatePenObj(ihPen - 1, elp.elpColor, 0,
-              elp.elpPenStyle and PS_STYLE_MASK)
+          if elpPenStyle and PS_TYPE_MASK = PS_COSMETIC then
+            E.CreatePenObj(ihPen - 1, elpColor, 0,
+              elpPenStyle and PS_STYLE_MASK)
           else
-            E.CreatePenObj(ihPen - 1, elp.elpColor, elp.elpWidth,
-              elp.elpPenStyle and PS_STYLE_MASK);
+            E.CreatePenObj(ihPen - 1, elpColor, elpWidth,
+              elpPenStyle and PS_STYLE_MASK);
         end;
       EMR_CREATEBRUSHINDIRECT:
-        with PEMRCreateBrushIndirect(Rec)^ do
+        with PEmrCreateBrushIndirect32(Rec)^ do
         begin
           E.DeleteObj(ihBrush - 1);
           with E.obj[ihBrush - 1] do
           begin
             kind := OBJ_BRUSH;
-            if lb.lbStyle = BS_NULL then
+            if lbStyle = BS_NULL then
               brush := 0
             else
             begin
-              handle := E.GetCachedSolidBrush(lb.lbColor);
+              handle := E.GetCachedSolidBrush(lbColor);
               brush := handle;
             end;
           end;

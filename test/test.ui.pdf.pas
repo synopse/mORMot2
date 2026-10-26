@@ -52,6 +52,7 @@ type
     procedure EmfPlusViewportOrigin;
     procedure EmfPlusPlaybackOrder;
     procedure EmfPlusWindowOrigin;
+    procedure EmfPlusRecordLayout;
   end;
 
 implementation
@@ -1501,6 +1502,28 @@ begin
   SelectObject(expected, CreateSolidBrush(RGB(255, 0, 0)));
   Rectangle(expected, 0, 0, 10, 10);
   Check(SameRedBounds(CloseEmf(dc), CloseEmf(expected)), 'not rounded');
+end;
+
+procedure TTestUiPdf.EmfPlusRecordLayout;
+var
+  dc: HDC;
+  lb: TLogBrush;
+begin
+  // FPC 3.2.2 declares EMR_CREATEBRUSHINDIRECT and EMR_EXTCREATEPEN with the
+  // native LOGBRUSH and EXTLOGPEN, whose ULONG_PTR hatch moves the fields on
+  // Win64: every brush and extended pen was read black
+  if not Check(Gdip.Exists, 'GDI+') then
+    exit;
+  Check(RedPixels(RectangleEmf(10, 10, 50, 50)) > 0, 'the brush colour');
+  dc := NewEmf;
+  lb.lbStyle := BS_SOLID;
+  lb.lbColor := RGB(255, 0, 0);
+  lb.lbHatch := 0;
+  DeleteObject(SelectObject(dc, // the null pen of NewEmf is a stock object
+    ExtCreatePen(PS_GEOMETRIC or PS_SOLID, 10, lb, 0, nil)));
+  MoveToEx(dc, 10, 50, nil);
+  LineTo(dc, 90, 50);
+  Check(RedPixels(CloseEmf(dc)) > 0, 'the extended pen colour');
 end;
 
 {$else}
