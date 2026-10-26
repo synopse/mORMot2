@@ -66,6 +66,7 @@ type
     procedure EmfRecordLayout;
     procedure EmfMirroredBoxes;
     procedure EmfClipRestoreDC;
+    procedure EmfUnderlineClipped;
   end;
 
 implementation
@@ -2428,7 +2429,8 @@ begin
   result := CountOccurrences('q'#10, s) - CountOccurrences('Q'#10, s);
 end;
 
-// no q or Q within a path, no l or c without a current point
+// no q, Q or other graphics state operator within a path, no l, c or
+// painting operator without a path
 function ValidPaths(const Txt: RawUtf8): boolean;
 var
   p: PUtf8Char;
@@ -2457,7 +2459,19 @@ begin
         exit;
     end
     else if (line = 'q') or
-            (line = 'Q') then
+            (line = 'Q') or
+            (op = 'w') or
+            (op = 'd') or
+            (op = 'J') or
+            (op = 'j') or
+            (op = 'M') or
+            (op = 'RG') or
+            (op = 'rg') or
+            (op = 'gs') or
+            (op = 'cm') or
+            (op = 'BMC') or
+            (op = 'BDC') or
+            (op = 'EMC') then
     begin
       if inpath then
         exit;
@@ -2466,8 +2480,13 @@ begin
             (line = 'f') or
             (line = 'f*') or
             (line = 'B') or
-            (line = 'B*') or
-            (line = 'n') then
+            (line = 'B*') then
+    begin
+      if not inpath then
+        exit;
+      inpath := false;
+    end
+    else if line = 'n' then
       inpath := false;
   end;
   result := true;
@@ -2478,8 +2497,11 @@ var
   mf, mf2: TMetaFile;
   mc: TMetaFileCanvas;
   pen: HPEN;
+  bmp: TBitmap;
+  pts: array[0..2] of TPoint;
   doc: TPdfDocumentGdi;
-  txt, meta, two: RawUtf8;
+  txt, meta, two, more, fill: RawUtf8;
+  i: PtrInt;
 
   procedure Text(Y: integer; const Value: WideString);
   begin
@@ -2580,10 +2602,88 @@ begin
       LineTo(mc.Handle, 200, 265); // after the path: a line of its own
       Clip(0, 0, 350, 350);
       Text(270, 'After');
+      BeginPath(mc.Handle); // painted under the clip of StrokePath, as GDI
+      MoveToEx(mc.Handle, 20, 290, nil);
+      LineTo(mc.Handle, 200, 290);
+      Clip(0, 0, 30, 350);
+      EndPath(mc.Handle);
+      StrokePath(mc.Handle);
     finally
       mc.Free;
     end;
     meta := RenderedEmf(mf, 0, 0, tcNeverClip);
+  finally
+    mf.Free;
+  end;
+  // what is drawn in a path bracket but is no geometry goes to the page
+  mf := TMetaFile.Create;
+  bmp := TBitmap.Create;
+  try
+    mf.Width := 400;
+    mf.Height := 400;
+    bmp.PixelFormat := pf24bit;
+    bmp.Width := 4;
+    bmp.Height := 4;
+    mc := TMetaFileCanvas.Create(mf, 0);
+    try
+      BeginPath(mc.Handle);
+      Text(20, 'InPath');
+      mc.Draw(10, 40, bmp);
+      MoveToEx(mc.Handle, 20, 80, nil);
+      LineTo(mc.Handle, 200, 80);
+      SelectObject(mc.Handle, GetStockObject(BLACK_PEN)); // a pen of the bracket
+      LineTo(mc.Handle, 200, 120);
+      EndPath(mc.Handle);
+      StrokePath(mc.Handle);
+      BeginPath(mc.Handle); // a shape adds to the path, painted once
+      Rectangle(mc.Handle, 250, 250, 300, 300);
+      EndPath(mc.Handle);
+      SelectObject(mc.Handle, GetStockObject(NULL_PEN));
+      SelectObject(mc.Handle, GetStockObject(GRAY_BRUSH)); // as FPC selects none
+      MoveToEx(mc.Handle, 20, 350, nil);
+      LineTo(mc.Handle, 200, 350); // its geometry left open on the page
+      FillPath(mc.Handle);
+    finally
+      mc.Free;
+    end;
+    more := RenderedEmf(mf, 0, 0, tcNeverClip);
+  finally
+    bmp.Free;
+    mf.Free;
+  end;
+  // the painting records as GDI paints: fill mode, closed figures
+  mf := TMetaFile.Create;
+  try
+    mf.Width := 400;
+    mf.Height := 400;
+    mc := TMetaFileCanvas.Create(mf, 0);
+    try
+      SetPolyFillMode(mc.Handle, ALTERNATE);
+      SelectObject(mc.Handle, GetStockObject(NULL_PEN));
+      SelectObject(mc.Handle, GetStockObject(NULL_BRUSH));
+      pts[0].X := 20;
+      pts[0].Y := 20;
+      pts[1].X := 100;
+      pts[1].Y := 20;
+      pts[2].X := 60;
+      pts[2].Y := 90;
+      BeginPath(mc.Handle); // kept although neither pen nor brush shows it
+      Polygon(mc.Handle, pts, 3);
+      EndPath(mc.Handle);
+      SelectObject(mc.Handle, GetStockObject(GRAY_BRUSH));
+      FillPath(mc.Handle); // f* for ALTERNATE
+      SelectObject(mc.Handle, GetStockObject(BLACK_PEN));
+      BeginPath(mc.Handle); // an open triangle, closed by StrokeAndFillPath
+      MoveToEx(mc.Handle, 20, 200, nil);
+      LineTo(mc.Handle, 100, 200);
+      LineTo(mc.Handle, 60, 290);
+      Rectangle(mc.Handle, 150, 200, 200, 250); // a figure of its own
+      EndPath(mc.Handle);
+      StrokeAndFillPath(mc.Handle);
+    finally
+      mc.Free;
+    end;
+    fill := RenderedEmf(mf, 0, 0, tcNeverClip);
   finally
     mf.Free;
   end;
@@ -2643,9 +2743,78 @@ begin
   CheckEqual(OpenBefore(meta, '(Free)'), 1, 'the meta region restored');
   Check(ValidPaths(meta), 'valid paths');
   CheckEqual(CountOccurrences(' l'#10, meta), 6, 'every segment kept');
+  Check((PosEx('0 842 22.5 -262.5 re', meta) > 0) and
+        (PosEx('0 842 22.5 -262.5 re', meta) < PosEx('15 624.5 m', meta)),
+    'the path under the clip of its painting');
+  Check(PosEx('(InPath)', more) > 0, 'text in a path');
+  Check(PosEx(' Do'#10, more) > 0, 'a bitmap in a path');
+  Check(ValidPaths(more), 'valid paths with text and bitmap');
+  CheckEqual(CountOccurrences('S'#10, more), 1, 'the path stroked once');
+  CheckEqual(CountOccurrences(#10'B'#10, more) + CountOccurrences(#10'f'#10, more) +
+    CountOccurrences(#10'B*'#10, more) + CountOccurrences(#10'f*'#10, more), 1,
+    'the shape painted once');
+  Check(PosEx('75 827 l'#10, fill) > 0, 'a polygon of no pen nor brush kept');
+  CheckEqual(CountOccurrences(#10'f*'#10, fill), 1, 'FillPath in ALTERNATE mode');
+  i := PosEx(' re'#10, fill);
+  while (i > 1) and
+        (fill[i - 1] <> #10) do
+    dec(i);
+  Check((i > 2) and
+        (copy(fill, i - 2, 2) = 'h'#10), 'StrokeAndFillPath closes the figure');
   Check(PosBefore(meta, '(After)', ' re'#10) > PosBefore(meta, '(After)', ' l'#10),
     'a clip after SelectClipPath');
   Check(PosEx(' l'#10'S'#10, two) > 0, 'a line after a path never painted');
+end;
+
+procedure TTestUiPdf.EmfUnderlineClipped;
+var
+  mf: TMetaFile;
+  mc: TMetaFileCanvas;
+  font: HFONT;
+  pen: HPEN;
+  r: TRect;
+  s: WideString;
+  txt: RawUtf8;
+begin
+  { the Q after a clipped text forgot only the fill colour, while its
+    underline had set the pen and then the one of before again: a line of
+    that pen kept the width of before the q }
+  mf := TMetaFile.Create;
+  try
+    mf.Width := 400;
+    mf.Height := 400;
+    mc := TMetaFileCanvas.Create(mf, 0);
+    try
+      pen := CreatePen(PS_SOLID, 1, 0); // of a width: NeedPen caches it
+      SelectObject(mc.Handle, pen);
+      font := CreateFontW(-20, 0, 0, 0, FW_NORMAL, 0, 1, 0, DEFAULT_CHARSET,
+        0, 0, 0, 0, 'Arial');
+      SelectObject(mc.Handle, font);
+      SetTextColor(mc.Handle, RGB(255, 0, 0));
+      r.Left := 10; // not Rect(): a type of the windows unit on FPC
+      r.Top := 10;
+      r.Right := 300;
+      r.Bottom := 60;
+      s := 'Under';
+      ExtTextOutW(mc.Handle, 10, 10, ETO_CLIPPED, @r, pointer(s), length(s), nil);
+      MoveToEx(mc.Handle, 20, 200, nil); // the pen of before the text
+      LineTo(mc.Handle, 200, 200);
+      s := 'End';
+      TextOutW(mc.Handle, 10, 300, pointer(s), length(s));
+      SelectObject(mc.Handle, GetStockObject(SYSTEM_FONT));
+      SelectObject(mc.Handle, GetStockObject(BLACK_PEN));
+      DeleteObject(font);
+      DeleteObject(pen);
+    finally
+      mc.Free;
+    end;
+    txt := RenderedEmf(mf);
+  finally
+    mf.Free;
+  end;
+  Check(PosEx('(Under)', txt) > 0, 'the text');
+  Check(PosBefore(txt, '(End)', ' w'#10) > PosBefore(txt, '(End)', #10'Q'#10),
+    'the pen width after the Q of the text');
 end;
 
 {$else}
