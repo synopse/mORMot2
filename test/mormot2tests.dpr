@@ -66,6 +66,7 @@ uses
   test.core.crypt          in '.\test.core.crypt.pas',
   test.core.ecc            in '.\test.core.ecc.pas',
   test.core.collections    in '.\test.core.collections.pas',
+  test.net.ws.concurrent in '.\test.net.ws.concurrent.pas',
   {$ifdef LIBQUICKJSSTATIC}
   test.core.script         in '.\test.core.script.pas',
   {$endif LIBQUICKJSSTATIC}
@@ -194,6 +195,7 @@ begin
   {$endif LIBQUICKJSSTATIC}
   AddCase([
     TTestServiceOrientedArchitecture,
+    TTestWebSocketThreadCompletion,
     TTestBidirectionalRemoteConnection
   ]);
 end;

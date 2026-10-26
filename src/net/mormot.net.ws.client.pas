@@ -484,6 +484,7 @@ var
   log: TSynLog;
   retry: string;
   waitms, maxwaitms: integer;
+  finalstate: TWebSocketProcessClientThreadState;
 begin
   if fProcess <> nil then
   try
@@ -536,10 +537,11 @@ begin
   except
     // ignore any exception in the thread, but end this unsafe client
   end;
-  fThreadState := sFinished; // safely set final state
+  finalstate := sFinished;
   if (fProcess <> nil) and
      (fProcess.fState = wpsClose) then
-    fThreadState := sClosed;
+    finalstate := sClosed;
+  fThreadState := finalstate; // last process access is above
   WebSocketLog.Add.Log(sllDebug, 'Execute: done (%)', [ToText(fThreadState)^], self);
 end;
 
