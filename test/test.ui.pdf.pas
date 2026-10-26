@@ -54,6 +54,7 @@ type
     procedure EmfPlusWindowOrigin;
     procedure EmfPlusRecordLayout;
     procedure EmfAlphaBlendOpaque;
+    procedure EmfPolyPolylineOpen;
   end;
 
 implementation
@@ -1673,6 +1674,56 @@ begin
   end;
   CheckEqual(CountOccurrences('/Subtype/Image', txt), 1, 'the bitmap');
   CheckEqual(CountOccurrences('/Mask', txt), 0, 'no colour key');
+end;
+
+procedure TTestUiPdf.EmfPolyPolylineOpen;
+var
+  mf: TMetaFile;
+  mc: TMetaFileCanvas;
+  pts: array[0..5] of TPoint;
+  lines: array[0..1] of DWord;
+  polys: array[0..1] of integer;
+  bytes: RawByteString;
+  txt: RawUtf8;
+  i: integer;
+begin
+  { every polyline of EMR_POLYPOLYLINE/16 got a segment back to its first
+    point; a polygon keeps it }
+  mf := TMetaFile.Create;
+  try
+    mf.Width := 400;
+    mf.Height := 400;
+    mc := TMetaFileCanvas.Create(mf, 0);
+    try
+      lines[0] := 3;
+      lines[1] := 3;
+      polys[0] := 3;
+      polys[1] := 3;
+      for i := 0 to 5 do
+      begin
+        pts[i].X := 20 + i * 30;
+        pts[i].Y := 20 + (i and 1) * 40;
+      end;
+      PolyPolyline(mc.Handle, pts[0], lines[0], 2); // 16-bit coordinates
+      for i := 0 to 5 do
+        inc(pts[i].Y, 100);
+      PolyPolygon(mc.Handle, pts[0], polys[0], 2);
+      for i := 0 to 5 do
+        pts[i].X := 40000 + i * 30; // past 16 bits: the 32-bit record
+      PolyPolyline(mc.Handle, pts[0], lines[0], 2);
+    finally
+      mc.Free;
+    end;
+    bytes := MetaFileBytes(mf);
+    CheckEqual(length(EmfRecords(bytes, R_POLYPOLYLINE16)), 1, 'EMR_POLYPOLYLINE16');
+    CheckEqual(length(EmfRecords(bytes, R_POLYPOLYLINE)), 1, 'EMR_POLYPOLYLINE');
+    CheckEqual(length(EmfRecords(bytes, R_POLYPOLYGON16)), 1, 'EMR_POLYPOLYGON16');
+    txt := RenderedEmf(mf);
+  finally
+    mf.Free;
+  end;
+  // two open polylines of two segments in each record, two closed triangles
+  CheckEqual(CountOccurrences(' l'#10, txt), 2 * 2 + 2 * 2 + 2 * 3, 'line segments');
 end;
 
 {$else}

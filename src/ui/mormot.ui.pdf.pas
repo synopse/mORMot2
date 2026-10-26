@@ -11814,7 +11814,8 @@ begin
               a[o].Y);
             inc(o);
           end;
-          Canvas.LineToI(a[f].x, a[f].Y);
+          if iType = EMR_POLYPOLYGON then // a polyline stays open
+            Canvas.LineToI(a[f].x, a[f].Y);
           DC[nDC].Moved := false;
         end;
       end;
@@ -11837,7 +11838,8 @@ begin
               a16[o].Y);
             inc(o);
           end;
-          Canvas.LineToI(a16[f].x, a16[f].Y);
+          if iType = EMR_POLYPOLYGON16 then
+            Canvas.LineToI(a16[f].x, a16[f].Y);
           DC[nDC].Moved := false;
         end;
       end;
