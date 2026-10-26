@@ -174,12 +174,14 @@ type
   PPdfBox = ^TPdfBox;
 
   /// the internal pdf file format
+  // - pdf20 is ISO 32000-2 (PDF 2.0), see TPdfDocument.GeneratePdf20File
   TPdfFileFormat = (
     pdf13,
     pdf14,
     pdf15,
     pdf16,
-    pdf17);
+    pdf17,
+    pdf20);
 
   /// the PDF/A level
   TPdfALevel = (
@@ -395,15 +397,20 @@ type
 {$ifdef USE_PDFSECURITY}
 
   /// the available encryption levels
-  // - in current version only RC4 40-bit and RC4 128-bit are available, which
-  // correspond respectively to PDF 1.3 and PDF 1.4 formats
+  // - RC4 40-bit and RC4 128-bit correspond respectively to PDF 1.3 and PDF 1.4
+  // formats: they are deprecated, and RC4 is weak by today's standards
   // - for RC4 40-bit and RC4 128-bit, associated password are restricted to a
   // maximum length of 32 characters and could contain only characters from the
   // Latin-1 encoding (i.e. no accent)
+  // - elAES_256 is the AES-256 security handler of ISO 32000-2 (PDF 2.0),
+  // revision 6: the file is written as PDF 1.7 with the Adobe extension level
+  // 8, as expected by all current readers; passwords are UTF-8 encoded (with
+  // no SASLprep normalization) and truncated to 127 bytes
   TPdfEncryptionLevel = (
     elNone,
     elRC4_40,
-    elRC4_128);
+    elRC4_128,
+    elAES_256);
 
   /// PDF can encode various restrictions on document operations which can be
   // granted or denied individually (some settings depend on others, though):
@@ -600,6 +607,10 @@ type
     fOwnerPassword: string;
     fDoc: TPdfDocument;
     procedure EncodeBuffer(const BufIn; var BufOut; Count: cardinal); virtual; abstract;
+    /// how many bytes EncodeBuffer() writes for Count input bytes
+    // - RC4 encrypts in place (same length); AES adds an IV and a padding, so
+    // BufOut should then be a distinct buffer of EncodeLength(Count) bytes
+    function EncodeLength(Count: cardinal): cardinal; virtual;
   public
     /// initialize the internal structures with the proper classes
     // - do not call this method directly, but class function TPdfEncryption.New()
@@ -611,8 +622,8 @@ type
     procedure AttachDocument(aDoc: TPdfDocument); virtual;
     /// will create the expected TPdfEncryption instance, depending on aLevel
     // - to be called as parameter of TPdfDocument/TPdfDocumentGdi.Create()
-    // - currently, only elRC4_40 and elRC4_128 levels are implemented
-    // - both passwords are expected to be ASCII-7 characters only
+    // - elRC4_40, elRC4_128 and elAES_256 levels are implemented
+    // - for RC4, both passwords are expected to be ASCII-7 characters only
     // - aUserPassword will be asked at file opening: to be set to '' for not
     // blocking display, but optional permission
     // - aOwnerPassword shall not be '', and will be used internally to cypher
@@ -625,6 +636,8 @@ type
     // !   TPdfEncryption.New(elRC4_40,'','toto',PDF_PERMISSION_NOMODIF));
     // ! Doc := TPdfDocument.Create(false,0,false,
     // !   TPdfEncryption.New(elRC4_128,'','toto',PDF_PERMISSION_NOCOPYNORPRINT));
+    // ! Doc := TPdfDocument.Create(false,0,false,
+    // !   TPdfEncryption.New(elAES_256,'user','owner',PDF_PERMISSION_NOMODIF));
     class function New(aLevel: TPdfEncryptionLevel;
       const aUserPassword, aOwnerPassword: string;
       aPermissions: TPdfEncryptionPermissions): TPdfEncryption;
@@ -645,6 +658,24 @@ type
   public
     /// prepare a specific document to be encrypted
     // - will compute the internal keys
+    procedure AttachDocument(aDoc: TPdfDocument); override;
+  end;
+
+  /// handle PDF security with the AES-256 scheme of ISO 32000-2 (revision 6)
+  // - allowed aLevel parameter for Create() is only elAES_256
+  // - each string and stream is encrypted with AES-256-CBC, a random IV and a
+  // PKCS#7 padding, using the 256-bit file key directly (no per-object key)
+  TPdfEncryptionAes256 = class(TPdfEncryption)
+  protected
+    fFileKey: THash256;
+    fAes: TAesCbc;
+    procedure EncodeBuffer(const BufIn; var BufOut; Count: cardinal); override;
+    function EncodeLength(Count: cardinal): cardinal; override;
+  public
+    /// finalize the internal AES context and erase the file key
+    destructor Destroy; override;
+    /// prepare a specific document to be encrypted
+    // - will compute the internal keys and the /O /U /OE /UE /Perms values
     procedure AttachDocument(aDoc: TPdfDocument); override;
   end;
 {$endif USE_PDFSECURITY}
@@ -1365,6 +1396,9 @@ type
     fFileID: THash128;
     function GetGeneratePdf15File: boolean;
     procedure SetGeneratePdf15File(Value: boolean);
+    function GetGeneratePdf20File: boolean;
+    procedure SetGeneratePdf20File(Value: boolean);
+    procedure PreparePdf20;
     function GetInfo: TPdfInfo;
       {$ifdef HASINLINE}inline;{$endif}
     function GetOutlineRoot: TPdfOutlineRoot;
@@ -1731,6 +1765,16 @@ type
     /// set to true to force PDF 1.5 format, which may produce smaller files
     property GeneratePdf15File: boolean
       read GetGeneratePdf15File write SetGeneratePdf15File;
+    /// set to true to generate a PDF 2.0 (ISO 32000-2) file
+    // - writes a "%PDF-2.0" header, a XMP /Metadata stream (the Info
+    // dictionary is still written, as deprecated but allowed) and a file /ID
+    // - uses the PDF 1.5 cross-reference stream, as GeneratePdf15File
+    // - encryption must be elAES_256: RC4 is not allowed in PDF 2.0, and
+    // PDF/A (based on PDF 1.4 / 1.7) neither - both raise EPdfInvalidOperation
+    // when saving
+    // - TrueType fonts should be embedded (EmbeddedTtf = true)
+    property GeneratePdf20File: boolean
+      read GetGeneratePdf20File write SetGeneratePdf20File;
   end;
 
   /// a PDF page
@@ -4595,6 +4639,10 @@ var
   len: TPdfNumber;
   buflen: integer;
   tmp: TSynTempBuffer;
+  {$ifdef USE_PDFSECURITY}
+  enc: TSynTempBuffer;
+  enclen: cardinal;
+  {$endif USE_PDFSECURITY}
   buf: pointer;
 begin
   inherited;
@@ -4603,6 +4651,9 @@ begin
   buf := TMemoryStream(fWriter.fDestStream).Memory;
   buflen := fWriter.Position;
   tmp.buf := nil;
+  {$ifdef USE_PDFSECURITY}
+  enc.buf := nil;
+  {$endif USE_PDFSECURITY}
   try
     if fFilter = 'FlateDecode' then
       if buflen < 100 then // don't compress tiny blocks
@@ -4613,20 +4664,35 @@ begin
         buflen := CompressMem(buf, tmp.buf, buflen, tmp.len, 7, true);
         buf := tmp.buf;
       end;
+    {$ifdef USE_PDFSECURITY}
+    // encrypt before writing /Length: AES makes the content longer
+    if (buflen > 0) and
+       (W.fDoc.fEncryption <> nil) and
+       not fDoNotEncrypt then
+    begin
+      enclen := W.fDoc.fEncryption.EncodeLength(buflen);
+      if enclen = cardinal(buflen) then
+        W.fDoc.fEncryption.EncodeBuffer(buf^, buf^, buflen) // RC4: in place
+      else
+      begin
+        enc.Init(enclen);
+        W.fDoc.fEncryption.EncodeBuffer(buf^, enc.buf^, buflen);
+        buf := enc.buf;
+        buflen := enclen;
+      end;
+    end;
+    {$endif USE_PDFSECURITY}
     len.Value := buflen;
     if fFilter <> '' then
       fAttributes.AddItem('Filter', fFilter);
     fAttributes.DirectWriteTo(W, fSecondaryAttributes);
-    {$ifdef USE_PDFSECURITY}
-    if (buflen > 0) and
-       (W.fDoc.fEncryption <> nil) and
-       not fDoNotEncrypt then
-      W.fDoc.fEncryption.EncodeBuffer(buf^, buf^, buflen);
-    {$endif USE_PDFSECURITY}
     W.Add(#10'stream'#10).Add(buf, buflen).Add(#10'endstream');
     fWriter.fDestStream.Size := 0; // release internal stream memory
   finally
     tmp.Done;
+    {$ifdef USE_PDFSECURITY}
+    enc.Done;
+    {$endif USE_PDFSECURITY}
   end;
 end;
 
@@ -4853,8 +4919,8 @@ begin
     {$ifdef USE_PDFSECURITY}
     if fDoc.fEncryption <> nil then
     begin
-      tmp.Init(length(Text));
-      fDoc.fEncryption.EncodeBuffer(pointer(Text)^, tmp.buf^, tmp.len);
+      tmp.Init(fDoc.fEncryption.EncodeLength(length(Text)));
+      fDoc.fEncryption.EncodeBuffer(pointer(Text)^, tmp.buf^, length(Text));
       AddEscape(tmp.buf, tmp.len);
       tmp.Done;
     end
@@ -5189,7 +5255,7 @@ function TPdfWrite.AddUnicodeHexString(PW: PWideChar;
   WideCharCount: integer): TPdfWrite;
 {$ifdef USE_PDFSECURITY}
 var
-  be: RawByteString;
+  be, enc: RawByteString;
   p: PByteArray;
   i: PtrInt;
 {$endif USE_PDFSECURITY}
@@ -5207,8 +5273,9 @@ begin
       p[i * 2 + 2] := PWordArray(PW)[i] shr 8;
       p[i * 2 + 3] := PWordArray(PW)[i] and $ff;
     end;
-    fDoc.fEncryption.EncodeBuffer(p^, p^, length(be)); // RC4 works in place
-    result := Add('<').AddHex(be).Add('>');
+    SetLength(enc, fDoc.fEncryption.EncodeLength(length(be)));
+    fDoc.fEncryption.EncodeBuffer(p^, pointer(enc)^, length(be));
+    result := Add('<').AddHex(enc).Add('>');
     exit;
   end;
   {$endif USE_PDFSECURITY}
@@ -7527,8 +7594,8 @@ begin
 end;
 
 const
-  PDF_HEADER: array[TPdfFileFormat] of AnsiChar = (
-    '3', '4', '5', '6', '7');
+  PDF_HEADER: array[TPdfFileFormat] of PdfString = (
+    '1.3', '1.4', '1.5', '1.6', '1.7', '2.0');
   PDFA_APART: array[TPdfALevel] of AnsiChar = (
     ' ', '1', '1', '2', '2', '3', '3');
   PDFA_CONFORMANCE: array[TPdfALevel] of AnsiChar = (
@@ -7546,8 +7613,11 @@ begin
   else
     fInfo.ModDate := ForceModDate;
   fRoot.SaveOpenAction;
-  // some PDF/A-1 requirements
-  if fPdfA <> pdfaNone then
+  if fFileFormat = pdf20 then
+    PreparePdf20;
+  // some PDF/A-1 requirements, and PDF 2.0 metadata
+  if (fPdfA <> pdfaNone) or
+     (fFileFormat = pdf20) then
   begin
     fMetaData.Writer.Add(
       '<?xpacket begin="' + BOM_UTF8_CHARS + '" id="W5M0MpCehiHzreSzNTczkc9d"?>' +
@@ -7577,19 +7647,21 @@ begin
       '<pdf:Keywords>').
       AddS(Info.Keywords).
       Add('</pdf:Keywords>' +
-      '<pdf:Producer>' + PDF_PRODUCER + '</pdf:Producer></rdf:Description>' +
-      '<rdf:Description rdf:about="" xmlns:pdfaid="http://www.aiim.org/pdfa/ns/id/">' +
-      '<pdfaid:part>').
-      Add(PDFA_APART[fPdfA]).
-      Add('</pdfaid:part><pdfaid:conformance>').
-      Add(PDFA_CONFORMANCE[fPdfA]).
-      Add('</pdfaid:conformance></rdf:Description>').
-      Add(fPdfAMetadaExtension).
-      Add('</rdf:RDF></x:xmpmeta><?xpacket end="w"?>');
+      '<pdf:Producer>' + PDF_PRODUCER + '</pdf:Producer></rdf:Description>');
+    if fPdfA <> pdfaNone then
+      fMetaData.Writer.Add(
+        '<rdf:Description rdf:about="" xmlns:pdfaid="http://www.aiim.org/pdfa/ns/id/">' +
+        '<pdfaid:part>').
+        Add(PDFA_APART[fPdfA]).
+        Add('</pdfaid:part><pdfaid:conformance>').
+        Add(PDFA_CONFORMANCE[fPdfA]).
+        Add('</pdfaid:conformance></rdf:Description>').
+        Add(fPdfAMetadaExtension);
+    fMetaData.Writer.Add('</rdf:RDF></x:xmpmeta><?xpacket end="w"?>');
   end;
   // write beginning of the content
   fSaveToStreamWriter := TPdfWrite.Create(self, AStream);
-  fSaveToStreamWriter.Add('%PDF-1.').Add(PDF_HEADER[fFileformat]).Add(#10);
+  fSaveToStreamWriter.Add('%PDF-').Add(PDF_HEADER[fFileformat]).Add(#10);
   if fFileFormat > pdf13 then
     fSaveToStreamWriter.Add(@PDFA_MARKER, SizeOf(PDFA_MARKER));
 end;
@@ -8246,6 +8318,57 @@ begin
       fFileFormat := pdf15
     else
       fFileFormat := pdf14;
+end;
+
+function TPdfDocument.GetGeneratePdf20File: boolean;
+begin
+  result := (self <> nil) and
+            (fFileFormat = pdf20);
+end;
+
+procedure TPdfDocument.SetGeneratePdf20File(Value: boolean);
+begin
+  if Value then
+    fFileFormat := pdf20
+  else if fFileFormat = pdf20 then
+    fFileFormat := pdf17;
+end;
+
+procedure TPdfDocument.PreparePdf20;
+var
+  hex: PdfString;
+  id: TPdfArray;
+begin
+  // PDF/A-1, 2 and 3 are based on PDF 1.4 and 1.7
+  if fPdfA <> pdfaNone then
+    raise EPdfInvalidOperation.Create('PDF/A is not allowed with PDF 2.0');
+  {$ifdef USE_PDFSECURITY}
+  // ISO 32000-2 7.6.4: only the AES-256 security handler (revision 6)
+  if (fEncryption <> nil) and
+     (fEncryption.fLevel <> elAES_256) then
+    raise EPdfInvalidOperation.Create('PDF 2.0 only allows elAES_256 encryption');
+  {$endif USE_PDFSECURITY}
+  // AES-256 is native in PDF 2.0: no Adobe extension
+  fRoot.Data.RemoveItem('Extensions');
+  // the document metadata are expected in a XMP stream
+  if fMetaData = nil then
+  begin
+    fMetaData := TPdfStream.Create(self);
+    fMetaData.Attributes.AddItem('Subtype', 'XML');
+    fMetaData.Attributes.AddItem('Type', 'Metadata');
+    fMetaData.fFilter := '';
+    fRoot.Data.AddItem('Metadata', fMetaData);
+  end;
+  // the file identifier is required in PDF 2.0
+  if fTrailer.Attributes.ValueByName('ID') = nil then
+  begin
+    SharedRandom.Fill(@fFileID, SizeOf(fFileID));
+    hex := '<' + mormot.core.text.BinToHex(PAnsiChar(@fFileID), SizeOf(fFileID)) + '>';
+    id := TPdfArray.Create(fXRef);
+    id.AddItem(TPdfRawText.Create(hex)); // creation ID
+    id.AddItem(TPdfRawText.Create(hex)); // modified ID
+    fTrailer.Attributes.AddItem('ID', id);
+  end;
 end;
 
 
@@ -10214,6 +10337,9 @@ begin
       elRC4_128:
       result := TPdfEncryptionRC4MD5.Create(aLevel, aPermissions, aUserPassword,
         aOwnerPassword);
+    elAES_256:
+      result := TPdfEncryptionAes256.Create(aLevel, aPermissions, aUserPassword,
+        aOwnerPassword);
   else
     result := nil;
   end;
@@ -10222,6 +10348,11 @@ end;
 procedure TPdfEncryption.AttachDocument(aDoc: TPdfDocument);
 begin
   fDoc := aDoc;
+end;
+
+function TPdfEncryption.EncodeLength(Count: cardinal): cardinal;
+begin
+  result := Count; // RC4 works in place
 end;
 
 
@@ -10380,6 +10511,211 @@ begin
     ComputeNewRC4Key;
   work := fLastRC4Key;
   work.Encrypt(BufIn, BufOut, Count); // RC4 allows in-place encryption :)
+end;
+
+{ TPdfEncryptionAes256 }
+
+// ISO 32000-2 7.6.4.3.4 Algorithm 2.B: hash of a password for revision 6
+procedure PdfHash2B(Pwd: pointer; PwdLen: integer; Salt: pointer;
+  UserKey: pointer; UserKeyLen: integer; out Hash: THash256);
+var
+  k: array[0..63] of byte; // current hash: 32, 48 or 64 bytes
+  klen, onelen, rnd, i, sum: integer;
+  k1, e: RawByteString;
+  p: PAnsiChar;
+  aes: TAesCbc;
+  sha256: TSha256;
+  sha384: TSha384;
+  sha512: TSha512;
+begin
+  // K = SHA-256(password + salt + user key)
+  SetLength(k1, PwdLen + 8 + UserKeyLen);
+  p := pointer(k1);
+  MoveFast(Pwd^, p^, PwdLen);
+  MoveFast(Salt^, p[PwdLen], 8);
+  MoveFast(UserKey^, p[PwdLen + 8], UserKeyLen);
+  sha256.Full(p, length(k1), PSha256Digest(@k)^);
+  klen := SizeOf(TSha256Digest);
+  rnd := 0;
+  repeat
+    // K1 = 64 repetitions of (password + K + user key)
+    onelen := PwdLen + klen + UserKeyLen;
+    SetLength(k1, onelen * 64);
+    p := pointer(k1);
+    for i := 1 to 64 do
+    begin
+      MoveFast(Pwd^, p^, PwdLen);
+      MoveFast(k, p[PwdLen], klen);
+      MoveFast(UserKey^, p[PwdLen + klen], UserKeyLen);
+      inc(p, onelen);
+    end;
+    // E = AES-128-CBC(K1), key = K[0..15], IV = K[16..31], no padding
+    SetLength(e, length(k1));
+    aes := TAesCbc.Create(k, 128, @k[16]);
+    try
+      aes.Encrypt(pointer(k1), pointer(e), length(k1));
+    finally
+      aes.Free;
+    end;
+    // first 16 bytes of E as a big-endian number, modulo 3 - since
+    // 256 mod 3 = 1, this is the sum of these bytes modulo 3
+    sum := 0;
+    for i := 0 to 15 do
+      inc(sum, PByteArray(e)[i]);
+    case sum mod 3 of
+      0:
+        begin
+          sha256.Full(pointer(e), length(e), PSha256Digest(@k)^);
+          klen := SizeOf(TSha256Digest);
+        end;
+      1:
+        begin
+          sha384.Full(pointer(e), length(e), PSha384Digest(@k)^);
+          klen := SizeOf(TSha384Digest);
+        end;
+    else
+      begin
+        sha512.Full(pointer(e), length(e), PSha512Digest(@k)^);
+        klen := SizeOf(TSha512Digest);
+      end;
+    end;
+    inc(rnd);
+  until (rnd >= 64) and
+        (PByteArray(e)[length(e) - 1] <= rnd - 32);
+  MoveFast(k, Hash, SizeOf(Hash));
+  FillCharFast(k, SizeOf(k), 0);
+end;
+
+// revision 6 passwords are UTF-8, at most 127 bytes
+// - SASLprep (RFC 4013) is not applied: characters are used as typed
+function PdfPasswordUtf8(const Password: string): RawUtf8;
+begin
+  result := StringToUtf8(Password);
+  if length(result) > 127 then
+    SetLength(result, 127);
+end;
+
+destructor TPdfEncryptionAes256.Destroy;
+begin
+  fAes.Free;
+  FillCharFast(fFileKey, SizeOf(fFileKey), 0);
+  inherited Destroy;
+end;
+
+procedure TPdfEncryptionAes256.AttachDocument(aDoc: TPdfDocument);
+const
+  FLAGBIT: array[TPdfEncryptionPermission] of byte = (
+    2, 3, 4, 5, 8, 9, 10, 11);
+var
+  f: TPdfEncryptionPermission;
+  usr, own: RawUtf8;
+  salt: array[0..15] of byte; // validation salt + key salt
+  u, o: array[0..47] of byte;
+  ue, oe, h: THash256;
+  perms, encperms: TAesBlock;
+  aes: TAesAbstract;
+  dic, cf, stdcf, ext, adbe: TPdfDictionary;
+begin
+  inherited;
+  // compute corresponding flags
+  fFlags := integer($FFFFF0C0);
+  for f := low(f) to high(f) do
+    if f in fPermissions then
+      fFlags := fFlags or (1 shl FLAGBIT[f]);
+  if fDoc.fFileFormat < pdf17 then
+    fDoc.fFileFormat := pdf17;
+  usr := PdfPasswordUtf8(fUserPassword);
+  own := PdfPasswordUtf8(fOwnerPassword);
+  // random 256-bit file encryption key
+  TAesPrng.Main.FillRandom(fFileKey);
+  FreeAndNil(fAes);
+  fAes := TAesCbc.Create(fFileKey, 256);
+  // Algorithm 8: /U and /UE
+  TAesPrng.Main.FillRandom(@salt, SizeOf(salt));
+  PdfHash2B(pointer(usr), length(usr), @salt[0], nil, 0, h);
+  MoveFast(h, u[0], 32);
+  MoveFast(salt, u[32], 16);
+  PdfHash2B(pointer(usr), length(usr), @salt[8], nil, 0, h);
+  aes := TAesCbc.Create(h, 256); // IV = 0, no padding
+  try
+    aes.Encrypt(@fFileKey, @ue, SizeOf(ue));
+  finally
+    aes.Free;
+  end;
+  // Algorithm 9: /O and /OE - the user key is the 48 bytes of /U
+  TAesPrng.Main.FillRandom(@salt, SizeOf(salt));
+  PdfHash2B(pointer(own), length(own), @salt[0], @u, SizeOf(u), h);
+  MoveFast(h, o[0], 32);
+  MoveFast(salt, o[32], 16);
+  PdfHash2B(pointer(own), length(own), @salt[8], @u, SizeOf(u), h);
+  aes := TAesCbc.Create(h, 256);
+  try
+    aes.Encrypt(@fFileKey, @oe, SizeOf(oe));
+  finally
+    aes.Free;
+  end;
+  FillCharFast(h, SizeOf(h), 0);
+  // Algorithm 10: /Perms
+  TAesPrng.Main.FillRandom(perms);
+  PInteger(@perms[0])^ := fFlags; // little endian
+  PCardinal(@perms[4])^ := $ffffffff;
+  perms[8] := ord('T'); // metadata are encrypted
+  perms[9] := ord('a');
+  perms[10] := ord('d');
+  perms[11] := ord('b');
+  aes := TAesEcb.Create(fFileKey, 256);
+  try
+    aes.Encrypt(@perms, @encperms, SizeOf(perms));
+  finally
+    aes.Free;
+  end;
+  // add encryption dictionary object
+  if aDoc.fEncryptionObject = nil then
+    aDoc.fEncryptionObject := TPdfDictionary.Create(aDoc.fXRef);
+  stdcf := TPdfDictionary.Create(aDoc.fXRef);
+  stdcf.AddItem('AuthEvent', 'DocOpen');
+  stdcf.AddItem('CFM', 'AESV3');
+  stdcf.AddItem('Length', 32);
+  cf := TPdfDictionary.Create(aDoc.fXRef);
+  cf.AddItem('StdCF', stdcf);
+  dic := aDoc.fEncryptionObject;
+  dic.AddItem('Filter', 'Standard');
+  dic.AddItem('V', 5);
+  dic.AddItem('R', 6);
+  dic.AddItem('Length', 256);
+  dic.AddItem('CF', cf);
+  dic.AddItem('StmF', 'StdCF');
+  dic.AddItem('StrF', 'StdCF');
+  dic.AddItem('P', fFlags); // expected to be written as signed integer
+  dic.AddItem('O', TPdfClearText.Create(@o, SizeOf(o)));
+  dic.AddItem('U', TPdfClearText.Create(@u, SizeOf(u)));
+  dic.AddItem('OE', TPdfClearText.Create(@oe, SizeOf(oe)));
+  dic.AddItem('UE', TPdfClearText.Create(@ue, SizeOf(ue)));
+  dic.AddItem('Perms', TPdfClearText.Create(@encperms, SizeOf(encperms)));
+  aDoc.fTrailer.Attributes.AddItem('Encrypt', aDoc.fEncryptionObject);
+  // PDF 1.7 + Adobe extension level 8 (revision 6 before ISO 32000-2) -
+  // removed when saving as PDF 2.0, where AES-256 is native
+  if aDoc.fFileFormat = pdf17 then
+  begin
+    adbe := TPdfDictionary.Create(aDoc.fXRef);
+    adbe.AddItem('BaseVersion', '1.7');
+    adbe.AddItem('ExtensionLevel', 8);
+    ext := TPdfDictionary.Create(aDoc.fXRef);
+    ext.AddItem('ADBE', adbe);
+    aDoc.fRoot.Data.AddItem('Extensions', ext);
+  end;
+end;
+
+function TPdfEncryptionAes256.EncodeLength(Count: cardinal): cardinal;
+begin
+  result := fAes.EncryptPkcs7Length(Count, {IVAtBeginning=}true);
+end;
+
+procedure TPdfEncryptionAes256.EncodeBuffer(const BufIn; var BufOut;
+  Count: cardinal);
+begin
+  // random IV + AES-256-CBC + PKCS#7 padding (ISO 32000-2 7.6.3)
+  fAes.EncryptPkcs7Buffer(@BufIn, @BufOut, Count, EncodeLength(Count), true);
 end;
 
 {$endif USE_PDFSECURITY}
