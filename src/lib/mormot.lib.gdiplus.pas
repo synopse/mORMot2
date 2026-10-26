@@ -1111,6 +1111,11 @@ end;
 
 { *************** AntiAliased Rendering of GDI MetaFile }
 
+const
+  // the order of GdipMultiplyMatrix: the second matrix on the left or right
+  MATRIX_ORDER_PREPEND = 0;
+  MATRIX_ORDER_APPEND = 1;
+
 {$ifdef FPC}
 
 const
@@ -1178,6 +1183,25 @@ type
     strikeout: boolean;
   end;
 
+  /// EMR_CREATEBRUSHINDIRECT as the EMF stores it, with a 32-bit LOGBRUSH
+  // - the windows unit of FPC 3.2.2 declares lb as LOGBRUSH, whose ULONG_PTR
+  // lbHatch moves the fields on Win64: every brush was read as black there
+  TEmrCreateBrushIndirect32 = record
+    emr: TEMR;
+    ihBrush: cardinal;
+    lbStyle, lbColor, lbHatch: cardinal;
+  end;
+  PEmrCreateBrushIndirect32 = ^TEmrCreateBrushIndirect32;
+
+  /// EMR_EXTCREATEPEN as the EMF stores it, with a 32-bit EXTLOGPEN
+  // - the same with FPC 3.2.2 on Win64: elpHatch is a ULONG_PTR there
+  TEmrExtCreatePen32 = record
+    emr: TEMR;
+    ihPen, offBmi, cbBmi, offBits, cbBits: cardinal;
+    elpPenStyle, elpWidth, elpBrushStyle, elpColor, elpHatch: cardinal;
+  end;
+  PEmrExtCreatePen32 = ^TEmrExtCreatePen32;
+
   /// one DC state properties
   TGdiplusEnumState = record
     pen, brush, font, ClipRegion: THandle;
@@ -1225,15 +1249,16 @@ type
       objfont: TFontSpec;
       logfont: TLogFontW;
     end;
-    // the DC states, as stored by SaveDC / RestoreDC methods
+    // the DC states, as stored by SaveDC / RestoreDC methods: as deep as the
+    // metafile saves them, grown by SaveDC only
     nDC: integer;
-    DC: array[0..10] of TGdiplusEnumState;
+    DC: array of TGdiplusEnumState;
     // if true, DrawText() will use DrawString and not DrawDriverString
     UseDrawString: boolean;
     // owned buffer to reduce memory allocations e.g. for Points16To32()
     Temp: TSynTempBuffer;
     procedure SaveDC;
-    procedure RestoreDC;
+    procedure RestoreDC(Relative: integer);
     procedure ScaleMatrix;
     procedure CreatePenObj(index: integer; Color, Width, Style: cardinal);
     procedure DeleteObj(index: integer);
@@ -1343,9 +1368,9 @@ begin
             x.eM11, x.eM12, x.eM21, x.eM22, x.eDx, x.eDy, E.destMatrix);
         end;
       EMR_SAVEDC:
-        E.SaveDC;
+        E.SaveDC; // may grow DC: no field of the with can be used after it
       EMR_RESTOREDC:
-        E.RestoreDC;
+        E.RestoreDC(PEMRRestoreDC(Rec)^.iRelative);
       EMR_SETWINDOWEXTEX:
         WinSize := PEMRSetWindowExtEx(Rec)^.szlExtent;
       EMR_SETWINDOWORGEX:
@@ -1406,28 +1431,28 @@ begin
         end;
       EMR_EXTCREATEPEN:
         // approximated: only the color, width and dash style are handled
-        with PEMRExtCreatePen(Rec)^ do
+        with PEmrExtCreatePen32(Rec)^ do
         begin
           E.DeleteObj(ihPen - 1);
-          if elp.elpPenStyle and PS_TYPE_MASK = PS_COSMETIC then
-            E.CreatePenObj(ihPen - 1, elp.elpColor, 0,
-              elp.elpPenStyle and PS_STYLE_MASK)
+          if elpPenStyle and PS_TYPE_MASK = PS_COSMETIC then
+            E.CreatePenObj(ihPen - 1, elpColor, 0,
+              elpPenStyle and PS_STYLE_MASK)
           else
-            E.CreatePenObj(ihPen - 1, elp.elpColor, elp.elpWidth,
-              elp.elpPenStyle and PS_STYLE_MASK);
+            E.CreatePenObj(ihPen - 1, elpColor, elpWidth,
+              elpPenStyle and PS_STYLE_MASK);
         end;
       EMR_CREATEBRUSHINDIRECT:
-        with PEMRCreateBrushIndirect(Rec)^ do
+        with PEmrCreateBrushIndirect32(Rec)^ do
         begin
           E.DeleteObj(ihBrush - 1);
           with E.obj[ihBrush - 1] do
           begin
             kind := OBJ_BRUSH;
-            if lb.lbStyle = BS_NULL then
+            if lbStyle = BS_NULL then
               brush := 0
             else
             begin
-              handle := E.GetCachedSolidBrush(lb.lbColor);
+              handle := E.GetCachedSolidBrush(lbColor);
               brush := handle;
             end;
           end;
@@ -1655,9 +1680,14 @@ begin
     with Obj[index] do
     begin
       kind := OBJ_PEN;
-      gdip.CreatePen(ColorRefToARGB(Color), Width, uWorld, handle);
-      if Style in [PS_DASH..PS_DASHDOTDOT] then
-        gdip.SetPenDashStyle(handle, PS_DASH); // force PS_DASH on GDI+
+      if Style = PS_NULL then
+        handle := 0 // draws nothing, as the stock NULL_PEN
+      else
+      begin
+        gdip.CreatePen(ColorRefToARGB(Color), Width, uWorld, handle);
+        if Style in [PS_DASH..PS_DASHDOTDOT] then
+          gdip.SetPenDashStyle(handle, PS_DASH); // force PS_DASH on GDI+
+      end;
       DC[nDC].pen := handle;
     end;
 end;
@@ -1853,7 +1883,7 @@ var
   i: PtrInt;
 begin
   for i := 1 to nDC do
-    gdip.DeleteRegion(DC[nDC].ClipRegion);
+    gdip.DeleteRegion(DC[i].ClipRegion);
   for i := 0 to high(obj) do
     DeleteObj(i);
   for i := 0 to high(CachedPen) do
@@ -1974,23 +2004,31 @@ begin
   CachedBrush[n].handle := result;
 end;
 
-procedure TGdiplusEnum.RestoreDC;
+procedure TGdiplusEnum.RestoreDC(Relative: integer);
+var
+  saved: THandle;
+  i: PtrInt;
 begin
-  assert(nDC > 0);
-  with DC[nDC] do
-  begin
-    gdip.SetClipRegion(gr, ClipRegion, cmReplace);
-    gdip.DeleteRegion(ClipRegion);
-  end;
-  dec(nDC);
+  // an EMF record restores relatively (-1 = the last saved): a state which
+  // was not saved is ignored, as GDI fails it
+  if (Relative >= 0) or
+     (Relative < -nDC) then
+    exit;
+  saved := DC[nDC + Relative + 1].ClipRegion; // the clip when it was saved
+  for i := nDC + Relative + 2 to nDC do
+    gdip.DeleteRegion(DC[i].ClipRegion);
+  inc(nDC, Relative);
+  // GetClip gave the region under the transform of the saved state: set it
+  // again once that transform is back
   ScaleMatrix;
-//  with DC[nDC] do
-//    Gdip.SetWorldTransform(Graphics,destMatrix);
+  gdip.SetClipRegion(gr, saved, cmReplace);
+  gdip.DeleteRegion(saved);
 end;
 
 procedure TGdiplusEnum.SaveDC;
 begin
-  Assert(nDC < high(DC));
+  if nDC >= high(DC) then
+    SetLength(DC, length(DC) * 2 + 16);
   DC[nDC + 1] := DC[nDC];
   inc(nDC);
   with DC[nDC] do
@@ -2002,19 +2040,24 @@ end;
 
 procedure TGdiplusEnum.ScaleMatrix;
 var
-  P: TPoint;
+  sx, sy: single;
   mtx, world: THandle;
 begin
   with DC[nDC] do
   begin
-    P.X := MulDiv(ViewOrg.x, WinSize.cx, ViewSize.cx) - WinOrg.x;
-    P.Y := MulDiv(ViewOrg.y, WinSize.cy, ViewSize.cy) - WinOrg.y;
+    // a page point p is at (p - WinOrg) * View / Win + ViewOrg on the device,
+    // not rounded: the playback transform may scale it a lot
+    sx := ViewSize.cx / WinSize.cx;
+    sy := ViewSize.cy / WinSize.cy;
     gdip.CreateMatrix2(
-      ViewSize.cx / WinSize.cx, 0, 0, ViewSize.cy / WinSize.cy, P.X, P.Y, mtx);
-    gdip.MultiplyMatrix(mtx, destMatrix);
+      sx, 0, 0, sy, ViewOrg.x - WinOrg.x * sx, ViewOrg.y - WinOrg.y * sy, mtx);
+    // GDI+ multiplies row vectors: World x Map x Dest applies the world
+    // transform, then the mapping, then the playback transform of the target
+    // (EnumEnhMetaFile maps the frame of the metafile to its rectangle)
+    gdip.MultiplyMatrix(mtx, destMatrix, MATRIX_ORDER_APPEND);
     with WorldTransform do
       gdip.CreateMatrix2(eM11, eM12, eM21, eM22, eDx, eDy, world);
-    gdip.MultiplyMatrix(mtx, world);
+    gdip.MultiplyMatrix(mtx, world, MATRIX_ORDER_PREPEND);
     gdip.DeleteMatrix(world);
     gdip.SetWorldTransform(gr, mtx);
     gdip.DeleteMatrix(mtx);
@@ -2108,6 +2151,7 @@ begin
   begin
     // our manual (and not 100% complete yet) conversion
     E.UseDrawString := ecoDrawString in ConvertOptions;
+    SetLength(E.DC, 16);
     with E.DC[0] do
     begin
       PInt64(@WinSize)^ := PInt64(@R.Width)^;
