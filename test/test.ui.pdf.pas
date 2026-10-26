@@ -48,6 +48,7 @@ type
     procedure BidiEmbeddingOrder;
     procedure EmfPlusClipRestored;
     procedure EmfPlusRestoreDepth;
+    procedure EmfPlusNullPen;
   end;
 
 implementation
@@ -1362,6 +1363,70 @@ begin
   Rectangle(dc, 0, 0, 40, 40);
   Check(SameEmfPlus(CloseEmf(dc), RectangleEmf(0, 0, 40, 40)),
     'not scaled');
+end;
+
+procedure TTestUiPdf.EmfPlusNullPen;
+const
+  EMR_CREATEPEN_ = 38; // the record types, by number
+  EMR_EXTCREATEPEN_ = 95;
+var
+  dc: HDC;
+  lb: TLogBrush;
+  bits: RawByteString;
+  emf: HENHMETAFILE;
+  o, n, patched: PtrInt;
+begin
+  // a PS_NULL pen was created as a solid one, of the colour and width given;
+  // Windows records CreatePen(PS_NULL) as the stock NULL_PEN, so the style of
+  // two solid pens is set to PS_NULL in the records
+  if not Check(Gdip.Exists, 'GDI+') then
+    exit;
+  dc := NewEmf;
+  SelectObject(dc, CreatePen(PS_SOLID, 10, RGB(255, 0, 0)));
+  MoveToEx(dc, 0, 30, nil);
+  LineTo(dc, EMF_SIZE, 30);
+  lb.lbStyle := BS_SOLID;
+  lb.lbColor := RGB(255, 0, 0);
+  lb.lbHatch := 0;
+  DeleteObject(SelectObject(dc, // the first pen
+    ExtCreatePen(PS_GEOMETRIC or PS_SOLID, 10, lb, 0, nil)));
+  MoveToEx(dc, 0, 70, nil);
+  LineTo(dc, EMF_SIZE, 70);
+  bits := EmfBits(CloseEmf(dc));
+  o := 0;
+  patched := 0;
+  while o + 8 <= length(bits) do
+  begin
+    case PCardinal(@PByteArray(bits)[o])^ of
+      EMR_CREATEPEN_: // lopn.lopnStyle at 12
+        begin
+          PCardinal(@PByteArray(bits)[o + 12])^ := PS_NULL;
+          inc(patched);
+        end;
+      EMR_EXTCREATEPEN_: // elp.elpPenStyle at 28
+        begin
+          PCardinal(@PByteArray(bits)[o + 28])^ := PS_GEOMETRIC or PS_NULL;
+          inc(patched);
+        end;
+    end;
+    n := PCardinal(@PByteArray(bits)[o + 4])^;
+    if n < 8 then
+      break;
+    inc(o, n);
+  end;
+  CheckEqual(patched, 2, 'both pens recorded');
+  emf := SetEnhMetaFileBits(length(bits), pointer(bits));
+  if Check(emf <> 0, 'the patched metafile') then
+    CheckEqual(RedPixels(emf), 0, 'nothing drawn');
+end;
+
+// a metafile DC drawing twice the size of its logical units
+function DoubledEmf: HDC;
+begin
+  result := NewEmf;
+  SetMapMode(result, MM_ANISOTROPIC);
+  SetWindowExtEx(result, 50, 50, nil);
+  SetViewportExtEx(result, 100, 100, nil);
 end;
 
 {$else}

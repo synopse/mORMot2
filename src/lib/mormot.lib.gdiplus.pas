@@ -1656,9 +1656,14 @@ begin
     with Obj[index] do
     begin
       kind := OBJ_PEN;
-      gdip.CreatePen(ColorRefToARGB(Color), Width, uWorld, handle);
-      if Style in [PS_DASH..PS_DASHDOTDOT] then
-        gdip.SetPenDashStyle(handle, PS_DASH); // force PS_DASH on GDI+
+      if Style = PS_NULL then
+        handle := 0 // draws nothing, as the stock NULL_PEN
+      else
+      begin
+        gdip.CreatePen(ColorRefToARGB(Color), Width, uWorld, handle);
+        if Style in [PS_DASH..PS_DASHDOTDOT] then
+          gdip.SetPenDashStyle(handle, PS_DASH); // force PS_DASH on GDI+
+      end;
       DC[nDC].pen := handle;
     end;
 end;
