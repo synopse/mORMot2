@@ -5094,6 +5094,7 @@ function TInterfaceFactory.GetMethodsVirtualTable: pointer;
 var
   P: PCardinal;
   i: PtrInt;
+  vmt: TPointerDynArray;
 begin
   result := fFakeVTable;
   if result <> nil then
@@ -5104,18 +5105,18 @@ begin
     // we need to JIT with an explicit ArgsSizeInStack adjustement
     if fFakeVTable = nil then // avoid race condition
     begin
-      SetLength(fFakeVTable, MethodsCount + RESERVED_VTABLE_SLOTS);
+      SetLength(vmt, MethodsCount + RESERVED_VTABLE_SLOTS);
       // set IInterface required methods
-      fFakeVTable[0] := @TInterfacedObjectFakeRaw.FakeQueryInterface;
-      fFakeVTable[1] := @TInterfacedObjectFakeRaw.Fake_AddRef;
-      fFakeVTable[2] := @TInterfacedObjectFakeRaw.Fake_Release;
+      vmt[0] := @TInterfacedObjectFakeRaw.FakeQueryInterface;
+      vmt[1] := @TInterfacedObjectFakeRaw.Fake_AddRef;
+      vmt[2] := @TInterfacedObjectFakeRaw.Fake_Release;
       // set JITted VMT stubs for each method of this interface
       if MethodsCount <> 0 then
       begin
         P := ReserveExecutableMemory(MethodsCount * VMTSTUBSIZE);
         for i := 0 to MethodsCount - 1 do
         begin
-          fFakeVTable[RESERVED_VTABLE_SLOTS + i] := P;
+          vmt[RESERVED_VTABLE_SLOTS + i] := P;
           P^ := $68ec8b55;
           inc(P);                 // push ebp; mov ebp, esp
           P^ := i;
@@ -5140,8 +5141,9 @@ begin
           {$endif OSPOSIX}        // VMTSTUBSIZE = 24 (OSPOSIX: + 4 )
         end;
         ReserveExecutableMemoryPageAccess(
-          fFakeVTable[RESERVED_VTABLE_SLOTS], {exec=}true);
+          vmt[RESERVED_VTABLE_SLOTS], {exec=}true);
       end;
+      fFakeVTable := vmt;
     end;
     result := pointer(fFakeVTable);
   finally
@@ -5159,18 +5161,20 @@ end;
 // - internal function protected by VmtSafe.Lock
 procedure Compute_FAKEVMT;
 var
+  vmt: TPointerDynArray;
   i: PtrInt;
   thunk: PAnsiChar;
 begin
-  SetLength(_FAKEVMT, MAX_METHOD_COUNT + RESERVED_VTABLE_SLOTS);
+  SetLength(vmt, MAX_METHOD_COUNT + RESERVED_VTABLE_SLOTS);
   // set IInterface RESERVED_VTABLE_SLOTS required methods
-  _FAKEVMT[0] := @TInterfacedObjectFakeRaw.FakeQueryInterface;
-  _FAKEVMT[1] := @TInterfacedObjectFakeRaw.Fake_AddRef;
-  _FAKEVMT[2] := @TInterfacedObjectFakeRaw.Fake_Release;
+  vmt[0] := @TInterfacedObjectFakeRaw.FakeQueryInterface;
+  vmt[1] := @TInterfacedObjectFakeRaw.Fake_AddRef;
+  vmt[2] := @TInterfacedObjectFakeRaw.Fake_Release;
   // point to the static thunk of each method index (e.g. mov x16,i; b stub)
   thunk := FakeThunkBase;
   for i := 0 to MAX_METHOD_COUNT - 1 do
-    _FAKEVMT[i + RESERVED_VTABLE_SLOTS] := @thunk[i * FAKETHUNKSIZE];
+    vmt[i + RESERVED_VTABLE_SLOTS] := @thunk[i * FAKETHUNKSIZE];
+  _FAKEVMT := vmt;
 end;
 
 {$else}
@@ -5179,6 +5183,7 @@ end;
 // - internal function protected by VmtSafe.Lock
 procedure Compute_FAKEVMT;
 var
+  vmt: TPointerDynArray;
   P: PCardinal;
   i: PtrInt;
   {$ifdef ABIARM}
@@ -5189,16 +5194,16 @@ begin
   P := ReserveExecutableMemory(MAX_METHOD_COUNT * VMTSTUBSIZE
     {$ifdef ABIA64} + ($120 shr 2) {$endif ABIA64}
     {$ifdef ABIA32}, @TInterfacedObjectFakeRaw.ArmFakeStub {$endif ABIA32});
-  // populate _FAKEVMT[] with JITted stubs
-  SetLength(_FAKEVMT, MAX_METHOD_COUNT + RESERVED_VTABLE_SLOTS);
+  // populate vmt[] with JITted stubs
+  SetLength(vmt, MAX_METHOD_COUNT + RESERVED_VTABLE_SLOTS);
   // set IInterface RESERVED_VTABLE_SLOTS required methods
-  _FAKEVMT[0] := @TInterfacedObjectFakeRaw.FakeQueryInterface;
-  _FAKEVMT[1] := @TInterfacedObjectFakeRaw.Fake_AddRef;
-  _FAKEVMT[2] := @TInterfacedObjectFakeRaw.Fake_Release;
+  vmt[0] := @TInterfacedObjectFakeRaw.FakeQueryInterface;
+  vmt[1] := @TInterfacedObjectFakeRaw.Fake_AddRef;
+  vmt[2] := @TInterfacedObjectFakeRaw.Fake_Release;
   // JIT all potential custom method stubs
   for i := 0 to MAX_METHOD_COUNT - 1 do
   begin
-    _FAKEVMT[i + RESERVED_VTABLE_SLOTS] := P;
+    vmt[i + RESERVED_VTABLE_SLOTS] := P;
     {$ifdef ABIX64}    // note: on Posix, (stub-P) > 32-bit -> need absolute jmp
     P^ := $ba49;       // mov r10, x64FakeStub
     inc(PWord(P));
@@ -5258,7 +5263,8 @@ begin
   end;
   // reenable execution permission of JITed memory as expected by the VMT
   ReserveExecutableMemoryPageAccess(
-    _FAKEVMT[RESERVED_VTABLE_SLOTS], {exec=}true);
+    vmt[RESERVED_VTABLE_SLOTS], {exec=}true);
+  _FAKEVMT := vmt;
 end;
 
 {$endif DELPHI_STATIC_FAKEVMT}

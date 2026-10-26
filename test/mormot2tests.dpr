@@ -61,6 +61,7 @@ uses
   mormot.crypt.openssl,
   mormot.tools.ecc         in '..\src\tools\ecc\mormot.tools.ecc.pas',
   test.core.base           in '.\test.core.base.pas',
+  test.core.interfaces.concurrent in '.\test.core.interfaces.concurrent.pas',
   test.core.threads        in '.\test.core.threads.pas',
   test.core.data           in '.\test.core.data.pas',
   test.core.crypt          in '.\test.core.crypt.pas',
@@ -159,6 +160,7 @@ end;
 procedure TIntegrationTests.CoreUnits;
 begin
   AddCase([
+    TTestInterfaceVmtConcurrent, // must run first
     TTestCoreBase,
     TTestCoreThreads,
     TTestCoreProcess,
