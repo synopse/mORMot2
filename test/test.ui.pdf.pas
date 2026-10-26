@@ -53,6 +53,7 @@ type
     procedure EmfPlusPlaybackOrder;
     procedure EmfPlusWindowOrigin;
     procedure EmfPlusRecordLayout;
+    procedure EmfAlphaBlendOpaque;
   end;
 
 implementation
@@ -1524,6 +1525,154 @@ begin
   MoveToEx(dc, 10, 50, nil);
   LineTo(dc, 90, 50);
   Check(RedPixels(CloseEmf(dc)) > 0, 'the extended pen colour');
+end;
+
+const
+  // the record types, by number: the windows unit of FPC lacks some names
+  R_POLYPOLYLINE = 7;
+  R_SAVEDC = 33;
+  R_RESTOREDC = 34;
+  R_SELECTOBJECT = 37;
+  R_CREATEBRUSHINDIRECT = 39;
+  R_STRETCHDIBITS = 81;
+  R_EXTTEXTOUTA = 83;
+  R_EXTTEXTOUTW = 84;
+  R_POLYPOLYLINE16 = 90;
+  R_POLYPOLYGON16 = 91;
+  R_EXTCREATEPEN = 95;
+  R_ALPHABLEND = 114;
+
+// AlphaBlend under its gdi32 name: the windows unit of FPC lacks it
+function GdiAlphaBlend(Dest: HDC; X, Y, W, H: integer; Src: HDC;
+  XS, YS, WS, HS: integer; Blend: DWord): BOOL; stdcall; external 'gdi32.dll';
+
+// the bytes of a metafile, as GetEnhMetaFileBits gives them
+function MetaFileBytes(Mf: TMetaFile): RawByteString;
+var
+  n: cardinal;
+begin
+  n := GetEnhMetaFileBits(Mf.Handle, 0, nil);
+  SetLength(result, n);
+  if n > 0 then
+    GetEnhMetaFileBits(Mf.Handle, n, pointer(result));
+end;
+
+// the offsets of the records of type RecType in the bytes of a metafile
+function EmfRecords(const Bytes: RawByteString; RecType: cardinal): TIntegerDynArray;
+var
+  o, n: PtrInt;
+begin
+  result := nil;
+  o := 0;
+  while o + 8 <= length(Bytes) do
+  begin
+    if PCardinal(@PByteArray(Bytes)[o])^ = RecType then
+    begin
+      n := length(result);
+      SetLength(result, n + 1);
+      result[n] := o;
+    end;
+    n := PCardinal(@PByteArray(Bytes)[o + 4])^;
+    if n < 8 then
+      break;
+    inc(o, n);
+  end;
+end;
+
+// the metafile rendered into one page of an uncompressed PDF
+function RenderedEmf(Mf: TMetaFile; PxX: integer = 0; PxY: integer = 0): RawUtf8;
+var
+  doc: TPdfDocumentGdi;
+begin
+  doc := TPdfDocumentGdi.Create;
+  try
+    doc.Info.CreationDate := FIXED_DATE;
+    doc.CompressionMethod := cmNone;
+    doc.EmbeddedTTF := false;
+    doc.StandardFontsReplace := true;
+    TPdfDocumentAccess(TPdfDocument(doc)).fPrinterPxPerInch.X := PxX;
+    TPdfDocumentAccess(TPdfDocument(doc)).fPrinterPxPerInch.Y := PxY;
+    doc.AddPage;
+    RenderMetaFile(doc.Canvas, Mf, 1, 1, 0, 0);
+    result := SavedPdf(doc);
+  finally
+    doc.Free;
+  end;
+end;
+
+// the operands of the last Op (' rg', ' Tm') before Marker in the content
+function OperandsBefore(const Txt, Marker, Op: RawUtf8): RawUtf8;
+var
+  p, i, j, k: PtrInt;
+begin
+  result := '';
+  p := PosEx(Marker, Txt);
+  i := 1;
+  repeat
+    j := PosEx(Op, Txt, i);
+    if (j = 0) or
+       (j > p) then
+      break;
+    i := j + length(Op);
+    k := j;
+    while (k > 1) and
+          not (Txt[k - 1] in [#10, #13]) do
+      dec(k);
+    result := copy(Txt, k, j - k);
+  until false;
+end;
+
+function BinaryOf(const B: array of byte): RawByteString;
+begin
+  FastSetRawByteString(result, @B[0], length(B));
+end;
+
+procedure TTestUiPdf.EmfAlphaBlendOpaque;
+var
+  mf: TMetaFile;
+  mc: TMetaFileCanvas;
+  mem: HDC;
+  bmp, old: HBITMAP;
+  bi: TBitmapInfo;
+  bits: PCardinalArray;
+  txt: RawUtf8;
+  i: integer;
+begin
+  { the BLENDFUNCTION of EMR_ALPHABLEND was taken as the transparent colour:
+    the usual AC_SRC_OVER with SourceConstantAlpha 255 is $00FF0000, blue }
+  mf := TMetaFile.Create;
+  try
+    mf.Width := 100;
+    mf.Height := 100;
+    mc := TMetaFileCanvas.Create(mf, 0);
+    try
+      // a 32-bit DIB of blue pixels, whatever the depth of the screen
+      FillChar(bi, SizeOf(bi), 0);
+      bi.bmiHeader.biSize := SizeOf(bi.bmiHeader);
+      bi.bmiHeader.biWidth := 8;
+      bi.bmiHeader.biHeight := 8;
+      bi.bmiHeader.biPlanes := 1;
+      bi.bmiHeader.biBitCount := 32;
+      mem := CreateCompatibleDC(0);
+      bmp := CreateDIBSection(mem, bi, DIB_RGB_COLORS, pointer(bits), 0, 0);
+      for i := 0 to 63 do
+        bits[i] := $000000ff; // BGRX: blue
+      old := SelectObject(mem, bmp);
+      GdiAlphaBlend(mc.Handle, 10, 10, 64, 64, mem, 0, 0, 8, 8, $00FF0000);
+      SelectObject(mem, old);
+      DeleteObject(bmp);
+      DeleteDC(mem);
+    finally
+      mc.Free;
+    end;
+    CheckEqual(length(EmfRecords(MetaFileBytes(mf), R_ALPHABLEND)), 1,
+      'recorded as EMR_ALPHABLEND');
+    txt := RenderedEmf(mf);
+  finally
+    mf.Free;
+  end;
+  CheckEqual(CountOccurrences('/Subtype/Image', txt), 1, 'the bitmap');
+  CheckEqual(CountOccurrences('/Mask', txt), 0, 'no colour key');
 end;
 
 {$else}

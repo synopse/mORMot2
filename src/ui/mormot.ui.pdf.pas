@@ -11395,9 +11395,10 @@ begin
         with PEMRAlphaBlend(R)^ do // only handle RGB bitmaps (no palette nor transparency)
           if (offBmiSrc <> 0) and
              (offBitsSrc <> 0) then
+            // drawn opaque: dwRop is a BLENDFUNCTION, no transparent colour
             E.DrawBitmap (xSrc, ySrc, cxSrc, cySrc, xDest, yDest, cxDest, cyDest,
               iUsageSrc, pointer(PtrUInt(R) + offBmiSrc), pointer(
-               PtrUInt(R) + offBitsSrc), @rclBounds, @xformSrc, SRCCOPY, dwRop)
+               PtrUInt(R) + offBitsSrc), @rclBounds, @xformSrc, SRCCOPY)
           else
             case dwRop of // we only handle PATCOPY = fillrect
               PATCOPY:
