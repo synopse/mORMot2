@@ -3312,13 +3312,15 @@ begin
   result := psUserDefined;
   if not PrinterDriverExists then
     exit;
-  GetProfileString('windows', 'device', nil, name, SizeOf(name) - 1);
+  GetProfileString('windows', 'device', nil, name, length(name)); // chars
   PC := ParseFetchedPrinterStr(name);
   if (PC = nil) or
      (PC^ = #0) then
     exit;
   try
     h := CreateDC(nil, PC, nil, nil);
+    if h = 0 then
+      exit; // no printer DC: nothing to measure
     try
       pt.x := GetDeviceCaps(h, LOGPIXELSX);
       pt.y := GetDeviceCaps(h, LOGPIXELSY);
@@ -3360,6 +3362,7 @@ end;
 
 function CurrentPrinterRes: TPoint;
 var
+  res: TPoint;
   name: array[0..1023] of Char;
   PC: PChar;
   h: THandle;
@@ -3368,16 +3371,22 @@ begin
   result.Y := 300; // default standard printer resolution
   if not PrinterDriverExists then
     exit;
-  GetProfileString('windows', 'device', nil, name, SizeOf(name) - 1);
+  GetProfileString('windows', 'device', nil, name, length(name)); // chars
   PC := ParseFetchedPrinterStr(name);
   if (PC = nil) or
      (PC^ = #0) then
     exit;
   try
     h := CreateDC(nil, PC, nil, nil);
+    if h = 0 then
+      exit; // no printer DC: the default resolution
     try
-      result.x := GetDeviceCaps(h, LOGPIXELSX);
-      result.y := GetDeviceCaps(h, LOGPIXELSY);
+      res.x := GetDeviceCaps(h, LOGPIXELSX);
+      res.y := GetDeviceCaps(h, LOGPIXELSY);
+      if res.x > 0 then
+        result.x := res.x;
+      if res.y > 0 then
+        result.y := res.y;
     finally
       DeleteDC(h);
     end;
@@ -11601,8 +11610,10 @@ begin
     C.fUseMetaFileTextClipping := TextClipping;
     C.fKerningHScaleBottom := KerningHScaleBottom;
     C.fKerningHScaleTop := KerningHScaleTop;
-    if C.fDoc.fPrinterPxPerInch.X = 0 then
-      C.fDoc.fPrinterPxPerInch := CurrentPrinterRes; // caching for major speedup
+    if (C.fDoc.fPrinterPxPerInch.X <= 0) or
+       (C.fDoc.fPrinterPxPerInch.Y <= 0) then
+      // caching for major speedup; MM_ISOTROPIC divides by both
+      C.fDoc.fPrinterPxPerInch := CurrentPrinterRes;
     C.fPrinterPxPerInch := C.fDoc.fPrinterPxPerInch;
     with E.DC[0] do
     begin

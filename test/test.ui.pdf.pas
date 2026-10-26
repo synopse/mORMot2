@@ -60,6 +60,7 @@ type
     procedure EmfAnsiText;
     procedure EmfAnsiStockFont;
     procedure EmfDIBitsKept;
+    procedure EmfPrinterResZero;
   end;
 
 implementation
@@ -2083,6 +2084,43 @@ begin
   end;
   CheckEqual(CountOccurrences('/Subtype/Image', first), 1, 'the bitmap');
   CheckEqual(second, first, 'drawn the same twice');
+end;
+
+procedure TTestUiPdf.EmfPrinterResZero;
+var
+  mf: TMetaFile;
+  mc: TMetaFileCanvas;
+  auto, zero: RawUtf8;
+  raised: boolean;
+begin
+  { MM_ISOTROPIC divides by the printer resolution: one of 0 - a printer DC
+    that failed - was kept, as only its X was checked }
+  mf := TMetaFile.Create;
+  try
+    mf.Width := 400;
+    mf.Height := 400;
+    mc := TMetaFileCanvas.Create(mf, 0);
+    try
+      SetMapMode(mc.Handle, MM_ISOTROPIC);
+      SetWindowExtEx(mc.Handle, 1000, 1000, nil);
+      SetViewportExtEx(mc.Handle, 300, 300, nil);
+      Rectangle(mc.Handle, 100, 100, 600, 400);
+    finally
+      mc.Free;
+    end;
+    auto := RenderedEmf(mf); // the resolution asked from the printer
+    raised := false;
+    try
+      zero := RenderedEmf(mf, 300, 0);
+    except
+      raised := true;
+    end;
+  finally
+    mf.Free;
+  end;
+  Check(not raised, 'rendered with a resolution of 0');
+  Check(auto <> '', 'rendered');
+  CheckEqual(zero, auto, 'asked again');
 end;
 
 {$else}
