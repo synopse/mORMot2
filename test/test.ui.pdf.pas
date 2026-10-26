@@ -19,6 +19,9 @@ uses
   mormot.core.unicode,
   mormot.core.text,
   mormot.lib.z,
+  {$ifndef NO_USE_PDFSECURITY}
+  mormot.crypt.core,
+  {$endif NO_USE_PDFSECURITY}
   mormot.ui.pdf;
 
 type
@@ -53,6 +56,8 @@ type
     procedure EmfPlusPlaybackOrder;
     procedure EmfPlusWindowOrigin;
     procedure EmfPlusRecordLayout;
+    procedure EncryptionAes256;
+    procedure Pdf20File;
   end;
 
 implementation
@@ -1524,6 +1529,115 @@ begin
   MoveToEx(dc, 10, 50, nil);
   LineTo(dc, 90, 50);
   Check(RedPixels(CloseEmf(dc)) > 0, 'the extended pen colour');
+end;
+
+
+{$ifndef NO_USE_PDFSECURITY}
+type
+  // to read the protected file key of TPdfEncryptionAes256
+  TAesAccess = class(TPdfEncryptionAes256);
+{$endif NO_USE_PDFSECURITY}
+
+procedure TTestUiPdf.EncryptionAes256;
+{$ifndef NO_USE_PDFSECURITY}
+const
+  KNOWN = 'Hello AES-256 !'; // 15 bytes: one block once padded
+var
+  pdf: TPdfDocument;
+  enc: TPdfEncryption;
+  s, sub: RawByteString;
+  key: THash256;
+  aes: TAesCbc;
+begin
+  enc := TPdfEncryption.New(elAES_256, 'user', 'owner', PDF_PERMISSION_ALL);
+  pdf := TPdfDocument.Create(false, 0, pdfaNone, enc);
+  try
+    pdf.CompressionMethod := cmNone;
+    pdf.Info.Subject := KNOWN;
+    pdf.AddPage;
+    s := SavedPdf(pdf);
+    key := TAesAccess(enc).fFileKey; // enc is owned by pdf: read it before
+  finally
+    pdf.Free;
+  end;
+  // revision 6 security handler, written as PDF 1.7 + Adobe extension level 8
+  Check(copy(s, 1, 8) = '%PDF-1.7', 'header');
+  Check(PosEx('/V 5', s) > 0, 'V');
+  Check(PosEx('/R 6', s) > 0, 'R');
+  Check(PosEx('/AESV3', s) > 0, 'crypt filter');
+  Check(PosEx('/ExtensionLevel 8', s) > 0, 'Adobe extension');
+  Check(PosEx('/Perms', s) > 0, 'Perms');
+  // each string is IV + AES-256-CBC + PKCS#7 padding with the file key
+  sub := PdfStringAfter(s, '/Subject');
+  if not CheckEqual(length(sub), 16 + 16, 'IV and one padded block') then
+    exit;
+  aes := TAesCbc.Create(key, 256);
+  try
+    Check(aes.DecryptPkcs7(sub, {IVAtBeginning=}true) = KNOWN, 'decrypted');
+  finally
+    aes.Free;
+  end;
+  FillCharFast(key, SizeOf(key), 0);
+end;
+{$else}
+begin
+end;
+{$endif NO_USE_PDFSECURITY}
+
+procedure TTestUiPdf.Pdf20File;
+var
+  pdf: TPdfDocument;
+  s: RawByteString;
+  {$ifndef NO_USE_PDFSECURITY}
+  refused: boolean;
+  {$endif NO_USE_PDFSECURITY}
+begin
+  // PDF 2.0 without encryption: XMP metadata and file identifier
+  pdf := TPdfDocument.Create;
+  try
+    pdf.GeneratePdf20File := true;
+    pdf.Info.Title := 'PDF 2.0';
+    pdf.AddPage;
+    s := SavedPdf(pdf);
+  finally
+    pdf.Free;
+  end;
+  Check(copy(s, 1, 8) = '%PDF-2.0', 'header');
+  Check(PosEx('/Metadata', s) > 0, 'XMP metadata');
+  Check(PosEx('<dc:title>', s) > 0, 'title in XMP');
+  Check(PosEx('/ID', s) > 0, 'file identifier');
+  {$ifndef NO_USE_PDFSECURITY}
+  // PDF 2.0 + AES-256: native, without the Adobe extension
+  pdf := TPdfDocument.Create(false, 0, pdfaNone,
+    TPdfEncryption.New(elAES_256, '', 'owner', PDF_PERMISSION_ALL));
+  try
+    pdf.GeneratePdf20File := true;
+    pdf.AddPage;
+    s := SavedPdf(pdf);
+  finally
+    pdf.Free;
+  end;
+  Check(copy(s, 1, 8) = '%PDF-2.0', 'header with AES');
+  Check(PosEx('/R 6', s) > 0, 'revision 6');
+  Check(PosEx('/Extensions', s) = 0, 'no Adobe extension in PDF 2.0');
+  // PDF 2.0 + RC4: refused
+  refused := false;
+  pdf := TPdfDocument.Create(false, 0, pdfaNone,
+    TPdfEncryption.New(elRC4_128, '', 'owner', PDF_PERMISSION_ALL));
+  try
+    pdf.GeneratePdf20File := true;
+    pdf.AddPage;
+    try
+      SavedPdf(pdf);
+    except
+      on EPdfInvalidOperation do
+        refused := true;
+    end;
+  finally
+    pdf.Free;
+  end;
+  Check(refused, 'RC4 is not allowed in PDF 2.0');
+  {$endif NO_USE_PDFSECURITY}
 end;
 
 {$else}
