@@ -57,6 +57,8 @@ type
     procedure EmfPolyPolylineOpen;
     procedure EmfRestoreDCDepth;
     procedure EmfScaledRotation;
+    procedure EmfAnsiText;
+    procedure EmfAnsiStockFont;
   end;
 
 implementation
@@ -1838,6 +1840,196 @@ begin
   // FPC's ArcCos(-2) is NaN: the text took the negated matrix, drawn upright
   m := OperandsBefore(txt, '(Turned)', ' Tm');
   Check((m <> '') and (m[1] = '-'), 'turned by 180 degrees: ' + Utf8ToString(m));
+end;
+
+procedure TTestUiPdf.EmfAnsiText;
+var
+  mf: TMetaFile;
+  mc: TMetaFileCanvas;
+  bytes: RawByteString;
+  recs: TIntegerDynArray;
+  w, a: RawUtf8;
+  i: integer;
+
+  // draw Codes at Y in an Arial of CharSet
+  procedure Text(Y, CharSet: integer; const Codes: array of word);
+  var
+    lf: TLogFontW;
+    f, old: HFONT;
+    ws: WideString;
+    c: integer;
+  begin
+    FillChar(lf, SizeOf(lf), 0);
+    lf.lfHeight := -16;
+    lf.lfCharSet := CharSet;
+    Utf8ToWideChar(@lf.lfFaceName, 'Arial');
+    f := CreateFontIndirectW(lf);
+    old := SelectObject(mc.Handle, f);
+    SetLength(ws, length(Codes));
+    for c := 0 to high(Codes) do
+      ws[c + 1] := WideChar(Codes[c]);
+    TextOutW(mc.Handle, 10, Y, pointer(ws), length(ws));
+    SelectObject(mc.Handle, old);
+    DeleteObject(f);
+  end;
+
+  // the W record at o as an A record of Ansi, its UTF-16 zeroed past the bytes
+  procedure ToAnsi(o: integer; const Ansi: RawByteString);
+  var
+    str: PtrInt;
+  begin
+    PCardinal(@PByteArray(bytes)[o])^ := R_EXTTEXTOUTA;
+    // EMRTEXT.nChars at 44, offString at 48 of the record: room for 4 bytes
+    PCardinal(@PByteArray(bytes)[o + 44])^ := length(Ansi);
+    str := o + PInteger(@PByteArray(bytes)[o + 48])^;
+    FillChar(PByteArray(bytes)[str], 4, 0);
+    MoveFast(pointer(Ansi)^, PByteArray(bytes)[str], length(Ansi));
+  end;
+
+  // a dx of 100 per byte after the 4 bytes of the A record at o, which held
+  // the UTF-16 and the dx of 3 WideChars: wider than the text, so it is used
+  procedure WideDx(o: integer);
+  var
+    j, str: PtrInt;
+  begin
+    str := PInteger(@PByteArray(bytes)[o + 48])^;
+    PInteger(@PByteArray(bytes)[o + 72])^ := str + 4; // EMRTEXT.offDx
+    for j := 0 to 3 do
+      PInteger(@PByteArray(bytes)[o + str + 4 + j * 4])^ := 100;
+  end;
+
+begin
+  { EMR_EXTTEXTOUTA went through the Unicode path: its bytes were read as
+    WideChars, twice as many as the record holds. Windows records ExtTextOutA
+    as EMR_EXTTEXTOUTW, so the A records are made from W ones, in the ANSI
+    code page, in the one of a Greek font and in Shift-JIS, three characters
+    of four bytes. The W records lose their dx, which an A record has per
+    byte: the Shift-JIS one gets a dx of 4 entries, which cannot fit its 3
+    WideChars and is dropped - all draw by the measured text }
+  mf := TMetaFile.Create;
+  try
+    mf.Width := 400;
+    mf.Height := 400;
+    mc := TMetaFileCanvas.Create(mf, 0);
+    try
+      Text(10, ANSI_CHARSET, [ord('A'), ord('b')]);
+      Text(40, GREEK_CHARSET, [$03B1, $03B2]); // alpha beta
+      Text(70, SHIFTJIS_CHARSET, [ord('A'), $3042, ord('B')]); // hiragana a
+    finally
+      mc.Free;
+    end;
+    bytes := MetaFileBytes(mf);
+    recs := EmfRecords(bytes, R_EXTTEXTOUTW);
+    if CheckEqual(length(recs), 3, 'three W records') then
+    begin
+      for i := 0 to 2 do
+      begin
+        CheckEqual(PCardinal(@PByteArray(bytes)[recs[i] + 44])^, 2 + i shr 1,
+          'the characters');
+        PCardinal(@PByteArray(bytes)[recs[i] + 72])^ := 0; // EMRTEXT.offDx
+      end;
+      mf.Handle := SetEnhMetaFileBits(length(bytes), pointer(bytes));
+      w := RenderedEmf(mf);
+      ToAnsi(recs[0], 'Ab');
+      ToAnsi(recs[1], BinaryOf([$E1, $E2])); // code page 1253
+      ToAnsi(recs[2], BinaryOf([ord('A'), $82, $A0, ord('B')])); // code page 932
+      WideDx(recs[2]);
+      mf.Handle := SetEnhMetaFileBits(length(bytes), pointer(bytes));
+      a := RenderedEmf(mf);
+    end;
+  finally
+    mf.Free;
+  end;
+  Check(w <> '', 'the W metafile rendered');
+  CheckEqual(a, w, 'the A records draw as the W ones');
+end;
+
+procedure TTestUiPdf.EmfAnsiStockFont;
+const
+  ANSI: array[0..1] of byte = ($E1, $E2);
+var
+  mf: TMetaFile;
+  mc: TMetaFileCanvas;
+  lf: TLogFontW;
+  f, old: HFONT;
+  bytes: RawByteString;
+  recs: TIntegerDynArray;
+  w, a: RawUtf8;
+  str: PtrInt;
+  i, stock: integer;
+
+  // the bytes as CodePage reads them, drawn as a W record after the stock
+  // font - one character on a DBCS code page (932, 936, 950)
+  procedure Text(Y: integer; StockFont, CodePage: cardinal);
+  var
+    ws: array[0..1] of WideChar;
+    n: integer;
+  begin
+    SelectObject(mc.Handle, GetStockObject(StockFont));
+    n := MultiByteToWideChar(CodePage, 0, @ANSI, 2, @ws, 2);
+    TextOutW(mc.Handle, 10, Y, @ws, n);
+  end;
+
+begin
+  { a stock font selected after a font of the metafile kept the code page of
+    that font: an EMR_EXTTEXTOUTA drawn then decoded its bytes in it, not in
+    the code page of the stock font - the system one, the OEM one for
+    OEM_FIXED_FONT }
+  mf := TMetaFile.Create;
+  try
+    mf.Width := 400;
+    mf.Height := 400;
+    mc := TMetaFileCanvas.Create(mf, 0);
+    try
+      FillChar(lf, SizeOf(lf), 0);
+      lf.lfHeight := -16;
+      lf.lfCharSet := GREEK_CHARSET;
+      Utf8ToWideChar(@lf.lfFaceName, 'Arial');
+      f := CreateFontIndirectW(lf);
+      old := SelectObject(mc.Handle, f);
+      Text(10, SYSTEM_FONT, CP_ACP);
+      SelectObject(mc.Handle, f);
+      Text(40, OEM_FIXED_FONT, CP_OEMCP);
+      SelectObject(mc.Handle, old);
+      DeleteObject(f);
+    finally
+      mc.Free;
+    end;
+    bytes := MetaFileBytes(mf);
+    recs := EmfRecords(bytes, R_SELECTOBJECT);
+    stock := 0; // the VCL canvas may select a stock font of its own
+    for i := 0 to high(recs) do
+      case PCardinal(@PByteArray(bytes)[recs[i] + 8])^ of
+        $80000000 + SYSTEM_FONT:
+          stock := stock or 1;
+        $80000000 + OEM_FIXED_FONT:
+          stock := stock or 2;
+      end;
+    CheckEqual(stock, 3, 'both stock fonts selected');
+    recs := EmfRecords(bytes, R_EXTTEXTOUTW);
+    if CheckEqual(length(recs), 2, 'two W records') then
+    begin
+      for i := 0 to 1 do
+        PCardinal(@PByteArray(bytes)[recs[i] + 72])^ := 0; // no dx: see EmfAnsiText
+      mf.Handle := SetEnhMetaFileBits(length(bytes), pointer(bytes));
+      w := RenderedEmf(mf);
+      // the W records as A records of the two bytes
+      for i := 0 to 1 do
+      begin
+        PCardinal(@PByteArray(bytes)[recs[i]])^ := R_EXTTEXTOUTA;
+        PCardinal(@PByteArray(bytes)[recs[i] + 44])^ := 2; // EMRTEXT.nChars
+        str := recs[i] + PInteger(@PByteArray(bytes)[recs[i] + 48])^;
+        FillChar(PByteArray(bytes)[str], 4, 0);
+        MoveFast(ANSI, PByteArray(bytes)[str], 2);
+      end;
+      mf.Handle := SetEnhMetaFileBits(length(bytes), pointer(bytes));
+      a := RenderedEmf(mf);
+    end;
+  finally
+    mf.Free;
+  end;
+  Check(w <> '', 'the W metafile rendered');
+  CheckEqual(a, w, 'decoded in the code page of the stock font');
 end;
 
 {$else}

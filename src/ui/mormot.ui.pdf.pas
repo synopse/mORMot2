@@ -10713,6 +10713,10 @@ type
       Align: integer;
       BkMode, BkColor: integer;
       Spec: TFontSpec;
+      // a font of the metafile is selected, not a stock font
+      Selected: boolean;
+      // the code page of the stock font while none is: CP_ACP or CP_OEMCP
+      StockCodePage: cardinal;
       LogFont: TLogFontW; // better be the last entry in TPdfEnumState record
     end;
   end;
@@ -11922,6 +11926,18 @@ begin
             brush.color := STOCKBRUSHCOLOR[iObject];
             brush.null := false;
           end;
+        OEM_FIXED_FONT..DEVICE_DEFAULT_FONT,
+        SYSTEM_FIXED_FONT,
+        DEFAULT_GUI_FONT:
+          begin
+            // its LogFont is not known: EMR_EXTTEXTOUTA decodes in the code
+            // page of its charset, not in the one of the font selected before
+            Font.Selected := false;
+            if iObject = OEM_FIXED_FONT then
+              Font.StockCodePage := CP_OEMCP
+            else
+              Font.StockCodePage := CP_ACP;
+          end;
         NULL_PEN:
           begin
             if fInLined and
@@ -11978,6 +11994,7 @@ begin
           OBJ_FONT:
             begin
               Font.spec := FontSpec;
+              Font.Selected := true;
               MoveFast(LogFont, Font.LogFont, SizeOf(LogFont));
             end;
         end;
@@ -12401,6 +12418,8 @@ var
   posi: TPoint;
   tmp: array of WideChar; // R.emrtext is not #0 terminated -> use tmp[]
   hasdx, clipped, isopaque: boolean;
+  n: integer; // the WideChars of tmp, or the glyphs
+  cp: cardinal;
   tmp2: array[0..1] of WideChar;
   clip: TPdfBox;
   back: TRect;
@@ -12454,8 +12473,40 @@ begin
   if R.emrtext.nChars > 0 then
     with DC[nDC] do
     begin
-      SetLength(tmp, R.emrtext.nChars + 1); // faster than WideString for our purpose
-      MoveFast(pointer(PtrUInt(@R) + R.emrtext.offString)^, tmp[0], R.emrtext.nChars * 2);
+      if (R.emr.iType = EMR_EXTTEXTOUTA) and
+         (R.emrtext.fOptions and ETO_GLYPH_INDEX = 0) then
+      begin
+        // bytes in the code page of the font's charset, as ExtTextOutA reads them
+        if not Font.Selected then
+          cp := Font.StockCodePage // CP_ACP (0) at the start
+        else
+          case Font.LogFont.lfCharSet of
+            DEFAULT_CHARSET:
+              cp := CP_ACP;
+            OEM_CHARSET:
+              cp := CP_OEMCP;
+            SYMBOL_CHARSET:
+              cp := 42; // CP_SYMBOL: $20..$FF as U+F020..U+F0FF, as GDI records them
+            CHINESEBIG5_CHARSET:
+              cp := 950;
+          else
+            cp := CharSetToCodePage(Font.LogFont.lfCharSet);
+          end;
+        n := MultiByteToWideChar(cp, 0,
+          pointer(PtrUInt(@R) + R.emrtext.offString), R.emrtext.nChars, nil, 0);
+        if n = 0 then
+          exit; // not text in that code page
+        SetLength(tmp, n + 1);
+        MultiByteToWideChar(cp, 0, pointer(PtrUInt(@R) + R.emrtext.offString),
+          R.emrtext.nChars, pointer(tmp), n);
+      end
+      else
+      begin
+        n := R.emrtext.nChars;
+        SetLength(tmp, n + 1); // faster than WideString for our purpose
+        MoveFast(pointer(PtrUInt(@R) + R.emrtext.offString)^, tmp[0], n * 2);
+      end;
+      tmp[n] := #0;
       sy := 1;
       sx := 1;
       if (Canvas.fWorldFactorY) < 0 then
@@ -12483,7 +12534,7 @@ begin
            fnt.InheritsFrom(TPdfFontTrueType) then
         begin
           dest := Canvas.fDoc.GetDCWithFont(TPdfFontTrueType(fnt));
-          if GetTextExtentPoint32W(dest, pointer(tmp), R.emrtext.nChars, siz) then
+          if GetTextExtentPoint32W(dest, pointer(tmp), n, siz) then
             ws := (siz.cX * Canvas.fPage.fFontSize) / 1000;
         end;
         {$endif USE_UNISCRIBE}
@@ -12491,7 +12542,10 @@ begin
           ws := Canvas.UnicodeTextWidth(pointer(tmp));
         mw := Round(ws / fscaleX);
       end;
-      hasdx := R.emrtext.offDx > 0;
+      // an A record has one dx per byte: they fit the WideChars of a single-byte
+      // code page only
+      hasdx := (R.emrtext.offDx > 0) and
+               (cardinal(n) = R.emrtext.nChars);
       {$ifdef USE_UNISCRIBE}
       if Canvas.fDoc.UseUniScribe then
         hasdx := hasdx and (R.emrtext.fOptions and ETO_GLYPH_INDEX <> 0);
@@ -12499,7 +12553,7 @@ begin
       if hasdx then
       begin
         dx := pointer(PtrUInt(@R) + R.emrtext.offDx);
-        w := DXTextWidth(dx, R.emrText.nChars);
+        w := DXTextWidth(dx, n);
         if w < Trunc((R.rclBounds.Right - R.rclBounds.Left) / Canvas.fFactorX) then
           dx := nil; // offDX=0 or within box
       end
@@ -12515,7 +12569,7 @@ begin
       hscale := 100;
       if mw <> 0 then
       begin
-        for i := 0 to R.emrtext.nChars - 1 do
+        for i := 0 to n - 1 do
           if tmp[i] = ' ' then
             inc(nspace);
         if (po = tpSetTextJustification) and
@@ -12692,7 +12746,7 @@ begin
         Canvas.MoveTextPoint(Canvas.S2X(xs), Canvas.S2Y(ys));
       end;
       if (R.emrtext.fOptions and ETO_GLYPH_INDEX) <> 0 then
-        Canvas.ShowGlyph(pointer(tmp), R.emrtext.nChars)
+        Canvas.ShowGlyph(pointer(tmp), n)
       else if po = tpExactTextCharacterPositining then
       begin
         cur := 0;
@@ -12700,7 +12754,7 @@ begin
         repeat
           tmp2[0] := tmp[cur];
           Canvas.ShowText(@tmp2, false);
-          if cur = R.emrtext.nChars - 1 then
+          if integer(cur) = n - 1 then
             break;
           xs := xs + dx^[cur];
           Canvas.EndText;
