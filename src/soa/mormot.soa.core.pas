@@ -705,6 +705,7 @@ type
     fInterfaceMethod: TServiceContainerInterfaceMethods; // dynamic array
     fInterfaceMethods: TDynArrayHashed;
     fExpectMangledUri: boolean;
+    fAsSoaSafe: TLightLock;
     fAsSoa: TDocVariantData;
     procedure SetExpectMangledUri(Mangled: boolean);
     procedure SetInterfaceMethodBits(MethodNamesCsv: PUtf8Char;
@@ -1528,12 +1529,18 @@ end;
 
 procedure TServiceContainer.ClearServiceList;
 begin
-  fInterface := nil;
-  fInterfaceMethod := nil;
-  fInterfaces.InitSpecific(TypeInfo(TServiceContainerInterfaces),
-    fInterface, ptRawUtf8, nil, {caseinsensitive=}not fExpectMangledUri);
-  fInterfaceMethods.InitSpecific(TypeInfo(TServiceContainerInterfaceMethods),
-    fInterfaceMethod, ptRawUtf8, nil, {caseinsensitive=}not fExpectMangledUri);
+  fAsSoaSafe.Lock;
+  try
+    fAsSoa.Clear;
+    fInterface := nil;
+    fInterfaceMethod := nil;
+    fInterfaces.InitSpecific(TypeInfo(TServiceContainerInterfaces),
+      fInterface, ptRawUtf8, nil, {caseinsensitive=}not fExpectMangledUri);
+    fInterfaceMethods.InitSpecific(TypeInfo(TServiceContainerInterfaceMethods),
+      fInterfaceMethod, ptRawUtf8, nil, {caseinsensitive=}not fExpectMangledUri);
+  finally
+    fAsSoaSafe.UnLock;
+  end;
 end;
 
 destructor TServiceContainer.Destroy;
@@ -1574,22 +1581,28 @@ begin
   if (self = nil) or
      (aService = nil) then
     EServiceException.RaiseUtf8('%.AddServiceInternal(%)', [self, aService]);
-  // add TServiceFactory to the im list
-  if ExpectMangledUri then
-    uri := aService.fInterfaceMangledUri
-  else
-    uri := aService.fInterfaceUri;
-  n := 0;
-  int := fInterfaces.AddUniqueName(uri, @n);
-  int^.Service := aService;
-  // add associated methods - first SERVICE_PSEUDO_METHOD[], then from interface
-  Append(uri, '.');
-  ndx := 0;
-  for im := Low(im) to High(im) do
-    AddServiceMethodInternal(uri + SERVICE_PSEUDO_METHOD[im], aService, ndx);
-  for m := 0 to aService.fInterface.MethodsCount - 1 do
-    AddServiceMethodInternal(uri + aService.fInterface.Methods[m].Uri, aService, ndx);
-  result := n; // safer with a transient local variable
+  fAsSoaSafe.Lock;
+  try
+    // add TServiceFactory to the im list
+    if ExpectMangledUri then
+      uri := aService.fInterfaceMangledUri
+    else
+      uri := aService.fInterfaceUri;
+    n := 0;
+    int := fInterfaces.AddUniqueName(uri, @n);
+    int^.Service := aService;
+    // add associated methods - first SERVICE_PSEUDO_METHOD[], then from interface
+    Append(uri, '.');
+    ndx := 0;
+    for im := Low(im) to High(im) do
+      AddServiceMethodInternal(uri + SERVICE_PSEUDO_METHOD[im], aService, ndx);
+    for m := 0 to aService.fInterface.MethodsCount - 1 do
+      AddServiceMethodInternal(uri + aService.fInterface.Methods[m].Uri, aService, ndx);
+    fAsSoa.Clear;
+    result := n; // safer with a transient local variable
+  finally
+    fAsSoaSafe.UnLock;
+  end;
 end;
 
 procedure TServiceContainer.CheckInterface(const aInterfaces: array of PRttiInfo);
@@ -1803,14 +1816,25 @@ begin
 end;
 
 function TServiceContainer.AsSoa: variant;
+var
+  tmp: TDocVariantData;
 begin
   VarClear(result);
-  if (self = nil) or
-     (fInterface = nil) then
+  if self = nil then
     exit;
-  if fAsSoa.Count = 0 then
-    _Set(fAsSoa, pointer(fInterface), length(fInterface)); // compute once
-  result := PVariant(@fAsSoa)^;
+  fAsSoaSafe.Lock;
+  try
+    if fInterface = nil then
+      exit;
+    if fAsSoa.Count = 0 then
+    begin
+      _Set(tmp, pointer(fInterface), length(fInterface));
+      fAsSoa := tmp; // publish only a complete service list
+    end;
+    result := PVariant(@fAsSoa)^;
+  finally
+    fAsSoaSafe.UnLock;
+  end;
 end;
 
 function TServiceContainer.TryResolve(aInterface: PRttiInfo; out Obj): boolean;

@@ -83,6 +83,7 @@ uses
   test.orm.threads         in '.\test.orm.threads.pas',
   test.orm.network         in '.\test.orm.network.pas',
   test.soa.core            in '.\test.soa.core.pas',
+  test.soa.concurrent in '.\test.soa.concurrent.pas',
   test.soa.network         in '.\test.soa.network.pas';
 
 
@@ -192,6 +193,7 @@ begin
   {$ifdef LIBQUICKJSSTATIC}
   AddCase(TTestCoreScript);
   {$endif LIBQUICKJSSTATIC}
+  AddCase(TTestServiceListConcurrent);
   AddCase([
     TTestServiceOrientedArchitecture,
     TTestBidirectionalRemoteConnection
