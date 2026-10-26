@@ -576,6 +576,19 @@ function CurrentPrinterPaperSize: TPdfPaperSize;
 /// retrieve the current printer resolution
 function CurrentPrinterRes: TPoint;
 
+/// the code page ExtTextOutA reads the bytes of a font of this charset in
+// - CP_ACP for DEFAULT_CHARSET, CP_OEMCP for OEM_CHARSET, 42 (CP_SYMBOL) for
+// SYMBOL_CHARSET - as GDI records them, U+F020..U+F0FF - else the code page
+// of the charset (1252 for ANSI_CHARSET)
+function FontCharSetCodePage(CharSet: integer): cardinal;
+
+/// the code page ExtTextOutA reads the bytes of a stock font in
+// - from the charset of GetStockObject(StockFont) on this system, CP_ACP if
+// it gives none or StockFont is no font: ANSI_FIXED_FONT and ANSI_VAR_FONT
+// are ANSI_CHARSET (1252), OEM_FIXED_FONT is OEM_CHARSET, the system fonts
+// follow the system charset
+function StockFontCodePage(StockFont: integer): cardinal;
+
 
 {************ Internal classes mapping PDF objects }
 
@@ -1859,7 +1872,8 @@ type
     procedure PointI(x, y: single);
       {$ifdef HASINLINE}inline;{$endif}
     function RectI(const Rect: TRect; Normalize: boolean): TPdfRect;
-    // size of one device pixel of the metafile, in logical units
+    // size of one device pixel of the metafile, in logical units - negative
+    // when the mapping mirrors that axis
     function DevPixelX: single;
     function DevPixelY: single;
     // inclusive-inclusive GDI box (EMR_RECTANGLE, EMR_ELLIPSE)
@@ -3312,13 +3326,15 @@ begin
   result := psUserDefined;
   if not PrinterDriverExists then
     exit;
-  GetProfileString('windows', 'device', nil, name, SizeOf(name) - 1);
+  GetProfileString('windows', 'device', nil, name, length(name)); // chars
   PC := ParseFetchedPrinterStr(name);
   if (PC = nil) or
      (PC^ = #0) then
     exit;
   try
     h := CreateDC(nil, PC, nil, nil);
+    if h = 0 then
+      exit; // no printer DC: nothing to measure
     try
       pt.x := GetDeviceCaps(h, LOGPIXELSX);
       pt.y := GetDeviceCaps(h, LOGPIXELSY);
@@ -3358,8 +3374,38 @@ begin
   end;
 end;
 
+function FontCharSetCodePage(CharSet: integer): cardinal;
+begin
+  case CharSet of
+    DEFAULT_CHARSET:
+      result := CP_ACP;
+    OEM_CHARSET:
+      result := CP_OEMCP;
+    SYMBOL_CHARSET:
+      result := 42; // CP_SYMBOL: $20..$FF as U+F020..U+F0FF, as GDI records them
+    CHINESEBIG5_CHARSET:
+      result := 950;
+  else
+    result := CharSetToCodePage(CharSet);
+  end;
+end;
+
+function StockFontCodePage(StockFont: integer): cardinal;
+var
+  h: HGDIOBJ;
+  lf: TLogFontW;
+begin
+  h := GetStockObject(StockFont);
+  if (GetObjectType(h) = OBJ_FONT) and
+     (GetObjectW(h, SizeOf(lf), @lf) <> 0) then
+    result := FontCharSetCodePage(lf.lfCharSet)
+  else
+    result := CP_ACP;
+end;
+
 function CurrentPrinterRes: TPoint;
 var
+  res: TPoint;
   name: array[0..1023] of Char;
   PC: PChar;
   h: THandle;
@@ -3368,16 +3414,22 @@ begin
   result.Y := 300; // default standard printer resolution
   if not PrinterDriverExists then
     exit;
-  GetProfileString('windows', 'device', nil, name, SizeOf(name) - 1);
+  GetProfileString('windows', 'device', nil, name, length(name)); // chars
   PC := ParseFetchedPrinterStr(name);
   if (PC = nil) or
      (PC^ = #0) then
     exit;
   try
     h := CreateDC(nil, PC, nil, nil);
+    if h = 0 then
+      exit; // no printer DC: the default resolution
     try
-      result.x := GetDeviceCaps(h, LOGPIXELSX);
-      result.y := GetDeviceCaps(h, LOGPIXELSY);
+      res.x := GetDeviceCaps(h, LOGPIXELSX);
+      res.y := GetDeviceCaps(h, LOGPIXELSY);
+      if res.x > 0 then
+        result.x := res.x;
+      if res.y > 0 then
+        result.y := res.y;
     finally
       DeleteDC(h);
     end;
@@ -3497,7 +3549,8 @@ begin
   result := ((r shr 8) or ((g shr 8) shl 8) or ((b shr 8) shl 16) or ((a shr 8) shl 24));
 end;
 
-function GetTtfData(aDC: HDC; aTableName: PAnsiChar; var Ref: TWordDynArray): pointer;
+function GetTtfData(aDC: HDC; aTableName: PAnsiChar; var Ref: TWordDynArray;
+  Size: PCardinal = nil): pointer;
 var
   L: cardinal;
 begin
@@ -3505,6 +3558,8 @@ begin
   L := windows.GetFontData(aDC, PCardinal(aTableName)^, 0, nil, 0);
   if L = GDI_ERROR then
     exit;
+  if Size <> nil then
+    Size^ := L; // the bytes of the table, without the word added below
   SetLength(Ref, L shr 1 + 1);
   if windows.GetFontData(aDC, PCardinal(aTableName)^, 0, pointer(Ref), L) = GDI_ERROR then
     exit;
@@ -5959,8 +6014,8 @@ var
   P: pointer;
   SubTable: ^TCmapSubTableArray absolute P;
   Header: ^TCmapHeader;
-  i, n, code, ndx: PtrInt;
-  off: cardinal;
+  i, n, code, ndx, ndx2: PtrInt;
+  off, len: cardinal;
   glyph: integer;
   delta, offs: PtrInt;
   W, numOfLongHorMetrics: word;
@@ -5969,10 +6024,14 @@ begin
   // retrieve the 'cmap' (character code mapping) table
   // see http://developer.apple.com/fonts/TTRefMan/RM06/Chap6cmap.html
   // and http://www.microsoft.com/typography/OTSPEC/cmap.htm
-  P := GetTtfData(aUnicodeTtf.fDoc.fDC, 'cmap', fcmap);
-  if P = nil then
+  P := GetTtfData(aUnicodeTtf.fDoc.fDC, 'cmap', fcmap, @len);
+  if (P = nil) or
+     (len < cardinal(SizeOf(TCmapHeader))) then
     exit;
   Header := P;
+  if cardinal(SizeOf(TCmapHeader)) +
+     cardinal(Header^.numberSubtables) * cardinal(SizeOf(SubTable^[0])) > len then
+    exit; // a directory past the table
   inc(PByte(P), SizeOf(TCmapHeader));
   off := 0;
   for i := 0 to Header^.numberSubtables - 1 do
@@ -5995,13 +6054,16 @@ begin
   i := LongRec(off).Lo; // offset swap to bswap conversion :)
   LongRec(off).Lo := LongRec(off).Hi;
   LongRec(off).Hi := i;
-  if off > cardinal(Length(fcmap) * 2) then
+  if (off > len) or
+     (len - off < cardinal(SizeOf(TCmapFmt4))) then
     exit; // avoid GPF
   fmt4 := pointer(PtrUInt(fcmap) + off);
   with fmt4^ do
   begin
     if format <> 4 then
       exit; // we handle only cmap table format 4
+    if len - off - cardinal(SizeOf(TCmapFmt4)) < cardinal(segCountX2) * 4 + 2 then
+      exit; // the four arrays and reservedPad past the table
     endCode := pointer(PtrUInt(@format) + SizeOf(TCmapFmt4));
     startCode := pointer(PtrUInt(endCode) + segCountX2 + 2); // +2 = reservedPad
     idDelta := pointer(PtrUInt(startCode) + segCountX2);
@@ -6024,7 +6086,8 @@ begin
   with aUnicodeTtf.fUsedWideChar do
   begin
     for i := 0 to n - 1 do
-      inc(Count, endCode[i] - startCode[i] + 1);
+      if startCode[i] <= endCode[i] then // a broken segment holds no code
+        inc(Count, endCode[i] - startCode[i] + 1);
     SetLength(Values, Count);
     SetLength(aUnicodeTtf.fUsedWide, Count);
   end;
@@ -6042,7 +6105,13 @@ begin
         glyph := code + delta
       else
       begin
-        glyph := glyphIndexArray[offs + code];
+        // within the table: a broken cmap is no glyph, not a GPF
+        ndx2 := offs + code;
+        if (PtrUInt(@glyphIndexArray[ndx2]) >= PtrUInt(fcmap)) and
+           (PtrUInt(@glyphIndexArray[ndx2]) + 2 <= PtrUInt(fcmap) + len) then
+          glyph := glyphIndexArray[ndx2]
+        else
+          glyph := 0;
         if glyph <> 0 then
           inc(glyph, delta);
       end;
@@ -6371,8 +6440,8 @@ var
   dir: PTtfTableDirectory;
   d, e: PTtfTableEntry;
   head: ^TCmapHEAD;
-  n, i, len: PtrInt;
-  checksum: cardinal;
+  n, i, len, sel: PtrInt;
+  checksum, off, size: cardinal;
 begin
   SetLength(ttf, SubSetSize); // maximum size
   d := pointer(ttf);
@@ -6381,7 +6450,11 @@ begin
   e := SubSetData;
   inc(PTtfTableDirectory(e));
   n := 0;
-  if SubSetSize > SizeOf(PTtfTableDirectory) then
+  // the directory and its entries within the subset (FontSub output)
+  if (SubSetSize >= SizeOf(TTtfTableDirectory)) and
+     (SizeOf(TTtfTableDirectory) +
+      PtrInt(bswap16(PTtfTableDirectory(SubSetData)^.numTables)) *
+      SizeOf(TTtfTableEntry) <= SubSetSize) then
     for i := 1 to bswap16(PTtfTableDirectory(SubSetData)^.numTables) do
     begin
       if IntegerScanIndex(@TTF_SUBSET, length(TTF_SUBSET), e^.tag) >= 0 then
@@ -6392,7 +6465,8 @@ begin
       end;
       inc(e);
     end;
-  if n < 8 then // pdf expects 10 tables, and 8..15 for our fixed dir^ values
+  if (n < 8) or // pdf expects 10 tables
+     (n * SizeOf(TTtfTableEntry) > $ffff) then
   begin
     MoveFast(SubSetData^, pointer(ttf)^, SubSetSize); // paranoid
     exit;
@@ -6401,13 +6475,12 @@ begin
   dir := pointer(ttf);
   dir^.sfntVersion := PTtfTableDirectory(SubSetData)^.sfntVersion;
   dir^.numTables := bswap16(n);
-  //len := HighBit(n); // always 8 when n in 8..15
-  //dir^.searchRange := bswap16(len * 16);
-  //dir^.entrySelector := bswap16(Floor(log2(len))); // requires the Math unit
-  //dir^.rangeShift := bswap16((integer(n) - len) * 16);
-  dir^.searchRange := 32768; // pre-computed values for n in 8..15
-  dir^.entrySelector := 768;
-  dir^.rangeShift := 8192;
+  sel := 0; // the binary search fields of n tables: 128, 3, 32 for ten
+  while 2 shl sel <= n do
+    inc(sel);
+  dir^.searchRange := bswap16(16 shl sel);
+  dir^.entrySelector := bswap16(sel);
+  dir^.rangeShift := bswap16(n * 16 - 16 shl sel);
   // include the associated data
   checksum := 0;
   head := nil;
@@ -6415,8 +6488,22 @@ begin
   inc(PTtfTableDirectory(e));
   for i := 1 to n do
   begin
-    len := bswap32(e^.length);
-    MoveFast(PByteArray(SubSetData)[bswap32(e^.offset)], d^, len);
+    size := bswap32(e^.length);
+    off := bswap32(e^.offset);
+    // a table past the subset, more data than it held (entries sharing a
+    // table), or a head too short for checkSumAdjustment: the subset as it is
+    if (off > cardinal(SubSetSize)) or
+       (size > cardinal(SubSetSize) - off) or
+       ((e^.tag = HEAD_TABLE) and
+        (size < 12)) or
+       (cardinal(PtrUInt(d) - PtrUInt(ttf)) + ((size + 3) and not 3) >
+        cardinal(SubSetSize)) then
+    begin
+      MoveFast(SubSetData^, pointer(ttf)^, SubSetSize);
+      exit;
+    end;
+    len := size;
+    MoveFast(PByteArray(SubSetData)[off], d^, len);
     e^.offset := bswap32(PtrUInt(d) - PtrUInt(ttf));
     if e^.tag = HEAD_TABLE then // 'head'
       head := pointer(d);
@@ -9509,12 +9596,20 @@ begin
 end;
 
 procedure TPdfCanvas.RoundRectI(x1, y1, x2, y2, cx, cy: integer);
+var
+  r: TPdfRect;
 begin
   // the corner size goes through the same window/viewport mapping as the
   // coordinates (MM_ANISOTROPIC metafiles), and the GDI box is
-  // inclusive-inclusive: one device pixel is added to the right/bottom edges
-  RoundRect(I2X(x1), I2Y(y1), S2X(x2 + DevPixelX), S2Y(y2 + DevPixelY),
-    I2X(x1 + cx) - I2X(x1), I2Y(y1 + cy) - I2Y(y1));
+  // inclusive-inclusive: one device pixel is added to the recorded
+  // right/bottom edges, before normalizing - see BoxInclI
+  r.Left   := I2X(x1);
+  r.Right  := S2X(x2 + DevPixelX);
+  r.Top    := I2Y(y1);
+  r.Bottom := S2Y(y2 + DevPixelY);
+  NormalizeRect(r);
+  RoundRect(r.Left, r.Bottom, r.Right, r.Top,
+    Abs(I2X(x1 + cx) - I2X(x1)), -Abs(I2Y(y1 + cy) - I2Y(y1)));
 end;
 
 procedure TPdfCanvas.ArcI(centerx, centery, W, H, Sx, Sy, Ex, Ey: integer;
@@ -9575,7 +9670,7 @@ function TPdfCanvas.DevPixelX: single;
 begin
   if (fViewSize.cx <> 0) and
      (fWinSize.cx <> 0) then
-    result := Abs(fWinSize.cx / fViewSize.cx)
+    result := fWinSize.cx / fViewSize.cx
   else
     result := 1;
 end;
@@ -9584,7 +9679,7 @@ function TPdfCanvas.DevPixelY: single;
 begin
   if (fViewSize.cy <> 0) and
      (fWinSize.cy <> 0) then
-    result := Abs(fWinSize.cy / fViewSize.cy)
+    result := fWinSize.cy / fViewSize.cy
   else
     result := 1;
 end;
@@ -9601,11 +9696,13 @@ end;
 // GDI records the Right/Bottom of Rectangle/Ellipse one DEVICE pixel inside
 // the shape, i.e. several logical units with a screen reference DC: RectI()
 // removed one logical unit instead, and shapes were too small
+// - under a mirrored mapping the recorded Right is the smaller value (500,110
+// for 100..500 at -10 units per pixel): the signed pixel is added before the
+// box is normalized
 function TPdfCanvas.BoxInclI(Box: TRect): TPdfBox;
 var
   r: TPdfRect;
 begin
-  NormalizeRect(Box);
   r.Left   := I2X(Box.Left);
   r.Right  := S2X(Box.Right + DevPixelX);
   r.Top    := I2Y(Box.Top);
@@ -10666,6 +10763,25 @@ type
     Width: single;
   end;
 
+  /// EMR_CREATEBRUSHINDIRECT as the EMF stores it, with a 32-bit LOGBRUSH
+  // - the windows unit of FPC 3.2.2 declares lb as LOGBRUSH, whose ULONG_PTR
+  // lbHatch moves the fields on Win64: every brush was read as black there
+  TEmrCreateBrushIndirect32 = record
+    emr: TEMR;
+    ihBrush: cardinal;
+    lbStyle, lbColor, lbHatch: cardinal;
+  end;
+  PEmrCreateBrushIndirect32 = ^TEmrCreateBrushIndirect32;
+
+  /// EMR_EXTCREATEPEN as the EMF stores it, with a 32-bit EXTLOGPEN
+  // - the same with FPC 3.2.2 on Win64: elpHatch is a ULONG_PTR there
+  TEmrExtCreatePen32 = record
+    emr: TEMR;
+    ihPen, offBmi, cbBmi, offBits, cbBits: cardinal;
+    elpPenStyle, elpWidth, elpBrushStyle, elpColor, elpHatch: cardinal;
+  end;
+  PEmrExtCreatePen32 = ^TEmrExtCreatePen32;
+
   /// a state of the EMF enumeration engine, for the PDF canvas
   // - used also for the SaveDC/RestoreDC stack
   TPdfEnumState = record
@@ -10678,6 +10794,12 @@ type
     MetaRgn: TPdfBox;      //clipping
     ClipRgn: TPdfBox;      //clipping
     ClipRgnNull: boolean;  //clipping
+    // the region of EMR_EXTSELECTCLIPRGN, 1-based in TPdfEnum.fClipRegions:
+    // 0 if none
+    ClipRegion: integer;
+    // the regions EMR_SETMETARGN made part of the meta region, 1-based in
+    // TPdfEnum.fMetaClips: 0 if none
+    MetaClip: integer;
     MappingMode: integer;
     PolyFillMode: integer;
     StretchBltMode: integer;
@@ -10696,6 +10818,10 @@ type
       Align: integer;
       BkMode, BkColor: integer;
       Spec: TFontSpec;
+      // a font of the metafile is selected, not a stock font
+      Selected: boolean;
+      // the code page of the stock font while none is (StockFontCodePage)
+      StockCodePage: cardinal;
       LogFont: TLogFontW; // better be the last entry in TPdfEnumState record
     end;
   end;
@@ -10730,13 +10856,53 @@ type
            BrushNull: boolean;
            BrushStyle: integer);
     end;
-    // SaveDC/RestoreDC stack
+    // SaveDC/RestoreDC stack, as deep as the metafile saves it: SaveDC may
+    // reallocate it, so EnumEMFFunc must not use its "with E.DC[E.nDC]"
+    // scope after E.SaveDC
     nDC: integer;
-    DC: array[0..31] of TPdfEnumState;
+    DC: array of TPdfEnumState;
+    // the clip regions as PDF boxes, kept so that RestoreDC can apply the
+    // one of the state it restores
+    fClipRegions: array of array of TPdfBox;
+    // a region SetMetaRgn kept, inside the ones kept before it (Parent)
+    fMetaClips: array of record
+      Region, Parent: integer;
+    end;
+    // what the q of the canvas hold: fMetaActive, then fClipActive; 0 if none
+    fMetaActive: integer;
+    fClipActive: integer;
+    // from EMR_BEGINPATH to EMR_ENDPATH: the path's geometry goes to a stream
+    // of its own, all else (pen, text, bitmaps) to the page
+    fPathRecording: boolean;
+    fPathStream: TPdfStream;
+    // within a geometry record: the page's contents
+    fPathIn: boolean;
+    fPathSaved: TPdfStream;
+    // the recorded path until its painting record
+    fPathBuf: RawByteString;
   public
     constructor Create(ACanvas: TPdfCanvas);
     procedure SaveDC;
-    procedure RestoreDC;
+    procedure RestoreDC(Relative: integer);
+    // make Meta and Region (0 = none) the clip of the canvas: Q of the q
+    // that are not part of it
+    procedure SelectClip(Meta, Region: integer);
+    // after a Q: the colours, the line width and the dash are those of before
+    procedure GStateRestored;
+    // EMR_BEGINPATH: record the path apart, PDF allows no q/Q within it
+    procedure PathBegin;
+    // around a record of the path's geometry: to its stream and back
+    procedure PathIn;
+    procedure PathOut;
+    // EMR_ENDPATH: back to the page's contents, the path kept
+    procedure PathClose;
+    // a painting record: back to the page, what it left open ended
+    procedure PathPaint;
+    // write the kept path, after the clip and the pen of its painting
+    // - CloseFigures for EMR_STROKEANDFILLPATH, which closes each figure
+    procedure PathReplay(CloseFigures: boolean = false);
+    // the path is painted or dropped
+    procedure PathDone;
     procedure NeedPen;
     procedure NeedBrushAndPen;
     procedure FlushPenBrush;
@@ -10793,8 +10959,20 @@ var
   i: PtrInt;
   InitTransX: XForm;
   polytypes: PByteArray;
+  bmi: PBitmapInfo;
+  bmicopy: RawByteString;
 begin
   result := true;
+  if E.fPathRecording then
+    case R^.iType of
+      EMR_MOVETOEX, EMR_LINETO, EMR_RECTANGLE, EMR_ELLIPSE, EMR_ROUNDRECT,
+      EMR_ARC, EMR_ARCTO, EMR_PIE, EMR_CHORD, EMR_POLYGON, EMR_POLYLINE,
+      EMR_POLYGON16, EMR_POLYLINE16, EMR_POLYPOLYGON, EMR_POLYPOLYGON16,
+      EMR_POLYPOLYLINE, EMR_POLYPOLYLINE16, EMR_POLYBEZIER, EMR_POLYBEZIER16,
+      EMR_POLYBEZIERTO, EMR_POLYBEZIERTO16, EMR_POLYLINETO, EMR_POLYLINETO16,
+      EMR_POLYDRAW, EMR_POLYDRAW16, EMR_CLOSEFIGURE:
+        E.PathIn;
+    end;
   with E.DC[E.nDC] do
     case R^.iType of
       EMR_HEADER:
@@ -10839,9 +11017,9 @@ begin
       EMR_EXTTEXTOUTW:
         E.TextOut(PEMRExtTextOut(R)^);
       EMR_SAVEDC:
-        E.SaveDC;
+        E.SaveDC; // may reallocate E.DC: nothing of this with-scope after it
       EMR_RESTOREDC:
-        E.RestoreDC;
+        E.RestoreDC(PEMRRestoreDC(R)^.iRelative);
       EMR_SETWORLDTRANSFORM:
         E.ScaleMatrix(@PEMRSetWorldTransform(R)^.xform, MWT_SET);
       EMR_CREATEPEN:
@@ -10855,14 +11033,14 @@ begin
               PenStyle := lopn.lopnStyle;
             end;
       EMR_CREATEBRUSHINDIRECT:
-        with PEMRCreateBrushIndirect(R)^ do
+        with PEmrCreateBrushIndirect32(R)^ do
           if ihBrush - 1 < cardinal(length(E.Obj)) then
             with E.obj[ihBrush - 1] do
             begin
               kind := OBJ_BRUSH;
-              BrushColor := lb.lbColor;
-              BrushNull := (lb.lbStyle = BS_NULL);
-              BrushStyle := lb.lbStyle;
+              BrushColor := lbColor;
+              BrushNull := (lbStyle = BS_NULL);
+              BrushStyle := lbStyle;
             end;
       EMR_EXTCREATEFONTINDIRECTW:
         E.CreateFont(PEMRExtCreateFontIndirect(R));
@@ -10912,7 +11090,6 @@ begin
         end;
       EMR_ROUNDRECT:
         begin
-          NormalizeRect(PRect(@PEMRRoundRect(R)^.rclBox)^);
           E.NeedBrushAndPen;
           with PEMRRoundRect(R)^ do
             E.Canvas.RoundRectI(rclBox.left, rclBox.top, rclBox.right,
@@ -10928,7 +11105,8 @@ begin
               rclBox.Bottom - rclBox.Top, ptlStart.x, ptlStart.y,
               ptlEnd.x, ptlEnd.y, E.dc[E.nDC].ArcDirection = AD_CLOCKWISE,
               acArc, position);
-          E.Canvas.Stroke;
+          if not E.Canvas.fNewPath then
+            E.Canvas.Stroke;
         end;
       EMR_ARCTO:
         begin
@@ -10960,10 +11138,11 @@ begin
               rclBox.Bottom - rclBox.Top, ptlStart.x, ptlStart.y,
               ptlEnd.x, ptlEnd.y, E.dc[E.nDC].ArcDirection = AD_CLOCKWISE,
               acPie, position);
-          if pen.null then
-            E.Canvas.Fill
-          else
-            E.Canvas.FillStroke;
+          if not E.fPathRecording then // else painted by the painting record
+            if pen.null then
+              E.Canvas.Fill
+            else
+              E.Canvas.FillStroke;
         end;
       EMR_CHORD:
         begin
@@ -10974,10 +11153,11 @@ begin
               rclBox.Bottom - rclBox.Top, ptlStart.x, ptlStart.y,
               ptlEnd.x, ptlEnd.y, E.dc[E.nDC].ArcDirection = AD_CLOCKWISE,
               acChoord, position);
-          if pen.null then
-            E.Canvas.Fill
-          else
-            E.Canvas.FillStroke;
+          if not E.fPathRecording then // else painted by the painting record
+            if pen.null then
+              E.Canvas.Fill
+            else
+              E.Canvas.FillStroke;
         end;
       EMR_FILLRGN:
         begin
@@ -10990,7 +11170,8 @@ begin
       EMR_POLYLINE,
       EMR_POLYGON16,
       EMR_POLYLINE16:
-        if not brush.null or
+        if E.fPathRecording or // a path keeps it for a brush selected later
+           not brush.null or
            not pen.null then
         begin
           if R^.iType in [EMR_POLYGON, EMR_POLYGON16] then
@@ -11033,10 +11214,11 @@ begin
             E.Canvas.Closepath;
             E.FlushPenBrush;
           end
-          else if not pen.null then
-            E.Canvas.Stroke
-          else // for lines
-            E.Canvas.NewPath;
+          else if not E.fPathRecording then // else painted by the painting record
+            if not pen.null then
+              E.Canvas.Stroke
+            else // for lines
+              E.Canvas.NewPath;
         end;
       EMR_POLYPOLYGON,
       EMR_POLYPOLYGON16,
@@ -11359,12 +11541,23 @@ begin
           if (offBmiSrc <> 0) and
              (offBitsSrc <> 0) then
           begin
+            bmi := pointer(PtrUInt(R) + offBmiSrc);
             if WorldTransform.eM22 < 0 then
-              with PBitmapInfo(PtrUInt(R) + offBmiSrc)^ do
-                bmiHeader.biHeight := -bmiHeader.biHeight;
-            E.DrawBitmap(xSrc, ySrc, cxSrc, cySrc, xDest, yDest, cxDest, cyDest,
-              iUsageSrc, pointer(PtrUInt(R) + offBmiSrc),
-              pointer(PtrUInt(R) + offBitsSrc), @rclBounds, nil, dwRop);
+              // flipped in a copy: the record belongs to the metafile
+              if (cbBmiSrc >= SizeOf(TBitmapInfoHeader)) and
+                 (offBmiSrc + cbBmiSrc <= R^.nSize) then
+              begin
+                SetLength(bmicopy, cbBmiSrc);
+                MoveFast(bmi^, pointer(bmicopy)^, cbBmiSrc);
+                bmi := pointer(bmicopy);
+                bmi^.bmiHeader.biHeight := -bmi^.bmiHeader.biHeight;
+              end
+              else
+                bmi := nil;
+            if bmi <> nil then
+              E.DrawBitmap(xSrc, ySrc, cxSrc, cySrc, xDest, yDest, cxDest, cyDest,
+                iUsageSrc, bmi, pointer(PtrUInt(R) + offBitsSrc), @rclBounds,
+                nil, dwRop);
           end;
       EMR_TRANSPARENTBLT:
         with PEMRTransparentBLT(R)^ do // only handle RGB bitmaps (no palette)
@@ -11378,9 +11571,10 @@ begin
         with PEMRAlphaBlend(R)^ do // only handle RGB bitmaps (no palette nor transparency)
           if (offBmiSrc <> 0) and
              (offBitsSrc <> 0) then
+            // drawn opaque: dwRop is a BLENDFUNCTION, no transparent colour
             E.DrawBitmap (xSrc, ySrc, cxSrc, cySrc, xDest, yDest, cxDest, cyDest,
               iUsageSrc, pointer(PtrUInt(R) + offBmiSrc), pointer(
-               PtrUInt(R) + offBitsSrc), @rclBounds, @xformSrc, SRCCOPY, dwRop)
+               PtrUInt(R) + offBitsSrc), @rclBounds, @xformSrc, SRCCOPY)
           else
             case dwRop of // we only handle PATCOPY = fillrect
               PATCOPY:
@@ -11396,14 +11590,14 @@ begin
         with PEMRModifyWorldTransform(R)^ do
           E.ScaleMatrix(@xform, iMode);
       EMR_EXTCREATEPEN: // approx. - fast solution
-        with PEMRExtCreatePen(R)^ do
+        with PEmrExtCreatePen32(R)^ do
           if ihPen - 1 < cardinal(length(E.Obj)) then
             with E.obj[ihPen - 1] do
             begin
               kind := OBJ_PEN;
-              PenColor := elp.elpColor;
-              PenWidth := elp.elpWidth;
-              PenStyle := elp.elpPenStyle and (PS_STYLE_MASK or PS_ENDCAP_MASK);
+              PenColor := elpColor;
+              PenWidth := elpWidth;
+              PenStyle := elpPenStyle and (PS_STYLE_MASK or PS_ENDCAP_MASK);
             end;
       EMR_SETMITERLIMIT:
         if PEMRSetMiterLimit(R)^.eMiterLimit > 0.1 then
@@ -11420,6 +11614,8 @@ begin
       EMR_BEGINPATH:
         begin
           E.Canvas.NewPath;
+          E.PathBegin;
+          E.PathIn; // its first point
           if not Moved then
           begin
             E.Canvas.MoveToI(position.X, position.Y);
@@ -11427,40 +11623,58 @@ begin
           end;
         end;
       EMR_ENDPATH:
-        E.Canvas.fNewPath := false;
-      EMR_ABORTPATH:
         begin
-          E.Canvas.NewPath;
+          E.Canvas.fNewPath := false;
+          E.PathClose;
+        end;
+      EMR_ABORTPATH,
+      EMR_SELECTCLIPPATH: // the clip of a path is not applied
+        begin
+          E.PathDone;
           E.Canvas.fNewPath := false;
         end;
       EMR_CLOSEFIGURE:
         E.Canvas.ClosePath;
       EMR_FILLPATH:
         begin
+          E.PathPaint;
           if not brush.Null then
-          begin
             E.FillColor := brush.color;
-            E.Canvas.Fill;
-          end;
+          E.PathReplay;
+          if not brush.Null then
+            if PolyFillMode = ALTERNATE then
+              E.Canvas.EoFill
+            else
+              E.Canvas.Fill;
           E.Canvas.NewPath;
           E.Canvas.fNewPath := false;
+          E.PathDone;
         end;
       EMR_STROKEPATH:
         begin
+          E.PathPaint;
           if not pen.null then
-          begin
             E.NeedPen;
+          E.PathReplay;
+          if not pen.null then
             E.Canvas.Stroke;
-          end;
           E.Canvas.NewPath;
           E.Canvas.fNewPath := false;
+          E.PathDone;
         end;
       EMR_STROKEANDFILLPATH:
         begin
+          E.PathPaint;
           if not brush.Null then
           begin
             E.NeedPen;
             E.FillColor := brush.color;
+          end
+          else if not pen.null then
+            E.NeedPen;
+          E.PathReplay(true);
+          if not brush.Null then
+          begin
             if not pen.null then
               if PolyFillMode = ALTERNATE then
                 E.Canvas.EofillStroke
@@ -11472,12 +11686,10 @@ begin
               E.Canvas.Fill
           end
           else if not pen.null then
-          begin
-            E.NeedPen;
             E.Canvas.Stroke;
-          end;
           E.Canvas.NewPath;
           E.Canvas.fNewPath := false;
+          E.PathDone;
         end;
       EMR_SETPOLYFILLMODE:
         PolyFillMode := PEMRSetPolyFillMode(R)^.iMode;
@@ -11528,6 +11740,9 @@ begin
     else
       R^.iType := R^.iType; // for debug purpose (breakpoint)
     end;
+  E.PathOut;
+  if E.fPathRecording then
+    E.Canvas.fNewPath := true; // text or a bitmap of the bracket reset it
   case R^.iType of
     EMR_RESTOREDC,
     EMR_SETWINDOWEXTEX,
@@ -11564,8 +11779,10 @@ begin
     C.fUseMetaFileTextClipping := TextClipping;
     C.fKerningHScaleBottom := KerningHScaleBottom;
     C.fKerningHScaleTop := KerningHScaleTop;
-    if C.fDoc.fPrinterPxPerInch.X = 0 then
-      C.fDoc.fPrinterPxPerInch := CurrentPrinterRes; // caching for major speedup
+    if (C.fDoc.fPrinterPxPerInch.X <= 0) or
+       (C.fDoc.fPrinterPxPerInch.Y <= 0) then
+      // caching for major speedup; MM_ISOTROPIC divides by both
+      C.fDoc.fPrinterPxPerInch := CurrentPrinterRes;
     C.fPrinterPxPerInch := C.fDoc.fPrinterPxPerInch;
     with E.DC[0] do
     begin
@@ -11580,6 +11797,9 @@ begin
       EnumEnhMetaFile(C.fDoc.fDC, MF.Handle, @EnumEMFFunc, E, TRect(R));
       {$endif FPC}
     finally
+      E.PathDone; // a path never painted
+      E.SelectClip(0, 0); // the q of a clip still selected
+      C.fNewPath := false;
       C.GRestore;
     end;
   finally
@@ -11594,6 +11814,7 @@ end;
 constructor TPdfEnum.Create(ACanvas: TPdfCanvas);
 begin
   Canvas := ACanvas;
+  SetLength(DC, 32);
   // set invalid colors or style -> force paint
   fFillColor := -1;
   fStrokeColor := -1;
@@ -11796,7 +12017,8 @@ begin
               a[o].Y);
             inc(o);
           end;
-          Canvas.LineToI(a[f].x, a[f].Y);
+          if iType = EMR_POLYPOLYGON then // a polyline stays open
+            Canvas.LineToI(a[f].x, a[f].Y);
           DC[nDC].Moved := false;
         end;
       end;
@@ -11819,11 +12041,14 @@ begin
               a16[o].Y);
             inc(o);
           end;
-          Canvas.LineToI(a16[f].x, a16[f].Y);
+          if iType = EMR_POLYPOLYGON16 then
+            Canvas.LineToI(a16[f].x, a16[f].Y);
           DC[nDC].Moved := false;
         end;
       end;
   end;
+  if fPathRecording then
+    exit; // painted by the painting record
   if iType in [EMR_POLYPOLYLINE, EMR_POLYPOLYLINE16] then
   begin // stroke
     if not DC[nDC].pen.null then
@@ -11868,6 +12093,8 @@ end;
 
 procedure TPdfEnum.FlushPenBrush;
 begin
+  if fPathRecording then
+    exit; // painted by the painting record
   with DC[nDC] do
   begin
     if brush.null then
@@ -11899,9 +12126,19 @@ begin
             brush.color := STOCKBRUSHCOLOR[iObject];
             brush.null := false;
           end;
+        OEM_FIXED_FONT..DEVICE_DEFAULT_FONT,
+        SYSTEM_FIXED_FONT,
+        DEFAULT_GUI_FONT:
+          begin
+            // its LogFont is not known: EMR_EXTTEXTOUTA decodes in the code
+            // page of its charset, not in the one of the font selected before
+            Font.Selected := false;
+            Font.StockCodePage := StockFontCodePage(iObject);
+          end;
         NULL_PEN:
           begin
             if fInLined and
+               not fPathRecording and // StrokePath paints a path
                ((pen.style <> PS_NULL) or not pen.null) then
             begin
               fInLined := false;
@@ -11915,6 +12152,7 @@ begin
         BLACK_PEN:
           begin
             if fInLined and
+               not fPathRecording and
                ((pen.color <> STOCKPENCOLOR[iObject]) or not pen.null) then
             begin
               fInLined := false;
@@ -11932,6 +12170,7 @@ begin
           OBJ_PEN:
             begin
               if fInLined and
+                 not fPathRecording and
                  ((pen.color <> PenColor) or
                   (pen.width <> PenWidth) or
                   (pen.style <> PenStyle)) then
@@ -11955,6 +12194,7 @@ begin
           OBJ_FONT:
             begin
               Font.spec := FontSpec;
+              Font.Selected := true;
               MoveFast(LogFont, Font.LogFont, SizeOf(LogFont));
             end;
         end;
@@ -12018,10 +12258,18 @@ end;
 
 procedure TPdfEnum.NeedBrushAndPen;
 begin
+  if fPathIn then
+  begin
+    PathOut; // no w, RG or rg within a path
+    NeedBrushAndPen;
+    PathIn;
+    exit;
+  end;
   if fInlined then
   begin
     fInlined := false;
-    Canvas.Stroke;
+    if not fPathRecording then // StrokePath paints a path
+      Canvas.Stroke;
   end;
   NeedPen;
   with DC[nDC] do
@@ -12031,6 +12279,13 @@ end;
 
 procedure TPdfEnum.NeedPen;
 begin
+  if fPathIn then
+  begin
+    PathOut; // no w, RG or d within a path
+    NeedPen;
+    PathIn;
+    exit;
+  end;
   with DC[nDC] do
     if not pen.null then
     begin
@@ -12077,15 +12332,21 @@ begin
     end;
 end;
 
-procedure TPdfEnum.RestoreDC;
+procedure TPdfEnum.RestoreDC(Relative: integer);
 begin
-  Assert(nDC > 0);
-  dec(nDC);
+  // an EMF record restores relatively (-1 = the last saved); a state that
+  // was not saved is ignored, as the playback of GDI does
+  if (Relative >= 0) or
+     (Relative < -nDC) then
+    exit;
+  inc(nDC, Relative);
+  SelectClip(DC[nDC].MetaClip, DC[nDC].ClipRegion);
 end;
 
 procedure TPdfEnum.SaveDC;
 begin
-  Assert(nDC < high(DC));
+  if nDC >= high(DC) then
+    SetLength(DC, length(DC) * 2);
   DC[nDC + 1] := DC[nDC];
   inc(nDC);
 end;
@@ -12099,7 +12360,8 @@ begin
   if fInlined then
   begin
     fInlined := false;
-    if not DC[nDC].pen.null then
+    if not DC[nDC].pen.null and
+       not fPathRecording then // StrokePath paints a path
       Canvas.Stroke;
   end;
   with DC[nDC], Canvas do
@@ -12220,7 +12482,8 @@ begin
     else if (xf.eM22 = xf.eM11) and
             (xf.eM21 = -xf.eM12) then
     begin // Rotate
-      fAngle := ArcSin(xf.eM12) * c180divPI;
+      // ArcTan2, not ArcSin: a scaled rotation has |eM12| > 1
+      fAngle := ArcTan2(xf.eM12, xf.eM11) * c180divPI;
       fWorldOffsetCos := xf.eM11;
       fWorldOffsetSin := xf.eM12;
     end
@@ -12249,7 +12512,21 @@ begin
 end;
 
 procedure TPdfEnum.SetMetaRgn;
+var
+  n: integer;
 begin
+  if DC[nDC].ClipRegion <> 0 then
+  begin
+    n := length(fMetaClips);
+    SetLength(fMetaClips, n + 1);
+    fMetaClips[n].Region := DC[nDC].ClipRegion;
+    fMetaClips[n].Parent := DC[nDC].MetaClip;
+    // the q of the clip stays, as part of the meta region
+    fMetaActive := n + 1;
+    fClipActive := 0;
+    DC[nDC].MetaClip := n + 1;
+    DC[nDC].ClipRegion := 0;
+  end;
   try
     with DC[nDC] do
       if not ClipRgnNull then
@@ -12289,7 +12566,7 @@ end;
 
 procedure TPdfEnum.ExtSelectClipRgn(data: PEMRExtSelectClipRgn);
 var
-  i: integer;
+  i, n: integer;
   d: PRgnData;
   pr: PRect;
   r: TRect;
@@ -12297,35 +12574,205 @@ begin
   // see http://www.codeproject.com/Articles/1944/Guide-to-WIN-Regions
   if data^.iMode <> RGN_COPY then
     exit; // we are handling RGN_COPY (5) only
-  if not DC[nDC].ClipRgnNull then // if current clip then finish
-  begin
-    Canvas.GRestore;
-    Canvas.NewPath;
-    Canvas.fNewPath := false;
-    DC[nDC].ClipRgnNull := true;
-    fFillColor := -1;
-  end;
   if Data^.cbRgnData > 0 then
   begin
-    Canvas.GSave;
-    Canvas.NewPath;
-    DC[nDC].ClipRgnNull := false;
     d := @Data^.RgnData;
     pr := @d^.Buffer;
-    for i := 1 to d^.rdh.nCount do
+    n := length(fClipRegions);
+    SetLength(fClipRegions, n + 1);
+    SetLength(fClipRegions[n], d^.rdh.nCount);
+    for i := 0 to integer(d^.rdh.nCount) - 1 do
     begin
       r := pr^;
       inc(r.Bottom);
       inc(r.Right);
-      with Canvas.BoxI(r, false) do
-        Canvas.Rectangle(Left, Top, Width, Height);
+      fClipRegions[n][i] := Canvas.BoxI(r, false);
       inc(pr);
     end;
+    DC[nDC].ClipRegion := n + 1;
+  end
+  else
+    DC[nDC].ClipRegion := 0;
+  DC[nDC].ClipRgnNull := DC[nDC].ClipRegion = 0;
+  SelectClip(DC[nDC].MetaClip, DC[nDC].ClipRegion);
+end;
+
+procedure TPdfEnum.SelectClip(Meta, Region: integer);
+
+  procedure Pop;
+  begin
+    Canvas.GRestore;
+    Canvas.NewPath;
+    GStateRestored;
+  end;
+
+  procedure Push(Index: integer);
+  var
+    i: integer;
+  begin
+    Canvas.GSave;
+    Canvas.NewPath;
+    for i := 0 to high(fClipRegions[Index - 1]) do
+      Canvas.Rectangle(fClipRegions[Index - 1][i].Left,
+        fClipRegions[Index - 1][i].Top, fClipRegions[Index - 1][i].Width,
+        fClipRegions[Index - 1][i].Height);
     Canvas.Closepath;
     Canvas.Clip;
     Canvas.NewPath;
-    Canvas.FNewPath := false;
   end;
+
+  function Holds(Node, Target: integer): boolean;
+  begin // Node is Target or one it was kept inside
+    while (Target <> 0) and
+          (Target <> Node) do
+      Target := fMetaClips[Target - 1].Parent;
+    result := Target = Node;
+  end;
+
+  procedure PushMeta(Node: integer);
+  begin
+    if Node = fMetaActive then
+      exit;
+    PushMeta(fMetaClips[Node - 1].Parent);
+    Push(fMetaClips[Node - 1].Region);
+  end;
+
+begin
+  if (Meta = fMetaActive) and
+     (Region = fClipActive) then
+    exit;
+  if fClipActive <> 0 then
+    Pop;
+  while not Holds(fMetaActive, Meta) do
+  begin
+    Pop;
+    fMetaActive := fMetaClips[fMetaActive - 1].Parent;
+  end;
+  PushMeta(Meta);
+  fMetaActive := Meta;
+  if Region <> 0 then
+    Push(Region);
+  fClipActive := Region;
+  // the path recorded meanwhile goes on: its geometry is not on the page
+  Canvas.fNewPath := fPathRecording;
+end;
+
+procedure TPdfEnum.GStateRestored;
+begin
+  fFillColor := -1;
+  fStrokeColor := -1;
+  fPenWidth := -1;
+  fPenStyle := -1;
+end;
+
+procedure TPdfEnum.PathBegin;
+begin
+  if fPathRecording or
+     (fPathBuf <> '') then
+    PathDone; // a path begun again drops the one before, as in GDI
+  fPathRecording := true;
+  if Canvas.fContents <> nil then
+    fPathStream := TPdfStream.Create(Canvas.fDoc, true);
+end;
+
+procedure TPdfEnum.PathIn;
+begin
+  if fPathIn or
+     (fPathStream = nil) then
+    exit;
+  fPathIn := true;
+  fPathSaved := Canvas.fContents;
+  Canvas.fContents := fPathStream;
+end;
+
+procedure TPdfEnum.PathOut;
+begin
+  if not fPathIn then
+    exit;
+  fPathIn := false;
+  Canvas.fContents := fPathSaved;
+  fPathSaved := nil;
+end;
+
+procedure TPdfEnum.PathClose;
+begin
+  if not fPathRecording then
+    exit;
+  PathOut;
+  fPathRecording := false;
+  fInlined := false; // its lines are painted by the painting record
+  if fPathStream = nil then
+    exit;
+  fPathBuf := fPathStream.Writer.ToPdfString;
+  FreeAndNil(fPathStream);
+end;
+
+procedure TPdfEnum.PathPaint;
+begin
+  PathClose;
+  if fPathBuf <> '' then
+    Canvas.NewPath; // a line of a null pen leaves its geometry open
+end;
+
+procedure TPdfEnum.PathReplay(CloseFigures: boolean);
+var
+  p, n: PtrInt;
+  segment: boolean;
+  line: RawByteString;
+begin
+  PathClose;
+  if fPathBuf = '' then
+    exit;
+  if not CloseFigures then
+  begin
+    Canvas.fContents.Writer.Add(fPathBuf);
+    fPathBuf := '';
+    exit;
+  end;
+  // an h before each move or re and at the end, after a figure of a segment
+  // or more
+  segment := false;
+  p := 1;
+  while p <= length(fPathBuf) do
+  begin
+    n := PosEx(#10, fPathBuf, p);
+    if n = 0 then
+      n := length(fPathBuf) + 1;
+    line := copy(fPathBuf, p, n - p);
+    p := n + 1;
+    if line = 'h' then
+      segment := false
+    else if (length(line) > 3) and
+            (copy(line, length(line) - 2, 3) = ' re') then
+    begin
+      if segment then
+        Canvas.fContents.Writer.Add('h'#10);
+      segment := false;
+    end
+    else if (length(line) > 2) and
+            (line[length(line) - 1] = ' ') then
+      case line[length(line)] of
+        'm':
+          begin
+            if segment then
+              Canvas.fContents.Writer.Add('h'#10);
+            segment := false;
+          end;
+        'l', 'c', 'v', 'y':
+          segment := true;
+      end;
+    Canvas.fContents.Writer.Add(line).Add(#10);
+  end;
+  if segment then
+    Canvas.fContents.Writer.Add('h'#10);
+  fPathBuf := '';
+end;
+
+procedure TPdfEnum.PathDone;
+begin
+  PathClose;
+  fPathBuf := ''; // dropped when not painted
+  DC[nDC].Moved := false; // the next segment starts with its own m
 end;
 
 function TPdfEnum.GetClipRect: TPdfBox;
@@ -12372,6 +12819,8 @@ var
   posi: TPoint;
   tmp: array of WideChar; // R.emrtext is not #0 terminated -> use tmp[]
   hasdx, clipped, isopaque: boolean;
+  n: integer; // the WideChars of tmp, or the glyphs
+  cp: cardinal;
   tmp2: array[0..1] of WideChar;
   clip: TPdfBox;
   back: TRect;
@@ -12425,8 +12874,29 @@ begin
   if R.emrtext.nChars > 0 then
     with DC[nDC] do
     begin
-      SetLength(tmp, R.emrtext.nChars + 1); // faster than WideString for our purpose
-      MoveFast(pointer(PtrUInt(@R) + R.emrtext.offString)^, tmp[0], R.emrtext.nChars * 2);
+      if (R.emr.iType = EMR_EXTTEXTOUTA) and
+         (R.emrtext.fOptions and ETO_GLYPH_INDEX = 0) then
+      begin
+        // bytes in the code page of the font's charset, as ExtTextOutA reads them
+        if not Font.Selected then
+          cp := Font.StockCodePage // CP_ACP (0) at the start
+        else
+          cp := FontCharSetCodePage(Font.LogFont.lfCharSet);
+        n := MultiByteToWideChar(cp, 0,
+          pointer(PtrUInt(@R) + R.emrtext.offString), R.emrtext.nChars, nil, 0);
+        if n = 0 then
+          exit; // not text in that code page
+        SetLength(tmp, n + 1);
+        MultiByteToWideChar(cp, 0, pointer(PtrUInt(@R) + R.emrtext.offString),
+          R.emrtext.nChars, pointer(tmp), n);
+      end
+      else
+      begin
+        n := R.emrtext.nChars;
+        SetLength(tmp, n + 1); // faster than WideString for our purpose
+        MoveFast(pointer(PtrUInt(@R) + R.emrtext.offString)^, tmp[0], n * 2);
+      end;
+      tmp[n] := #0;
       sy := 1;
       sx := 1;
       if (Canvas.fWorldFactorY) < 0 then
@@ -12454,7 +12924,7 @@ begin
            fnt.InheritsFrom(TPdfFontTrueType) then
         begin
           dest := Canvas.fDoc.GetDCWithFont(TPdfFontTrueType(fnt));
-          if GetTextExtentPoint32W(dest, pointer(tmp), R.emrtext.nChars, siz) then
+          if GetTextExtentPoint32W(dest, pointer(tmp), n, siz) then
             ws := (siz.cX * Canvas.fPage.fFontSize) / 1000;
         end;
         {$endif USE_UNISCRIBE}
@@ -12462,7 +12932,10 @@ begin
           ws := Canvas.UnicodeTextWidth(pointer(tmp));
         mw := Round(ws / fscaleX);
       end;
-      hasdx := R.emrtext.offDx > 0;
+      // an A record has one dx per byte: they fit the WideChars of a single-byte
+      // code page only
+      hasdx := (R.emrtext.offDx > 0) and
+               (cardinal(n) = R.emrtext.nChars);
       {$ifdef USE_UNISCRIBE}
       if Canvas.fDoc.UseUniScribe then
         hasdx := hasdx and (R.emrtext.fOptions and ETO_GLYPH_INDEX <> 0);
@@ -12470,7 +12943,7 @@ begin
       if hasdx then
       begin
         dx := pointer(PtrUInt(@R) + R.emrtext.offDx);
-        w := DXTextWidth(dx, R.emrText.nChars);
+        w := DXTextWidth(dx, n);
         if w < Trunc((R.rclBounds.Right - R.rclBounds.Left) / Canvas.fFactorX) then
           dx := nil; // offDX=0 or within box
       end
@@ -12486,7 +12959,7 @@ begin
       hscale := 100;
       if mw <> 0 then
       begin
-        for i := 0 to R.emrtext.nChars - 1 do
+        for i := 0 to n - 1 do
           if tmp[i] = ' ' then
             inc(nspace);
         if (po = tpSetTextJustification) and
@@ -12625,12 +13098,15 @@ begin
               (WorldTransform.eM12 = -WorldTransform.eM21) and
               // a pure positive uniform scaling is no rotation: default branch below
               not ((WorldTransform.eM12 = 0) and (WorldTransform.eM11 > 0)) and
-              not SameValue(ArcCos(WorldTransform.eM11), 0, 0.0001) then
+              // the angle by ArcTan2: ArcCos(eM11) fails for a scaled rotation
+              not SameValue(ArcTan2(WorldTransform.eM12, WorldTransform.eM11),
+                0, 0.0001) then
       begin
         xs := 0;
         ys := 0;
-        if SameValue(ArcCos(WorldTransform.eM11), 0, 0.0001) or      // 0 grad
-           SameValue(ArcCos(WorldTransform.eM11), cPI, 0.0001) then  // 180 grad
+        a := Abs(ArcTan2(WorldTransform.eM12, WorldTransform.eM11));
+        if SameValue(a, 0, 0.0001) or    // 0 grad
+           SameValue(a, cPI, 0.0001) then // 180 grad
           Canvas.SetTextMatrix(WorldTransform.eM11, WorldTransform.eM12,
             WorldTransform.eM21, WorldTransform.eM22,
             Canvas.S2X(posi.X * WorldTransform.eM11 +
@@ -12660,7 +13136,7 @@ begin
         Canvas.MoveTextPoint(Canvas.S2X(xs), Canvas.S2Y(ys));
       end;
       if (R.emrtext.fOptions and ETO_GLYPH_INDEX) <> 0 then
-        Canvas.ShowGlyph(pointer(tmp), R.emrtext.nChars)
+        Canvas.ShowGlyph(pointer(tmp), n)
       else if po = tpExactTextCharacterPositining then
       begin
         cur := 0;
@@ -12668,7 +13144,7 @@ begin
         repeat
           tmp2[0] := tmp[cur];
           Canvas.ShowText(@tmp2, false);
-          if cur = R.emrtext.nChars - 1 then
+          if integer(cur) = n - 1 then
             break;
           xs := xs + dx^[cur];
           Canvas.EndText;
@@ -12689,7 +13165,7 @@ begin
       if clipped then
       begin
         Canvas.GRestore;
-        fFillColor := -1; // force set drawing color
+        GStateRestored; // the pen of an underline too
       end;
       // restore previous text justification (after GRestore if clipped)
       case po of
