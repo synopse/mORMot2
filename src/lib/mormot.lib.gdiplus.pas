@@ -1225,15 +1225,16 @@ type
       objfont: TFontSpec;
       logfont: TLogFontW;
     end;
-    // the DC states, as stored by SaveDC / RestoreDC methods
+    // the DC states, as stored by SaveDC / RestoreDC methods: as deep as the
+    // metafile saves them, grown by SaveDC only
     nDC: integer;
-    DC: array[0..10] of TGdiplusEnumState;
+    DC: array of TGdiplusEnumState;
     // if true, DrawText() will use DrawString and not DrawDriverString
     UseDrawString: boolean;
     // owned buffer to reduce memory allocations e.g. for Points16To32()
     Temp: TSynTempBuffer;
     procedure SaveDC;
-    procedure RestoreDC;
+    procedure RestoreDC(Relative: integer);
     procedure ScaleMatrix;
     procedure CreatePenObj(index: integer; Color, Width, Style: cardinal);
     procedure DeleteObj(index: integer);
@@ -1343,9 +1344,9 @@ begin
             x.eM11, x.eM12, x.eM21, x.eM22, x.eDx, x.eDy, E.destMatrix);
         end;
       EMR_SAVEDC:
-        E.SaveDC;
+        E.SaveDC; // may grow DC: no field of the with can be used after it
       EMR_RESTOREDC:
-        E.RestoreDC;
+        E.RestoreDC(PEMRRestoreDC(Rec)^.iRelative);
       EMR_SETWINDOWEXTEX:
         WinSize := PEMRSetWindowExtEx(Rec)^.szlExtent;
       EMR_SETWINDOWORGEX:
@@ -1853,7 +1854,7 @@ var
   i: PtrInt;
 begin
   for i := 1 to nDC do
-    gdip.DeleteRegion(DC[nDC].ClipRegion);
+    gdip.DeleteRegion(DC[i].ClipRegion);
   for i := 0 to high(obj) do
     DeleteObj(i);
   for i := 0 to high(CachedPen) do
@@ -1974,23 +1975,31 @@ begin
   CachedBrush[n].handle := result;
 end;
 
-procedure TGdiplusEnum.RestoreDC;
+procedure TGdiplusEnum.RestoreDC(Relative: integer);
+var
+  saved: THandle;
+  i: PtrInt;
 begin
-  assert(nDC > 0);
-  with DC[nDC] do
-  begin
-    gdip.SetClipRegion(gr, ClipRegion, cmReplace);
-    gdip.DeleteRegion(ClipRegion);
-  end;
-  dec(nDC);
+  // an EMF record restores relatively (-1 = the last saved): a state which
+  // was not saved is ignored, as GDI fails it
+  if (Relative >= 0) or
+     (Relative < -nDC) then
+    exit;
+  saved := DC[nDC + Relative + 1].ClipRegion; // the clip when it was saved
+  for i := nDC + Relative + 2 to nDC do
+    gdip.DeleteRegion(DC[i].ClipRegion);
+  inc(nDC, Relative);
+  // GetClip gave the region under the transform of the saved state: set it
+  // again once that transform is back
   ScaleMatrix;
-//  with DC[nDC] do
-//    Gdip.SetWorldTransform(Graphics,destMatrix);
+  gdip.SetClipRegion(gr, saved, cmReplace);
+  gdip.DeleteRegion(saved);
 end;
 
 procedure TGdiplusEnum.SaveDC;
 begin
-  Assert(nDC < high(DC));
+  if nDC >= high(DC) then
+    SetLength(DC, length(DC) * 2 + 16);
   DC[nDC + 1] := DC[nDC];
   inc(nDC);
   with DC[nDC] do
@@ -2108,6 +2117,7 @@ begin
   begin
     // our manual (and not 100% complete yet) conversion
     E.UseDrawString := ecoDrawString in ConvertOptions;
+    SetLength(E.DC, 16);
     with E.DC[0] do
     begin
       PInt64(@WinSize)^ := PInt64(@R.Width)^;

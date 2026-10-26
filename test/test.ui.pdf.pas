@@ -46,6 +46,8 @@ type
     procedure ZeroAdvanceMeasured;
     procedure ReducedFontChecksum;
     procedure BidiEmbeddingOrder;
+    procedure EmfPlusClipRestored;
+    procedure EmfPlusRestoreDepth;
   end;
 
 implementation
@@ -55,16 +57,19 @@ uses
   Windows,
   Graphics,
   mormot.ui.core,
-  {$ifdef NO_USE_SYNGDIPLUS} jpeg {$else} mormot.ui.gdiplus {$endif}
+  {$ifdef NO_USE_SYNGDIPLUS} jpeg {$else} mormot.ui.gdiplus {$endif},
+  mormot.lib.gdiplus
 {$else}
   {$ifdef NEEDVCLPREFIX}
   WinApi.Windows,
   VCL.Graphics,
-  {$ifdef NO_USE_SYNGDIPLUS} jpeg {$else} mormot.ui.gdiplus {$endif}
+  {$ifdef NO_USE_SYNGDIPLUS} jpeg {$else} mormot.ui.gdiplus {$endif},
+  mormot.lib.gdiplus
   {$else}
   Windows,
   Graphics,
-  {$ifdef NO_USE_SYNGDIPLUS} jpeg {$else} mormot.ui.gdiplus {$endif}
+  {$ifdef NO_USE_SYNGDIPLUS} jpeg {$else} mormot.ui.gdiplus {$endif},
+  mormot.lib.gdiplus
   {$endif NEEDVCLPREFIX}
 {$endif FPC}
   ;
@@ -1144,6 +1149,220 @@ end;
 begin
 end;
 {$endif NO_USE_UNISCRIBE}
+
+const
+  EMF_SIZE = 100;
+  EMF_WHITE = $ffffff;
+  EMF_RED = $ff0000; // in a 32-bit DIB: BGRX
+
+// the pixels of Emf converted by our own EMF+ conversion, on white
+function EmfPlusPixels(Emf: HENHMETAFILE): TCardinalDynArray;
+var
+  dc: HDC;
+  bmp, old: HBITMAP;
+  bi: TBitmapInfo;
+  bits: PCardinalArray;
+  r: TRect;
+  i: PtrInt;
+begin
+  result := nil;
+  FillCharFast(bi, SizeOf(bi), 0);
+  bi.bmiHeader.biSize := SizeOf(bi.bmiHeader);
+  bi.bmiHeader.biWidth := EMF_SIZE;
+  bi.bmiHeader.biHeight := -EMF_SIZE; // top-down
+  bi.bmiHeader.biPlanes := 1;
+  bi.bmiHeader.biBitCount := 32;
+  dc := CreateCompatibleDC(0);
+  bmp := CreateDIBSection(dc, bi, DIB_RGB_COLORS, pointer(bits), 0, 0);
+  old := SelectObject(dc, bmp);
+  try
+    FillCharFast(bits^, EMF_SIZE * EMF_SIZE * 4, $ff);
+    r.Left := 0; // not Rect(): a type of the windows unit on FPC
+    r.Top := 0;
+    r.Right := EMF_SIZE;
+    r.Bottom := EMF_SIZE;
+    DrawAntiAliased(Emf, EMF_SIZE, EMF_SIZE, dc, r, [ecoInternalConvert], smNone);
+    GdiFlush;
+    SetLength(result, EMF_SIZE * EMF_SIZE);
+    for i := 0 to high(result) do
+      result[i] := bits[i] and $ffffff;
+  finally
+    SelectObject(dc, old);
+    DeleteObject(bmp);
+    DeleteDC(dc);
+    DeleteEnhMetaFile(Emf);
+  end;
+end;
+
+// a metafile DC in advanced graphics mode, its brush red and its pen null
+// - two black corners fix the bounds of the picture: the conversion draws
+// the metafile scaled to them
+function NewEmf: HDC;
+begin
+  result := CreateEnhMetaFileW(0, nil, nil, nil);
+  SetGraphicsMode(result, GM_ADVANCED);
+  SelectObject(result, GetStockObject(NULL_PEN));
+  SelectObject(result, GetStockObject(BLACK_BRUSH));
+  Rectangle(result, 0, 0, 2, 2);
+  Rectangle(result, EMF_SIZE - 2, EMF_SIZE - 2, EMF_SIZE, EMF_SIZE);
+  SelectObject(result, CreateSolidBrush(RGB(255, 0, 0)));
+end;
+
+// the bytes of a metafile; frees it
+function EmfBits(Emf: HENHMETAFILE): RawByteString;
+var
+  n: cardinal;
+begin
+  n := GetEnhMetaFileBits(Emf, 0, nil);
+  SetLength(result, n);
+  GetEnhMetaFileBits(Emf, n, pointer(result));
+  DeleteEnhMetaFile(Emf);
+end;
+
+// close a metafile DC of NewEmf, freeing the brush and pen it selected
+function CloseEmf(DC: HDC): HENHMETAFILE;
+var
+  brush, pen: HGDIOBJ;
+begin
+  brush := SelectObject(DC, GetStockObject(WHITE_BRUSH));
+  pen := SelectObject(DC, GetStockObject(NULL_PEN));
+  result := CloseEnhMetaFile(DC);
+  DeleteObject(brush); // a stock object is ignored
+  DeleteObject(pen);
+end;
+
+procedure ScaleEmf(DC: HDC; Factor: single);
+var
+  xf: TXForm;
+begin
+  FillCharFast(xf, SizeOf(xf), 0);
+  xf.eM11 := Factor;
+  xf.eM22 := Factor;
+  ModifyWorldTransform(DC, xf, MWT_LEFTMULTIPLY);
+end;
+
+function HasRed(const Pixels: TCardinalDynArray): boolean;
+var
+  i: PtrInt;
+begin
+  result := true;
+  for i := 0 to high(Pixels) do
+    if Pixels[i] = EMF_RED then
+      exit;
+  result := false;
+end;
+
+// true if both metafiles convert to the same pixels; frees them
+function SameEmfPlus(Emf, Expected: HENHMETAFILE): boolean;
+var
+  a, b: TCardinalDynArray;
+begin
+  a := EmfPlusPixels(Emf);
+  b := EmfPlusPixels(Expected);
+  result := (a <> nil) and
+            (length(a) = length(b)) and
+            CompareMem(pointer(a), pointer(b), length(a) * 4) and
+            HasRed(b); // not two blank pictures of a broken conversion
+end;
+
+// the box of the red pixels of the converted metafile; frees it
+function RedBounds(Emf: HENHMETAFILE): TRect;
+var
+  px: TCardinalDynArray;
+  x, y: integer;
+begin
+  px := EmfPlusPixels(Emf);
+  result.Left := EMF_SIZE;
+  result.Top := EMF_SIZE;
+  result.Right := -1;
+  result.Bottom := -1;
+  for y := 0 to EMF_SIZE - 1 do
+    for x := 0 to EMF_SIZE - 1 do
+      if px[y * EMF_SIZE + x] = EMF_RED then
+      begin
+        if x < result.Left then
+          result.Left := x;
+        if x > result.Right then
+          result.Right := x;
+        if y < result.Top then
+          result.Top := y;
+        if y > result.Bottom then
+          result.Bottom := y;
+      end;
+end;
+
+// true if the red pixels of both metafiles have the same box, to one pixel
+function SameRedBounds(Emf, Expected: HENHMETAFILE): boolean;
+var
+  a, b: TRect;
+begin
+  a := RedBounds(Emf);
+  b := RedBounds(Expected);
+  result := (a.Right >= 0) and
+            (abs(a.Left - b.Left) <= 1) and
+            (abs(a.Top - b.Top) <= 1) and
+            (abs(a.Right - b.Right) <= 1) and
+            (abs(a.Bottom - b.Bottom) <= 1);
+end;
+
+// how many pixels of the converted metafile are red; frees it
+function RedPixels(Emf: HENHMETAFILE): integer;
+var
+  px: TCardinalDynArray;
+  i: PtrInt;
+begin
+  px := EmfPlusPixels(Emf);
+  result := 0;
+  for i := 0 to high(px) do
+    if px[i] = EMF_RED then
+      inc(result);
+end;
+
+// the metafile of one red rectangle, nothing else
+function RectangleEmf(Left, Top, Right, Bottom: integer): HENHMETAFILE;
+var
+  dc: HDC;
+begin
+  dc := NewEmf;
+  Rectangle(dc, Left, Top, Right, Bottom);
+  result := CloseEmf(dc);
+end;
+
+procedure TTestUiPdf.EmfPlusClipRestored;
+var
+  dc: HDC;
+begin
+  // the clip saved by SaveDC was set again under the transform RestoreDC
+  // was leaving, so a scale of 1/16 left it 1/16 of its size
+  if not Check(Gdip.Exists, 'GDI+') then
+    exit;
+  dc := NewEmf;
+  IntersectClipRect(dc, 0, 0, EMF_SIZE, EMF_SIZE);
+  SaveDC(dc);
+  ScaleEmf(dc, 1 / 16);
+  RestoreDC(dc, -1);
+  Rectangle(dc, 0, 0, EMF_SIZE, EMF_SIZE);
+  Check(SameEmfPlus(CloseEmf(dc), RectangleEmf(0, 0, EMF_SIZE, EMF_SIZE)),
+    'drawn within the restored clip');
+end;
+
+procedure TTestUiPdf.EmfPlusRestoreDepth;
+var
+  dc: HDC;
+begin
+  // EMR_RESTOREDC restored one state whatever its iRelative
+  if not Check(Gdip.Exists, 'GDI+') then
+    exit;
+  dc := NewEmf;
+  SaveDC(dc);
+  ScaleEmf(dc, 2);
+  SaveDC(dc);
+  ScaleEmf(dc, 2);
+  RestoreDC(dc, -2); // back to the identity
+  Rectangle(dc, 0, 0, 40, 40);
+  Check(SameEmfPlus(CloseEmf(dc), RectangleEmf(0, 0, 40, 40)),
+    'not scaled');
+end;
 
 {$else}
 
