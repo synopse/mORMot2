@@ -341,6 +341,7 @@ begin
     try
       Info.CreationDate := FIXED_DATE; // force fixed date and creator for Hash32()
       Info.Data.PdfTextByName('Producer').Value := 'Synopse PDF engine';
+      ScreenLogPixels := 96; // the hash of a 96 DPI screen, any screen
       AddPage;
       MF := TMetaFile.Create;
       try
@@ -1603,6 +1604,7 @@ begin
   doc := TPdfDocumentGdi.Create;
   try
     doc.Info.CreationDate := FIXED_DATE;
+    doc.ScreenLogPixels := 96; // the coordinates the checks expect, any screen
     doc.CompressionMethod := cmNone;
     doc.EmbeddedTTF := false;
     doc.StandardFontsReplace := true;
