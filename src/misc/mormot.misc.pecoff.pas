@@ -10,6 +10,7 @@ unit mormot.misc.pecoff;
     - Low-Level DOS/PE/COFF Encoding Structures
     - High-Level PE (.exe, .dll...) File Reader
     - Windows Executable Digital Signature Stuffing
+    - Windows Executable Digital Signature Check
 
   *****************************************************************************
 }
@@ -468,6 +469,9 @@ type
   PVarFileInfo = ^TVarFileInfo;
 
   {$A+} // back to regular field alignment
+  {$ifdef FPC}
+  {$PACKRECORDS DEFAULT} // FPC {$A+} is 4-byte only, not enough for Win64 APIs
+  {$endif FPC}
 
 
 /// Align an offset (from ordinal and PWideChar + ending #0) with a base address
@@ -653,6 +657,69 @@ procedure StuffExeCertificate(const MainFile, NewFile: TFileName;
 // - returns the stuffed text, or '' if no text has been included
 // - this function does not require mormot.crypt.openssl
 function FindStuffExeCertificate(const FileName: TFileName): RawUtf8;
+
+
+{ ************** Windows Executable Digital Signature Check }
+
+/// return the raw PKCS#7 signed data embedded in a Windows executable
+// - i.e. the Authenticode signature content of the PE certificate table
+// - returns '' if the file is not a PE executable or has no embedded signature
+// - the returned DER binary may include some trailing #0 padding bytes
+// - this function is cross-platform and does not verify anything: use
+// WinVerifyExeSignature() on Windows for a genuine verification
+function GetExeSignature(const FileName: TFileName): RawByteString;
+
+/// check if a Windows executable has an embedded Authenticode signature
+// - this function is cross-platform, and only checks the signature presence:
+// use WinVerifyExeSignature() on Windows for a genuine verification
+// - note that Windows system files are usually signed via a catalog file,
+// so have no embedded signature and would return false here
+function IsExeSigned(const FileName: TFileName): boolean;
+
+{$ifdef OSWINDOWS}
+
+type
+  /// the result of WinVerifyExeSignature()
+  // - wvsValid: the signature is valid and its certificates chain is trusted
+  // - wvsNotSigned: the file has no (embedded) signature
+  // - wvsBadDigest: the file content has been tampered after signing
+  // - wvsUntrustedRoot: certificate chain ends with an untrusted root
+  // - wvsExpired: a certificate of the chain has expired (and no timestamp)
+  // - wvsRevoked: a certificate of the chain has been revoked
+  // - wvsDistrust: a certificate is explicitly distrusted by the user/admin
+  // - wvsNotTrusted: the subject is not trusted for the specified action, or
+  // the local security policy forbids it
+  // - wvsNoRevocationCheck: revocation could not be checked (e.g. offline)
+  // - wvsError: the file can't be read, or any other WinVerifyTrust() error
+  TWinVerifyStatus = (
+    wvsError,
+    wvsValid,
+    wvsNotSigned,
+    wvsBadDigest,
+    wvsUntrustedRoot,
+    wvsExpired,
+    wvsRevoked,
+    wvsDistrust,
+    wvsNotTrusted,
+    wvsNoRevocationCheck);
+
+/// verify the Authenticode digital signature of a file using the Windows API
+// - calls WinVerifyTrust(WINTRUST_ACTION_GENERIC_VERIFY_V2) without any UI
+// - by default, no revocation check is done, so no network access occurs: set
+// CheckRevocation=true to validate the whole certificates chain (with a
+// possible slow network access to the CRL/OCSP servers)
+// - ErrorCode, if not nil, will contain the raw HRESULT of WinVerifyTrust()
+// - only the embedded signature is checked: catalog-signed files (e.g. most
+// Windows system files) will return wvsNotSigned
+function WinVerifyExeSignature(const FileName: TFileName;
+  CheckRevocation: boolean = false; ErrorCode: PCardinal = nil): TWinVerifyStatus;
+
+/// return true if WinVerifyExeSignature() returns wvsValid
+// - a convenient wrapper to check the Authenticode signature of a file
+function IsExeSignatureValid(const FileName: TFileName;
+  CheckRevocation: boolean = false): boolean;
+
+{$endif OSWINDOWS}
 
 
 implementation
@@ -1131,71 +1198,98 @@ type
 
 const
   PE_ENTRY_OFFSET = $3c;
-  CERTIFICATE_ENTRY_OFFSET = $98;
+  PE_MAGIC_OFFSET = 24; // optional header Magic, after the COFF file header
+  CERTIFICATE_ENTRY_OFFSET = $98;   // with PE32 optional header
+  CERTIFICATE_ENTRY_OFFSET64 = $a8; // with PE32+ optional header
   WIN_CERT_TYPE_PKCS_SIGNED_DATA = 2;
 
 function FindExeCertificate(const MainFile: TFileName; OutFile: THandleStream;
-  out wc: WIN_CERTIFICATE; lenoffs, offs: PCardinal): RawByteString;
+  out wc: WIN_CERTIFICATE; lenoffs, offs: PCardinal;
+  RaiseOnError: boolean = true): RawByteString;
 var
   M: TStream;
+  h: THandle;
   i, read: PtrInt;
   certoffs, certlenoffs, certlen: cardinal;
   firstbuf: boolean;
+  err: PUtf8Char;
   buf: array[0 .. 128 shl 10 - 1] of byte; // 128KB of temp copy buffer on stack
 begin
   FastAssignNew(result);
   firstbuf := true;
-  M := TFileStreamEx.Create(MainFile, fmOpenReadShared);
-  try
-    repeat
-      read := M.Read(buf{%H-}, SizeOf(buf));
-      if firstbuf then
-      begin
-        // search for COFF/PE header in the first block
-        if read < 1024 then
-          EStuffExe.RaiseUtf8('% read error', [MainFile]);
-        i := PCardinal(@buf[PE_ENTRY_OFFSET])^; // read DOS header offset
-        if (i >= read) or
-           (PCardinal(@buf[i])^ <> ord('P') + ord('E') shl 8) then
-          EStuffExe.RaiseUtf8('% is not a PE executable', [MainFile]);
-        // parse PE header
-        inc(i, CERTIFICATE_ENTRY_OFFSET);
-        certoffs := PCardinal(@buf[i])^;
-        certlenoffs := i + 4;
-        certlen := PCardinal(@buf[certlenoffs])^;
-        if (certoffs = 0) or
-           (certlen = 0) then
-           EStuffExe.RaiseUtf8('% has no signature', [MainFile]);
-        // parse certificate table
-        if certoffs + certlen <> M.Size then
-          EStuffExe.RaiseUtf8('% should end with a certificate', [MainFile]);
-        M.Seek(certoffs, soBeginning);
-        if (M.Read(wc{%H-}, SizeOf(wc)) <> SizeOf(wc)) or
-           (wc.dwLength <> certlen) or
-           (wc.wRevision <> $200) or
-           (wc.wCertType <> WIN_CERT_TYPE_PKCS_SIGNED_DATA) then
-          EStuffExe.RaiseUtf8('% unsupported signature', [MainFile]);
-        // read original signature
-        dec(certlen, SizeOf(wc));
-        SetLength(result, certlen);
-        if not StreamReadAll(M, pointer(result), certlen) then
-          EStuffExe.RaiseUtf8('% certificate reading', [MainFile]);
-        // note: don't remove ending #0 padding because some may be needed
-        if lenoffs <> nil then
-          lenoffs^ := certlenoffs;
-        if offs <> nil then
-          offs^ := certoffs;
-        if Outfile = nil then
-          break;
-        M.Seek(read, soBeginning);
-        firstbuf := false; // do it once
-      end;
-      if read > 0 then
-        OutFile.WriteBuffer(buf, read);
-    until read < SizeOf(buf);
-  finally
-    M.Free;
+  err := nil;
+  h := FileOpen(MainFile, fmOpenReadShared);
+  if not ValidHandle(h) then
+    err := 'open error'
+  else
+  begin
+    M := TFileStreamEx.CreateFromHandle(h, MainFile);
+    try
+      repeat
+        read := M.Read(buf{%H-}, SizeOf(buf));
+        if firstbuf then
+        begin
+          // search for COFF/PE header in the first block
+          err := 'read error';
+          if read < 1024 then
+            break;
+          err := 'is not a PE executable';
+          i := PCardinal(@buf[PE_ENTRY_OFFSET])^; // read DOS header offset
+          if (PtrUInt(i) > PtrUInt(read - (CERTIFICATE_ENTRY_OFFSET64 + 8))) or
+             (PCardinal(@buf[i])^ <> ord('P') + ord('E') shl 8) then
+            break;
+          // parse PE32 or PE32+ header
+          if PWord(@buf[i + PE_MAGIC_OFFSET])^ = PE_32PLUS_MAGIC then
+            inc(i, CERTIFICATE_ENTRY_OFFSET64)
+          else
+            inc(i, CERTIFICATE_ENTRY_OFFSET);
+          certoffs := PCardinal(@buf[i])^;
+          certlenoffs := i + 4;
+          certlen := PCardinal(@buf[certlenoffs])^;
+          err := 'has no signature';
+          if (certoffs = 0) or
+             (certlen = 0) then
+            break;
+          // parse certificate table
+          err := 'should end with a certificate';
+          if certoffs + certlen <> M.Size then
+            break;
+          M.Seek(certoffs, soBeginning);
+          err := 'unsupported signature';
+          if (M.Read(wc{%H-}, SizeOf(wc)) <> SizeOf(wc)) or
+             (wc.dwLength <> certlen) or
+             (wc.wRevision <> $200) or
+             (wc.wCertType <> WIN_CERT_TYPE_PKCS_SIGNED_DATA) then
+            break;
+          // read original signature
+          dec(certlen, SizeOf(wc));
+          SetLength(result, certlen);
+          err := 'certificate reading';
+          if not StreamReadAll(M, pointer(result), certlen) then
+            break;
+          err := nil;
+          // note: don't remove ending #0 padding because some may be needed
+          if lenoffs <> nil then
+            lenoffs^ := certlenoffs;
+          if offs <> nil then
+            offs^ := certoffs;
+          if Outfile = nil then
+            break;
+          M.Seek(read, soBeginning);
+          firstbuf := false; // do it once
+        end;
+        if read > 0 then
+          OutFile.WriteBuffer(buf, read);
+      until read < SizeOf(buf);
+    finally
+      M.Free;
+    end;
   end;
+  if err = nil then
+    exit;
+  FastAssignNew(result);
+  if RaiseOnError then
+    EStuffExe.RaiseUtf8('% %', [MainFile, err]);
 end;
 
 function Asn1Len(var p: PByte): PtrUInt; // function dedicated to cert stuffing
@@ -1433,6 +1527,162 @@ begin
       end;
     end;
 end;
+
+
+{ ************** Windows Executable Digital Signature Check }
+
+function GetExeSignature(const FileName: TFileName): RawByteString;
+var
+  wc: WIN_CERTIFICATE;
+begin
+  result := FindExeCertificate(FileName, nil, wc, nil, nil, {raise=}false);
+end;
+
+function IsExeSigned(const FileName: TFileName): boolean;
+begin
+  result := GetExeSignature(FileName) <> '';
+end;
+
+{$ifdef OSWINDOWS}
+
+type
+  // see https://learn.microsoft.com/en-us/windows/win32/api/wintrust
+  TWinTrustFileInfo = record
+    cbStruct: cardinal;
+    pcwszFilePath: PWideChar;
+    hFile: THandle;
+    pgKnownSubject: PGuid;
+  end;
+
+  TWinTrustData = record
+    cbStruct: cardinal;
+    pPolicyCallbackData: pointer;
+    pSIPClientData: pointer;
+    dwUIChoice: cardinal;
+    fdwRevocationChecks: cardinal;
+    dwUnionChoice: cardinal;
+    pFile: ^TWinTrustFileInfo;
+    dwStateAction: cardinal;
+    hWVTStateData: THandle;
+    pwszURLReference: PWideChar;
+    dwProvFlags: cardinal;
+    dwUIContext: cardinal;
+    pSignatureSettings: pointer;
+  end;
+
+const
+  WINTRUST_ACTION_GENERIC_VERIFY_V2: TGuid =
+    '{00AAC56B-CD44-11D0-8CC2-00C04FC295EE}';
+  WTD_UI_NONE = 2;
+  WTD_REVOKE_NONE = 0;
+  WTD_REVOKE_WHOLECHAIN = 1;
+  WTD_CHOICE_FILE = 1;
+  WTD_STATEACTION_VERIFY = 1;
+  WTD_STATEACTION_CLOSE = 2;
+  WTD_REVOCATION_CHECK_NONE = $00000010;
+  WTD_REVOCATION_CHECK_CHAIN = $00000040;
+  WTD_CACHE_ONLY_URL_RETRIEVAL = $00001000;
+
+  TRUST_E_PROVIDER_UNKNOWN     = $800B0001;
+  TRUST_E_SUBJECT_FORM_UNKNOWN = $800B0003;
+  TRUST_E_SUBJECT_NOT_TRUSTED  = $800B0004;
+  TRUST_E_NOSIGNATURE          = $800B0100;
+  CERT_E_EXPIRED               = $800B0101;
+  CERT_E_UNTRUSTEDROOT         = $800B0109;
+  CERT_E_CHAINING              = $800B010A;
+  CERT_E_REVOKED               = $800B010C;
+  CERT_E_UNTRUSTEDTESTROOT     = $800B010D;
+  TRUST_E_EXPLICIT_DISTRUST    = $800B0111;
+  CRYPT_E_REVOKED              = $80092010;
+  CRYPT_E_NO_REVOCATION_CHECK  = $80092012;
+  CRYPT_E_REVOCATION_OFFLINE   = $80092013;
+  CRYPT_E_SECURITY_SETTINGS    = $80092026;
+  TRUST_E_BAD_DIGEST           = $80096010;
+
+var
+  WinTrustDll: THandle;
+  WinVerifyTrust: function(hwnd: THandle; pgActionID: PGuid;
+    pWVTData: pointer): integer; stdcall;
+
+function WinVerifyExeSignature(const FileName: TFileName;
+  CheckRevocation: boolean; ErrorCode: PCardinal): TWinVerifyStatus;
+var
+  fi: TWinTrustFileInfo;
+  wd: TWinTrustData;
+  tmp: TW32Temp;
+  res: cardinal;
+begin
+  result := wvsError;
+  if ErrorCode <> nil then
+    ErrorCode^ := 0;
+  if (FileName = '') or
+     not DelayedProc(WinVerifyTrust, WinTrustDll, 'wintrust.dll',
+       'WinVerifyTrust') then
+    exit;
+  FillCharFast(fi, SizeOf(fi), 0);
+  fi.cbStruct := SizeOf(fi);
+  fi.pcwszFilePath := W32(FileName, tmp);
+  FillCharFast(wd, SizeOf(wd), 0);
+  wd.cbStruct := SizeOf(wd);
+  wd.dwUIChoice := WTD_UI_NONE;
+  wd.dwUnionChoice := WTD_CHOICE_FILE;
+  wd.pFile := @fi;
+  wd.dwStateAction := WTD_STATEACTION_VERIFY;
+  if CheckRevocation then
+  begin
+    wd.fdwRevocationChecks := WTD_REVOKE_WHOLECHAIN;
+    wd.dwProvFlags := WTD_REVOCATION_CHECK_CHAIN;
+  end
+  else
+  begin
+    wd.fdwRevocationChecks := WTD_REVOKE_NONE;
+    wd.dwProvFlags := WTD_REVOCATION_CHECK_NONE or WTD_CACHE_ONLY_URL_RETRIEVAL;
+  end;
+  res := cardinal(WinVerifyTrust(0, @WINTRUST_ACTION_GENERIC_VERIFY_V2, @wd));
+  // always release the state data allocated by WTD_STATEACTION_VERIFY
+  wd.dwStateAction := WTD_STATEACTION_CLOSE;
+  WinVerifyTrust(0, @WINTRUST_ACTION_GENERIC_VERIFY_V2, @wd);
+  if ErrorCode <> nil then
+    ErrorCode^ := res;
+  case res of
+    0:
+      result := wvsValid;
+    TRUST_E_NOSIGNATURE,
+    TRUST_E_SUBJECT_FORM_UNKNOWN,
+    TRUST_E_PROVIDER_UNKNOWN:
+      result := wvsNotSigned;
+    TRUST_E_BAD_DIGEST:
+      result := wvsBadDigest;
+    CERT_E_UNTRUSTEDROOT,
+    CERT_E_UNTRUSTEDTESTROOT,
+    CERT_E_CHAINING:
+      result := wvsUntrustedRoot;
+    CERT_E_EXPIRED:
+      result := wvsExpired;
+    CERT_E_REVOKED,
+    CRYPT_E_REVOKED:
+      result := wvsRevoked;
+    TRUST_E_EXPLICIT_DISTRUST:
+      result := wvsDistrust;
+    TRUST_E_SUBJECT_NOT_TRUSTED,
+    CRYPT_E_SECURITY_SETTINGS:
+      result := wvsNotTrusted;
+    CRYPT_E_NO_REVOCATION_CHECK,
+    CRYPT_E_REVOCATION_OFFLINE:
+      result := wvsNoRevocationCheck;
+  else
+    result := wvsError; // e.g. CRYPT_E_FILE_ERROR
+  end;
+end;
+
+function IsExeSignatureValid(const FileName: TFileName;
+  CheckRevocation: boolean): boolean;
+begin
+  result := WinVerifyExeSignature(FileName, CheckRevocation) = wvsValid;
+end;
+
+{$endif OSWINDOWS}
+
 
 procedure InitializeUnit;
 begin
