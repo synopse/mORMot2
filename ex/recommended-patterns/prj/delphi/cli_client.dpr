@@ -24,7 +24,6 @@ uses
   shared_types in '..\..\src\shared_types.pas',
   app_config in '..\..\src\app_config.pas',
   app_settings in '..\..\src\app_settings.pas',
-  task in '..\..\src\dom\tasks\task.pas',
   task_query in '..\..\src\app\tasks\interface\task_query.pas',
   task_command in '..\..\src\app\tasks\interface\task_command.pas',
   task_dtos in '..\..\src\app\tasks\interface\task_dtos.pas',
@@ -33,6 +32,7 @@ uses
   tag_dtos in '..\..\src\app\tags\interface\tag_dtos.pas',
   AppTaskManagerClient in '..\..\src\AppTaskManagerClient.pas',
   {$ifdef LOCAL_MODE}
+  task in '..\..\src\dom\tasks\task.pas',
   task_repository in '..\..\src\dom\tasks\task_repository.pas',
   task_mappers in '..\..\src\app\tasks\implementation\task_mappers.pas',
   task_query_impl in '..\..\src\app\tasks\implementation\task_query_impl.pas',

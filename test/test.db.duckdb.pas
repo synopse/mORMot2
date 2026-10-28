@@ -45,7 +45,7 @@ type
     procedure Errors;
     procedure Metadata;
     procedure Bulk;
-    procedure BindArrays;
+    procedure BatchInsert;
     procedure Appender;
   end;
 
@@ -417,58 +417,80 @@ begin
   NotifyTestSpeed('read all', COUNT, 0, @timer);
 end;
 
-procedure TTestDuckDB.BindArrays;
+procedure TTestDuckDB.BatchInsert;
 const
   COUNT = 1000;
 var
-  st: ISqlDBStatement;
-  ids: array of Int64;
-  names: TRawUtf8DynArray;
-  amounts: array of currency;
-  dates: array of TDateTime;
-  ratios: array of double;
-  i: integer;
+  names, names2: TRawUtf8DynArray;
+  types: TSqlDBFieldTypeArray;
+  values, values2: TRawUtf8DynArrayDynArray;
+  i, pass: integer;
   rows: ISqlDBRows;
   timer: TPrecisionTimer;
 begin
   if fProps = nil then
     exit;
+  Check(Assigned(fProps.OnBatchInsert), 'OnBatchInsert');
+  CheckEqual(ord(fProps.BatchSendingAbilities = [cCreate]), 1);
   fProps.ExecuteNoResult('create or replace table arr (id INTEGER, ' +
     'name VARCHAR, amount DECIMAL(19,4), d TIMESTAMP, v DOUBLE)', []);
-  SetLength(ids, COUNT);
-  SetLength(names, COUNT);
-  SetLength(amounts, COUNT);
-  SetLength(dates, COUNT);
-  SetLength(ratios, COUNT);
-  for i := 0 to COUNT - 1 do
+  SetLength(names, 5);
+  names[0] := 'id';
+  names[1] := 'name';
+  names[2] := 'amount';
+  names[3] := 'd';
+  names[4] := 'v';
+  types[0] := ftInt64;
+  types[1] := ftUtf8;
+  types[2] := ftCurrency;
+  types[3] := ftDate;
+  types[4] := ftDouble;
+  SetLength(values, 5);
+  for i := 0 to 4 do
+    SetLength(values[i], COUNT);
+  // pass 0 uses the Appender, pass 1 the multi-values INSERT fallback
+  // (inserting only id and name for 100 more rows)
+  for pass := 0 to 1 do
   begin
-    ids[i] := i + 1;
-    names[i] := FormatUtf8('it''s #%', [i + 1]);
-    amounts[i] := (i + 1) + 0.5;
-    dates[i] := EncodeDate(2025, 1, 1) + i;
-    ratios[i] := i / 8;
+    for i := 0 to COUNT - 1 do
+    begin
+      values[0, i] := Int32ToUtf8(pass * COUNT + i + 1);
+      values[1, i] := QuotedStr(FormatUtf8('it''s #%', [i + 1]), '''');
+      values[2, i] := Int32ToUtf8(i + 1) + '.5';
+      values[3, i] := QuotedStr(DateToIso8601Text(EncodeDate(2025, 1, 1) + i), '''');
+      if i = 0 then
+        values[4, i] := 'null'
+      else
+        values[4, i] := DoubleToStr(i / 8);
+    end;
+    timer.Start;
+    if pass = 0 then
+      // the ORM supplies schema-qualified table names
+      fProps.OnBatchInsert(fProps, 'main.arr', names, types, COUNT, values, [])
+    else
+    begin
+      // not all columns: the Appender is not usable -> regular INSERT
+      SetLength(names2, 2);
+      SetLength(values2, 2);
+      for i := 0 to 1 do
+      begin
+        names2[i] := names[i];
+        values2[i] := values[i];
+      end;
+      fProps.OnBatchInsert(fProps, 'arr', names2, types, 100, values2, []);
+    end;
+    NotifyTestSpeed('insert', COUNT, 0, @timer);
   end;
-  timer.Start;
-  st := fProps.ThreadSafeConnection.NewStatementPrepared(
-    'insert into arr values (?,?,?,?,?)', false, true);
-  st.BindArray(1, ids);
-  st.BindArray(2, names);
-  st.BindArrayCurrency(3, amounts);
-  st.BindArrayDateTime(4, dates);
-  st.BindArray(5, ratios);
-  st.ExecutePrepared;
-  CheckEqual(st.UpdateCount, COUNT, 'array updatecount');
-  NotifyTestSpeed('insert', COUNT, 0, @timer);
-  st := nil;
   rows := fProps.Execute('select count(*), sum(amount), max(d), ' +
-    'max(name) filter (where id = 1000), sum(v) from arr', []);
-  Check(rows.Step, 'array select');
-  CheckEqual(rows.ColumnInt(0), COUNT, 'array count');
-  Check(rows.ColumnCurrency(1) = 501000, 'array sum(decimal)');
+    'max(name) filter (where id = 1000), sum(v), count(v) from arr', []);
+  Check(rows.Step, 'batch select');
+  CheckEqual(rows.ColumnInt(0), COUNT + 100, 'batch count');
+  Check(rows.ColumnCurrency(1) = 501000, 'batch sum(decimal)');
   CheckEqual(DateToIso8601Text(rows.ColumnDateTime(2)),
-    DateToIso8601Text(EncodeDate(2025, 1, 1) + COUNT - 1), 'array dates');
-  CheckEqual(rows.ColumnUtf8(3), 'it''s #1000', 'array quoted text');
-  Check(rows.ColumnDouble(4) = 62437.5, 'array doubles');
+    DateToIso8601Text(EncodeDate(2025, 1, 1) + COUNT - 1), 'batch dates');
+  CheckEqual(rows.ColumnUtf8(3), 'it''s #1000', 'batch quoted text');
+  Check(rows.ColumnDouble(4) = 62437.5, 'batch doubles');
+  CheckEqual(rows.ColumnInt(5), COUNT - 1, 'batch null');
 end;
 
 procedure TTestDuckDB.Appender;
