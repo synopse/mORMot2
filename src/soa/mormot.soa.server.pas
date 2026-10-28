@@ -1375,7 +1375,8 @@ var
   timeEnd: Int64;
   m: PtrInt;
   err: ShortString;
-  hold: IInterface; // keep the instance alive during the method execution
+  hold: pointer; // IInterface owned during the method execution, released
+  // manually to avoid an implicit try..finally for every call of this method
 
   procedure HandleCleanup; // sub-function for FPC Win64-aarch64 compilation
   begin
@@ -1385,6 +1386,8 @@ var
         // always release single shot instance immediately (no GC)
         InstanceFree(Inst.Instance);
     finally
+      if hold <> nil then
+        IInterface(hold) := nil; // may be the last reference to the instance
       if exec <> nil then
       begin
         if Ctxt.ServiceExecution^.LogRest <> nil then
@@ -1402,6 +1405,7 @@ begin
   // 1. initialize Inst.Instance and Inst.InstanceID
   Inst.InstanceID := 0;
   Inst.Instance := nil;
+  hold := nil;
   case InstanceCreation of
     sicSingle:
       Inst.Instance := CreateInstance(true);
@@ -1441,7 +1445,7 @@ begin
         // - a "_free_" (e.g. from a client giving up after its timeout), an
         // instance timeout or a session GC may run in another thread during
         // the method execution: hold makes InstanceFreeOrGC() see RefCount > 1
-        // and defer the release until hold is finalized when we exit
+        // and defer the release until hold is released in HandleCleanup
         case RetrieveInstance(Ctxt, Inst, Ctxt.ServiceMethodIndex, Ctxt.Session,
                @hold) of
           ord(imFree):
@@ -1453,6 +1457,7 @@ begin
           ord(imInstance):
             begin
               // from TServiceFactoryClient.CreateFakeInstance
+              IInterface(hold) := nil; // set by AddNew, no execution to hold
               Ctxt.Results([Inst.InstanceID], HTTP_SUCCESS);
               exit;
             end;
@@ -1472,6 +1477,7 @@ begin
      (Ctxt.ServiceExecution = nil) or
      (Ctxt.ServiceMethod = nil) then
   begin
+    IInterface(hold) := nil;
     ExecuteError(self, Ctxt, 'ServiceExecution=nil', HTTP_SERVERERROR);
     exit;
   end;
