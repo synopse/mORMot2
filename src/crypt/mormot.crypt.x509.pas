@@ -4278,7 +4278,7 @@ begin
     case Content of
       cccPrivateKeyOnly:
         begin
-          // may use mormot.core.secure encryption, not standard PKCS#8
+          // may use standard PKCS#8 PBES2 or mormot.crypt.secure encryption
           der := PemToDer(Saved); // see also TCryptPrivateKey.Load
           fPrivateKey := CryptPrivateKey[XKA_TO_CKA[AlgoXka]].Create; // replace
           if fPrivateKey.Load(
