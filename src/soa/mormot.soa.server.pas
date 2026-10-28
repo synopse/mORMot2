@@ -265,8 +265,12 @@ type
     // - returns -1 on error, or aMethodIndex for successful execution,
     // e.g. 0 after {"method":"_free_".. call
     // - otherwise, fill Inst.Instance with the matching implementation (or nil)
+    // - if Hold is set, Hold^ will own a reference to the returned instance,
+    // assigned within the fInstances lock: a concurrent "_free_", timeout or
+    // session GC would then defer the actual release to the next DoInstanceGC
     function RetrieveInstance(Ctxt: TRestServerUriContext;
-      var Inst: TServiceFactoryServerInstance; aMethodIndex, aSession: integer): integer;
+      var Inst: TServiceFactoryServerInstance; aMethodIndex, aSession: integer;
+      Hold: PInterface = nil): integer;
     /// define the the instance life time-out, in seconds
     function SetTimeoutSec(value: cardinal): TServiceFactoryServerAbstract; override;
     /// log method execution information to a TOrmServiceLog table
@@ -1025,7 +1029,8 @@ begin
 end;
 
 function TServiceFactoryServer.RetrieveInstance(Ctxt: TRestServerUriContext;
-  var Inst: TServiceFactoryServerInstance; aMethodIndex, aSession: integer): integer;
+  var Inst: TServiceFactoryServerInstance; aMethodIndex, aSession: integer;
+  Hold: PInterface): integer;
 
   procedure AddNew;
   var
@@ -1058,6 +1063,8 @@ function TServiceFactoryServer.RetrieveInstance(Ctxt: TRestServerUriContext;
         P^.LastAccessTix10 := Inst.LastAccessTix10;
         Inst.Instance := P^.Instance;
       end;
+      if Hold <> nil then
+        Hold^ := Inst.Instance; // within the lock
     finally
       fInstances.Safe.WriteUnLock;
     end;
@@ -1153,6 +1160,8 @@ begin
       P := @fInstance[ndx];
       P^.LastAccessTix10 := Inst.LastAccessTix10;
       Inst.Instance := P^.Instance;
+      if Hold <> nil then
+        Hold^ := Inst.Instance; // within the lock
       result := aMethodIndex; // notify caller
     end;
     fInstances.Safe.ReadUnLock;
@@ -1366,6 +1375,7 @@ var
   timeEnd: Int64;
   m: PtrInt;
   err: ShortString;
+  hold: IInterface; // keep the instance alive during the method execution
 
   procedure HandleCleanup; // sub-function for FPC Win64-aarch64 compilation
   begin
@@ -1428,7 +1438,12 @@ begin
           end;
         end;
         // O(log(n)) binary search of Inst.Instance from Inst.InstanceID
-        case RetrieveInstance(Ctxt, Inst, Ctxt.ServiceMethodIndex, Ctxt.Session) of
+        // - a "_free_" (e.g. from a client giving up after its timeout), an
+        // instance timeout or a session GC may run in another thread during
+        // the method execution: hold makes InstanceFreeOrGC() see RefCount > 1
+        // and defer the release until hold is finalized when we exit
+        case RetrieveInstance(Ctxt, Inst, Ctxt.ServiceMethodIndex, Ctxt.Session,
+               @hold) of
           ord(imFree):
             begin
               // {"method":"_free_", "params":[], "id":1234}
