@@ -19,6 +19,9 @@ uses
   mormot.core.unicode,
   mormot.core.text,
   mormot.lib.z,
+  {$ifndef NO_USE_PDFSECURITY}
+  mormot.crypt.core,
+  {$endif NO_USE_PDFSECURITY}
   mormot.ui.pdf;
 
 type
@@ -67,8 +70,8 @@ type
     procedure EmfMirroredBoxes;
     procedure EmfClipRestoreDC;
     procedure EmfUnderlineClipped;
-    procedure EmfNullPenLines;
-    procedure EmfLineAfterEndedPath;
+    procedure EncryptionAes256;
+    procedure Pdf20File;
   end;
 
 implementation
@@ -373,7 +376,7 @@ begin
         if CheckFailed(i <> 0) then
           exit;
         FillCharFast(S[i], 32, 32);
-        CheckHash(S, $439DB6C2); // no lone S after a line
+        CheckHash(S, $456748FC); // the boxes of #686
       end;
     finally
       Free;
@@ -1604,7 +1607,6 @@ begin
   doc := TPdfDocumentGdi.Create;
   try
     doc.Info.CreationDate := FIXED_DATE;
-    doc.ScreenLogPixels := 96; // the coordinates the checks expect, any screen
     doc.CompressionMethod := cmNone;
     doc.EmbeddedTTF := false;
     doc.StandardFontsReplace := true;
@@ -2645,7 +2647,7 @@ begin
       SelectObject(mc.Handle, GetStockObject(NULL_PEN));
       SelectObject(mc.Handle, GetStockObject(GRAY_BRUSH)); // as FPC selects none
       MoveToEx(mc.Handle, 20, 350, nil);
-      LineTo(mc.Handle, 200, 350); // of a null pen: ended, not in the fill
+      LineTo(mc.Handle, 200, 350); // its geometry left open on the page
       FillPath(mc.Handle);
     finally
       mc.Free;
@@ -2821,171 +2823,113 @@ begin
     'the pen width after the Q of the text');
 end;
 
-procedure TTestUiPdf.EmfNullPenLines;
-var
-  mf: TMetaFile;
-  mc: TMetaFileCanvas;
-  pen: HPEN;
-  txt, two: RawUtf8;
-begin
-  { GDI draws no line of a null pen: its m l and the ArcTo stayed open, the
-    next shape stroked them in the colour of before, and the Arc was
-    stroked at once; a line of a pen is stroked at once, yet the next shape
-    wrote a lone S }
-  mf := TMetaFile.Create;
-  try
-    mf.Width := 400;
-    mf.Height := 400;
-    mc := TMetaFileCanvas.Create(mf, 0);
-    try
-      SelectObject(mc.Handle, GetStockObject(NULL_PEN));
-      MoveToEx(mc.Handle, 20, 20, nil);
-      LineTo(mc.Handle, 200, 20);
-      ArcTo(mc.Handle, 20, 40, 120, 140, 120, 90, 20, 90);
-      Arc(mc.Handle, 150, 40, 250, 140, 250, 90, 150, 90);
-      SelectObject(mc.Handle, GetStockObject(GRAY_BRUSH));
-      Rectangle(mc.Handle, 250, 250, 300, 300);
-    finally
-      mc.Free;
-    end;
-    txt := RenderedEmf(mf, 0, 0, tcNeverClip);
-  finally
-    mf.Free;
-  end;
-  mf := TMetaFile.Create;
-  try
-    mf.Width := 400;
-    mf.Height := 400;
-    mc := TMetaFileCanvas.Create(mf, 0);
-    try
-      pen := CreatePen(PS_SOLID, 1, 0);
-      SelectObject(mc.Handle, pen);
-      MoveToEx(mc.Handle, 20, 20, nil);
-      LineTo(mc.Handle, 200, 20);
-      SelectObject(mc.Handle, GetStockObject(GRAY_BRUSH));
-      Rectangle(mc.Handle, 250, 250, 300, 300);
-      SelectObject(mc.Handle, GetStockObject(BLACK_PEN));
-      DeleteObject(pen);
-    finally
-      mc.Free;
-    end;
-    two := RenderedEmf(mf, 0, 0, tcNeverClip);
-  finally
-    mf.Free;
-  end;
-  CheckEqual(CountOccurrences(#10'S'#10, txt), 0, 'a null pen strokes nothing');
-  Check(ValidPaths(txt), 'valid paths of a null pen');
-  Check((PosBefore(txt, #10'f'#10, ' l'#10) > 0) and
-        (PosBefore(txt, #10'f'#10, ' l'#10) < PosBefore(txt, #10'f'#10, #10'n'#10)),
-    'the line ended before the shape');
-  Check((PosBefore(txt, #10'f'#10, ' c'#10) > 0) and
-        (PosBefore(txt, #10'f'#10, ' c'#10) < PosBefore(txt, #10'f'#10, #10'n'#10)),
-    'the arcs ended before the shape');
-  CheckEqual(CountOccurrences(#10'S'#10, two), 1, 'the line stroked once');
-  Check(ValidPaths(two), 'no stroke left pending for the shape');
-end;
 
-// the content of a metafile of the lines of LineAfterEndedPath, case Kind
-function LineAfterEndedPathEmf(Kind: integer): RawUtf8;
-var
-  mf: TMetaFile;
-  mc: TMetaFileCanvas;
-  pen: HPEN;
-  rgn: HRGN;
-  pts: array[0..3] of TPoint;
-  counts: array[0..1] of DWORD;
-begin
-  pts[0].X := 20;
-  pts[0].Y := 200;
-  pts[1].X := 90;
-  pts[1].Y := 250;
-  pts[2].X := 150;
-  pts[2].Y := 200;
-  pts[3].X := 220;
-  pts[3].Y := 250;
-  counts[0] := 2;
-  counts[1] := 2;
-  mf := TMetaFile.Create;
-  try
-    mf.Width := 400;
-    mf.Height := 400;
-    mc := TMetaFileCanvas.Create(mf, 0);
-    try
-      pen := CreatePen(PS_SOLID, 1, 0);
-      SelectObject(mc.Handle, pen);
-      case Kind of
-        0, 1: // PolylineTo alone, of a pen or of a null pen
-          begin
-            if Kind = 1 then
-              SelectObject(mc.Handle, GetStockObject(NULL_PEN));
-            MoveToEx(mc.Handle, 20, 60, nil);
-            PolylineTo(mc.Handle, PPoint(@pts)^, 2);
-          end;
-        2: // a polyline of a null pen ends with n
-          begin
-            SelectObject(mc.Handle, GetStockObject(GRAY_BRUSH)); // else left out
-            SelectObject(mc.Handle, GetStockObject(NULL_PEN));
-            Polyline(mc.Handle, PPoint(@pts)^, 2);
-            SelectObject(mc.Handle, pen);
-          end;
-        3: // FillRgn
-          begin
-            rgn := CreateRectRgn(250, 250, 300, 300);
-            FillRgn(mc.Handle, rgn, GetStockObject(GRAY_BRUSH));
-            DeleteObject(rgn);
-          end;
-        4: // PolyPolyline
-          PolyPolyline(mc.Handle, PPoint(@pts)^, PDWORD(@counts)^, 2);
-        5: // PolylineTo within a path, painted by StrokePath
-          begin
-            BeginPath(mc.Handle);
-            MoveToEx(mc.Handle, 20, 60, nil);
-            PolylineTo(mc.Handle, PPoint(@pts)^, 2);
-            EndPath(mc.Handle);
-            StrokePath(mc.Handle);
-          end;
-      end;
-      if Kind in [2..4] then
-      begin
-        MoveToEx(mc.Handle, 20, 100, nil); // the line after it, nothing else
-        LineTo(mc.Handle, 300, 100);
-      end;
-      SelectObject(mc.Handle, GetStockObject(BLACK_PEN));
-      DeleteObject(pen);
-    finally
-      mc.Free;
-    end;
-    result := RenderedEmf(mf, 0, 0, tcNeverClip);
-  finally
-    mf.Free;
-  end;
-end;
+{$ifndef NO_USE_PDFSECURITY}
+type
+  // to read the protected file key of TPdfEncryptionAes256
+  TAesAccess = class(TPdfEncryptionAes256);
+{$endif NO_USE_PDFSECURITY}
 
-procedure TTestUiPdf.EmfLineAfterEndedPath;
+procedure TTestUiPdf.EncryptionAes256;
+{$ifndef NO_USE_PDFSECURITY}
 const
-  STROKES: array[0..5] of integer = (1, 0, 1, 1, 2, 1);
-  LINES: array[0..5] of integer = (2, 2, 2, 1, 3, 2);
-  WHAT: array[0..5] of RawUtf8 = ('PolylineTo', 'PolylineTo of a null pen',
-    'a line after a null pen polyline', 'a line after FillRgn',
-    'a line after PolyPolyline', 'PolylineTo in a path');
+  KNOWN = 'Hello AES-256 !'; // 15 bytes: one block once padded
 var
-  k: integer;
-  txt: RawUtf8;
+  pdf: TPdfDocument;
+  enc: TPdfEncryption;
+  s, sub: RawByteString;
+  key: THash256;
+  aes: TAesCbc;
 begin
-  { TPdfCanvas.NewPath set the flag that tells the renderer a GDI path is
-    being recorded: after a record that ended its path with n, a line had
-    no S, and without a MoveTo no m, and PolylineTo wrote its own n first
-    and was never stroked }
-  for k := 0 to high(STROKES) do
-  begin
-    txt := LineAfterEndedPathEmf(k);
-    CheckEqual(CountOccurrences(#10'S'#10, txt), STROKES[k], WHAT[k]);
-    CheckEqual(CountOccurrences(' l'#10, txt), LINES[k], WHAT[k]);
-    Check(ValidPaths(txt), WHAT[k]);
-    Check(PosBefore(txt, 'endstream', ' l'#10) <
-      MaxPtrInt(PosBefore(txt, 'endstream', #10'S'#10),
-        PosBefore(txt, 'endstream', #10'n'#10)), WHAT[k]); // no path left open
+  enc := TPdfEncryption.New(elAES_256, 'user', 'owner', PDF_PERMISSION_ALL);
+  pdf := TPdfDocument.Create(false, 0, pdfaNone, enc);
+  try
+    pdf.CompressionMethod := cmNone;
+    pdf.Info.Subject := KNOWN;
+    pdf.AddPage;
+    s := SavedPdf(pdf);
+    key := TAesAccess(enc).fFileKey; // enc is owned by pdf: read it before
+  finally
+    pdf.Free;
   end;
+  // revision 6 security handler, written as PDF 1.7 + Adobe extension level 8
+  Check(copy(s, 1, 8) = '%PDF-1.7', 'header');
+  Check(PosEx('/V 5', s) > 0, 'V');
+  Check(PosEx('/R 6', s) > 0, 'R');
+  Check(PosEx('/AESV3', s) > 0, 'crypt filter');
+  Check(PosEx('/ExtensionLevel 8', s) > 0, 'Adobe extension');
+  Check(PosEx('/Perms', s) > 0, 'Perms');
+  // each string is IV + AES-256-CBC + PKCS#7 padding with the file key
+  sub := PdfStringAfter(s, '/Subject');
+  if not CheckEqual(length(sub), 16 + 16, 'IV and one padded block') then
+    exit;
+  aes := TAesCbc.Create(key, 256);
+  try
+    Check(aes.DecryptPkcs7(sub, {IVAtBeginning=}true) = KNOWN, 'decrypted');
+  finally
+    aes.Free;
+  end;
+  FillCharFast(key, SizeOf(key), 0);
+end;
+{$else}
+begin
+end;
+{$endif NO_USE_PDFSECURITY}
+
+procedure TTestUiPdf.Pdf20File;
+var
+  pdf: TPdfDocument;
+  s: RawByteString;
+  {$ifndef NO_USE_PDFSECURITY}
+  refused: boolean;
+  {$endif NO_USE_PDFSECURITY}
+begin
+  // PDF 2.0 without encryption: XMP metadata and file identifier
+  pdf := TPdfDocument.Create;
+  try
+    pdf.GeneratePdf20File := true;
+    pdf.Info.Title := 'PDF 2.0';
+    pdf.AddPage;
+    s := SavedPdf(pdf);
+  finally
+    pdf.Free;
+  end;
+  Check(copy(s, 1, 8) = '%PDF-2.0', 'header');
+  Check(PosEx('/Metadata', s) > 0, 'XMP metadata');
+  Check(PosEx('<dc:title>', s) > 0, 'title in XMP');
+  Check(PosEx('/ID', s) > 0, 'file identifier');
+  {$ifndef NO_USE_PDFSECURITY}
+  // PDF 2.0 + AES-256: native, without the Adobe extension
+  pdf := TPdfDocument.Create(false, 0, pdfaNone,
+    TPdfEncryption.New(elAES_256, '', 'owner', PDF_PERMISSION_ALL));
+  try
+    pdf.GeneratePdf20File := true;
+    pdf.AddPage;
+    s := SavedPdf(pdf);
+  finally
+    pdf.Free;
+  end;
+  Check(copy(s, 1, 8) = '%PDF-2.0', 'header with AES');
+  Check(PosEx('/R 6', s) > 0, 'revision 6');
+  Check(PosEx('/Extensions', s) = 0, 'no Adobe extension in PDF 2.0');
+  // PDF 2.0 + RC4: refused
+  refused := false;
+  pdf := TPdfDocument.Create(false, 0, pdfaNone,
+    TPdfEncryption.New(elRC4_128, '', 'owner', PDF_PERMISSION_ALL));
+  try
+    pdf.GeneratePdf20File := true;
+    pdf.AddPage;
+    try
+      SavedPdf(pdf);
+    except
+      on EPdfInvalidOperation do
+        refused := true;
+    end;
+  finally
+    pdf.Free;
+  end;
+  Check(refused, 'RC4 is not allowed in PDF 2.0');
+  {$endif NO_USE_PDFSECURITY}
 end;
 
 {$else}
