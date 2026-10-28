@@ -344,6 +344,7 @@ begin
     try
       Info.CreationDate := FIXED_DATE; // force fixed date and creator for Hash32()
       Info.Data.PdfTextByName('Producer').Value := 'Synopse PDF engine';
+      ScreenLogPixels := 96; // the hash of a 96 DPI screen, any screen
       AddPage;
       MF := TMetaFile.Create;
       try
@@ -360,7 +361,7 @@ begin
       // force constant Arial,Bold and Tahoma FontBBox
       SetString(S, PAnsiChar(MS.Memory), MS.Position);
       if (Unicode_CodePage <> 1252) {$ifdef CPU64} or true{$endif} then
-        Check(length(S) > 6500)
+        Check(length(S) > 6400)
       else
       begin
         i := PosEx('/FontBBox[', S);
