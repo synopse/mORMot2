@@ -72,6 +72,7 @@ type
     procedure EmfUnderlineClipped;
     procedure EmfNullPenLines;
     procedure EmfLineAfterEndedPath;
+    procedure EmfTextInPath;
     procedure EncryptionAes256;
     procedure Pdf20File;
   end;
@@ -2990,6 +2991,198 @@ begin
     Check(PosBefore(txt, 'endstream', ' l'#10) <
       MaxPtrInt(PosBefore(txt, 'endstream', #10'S'#10),
         PosBefore(txt, 'endstream', #10'n'#10)), WHAT[k]); // no path left open
+  end;
+end;
+
+// not in FPC's windows unit
+function GdiAbortPath(DC: HDC): BOOL; stdcall;
+  external 'gdi32.dll' name 'AbortPath';
+
+function Between(P, After, Before: PtrInt): boolean;
+begin
+  result := (P > After) and
+            (P < Before);
+end;
+
+// the operand Item of the line Index lines before the first Op line of Txt
+function OperandAt(const Txt, Op: RawUtf8; Index, Item: integer): double;
+var
+  p, i: PtrInt;
+  line: RawUtf8;
+begin
+  p := PosEx(Op, Txt);
+  for i := 0 to Index do
+  begin
+    while (p > 1) and
+          (Txt[p - 1] <> #10) do
+      dec(p);
+    dec(p); // the #10 before the line
+  end;
+  line := copy(Txt, p + 1, PosEx(#10, Txt, p + 1) - p - 1);
+  result := GetExtended(pointer(GetCsvItem(pointer(line), Item, ' ')));
+end;
+
+// the content of a metafile of text in a path, case Kind of EmfTextInPath
+function TextInPathEmf(Kind: integer): RawUtf8;
+var
+  mf: TMetaFile;
+  mc: TMetaFileCanvas;
+  lf: TLogFontW;
+  fnt, fnt2: HFONT;
+  brush: HBRUSH;
+  r: TRect;
+  dc: HDC;
+begin
+  FillChar(lf, SizeOf(lf), 0);
+  lf.lfHeight := -20;
+  lf.lfUnderline := ord(Kind = 6);
+  if Kind = 10 then
+    lf.lfEscapement := 900;
+  Utf8ToWideChar(@lf.lfFaceName, 'Arial');
+  fnt := CreateFontIndirectW(lf);
+  lf.lfUnderline := 0;
+  Utf8ToWideChar(@lf.lfFaceName, 'Courier New');
+  fnt2 := CreateFontIndirectW(lf);
+  brush := CreateSolidBrush($0000FF); // red
+  mf := TMetaFile.Create;
+  try
+    mf.Width := 400;
+    mf.Height := 400;
+    mc := TMetaFileCanvas.Create(mf, 0);
+    try
+      dc := mc.Handle;
+      SelectObject(dc, fnt);
+      SelectObject(dc, GetStockObject(BLACK_PEN));
+      if Kind = 5 then
+        SelectObject(dc, GetStockObject(NULL_BRUSH))
+      else
+        SelectObject(dc, brush);
+      SetTextColor(dc, $FF0000); // blue
+      if Kind in [7, 10] then
+      begin
+        SetBkMode(dc, OPAQUE);
+        SetTextAlign(dc, TA_BASELINE);
+      end
+      else
+        SetBkMode(dc, TRANSPARENT);
+      BeginPath(dc);
+      if Kind = 9 then
+      begin
+        MoveToEx(dc, 100, 100, nil);
+        LineTo(dc, 150, 100);
+      end;
+      if Kind = 4 then
+      begin
+        r.Left := 0;
+        r.Top := 0;
+        r.Right := 300;
+        r.Bottom := 100;
+        ExtTextOutW(dc, 20, 20, ETO_CLIPPED, @r, 'Path', 4, nil);
+      end
+      else
+        TextOutW(dc, 20, 20, 'Path', 4);
+      if Kind = 9 then
+        LineTo(dc, 150, 150);
+      EndPath(dc);
+      if Kind = 8 then
+      begin
+        SelectObject(dc, fnt2); // drawn at once, before the path
+        TextOutW(dc, 20, 200, 'Page', 4);
+      end;
+      case Kind of
+        1, 6:
+          StrokePath(dc);
+        2:
+          StrokeAndFillPath(dc);
+        3:
+          GdiAbortPath(dc);
+      else
+        FillPath(dc);
+      end;
+      SelectObject(dc, GetStockObject(SYSTEM_FONT));
+      SelectObject(dc, GetStockObject(WHITE_BRUSH));
+    finally
+      mc.Free;
+    end;
+    result := RenderedEmf(mf, 0, 0, tcNeverClip);
+  finally
+    mf.Free;
+    DeleteObject(fnt);
+    DeleteObject(fnt2);
+    DeleteObject(brush);
+  end;
+end;
+
+procedure TTestUiPdf.EmfTextInPath;
+const
+  MODES: array[0..10] of RawUtf8 = ('0 Tr', '1 Tr', '2 Tr', '', '', '', '1 Tr',
+    '0 Tr', '0 Tr', '0 Tr', '0 Tr');
+  TEXTS: array[0..10] of integer = (1, 1, 1, 0, 0, 0, 1, 1, 2, 1, 1);
+  WHAT: array[0..10] of RawUtf8 = ('FillPath', 'StrokePath',
+    'StrokeAndFillPath', 'AbortPath', 'ETO_CLIPPED', 'a null brush',
+    'an underline', 'an opaque background', 'text after the path',
+    'lines around the text', 'a turned opaque background');
+var
+  k: integer;
+  txt: RawUtf8;
+  tr, bt: PtrInt;
+  base: double;
+begin
+  { GDI adds the outlines of text in a path to the path, painted or dropped
+    with it, in the brush or the pen of the painting record: the renderer
+    drew the text at once, in the text colour }
+  for k := 0 to high(MODES) do
+  begin
+    txt := TextInPathEmf(k);
+    CheckEqual(CountOccurrences(#10'BT'#10, txt), TEXTS[k], WHAT[k]);
+    if MODES[k] <> '' then
+      Check(PosEx(#10 + MODES[k] + #10, txt) > 0, WHAT[k])
+    else
+      Check(PosEx(' Tr'#10, txt) = 0, WHAT[k]);
+    Check(ValidPaths(txt), WHAT[k]);
+    CheckEqual(OpenBefore(txt, 'endstream'), 0, WHAT[k]);
+    // the text colour only for the text drawn at once
+    Check((PosEx(#10'0 0 1 rg'#10, txt) > 0) = (k = 8), WHAT[k]);
+    Check(PosEx(#10'0 Tz'#10, txt) = 0, WHAT[k]); // no text scaled to nothing
+    case k of
+      6:
+        begin
+          CheckEqual(CountOccurrences(#10'S'#10, txt), 1, 'no stroke of its own');
+          CheckEqual(CountOccurrences(#10'h'#10, txt), 1, 'the underline closed');
+        end;
+      7:
+        begin
+          CheckEqual(CountOccurrences(#10'h'#10, txt), 1,
+            'the background as a figure');
+          // the cell around the baseline of TA_BASELINE, Y up in PDF
+          base := OperandAt(txt, ' Td'#10, 0, 1);
+          Check((OperandAt(txt, #10'h'#10, 2, 1) > base) and // its top
+                (OperandAt(txt, #10'h'#10, 1, 1) < base),
+            'the background around the baseline');
+        end;
+      8:
+        begin
+          tr := PosEx(' Tr'#10, txt);
+          bt := PosEx(#10'BT'#10, txt, tr);
+          Check((tr > 0) and
+                (PosEx(' Tf'#10, txt, tr) > 0) and
+                (PosEx(' Tf'#10, txt, tr) < bt),
+            'the text of the path selects its own font');
+          Check(Between(PosEx('Tc'#10, txt, tr), tr, bt) and
+                Between(PosEx('Tw'#10, txt, tr), tr, bt) and
+                Between(PosEx(' Tz'#10, txt, tr), tr, bt),
+            'and its own spacing');
+        end;
+      9:
+        CheckEqual(CountOccurrences(' m'#10, txt), 3,
+          'the line after the text starts a figure');
+      10: // turned by 90 degrees: its top and bottom apart in X, not in Y
+        Check((abs(OperandAt(txt, #10'h'#10, 2, 1) -
+                   OperandAt(txt, #10'h'#10, 1, 1)) < 0.01) and
+              (abs(OperandAt(txt, #10'h'#10, 2, 0) -
+                   OperandAt(txt, #10'h'#10, 1, 0)) > 5),
+          'the background turned with the text');
+    end;
   end;
 end;
 
