@@ -26,6 +26,7 @@ uses
   mormot.core.unicode,
   mormot.core.text,
   mormot.core.datetime,
+  mormot.lib.static,
   mormot.db.core,
   mormot.db.sql;
 
@@ -171,6 +172,9 @@ const
   DUCKDB_TYPE_STRING_LITERAL  = 37;
   DUCKDB_TYPE_INTEGER_LITERAL = 38;
   DUCKDB_TYPE_TIME_NS         = 39;
+  DUCKDB_TYPE_GEOMETRY        = 40;
+  DUCKDB_TYPE_VARIANT         = 41;
+  DUCKDB_TYPE_TIMESTAMP_TZ_NS = 42;
 
   /// DuckDB TIMESTAMP 'infinity' / '-infinity' special values
   DUCKDB_TIMESTAMP_INFINITY  = $7fffffffffffffff;
@@ -552,9 +556,17 @@ end;
 function TDuckDBLib.Exec(conn: TDuckDBConnection; const sql: RawUtf8): Int64;
 var
   res: TDuckDBResult;
+  state: TDuckDBState;
+  saved: cardinal;
 begin
   FillCharFast(res, SizeOf(res), 0);
-  if query(conn, pointer(sql), @res) <> DuckDBSuccess then
+  saved := SetFpuFlags; // the C++ engine expects masked FPU exceptions
+  try
+    state := query(conn, pointer(sql), @res);
+  finally
+    ResetFpuFlags(saved);
+  end;
+  if state <> DuckDBSuccess then
     RaiseResultError(@res, sql);
   result := rows_changed(@res);
   destroy_result(@res);
@@ -1110,9 +1122,10 @@ begin
         result := ftDouble;
     DUCKDB_TYPE_DATE, DUCKDB_TYPE_TIME, DUCKDB_TYPE_TIME_TZ, DUCKDB_TYPE_TIME_NS,
     DUCKDB_TYPE_TIMESTAMP, DUCKDB_TYPE_TIMESTAMP_S, DUCKDB_TYPE_TIMESTAMP_MS,
-    DUCKDB_TYPE_TIMESTAMP_NS, DUCKDB_TYPE_TIMESTAMP_TZ:
+    DUCKDB_TYPE_TIMESTAMP_NS, DUCKDB_TYPE_TIMESTAMP_TZ,
+    DUCKDB_TYPE_TIMESTAMP_TZ_NS:
       result := ftDate;
-    DUCKDB_TYPE_BLOB:
+    DUCKDB_TYPE_BLOB, DUCKDB_TYPE_GEOMETRY: // GEOMETRY as WKB
       result := ftBlob;
     DUCKDB_TYPE_SQLNULL:
       result := ftNull;

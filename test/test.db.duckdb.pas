@@ -180,6 +180,28 @@ begin
   CheckEqual(rows.ColumnInt(13), 3, 'hugeint');
   CheckEqual(rows.ColumnUtf8(14), '8f14e45f-ceea-467a-a5f0-6e0bd3f1d2a1', 'uuid');
   Check(not rows.Step, 'eof');
+  rows := nil;
+  if DuckDB.Version < 'v2' then
+    exit; // types below were introduced in DuckDB 1.5 / 2.0
+  rows := fProps.Execute(
+    'select ''2001-02-03 04:05:06.123456789+00''::TIMESTAMPTZ_NS as tzns, ' +
+    '''POINT(1 2)''::GEOMETRY as g, 42::VARIANT as v', []);
+  Check(rows.Step, 'step2');
+  Check(rows.ColumnType(0) = ftDate, 'timestamptz_ns type');
+  CheckEqual(DateTimeToIso8601(rows.ColumnDateTime(0), true, 'T', true),
+    '2001-02-03T04:05:06.123', 'timestamptz_ns');
+  CheckEqual(rows.ColumnUtf8(0), '2001-02-03 04:05:06.123456+00',
+    'timestamptz_ns text');
+  Check(rows.ColumnType(1) = ftBlob, 'geometry type');
+  CheckEqual(BinToHex(rows.ColumnBlob(1)),
+    '0101000000000000000000F03F0000000000000040', 'geometry as wkb');
+  try
+    rows.ColumnUtf8(2);
+    Check(false, 'variant');
+  except
+    on E: ESqlDBDuckDB do
+      Check(Pos('#41', E.Message) > 0, 'variant error');
+  end;
 end;
 
 procedure TTestDuckDB.ParamsAndCrud;
