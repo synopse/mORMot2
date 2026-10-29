@@ -34,7 +34,8 @@ uses
   mormot.crypt.ecc,
   mormot.crypt.rsa,
   mormot.crypt.x509,
-  mormot.crypt.win;
+  mormot.crypt.win,
+  mormot.misc.pecoff;
 
 type
   /// regression tests for mormot.crypt.core and mormot.crypt.jwt features
@@ -84,6 +85,8 @@ type
     procedure _RSA;
     /// X509 Certificates
     procedure _X509;
+    /// Authenticode signature of Windows executables
+    procedure _Authenticode;
     /// stream-oriented cryptography
     procedure Streams;
     /// Base64/Base58/Base32 encoding/decoding functions
@@ -6740,6 +6743,53 @@ begin
   Check(st.IsRevoked(chain[1]) = crrNotRevoked);
   Check(st.IsRevoked(chain[2]) = crrServerCompromised);
 end;
+
+procedure TTestCoreCrypto._Authenticode;
+var
+  fn: TFileName;
+  {$ifdef OSWINDOWS}
+  exe: TFileName;
+  sig, bin: RawByteString;
+  {$endif OSWINDOWS}
+begin
+  // cross-platform PE certificate table parsing
+  fn := WorkDir + 'authenticode.dll';
+  Check(FileFromString('this is not a PE executable', fn));
+  try
+    CheckEqual(GetExeSignature(fn), '', 'not PE');
+    Check(not IsExeSigned(fn), 'not PE');
+    Check(not IsExeSigned(fn + '.missing'), 'missing');
+    {$ifdef OSWINDOWS}
+    // genuine verification via WinVerifyTrust()
+    Check(WinVerifyExeSignature('') = wvsError, 'empty');
+    Check(WinVerifyExeSignature(fn + '.missing') = wvsError, 'missing');
+    Check(WinVerifyExeSignature(fn) <> wvsValid, 'not PE');
+    // kernel32.dll is likely to have an embedded signature (i.e. not from a
+    // catalog), in the PE32 or PE32+ format matching the current bitness
+    exe := GetEnvironmentVariable('SystemRoot') + '\System32\kernel32.dll';
+    if WinVerifyExeSignature(exe) <> wvsValid then
+      AddConsole('% has no embedded signature', [exe])
+    else
+    begin
+      sig := GetExeSignature(exe);
+      Check((sig <> '') and
+            (sig[1] = #$30), 'kernel32 PKCS#7'); // DER ASN.1 SEQUENCE
+      Check(IsExeSigned(exe), 'kernel32');
+      Check(IsExeSignatureValid(exe), 'kernel32');
+      // tampered content is detected, even if the signature itself is intact
+      bin := StringFromFile(exe);
+      PByteArray(bin)[length(bin) shr 2] := PByteArray(bin)[length(bin) shr 2] xor $ff;
+      Check(FileFromString(bin, fn));
+      CheckEqual(GetExeSignature(fn), sig, 'tampered');
+      Check(WinVerifyExeSignature(fn) = wvsBadDigest, 'tampered');
+      Check(not IsExeSignatureValid(fn), 'tampered');
+    end;
+    {$endif OSWINDOWS}
+  finally
+    DeleteFile(fn);
+  end;
+end;
+
 (*
 var
   i, v, v2, n, c, d: PtrInt;

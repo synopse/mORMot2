@@ -10,6 +10,7 @@ unit mormot.misc.pecoff;
     - Low-Level DOS/PE/COFF Encoding Structures
     - High-Level PE (.exe, .dll...) File Reader
     - Windows Executable Digital Signature Stuffing
+    - Windows Executable Digital Signature Retrieval
 
   *****************************************************************************
 }
@@ -655,6 +656,24 @@ procedure StuffExeCertificate(const MainFile, NewFile: TFileName;
 function FindStuffExeCertificate(const FileName: TFileName): RawUtf8;
 
 
+{ ************** Windows Executable Digital Signature Retrieval }
+
+/// return the raw PKCS#7 signed data embedded in a Windows executable
+// - i.e. the Authenticode signature content of the PE certificate table
+// - returns '' if the file is not a PE executable or has no embedded signature
+// - the returned DER binary may include some trailing #0 padding bytes
+// - this function is cross-platform and does not verify anything: use
+// WinVerifyExeSignature() from mormot.core.os.security to actually verify it
+function GetExeSignature(const FileName: TFileName): RawByteString;
+
+/// check if a Windows executable has an embedded Authenticode signature
+// - this function is cross-platform, and only checks the signature presence:
+// use WinVerifyExeSignature() from mormot.core.os.security for a verification
+// - note that Windows system files are usually signed via a catalog file,
+// so have no embedded signature and would return false here
+function IsExeSigned(const FileName: TFileName): boolean;
+
+
 implementation
 
   
@@ -1131,71 +1150,98 @@ type
 
 const
   PE_ENTRY_OFFSET = $3c;
-  CERTIFICATE_ENTRY_OFFSET = $98;
+  PE_MAGIC_OFFSET = 24; // optional header Magic, after the COFF file header
+  CERTIFICATE_ENTRY_OFFSET = $98;   // with PE32 optional header
+  CERTIFICATE_ENTRY_OFFSET64 = $a8; // with PE32+ optional header
   WIN_CERT_TYPE_PKCS_SIGNED_DATA = 2;
 
 function FindExeCertificate(const MainFile: TFileName; OutFile: THandleStream;
-  out wc: WIN_CERTIFICATE; lenoffs, offs: PCardinal): RawByteString;
+  out wc: WIN_CERTIFICATE; lenoffs, offs: PCardinal;
+  RaiseOnError: boolean = true): RawByteString;
 var
   M: TStream;
+  h: THandle;
   i, read: PtrInt;
   certoffs, certlenoffs, certlen: cardinal;
   firstbuf: boolean;
+  err: PUtf8Char;
   buf: array[0 .. 128 shl 10 - 1] of byte; // 128KB of temp copy buffer on stack
 begin
   FastAssignNew(result);
   firstbuf := true;
-  M := TFileStreamEx.Create(MainFile, fmOpenReadShared);
-  try
-    repeat
-      read := M.Read(buf{%H-}, SizeOf(buf));
-      if firstbuf then
-      begin
-        // search for COFF/PE header in the first block
-        if read < 1024 then
-          EStuffExe.RaiseUtf8('% read error', [MainFile]);
-        i := PCardinal(@buf[PE_ENTRY_OFFSET])^; // read DOS header offset
-        if (i >= read) or
-           (PCardinal(@buf[i])^ <> ord('P') + ord('E') shl 8) then
-          EStuffExe.RaiseUtf8('% is not a PE executable', [MainFile]);
-        // parse PE header
-        inc(i, CERTIFICATE_ENTRY_OFFSET);
-        certoffs := PCardinal(@buf[i])^;
-        certlenoffs := i + 4;
-        certlen := PCardinal(@buf[certlenoffs])^;
-        if (certoffs = 0) or
-           (certlen = 0) then
-           EStuffExe.RaiseUtf8('% has no signature', [MainFile]);
-        // parse certificate table
-        if certoffs + certlen <> M.Size then
-          EStuffExe.RaiseUtf8('% should end with a certificate', [MainFile]);
-        M.Seek(certoffs, soBeginning);
-        if (M.Read(wc{%H-}, SizeOf(wc)) <> SizeOf(wc)) or
-           (wc.dwLength <> certlen) or
-           (wc.wRevision <> $200) or
-           (wc.wCertType <> WIN_CERT_TYPE_PKCS_SIGNED_DATA) then
-          EStuffExe.RaiseUtf8('% unsupported signature', [MainFile]);
-        // read original signature
-        dec(certlen, SizeOf(wc));
-        SetLength(result, certlen);
-        if not StreamReadAll(M, pointer(result), certlen) then
-          EStuffExe.RaiseUtf8('% certificate reading', [MainFile]);
-        // note: don't remove ending #0 padding because some may be needed
-        if lenoffs <> nil then
-          lenoffs^ := certlenoffs;
-        if offs <> nil then
-          offs^ := certoffs;
-        if Outfile = nil then
-          break;
-        M.Seek(read, soBeginning);
-        firstbuf := false; // do it once
-      end;
-      if read > 0 then
-        OutFile.WriteBuffer(buf, read);
-    until read < SizeOf(buf);
-  finally
-    M.Free;
+  err := nil;
+  h := FileOpen(MainFile, fmOpenReadShared);
+  if not ValidHandle(h) then
+    err := 'open error'
+  else
+  begin
+    M := TFileStreamEx.CreateFromHandle(h, MainFile);
+    try
+      repeat
+        read := M.Read(buf{%H-}, SizeOf(buf));
+        if firstbuf then
+        begin
+          // search for COFF/PE header in the first block
+          err := 'read error';
+          if read < 1024 then
+            break;
+          err := 'is not a PE executable';
+          i := PCardinal(@buf[PE_ENTRY_OFFSET])^; // read DOS header offset
+          if (PtrUInt(i) > PtrUInt(read - (CERTIFICATE_ENTRY_OFFSET64 + 8))) or
+             (PCardinal(@buf[i])^ <> ord('P') + ord('E') shl 8) then
+            break;
+          // parse PE32 or PE32+ header
+          if PWord(@buf[i + PE_MAGIC_OFFSET])^ = PE_32PLUS_MAGIC then
+            inc(i, CERTIFICATE_ENTRY_OFFSET64)
+          else
+            inc(i, CERTIFICATE_ENTRY_OFFSET);
+          certoffs := PCardinal(@buf[i])^;
+          certlenoffs := i + 4;
+          certlen := PCardinal(@buf[certlenoffs])^;
+          err := 'has no signature';
+          if (certoffs = 0) or
+             (certlen = 0) then
+            break;
+          // parse certificate table
+          err := 'should end with a certificate';
+          if certoffs + certlen <> M.Size then
+            break;
+          M.Seek(certoffs, soBeginning);
+          err := 'unsupported signature';
+          if (M.Read(wc{%H-}, SizeOf(wc)) <> SizeOf(wc)) or
+             (wc.dwLength <> certlen) or
+             (wc.wRevision <> $200) or
+             (wc.wCertType <> WIN_CERT_TYPE_PKCS_SIGNED_DATA) then
+            break;
+          // read original signature
+          dec(certlen, SizeOf(wc));
+          SetLength(result, certlen);
+          err := 'certificate reading';
+          if not StreamReadAll(M, pointer(result), certlen) then
+            break;
+          err := nil;
+          // note: don't remove ending #0 padding because some may be needed
+          if lenoffs <> nil then
+            lenoffs^ := certlenoffs;
+          if offs <> nil then
+            offs^ := certoffs;
+          if Outfile = nil then
+            break;
+          M.Seek(read, soBeginning);
+          firstbuf := false; // do it once
+        end;
+        if read > 0 then
+          OutFile.WriteBuffer(buf, read);
+      until read < SizeOf(buf);
+    finally
+      M.Free;
+    end;
   end;
+  if err = nil then
+    exit;
+  FastAssignNew(result);
+  if RaiseOnError then
+    EStuffExe.RaiseUtf8('% %', [MainFile, err]);
 end;
 
 function Asn1Len(var p: PByte): PtrUInt; // function dedicated to cert stuffing
@@ -1433,6 +1479,22 @@ begin
       end;
     end;
 end;
+
+
+{ ************** Windows Executable Digital Signature Retrieval }
+
+function GetExeSignature(const FileName: TFileName): RawByteString;
+var
+  wc: WIN_CERTIFICATE;
+begin
+  result := FindExeCertificate(FileName, nil, wc, nil, nil, {raise=}false);
+end;
+
+function IsExeSigned(const FileName: TFileName): boolean;
+begin
+  result := GetExeSignature(FileName) <> '';
+end;
+
 
 procedure InitializeUnit;
 begin
