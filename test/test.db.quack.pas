@@ -367,7 +367,7 @@ begin
     // the VARIANT rows can't be decoded: the client has to ask them as JSON
     result := PrepareResponse([TypeObj(QTYPE_INTEGER), TypeObj(QTYPE_VARIANT)],
       ['id', 'v'], false, [])
-  else if Sql = 'SELECT * REPLACE ("v"::JSON AS "v") FROM (select variant)' then
+  else if Sql = 'SELECT #1 AS "id", NULLIF(#2::JSON, ''null''::JSON) AS "v" FROM (select variant)' then
     result := PrepareResponse([TypeObj(QTYPE_INTEGER), TypeObj(QTYPE_VARCHAR)],
       ['id', 'v'], false,
       [Chunk(2, [TypeObj(QTYPE_INTEGER), TypeObj(QTYPE_VARCHAR)],
@@ -880,7 +880,7 @@ begin
     Check(rows.ColumnNull(1));
     Check(not rows.Step);
     CheckEqual(fQueries[high(fQueries)],
-      'SELECT * REPLACE ("v"::JSON AS "v") FROM (select variant)');
+      'SELECT #1 AS "id", NULLIF(#2::JSON, ''null''::JSON) AS "v" FROM (select variant)');
     rows := nil;
     // values conversions
     rows := props.Execute('select flags', []);

@@ -375,7 +375,6 @@ end;
 procedure TTestDuckDB.Variants;
 var
   rows: ISqlDBRows;
-  raised: boolean;
 begin
   // DuckDB 1.5+ VARIANT columns are retrieved as JSON text
   if (fProps = nil) or
@@ -399,8 +398,7 @@ begin
   Check(rows.Step);
   CheckEqual(rows.ColumnUtf8(2), '42', 'number');
   Check(rows.Step);
-  // VARIANT null is a SQL NULL since DuckDB 2.0, and a JSON 'null' before
-  Check(rows.ColumnNull(2) or (rows.ColumnUtf8(2) = 'null'), 'null');
+  Check(rows.ColumnNull(2), 'variant null is a SQL NULL');
   Check(not rows.Step);
   rows := nil;
   // cached statement with other parameters
@@ -421,17 +419,12 @@ begin
   Check(rows.Step);
   CheckEqual(rows.ColumnUtf8(1), 'obj');
   rows := nil;
-  // duplicated names can't be converted
-  TSynLog.Family.ExceptionIgnoreCurrentThread := true;
-  raised := false;
-  try
-    fProps.Execute('select payload, payload from events', []);
-  except
-    on ESqlDBException do
-      raised := true;
-  end;
-  TSynLog.Family.ExceptionIgnoreCurrentThread := false;
-  Check(raised, 'duplicated VARIANT columns');
+  // duplicated names are supported
+  rows := fProps.Execute('select payload, id, payload from events order by id', []);
+  Check(rows.Step);
+  CheckEqual(rows.ColumnUtf8(0), '{"a":1,"b":[1,2]}', 'dup1');
+  CheckEqual(rows.ColumnUtf8(2), '{"a":1,"b":[1,2]}', 'dup2');
+  rows := nil;
 end;
 
 procedure TTestDuckDB.Metadata;

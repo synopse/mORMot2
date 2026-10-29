@@ -480,7 +480,9 @@ function DuckDBTypeHasVariant(const Info: TDuckDBTypeInfo): boolean;
 
 /// wrap a SELECT statement to retrieve its VARIANT columns as JSON
 // - the VARIANT binary layout is not decoded by our drivers: DuckDB converts
-// them to JSON, e.g. 'SELECT * REPLACE ("col"::JSON AS "col") FROM (sql)'
+// them to JSON, e.g. 'SELECT #1 AS "a", NULLIF(#2::JSON, 'null'::JSON) AS "b" FROM (sql)'
+// - positional #n references allow duplicated column names, and a VARIANT NULL
+// is always returned as SQL NULL (DuckDB 1.5 returned a JSON 'null')
 // - IsVariant[] flags the columns to be converted
 function DuckDBVariantSql(const Sql: RawUtf8; const Names: TRawUtf8DynArray;
   const IsVariant: TBooleanDynArray): RawUtf8;
@@ -1553,29 +1555,28 @@ end;
 function DuckDBVariantSql(const Sql: RawUtf8; const Names: TRawUtf8DynArray;
   const IsVariant: TBooleanDynArray): RawUtf8;
 var
-  i, j: PtrInt;
+  i: PtrInt;
   list, text: RawUtf8;
 begin
-  // SELECT * REPLACE() requires unique column names
-  for i := 0 to high(Names) do
-    for j := 0 to i - 1 do
-      if IdemPropNameU(Names[i], Names[j]) then
-        ESqlDBDuckDB.RaiseUtf8('VARIANT columns require unique names, but ' +
-          '% is duplicated: cast them to JSON in the SQL', [Names[i]]);
+  // positional #n references support duplicated column names
   list := '';
   for i := 0 to high(Names) do
+  begin
+    if i > 0 then
+      list := list + ', ';
+    text := QuotedStr(Names[i], '"');
     if IsVariant[i] then
-    begin
-      if list <> '' then
-        list := list + ', ';
-      text := QuotedStr(Names[i], '"');
-      list := list + text + '::JSON AS ' + text;
-    end;
+      // the VARIANT NULL is converted to JSON 'null' by some DuckDB versions
+      list := FormatUtf8('%NULLIF(#%::JSON, ''null''::JSON) AS %',
+        [list, i + 1, text])
+    else
+      list := FormatUtf8('%#% AS %', [list, i + 1, text]);
+  end;
   text := TrimU(Sql);
   while (text <> '') and
         (text[length(text)] = ';') do
     SetLength(text, length(text) - 1); // within a sub-query
-  result := 'SELECT * REPLACE (' + list + ') FROM (' + text + ')';
+  result := 'SELECT ' + list + ' FROM (' + text + ')';
 end;
 
 procedure DuckDBTypeInfoDone(var Info: TDuckDBTypeInfo);
