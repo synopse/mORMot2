@@ -1124,6 +1124,13 @@ begin
         'map {''k'': i} m, [i, i + 1]::integer[2] ar, null::integer n, ' +
         'case when i % 2 = 0 then 1 else null end::union(a integer, b varchar) un ' +
         'from range(5000) t(i)');
+      // types with nanoseconds resolution and GEOMETRY, as WKB
+      if DuckDB.Version >= 'v2' then
+        CompareToEmbedded(server, client,
+          'select i, timestamp_ns ''2024-02-29 12:34:56.123456789'' + ' +
+          'to_seconds(i) tns, (timestamp_ns ''2024-02-29 12:34:56.123456789'' + ' +
+          'to_seconds(i))::timestamptz_ns tzns, (''POINT('' || i || '' 2)'')::geometry g ' +
+          'from range(5000) t(i)');
     finally
       client.Free;
     end;
