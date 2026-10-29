@@ -10790,10 +10790,9 @@ begin
   end;
   // wipe the passwords and intermediate values
   FillCharFast(perms, SizeOf(perms), 0);
-  if usr <> '' then
-    FillCharFast(pointer(usr)^, length(usr), 0);
-  if own <> '' then
-    FillCharFast(pointer(own)^, length(own), 0);
+  // FillZero skips a constant: on FPC, StringToUtf8 returns the literal
+  FillZero(RawByteString(usr));
+  FillZero(RawByteString(own));
   // add encryption dictionary object
   if aDoc.fEncryptionObject = nil then
     aDoc.fEncryptionObject := TPdfDictionary.Create(aDoc.fXRef);
