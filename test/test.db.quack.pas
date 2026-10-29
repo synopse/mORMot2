@@ -363,6 +363,16 @@ begin
     // the first rows are inlined, then FETCH_REQUEST get the other batches
     result := PrepareResponse([TypeObj(QTYPE_BIGINT)], ['n'], true,
       [BigintChunk(1, 3)])
+  else if Sql = 'select variant' then
+    // the VARIANT rows can't be decoded: the client has to ask them as JSON
+    result := PrepareResponse([TypeObj(QTYPE_INTEGER), TypeObj(QTYPE_VARIANT)],
+      ['id', 'v'], false, [])
+  else if Sql = 'SELECT * REPLACE ("v"::JSON AS "v") FROM (select variant)' then
+    result := PrepareResponse([TypeObj(QTYPE_INTEGER), TypeObj(QTYPE_VARCHAR)],
+      ['id', 'v'], false,
+      [Chunk(2, [TypeObj(QTYPE_INTEGER), TypeObj(QTYPE_VARCHAR)],
+        [VecFlat('', Int32s([1, 2])),
+         VecStr(Valid([true, false]), ['{"a":[1,2]}', ''])])])
   else if Sql = 'select flags' then
     // columns of several types, to check the value conversions
     result := PrepareResponse([TypeObj(QTYPE_BOOLEAN), TypeDecimal(10, 2),
@@ -861,6 +871,17 @@ begin
     CheckEqual(rows.FetchAllAsJson(true),
       '[{"i":1,"s":"a","d":1.5},{"i":null,"s":null,"d":2.5},' +
       '{"i":3,"s":"ccc","d":3.5}]'#10, 'json');
+    // VARIANT columns are asked as JSON
+    rows := props.Execute('select variant', []);
+    Check(rows.Step);
+    CheckEqual(rows.ColumnInt(0), 1);
+    CheckEqual(rows.ColumnUtf8(1), '{"a":[1,2]}');
+    Check(rows.Step);
+    Check(rows.ColumnNull(1));
+    Check(not rows.Step);
+    CheckEqual(fQueries[high(fQueries)],
+      'SELECT * REPLACE ("v"::JSON AS "v") FROM (select variant)');
+    rows := nil;
     // values conversions
     rows := props.Execute('select flags', []);
     Check(rows.Step);
@@ -1124,6 +1145,18 @@ begin
         'map {''k'': i} m, [i, i + 1]::integer[2] ar, null::integer n, ' +
         'case when i % 2 = 0 then 1 else null end::union(a integer, b varchar) un ' +
         'from range(5000) t(i)');
+      // VARIANT columns, including nested ones, are retrieved as JSON
+      if DuckDB.Version >= 'v2' then
+      begin
+        rows := client.Execute('select {''a'': 1, ''l'': [1, null]}::variant v', []);
+        Check(rows.Step);
+        CheckEqual(rows.ColumnUtf8(0), '{"a":1,"l":[1,null]}', 'variant');
+        rows := nil;
+        CompareToEmbedded(server, client,
+          'select i, case when i % 3 = 0 then null::variant when i % 3 = 1 ' +
+          'then {''a'': i, ''l'': [i, null]}::variant else (''s'' || i)::variant ' +
+          'end v, [i::variant] lv from range(5000) t(i)');
+      end;
       // types with nanoseconds resolution and GEOMETRY, as WKB
       if DuckDB.Version >= 'v2' then
         CompareToEmbedded(server, client,

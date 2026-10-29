@@ -475,6 +475,16 @@ procedure DuckDBTypeInfoDone(var Info: TDuckDBTypeInfo);
 /// retrieve the text of an ENUM value, caching all the ENUM dictionary
 function DuckDBEnumValue(var Info: TDuckDBTypeInfo; Index: PtrInt): RawUtf8;
 
+/// return true if a type is a VARIANT, or contains a VARIANT as nested type
+function DuckDBTypeHasVariant(const Info: TDuckDBTypeInfo): boolean;
+
+/// wrap a SELECT statement to retrieve its VARIANT columns as JSON
+// - the VARIANT binary layout is not decoded by our drivers: DuckDB converts
+// them to JSON, e.g. 'SELECT * REPLACE ("col"::JSON AS "col") FROM (sql)'
+// - IsVariant[] flags the columns to be converted
+function DuckDBVariantSql(const Sql: RawUtf8; const Names: TRawUtf8DynArray;
+  const IsVariant: TBooleanDynArray): RawUtf8;
+
 /// convert a DuckDB type into the corresponding mormot.db field type
 function DuckDBTypeToField(TypeId: TDuckDBType; Scale: integer): TSqlDBFieldType;
 
@@ -607,6 +617,8 @@ type
     function FieldType: TSqlDBFieldType;
     /// guess Storage, ElemSize and DuckType from Id, Width and EnumValues
     procedure SetStorage;
+    /// return true if this type is a VARIANT, or contains a VARIANT
+    function HasVariant: boolean;
   end;
   PQuackType = ^TQuackType;
   TQuackTypeDynArray = array of TQuackType;
@@ -733,6 +745,11 @@ type
     ColumnTypes: TQuackTypeDynArray;
     /// PREPARE_RESPONSE: the result columns names
     ColumnNames: TRawUtf8DynArray;
+    /// PREPARE_RESPONSE: the columns which are, or contain, a VARIANT
+    // - the VARIANT binary layout is not decoded: the response is not decoded
+    // after the columns names, and the SQL should be wrapped by DuckDBVariantSql()
+    // - nil if there is no VARIANT in the result
+    VariantColumns: TBooleanDynArray;
     /// PREPARE_RESPONSE: true if some FETCH_REQUEST are needed to get all rows
     NeedsMoreFetch: boolean;
     /// PREPARE_RESPONSE: the query identifier
@@ -1519,6 +1536,48 @@ begin
   Info.Size := DuckFixedSize(Info.TypeId, Info.Internal);
 end;
 
+function DuckDBTypeHasVariant(const Info: TDuckDBTypeInfo): boolean;
+var
+  i: PtrInt;
+begin
+  result := Info.TypeId = DUCKDB_TYPE_VARIANT;
+  if not result then
+    for i := 0 to Info.ChildCount - 1 do
+      if DuckDBTypeHasVariant(Info.Children^[i]) then
+      begin
+        result := true;
+        exit;
+      end;
+end;
+
+function DuckDBVariantSql(const Sql: RawUtf8; const Names: TRawUtf8DynArray;
+  const IsVariant: TBooleanDynArray): RawUtf8;
+var
+  i, j: PtrInt;
+  list, text: RawUtf8;
+begin
+  // SELECT * REPLACE() requires unique column names
+  for i := 0 to high(Names) do
+    for j := 0 to i - 1 do
+      if IdemPropNameU(Names[i], Names[j]) then
+        ESqlDBDuckDB.RaiseUtf8('VARIANT columns require unique names, but ' +
+          '% is duplicated: cast them to JSON in the SQL', [Names[i]]);
+  list := '';
+  for i := 0 to high(Names) do
+    if IsVariant[i] then
+    begin
+      if list <> '' then
+        list := list + ', ';
+      text := QuotedStr(Names[i], '"');
+      list := list + text + '::JSON AS ' + text;
+    end;
+  text := TrimU(Sql);
+  while (text <> '') and
+        (text[length(text)] = ';') do
+    SetLength(text, length(text) - 1); // within a sub-query
+  result := 'SELECT * REPLACE (' + list + ') FROM (' + text + ')';
+end;
+
 procedure DuckDBTypeInfoDone(var Info: TDuckDBTypeInfo);
 var
   i: PtrInt;
@@ -1761,6 +1820,20 @@ const
     (Id: QTYPE_HUGEINT;          DuckType: DUCKDB_TYPE_HUGEINT),
     (Id: QTYPE_UHUGEINT;         DuckType: DUCKDB_TYPE_UHUGEINT),
     (Id: QTYPE_UUID;             DuckType: DUCKDB_TYPE_UUID));
+
+function TQuackType.HasVariant: boolean;
+var
+  i: PtrInt;
+begin
+  result := Id = QTYPE_VARIANT;
+  if not result then
+    for i := 0 to high(Children) do
+      if Children[i].HasVariant then
+      begin
+        result := true;
+        exit;
+      end;
+end;
 
 procedure TQuackType.SetStorage;
 var
@@ -2323,7 +2396,7 @@ end;
 procedure TQuackResponse.ReadPrepare(var R: TFastReader);
 var
   f: cardinal;
-  i, n: PtrInt;
+  i, j, n: PtrInt;
   start: PAnsiChar;
 begin
   repeat
@@ -2345,6 +2418,17 @@ begin
           SetLength(ColumnNames, n);
           for i := 0 to n - 1 do
             ColumnNames[i] := ReadStr(R);
+          if length(ColumnNames) <> length(ColumnTypes) then
+            RaiseQuack('columns names and types count mismatch', []);
+          for i := 0 to n - 1 do
+            if ColumnTypes[i].HasVariant then
+            begin
+              // the rows can't be decoded: ask them again as JSON
+              SetLength(VariantColumns, n);
+              for j := 0 to n - 1 do
+                VariantColumns[j] := ColumnTypes[j].HasVariant;
+              exit;
+            end;
         end;
       3:
         NeedsMoreFetch := R.NextByte <> 0;
