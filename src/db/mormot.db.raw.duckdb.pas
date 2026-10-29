@@ -440,6 +440,18 @@ procedure DuckDBTypeInfoDone(var Info: TDuckDBTypeInfo);
 /// retrieve the text of an ENUM value, caching all the ENUM dictionary
 function DuckDBEnumValue(var Info: TDuckDBTypeInfo; Index: PtrInt): RawUtf8;
 
+/// return true if a type is a VARIANT, or contains a VARIANT as nested type
+function DuckDBTypeHasVariant(const Info: TDuckDBTypeInfo): boolean;
+
+/// wrap a SELECT statement to retrieve its VARIANT columns as JSON
+// - the VARIANT binary layout is not decoded by our drivers: DuckDB converts
+// them to JSON, e.g. 'SELECT #1 AS "a", NULLIF(#2::JSON, 'null'::JSON) AS "b" FROM (sql)'
+// - positional #n references allow duplicated column names, and a VARIANT NULL
+// is always returned as SQL NULL (DuckDB 1.5 returned a JSON 'null')
+// - IsVariant[] flags the columns to be converted
+function DuckDBVariantSql(const Sql: RawUtf8; const Names: TRawUtf8DynArray;
+  const IsVariant: TBooleanDynArray): RawUtf8;
+
 /// convert a DuckDB type into the corresponding mormot.db field type
 function DuckDBTypeToField(TypeId: TDuckDBType; Scale: integer): TSqlDBFieldType;
 
@@ -1068,6 +1080,47 @@ begin
             DuckDB.union_type_member_type(Handle, i));
       end;
   end;
+end;
+
+function DuckDBTypeHasVariant(const Info: TDuckDBTypeInfo): boolean;
+var
+  i: PtrInt;
+begin
+  result := Info.TypeId = DUCKDB_TYPE_VARIANT;
+  if not result then
+    for i := 0 to Info.ChildCount - 1 do
+      if DuckDBTypeHasVariant(Info.Children^[i]) then
+      begin
+        result := true;
+        exit;
+      end;
+end;
+
+function DuckDBVariantSql(const Sql: RawUtf8; const Names: TRawUtf8DynArray;
+  const IsVariant: TBooleanDynArray): RawUtf8;
+var
+  i: PtrInt;
+  list, text: RawUtf8;
+begin
+  // positional #n references support duplicated column names
+  list := '';
+  for i := 0 to high(Names) do
+  begin
+    if i > 0 then
+      list := list + ', ';
+    text := QuotedStr(Names[i], '"');
+    if IsVariant[i] then
+      // the VARIANT NULL is converted to JSON 'null' by some DuckDB versions
+      list := FormatUtf8('%NULLIF(#%::JSON, ''null''::JSON) AS %',
+        [list, i + 1, text])
+    else
+      list := FormatUtf8('%#% AS %', [list, i + 1, text]);
+  end;
+  text := TrimU(Sql);
+  while (text <> '') and
+        (text[length(text)] = ';') do
+    SetLength(text, length(text) - 1); // within a sub-query
+  result := 'SELECT ' + list + ' FROM (' + text + ')';
 end;
 
 procedure DuckDBTypeInfoDone(var Info: TDuckDBTypeInfo);
