@@ -43,6 +43,7 @@ type
     procedure NestedTypes;
     procedure Json;
     procedure Errors;
+    procedure Variants;
     procedure Metadata;
     procedure Bulk;
     procedure BatchInsert;
@@ -195,13 +196,7 @@ begin
   Check(rows.ColumnType(1) = ftBlob, 'geometry type');
   CheckEqual(BinToHex(rows.ColumnBlob(1)),
     '0101000000000000000000F03F0000000000000040', 'geometry as wkb');
-  try
-    rows.ColumnUtf8(2);
-    Check(false, 'variant');
-  except
-    on E: ESqlDBDuckDB do
-      Check(Pos('#41', E.Message) > 0, 'variant error');
-  end;
+  CheckEqual(rows.ColumnUtf8(2), '42', 'variant as json');
 end;
 
 procedure TTestDuckDB.ParamsAndCrud;
@@ -375,6 +370,61 @@ begin
   // connection is still usable after an error
   with fProps.Execute('select 1', []) do
     Check(Step and (ColumnInt(0) = 1), 'usable after error');
+end;
+
+procedure TTestDuckDB.Variants;
+var
+  rows: ISqlDBRows;
+begin
+  // DuckDB 1.5+ VARIANT columns are retrieved as JSON text
+  if (fProps = nil) or
+     (PosEx('v1.4', fProps.LibraryVersion) = 1) then
+    exit;
+  fProps.ExecuteNoResult('drop table if exists events', []);
+  fProps.ExecuteNoResult('create table events (id integer, name varchar, ' +
+    'payload variant)', []);
+  fProps.ExecuteNoResult('insert into events values ' +
+    '(1, ''obj'', {''a'': 1, ''b'': [1, 2]}::variant), ' +
+    '(2, ''txt'', ''hello''::variant), (3, ''num'', 42::variant), ' +
+    '(4, ''nul'', null::variant)', []);
+  rows := fProps.Execute('select * from events where id > ? order by id', [0]);
+  Check(rows.Step);
+  CheckEqual(rows.ColumnCount, 3);
+  CheckEqual(rows.ColumnInt(0), 1);
+  CheckEqual(rows.ColumnUtf8(1), 'obj');
+  CheckEqual(rows.ColumnUtf8(2), '{"a":1,"b":[1,2]}', 'object');
+  Check(rows.Step);
+  CheckEqual(rows.ColumnUtf8(2), '"hello"', 'text');
+  Check(rows.Step);
+  CheckEqual(rows.ColumnUtf8(2), '42', 'number');
+  Check(rows.Step);
+  Check(rows.ColumnNull(2), 'variant null is a SQL NULL');
+  Check(not rows.Step);
+  rows := nil;
+  // cached statement with other parameters
+  rows := fProps.Execute('select id, payload from events where id = ?', [1]);
+  Check(rows.Step);
+  CheckEqual(rows.ColumnUtf8(1), '{"a":1,"b":[1,2]}');
+  rows := fProps.Execute('select id, payload from events where id = ?', [3]);
+  Check(rows.Step);
+  CheckEqual(rows.ColumnUtf8(1), '42');
+  rows := nil;
+  // VARIANT within a nested type
+  rows := fProps.Execute('select [payload] l from events where id = 2', []);
+  Check(rows.Step);
+  CheckEqual(rows.ColumnUtf8(0), '["hello"]');
+  rows := nil;
+  // other columns are not affected
+  rows := fProps.Execute('select id, name from events order by id', []);
+  Check(rows.Step);
+  CheckEqual(rows.ColumnUtf8(1), 'obj');
+  rows := nil;
+  // duplicated names are supported
+  rows := fProps.Execute('select payload, id, payload from events order by id', []);
+  Check(rows.Step);
+  CheckEqual(rows.ColumnUtf8(0), '{"a":1,"b":[1,2]}', 'dup1');
+  CheckEqual(rows.ColumnUtf8(2), '{"a":1,"b":[1,2]}', 'dup2');
+  rows := nil;
 end;
 
 procedure TTestDuckDB.Metadata;

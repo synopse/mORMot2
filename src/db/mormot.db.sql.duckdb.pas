@@ -153,6 +153,9 @@ type
     fDirectQuery: boolean;
     fInfo: TDuckDBColumnInfoDynArray;
     procedure BindParams;
+    procedure ExecuteStmt;
+    function DescribeColumns: TBooleanDynArray;
+    procedure ExecuteVariantAsJson(const Variants: TBooleanDynArray);
     procedure ReleaseResult;
     function NextChunk: boolean;
     function CheckCol(Col: integer): PDuckDBColumnInfo;
@@ -1082,13 +1085,7 @@ end;
 
 procedure TSqlDBDuckDBStatement.ExecutePrepared;
 var
-  i: PtrInt;
-  msg: RawUtf8;
-  c: PDuckDBColumnInfo;
-  col: PSqlDBColumnProperty;
-  name: RawUtf8;
-  res: TDuckDBState;
-  saved: cardinal;
+  variants: TBooleanDynArray;
 begin
   SqlLogBegin(sllSQL);
   inherited ExecutePrepared; // set fConnection.fLastAccessTicks
@@ -1103,6 +1100,20 @@ begin
   if fParamsArrayCount > 0 then
     ESqlDBDuckDB.RaiseUtf8('%.ExecutePrepared: BindArray() is not supported - ' +
       'use OnBatchInsert or a transaction', [self]);
+  ExecuteStmt;
+  variants := DescribeColumns;
+  if variants <> nil then
+    // DuckDB VARIANT binary layout is not decoded: ask for JSON instead
+    ExecuteVariantAsJson(variants);
+  SqlLogEnd;
+end;
+
+procedure TSqlDBDuckDBStatement.ExecuteStmt;
+var
+  res: TDuckDBState;
+  msg: RawUtf8;
+  saved: cardinal;
+begin
   FillCharFast(fRes, SizeOf(fRes), 0);
   saved := SetFpuFlags; // the C++ engine expects masked FPU exceptions
   try
@@ -1126,18 +1137,73 @@ begin
   end;
   fHasResult := true;
   fUpdateCount := DuckDB.rows_changed(@fRes);
-  // retrieve the columns description
+end;
+
+function TSqlDBDuckDBStatement.DescribeColumns: TBooleanDynArray;
+var
+  i: PtrInt;
+  c: PDuckDBColumnInfo;
+  col: PSqlDBColumnProperty;
+begin
+  result := nil;
   SetLength(fInfo, DuckDB.column_count(@fRes));
   for i := 0 to length(fInfo) - 1 do
   begin
     c := @fInfo[i];
     DuckDBTypeInfoInit(c^.Info, DuckDB.column_logical_type(@fRes, i));
-    name := RawUtf8(DuckDB.column_name(@fRes, i));
-    col := AddColumn(name);
+    col := AddColumn(RawUtf8(DuckDB.column_name(@fRes, i)));
     col^.ColumnType := DuckDBTypeToField(c^.Info.TypeId, c^.Info.Scale);
     col^.ColumnAttr := c^.Info.TypeId;
+    if DuckDBTypeHasVariant(c^.Info) then
+    begin
+      if result = nil then
+        SetLength(result, length(fInfo));
+      result[i] := true;
+    end;
   end;
-  SqlLogEnd;
+end;
+
+procedure TSqlDBDuckDBStatement.ExecuteVariantAsJson(
+  const Variants: TBooleanDynArray);
+var
+  names: TRawUtf8DynArray;
+  wrapped, msg: RawUtf8;
+  i: PtrInt;
+  state: TDuckDBState;
+  saved: cardinal;
+begin
+  if fDirectQuery then
+    ESqlDBDuckDB.RaiseUtf8('%.ExecutePrepared: VARIANT is not supported ' +
+      'by multi-statement SQL - cast it to JSON', [self]);
+  SetLength(names, length(fInfo));
+  for i := 0 to high(names) do
+    names[i] := fColumns[i].ColumnName;
+  wrapped := DuckDBVariantSql(fSql, names, Variants);
+  // run again the SQL, with the VARIANT columns converted to JSON
+  ReleaseResult;
+  ClearColumns;
+  fColumnCount := 0;
+  if fStmt <> nil then
+    DuckDB.destroy_prepare(fStmt);
+  fStmt := nil;
+  saved := SetFpuFlags;
+  try
+    state := DuckDB.prepare(TSqlDBDuckDBConnection(fConnection).fConn,
+      pointer(wrapped), fStmt);
+  finally
+    ResetFpuFlags(saved);
+  end;
+  if state <> DuckDBSuccess then
+  begin
+    msg := RawUtf8(DuckDB.prepare_error(fStmt));
+    DuckDB.destroy_prepare(fStmt);
+    fStmt := nil;
+    ESqlDBDuckDB.RaiseUtf8('%.ExecutePrepared: % [%]', [self, msg, wrapped]);
+  end;
+  ExecuteStmt;
+  if DescribeColumns <> nil then
+    ESqlDBDuckDB.RaiseUtf8('%.ExecutePrepared: unexpected VARIANT [%]',
+      [self, wrapped]);
 end;
 
 function TSqlDBDuckDBStatement.UpdateCount: integer;
