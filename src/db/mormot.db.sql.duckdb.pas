@@ -41,6 +41,7 @@ uses
   mormot.core.json,
   mormot.core.rtti,
   mormot.core.log,
+  mormot.lib.static,
   mormot.db.core,
   mormot.db.sql,
   mormot.db.raw.duckdb;
@@ -295,7 +296,7 @@ begin
       result := v * 1000000;
     DUCKDB_TYPE_TIMESTAMP_MS:
       result := v * 1000;
-    DUCKDB_TYPE_TIMESTAMP_NS:
+    DUCKDB_TYPE_TIMESTAMP_NS, DUCKDB_TYPE_TIMESTAMP_TZ_NS:
       result := v div 1000;
   else
     result := v;
@@ -502,15 +503,16 @@ begin
     DUCKDB_TYPE_TIMESTAMP_MS, DUCKDB_TYPE_TIMESTAMP_NS:
       DuckTimestampToText(
         TimestampMicros(typeid, PDuckI64Array(data)^[row]), result);
-    DUCKDB_TYPE_TIMESTAMP_TZ:
+    DUCKDB_TYPE_TIMESTAMP_TZ, DUCKDB_TYPE_TIMESTAMP_TZ_NS:
       begin
-        DuckTimestampToText(PDuckI64Array(data)^[row], result);
+        DuckTimestampToText(
+          TimestampMicros(typeid, PDuckI64Array(data)^[row]), result);
         result := result + '+00'; // stored as UTC
       end;
     DUCKDB_TYPE_INTERVAL:
       DuckIntervalToText(
         PDuckDBInterval(data + row * 16)^, result);
-    DUCKDB_TYPE_VARCHAR, DUCKDB_TYPE_BLOB:
+    DUCKDB_TYPE_VARCHAR, DUCKDB_TYPE_BLOB, DUCKDB_TYPE_GEOMETRY:
       begin
         p := DuckStringPtr(DuckStringAt(data, row), len);
         FastSetString(result, p, len);
@@ -523,9 +525,13 @@ begin
     DUCKDB_TYPE_ENUM:
       result := DuckDBEnumValue(T^,
         ReadIntegral(T^.Internal, data, row));
+    DUCKDB_TYPE_LIST, DUCKDB_TYPE_ARRAY, DUCKDB_TYPE_STRUCT,
+    DUCKDB_TYPE_MAP, DUCKDB_TYPE_UNION:
+      ComplexDuckDBVectorValueToText(vec, T, row, result); // as JSON
   else
-    // LIST, ARRAY, STRUCT, MAP, UNION -> JSON
-    ComplexDuckDBVectorValueToText(vec, T, row, result);
+    // e.g. VARIANT - would recurse with DuckDBVectorValueToJson()
+    ESqlDBDuckDB.RaiseUtf8('Unsupported DuckDB type #% - use a SQL cast',
+      [typeid]);
   end;
 end;
 
@@ -673,7 +679,7 @@ begin
         DuckDBVectorValueToJson(DuckDB.struct_vector_get_child(vec, tag + 1),
           @T^.Children^[tag], row, W);
       end;
-    DUCKDB_TYPE_BLOB:
+    DUCKDB_TYPE_BLOB, DUCKDB_TYPE_GEOMETRY:
       begin
         p := DuckStringPtr(DuckStringAt(data, row), len);
         W.WrBase64(p, len, {withmagic=}true);
@@ -797,6 +803,8 @@ var
   name, value, msg: RawUtf8;
   p: PUtf8Char;
   pair: RawUtf8;
+  state: TDuckDBState;
+  saved: cardinal;
 begin
   result := fDatabase;
   if result <> nil then
@@ -830,7 +838,13 @@ begin
         else
           path := pointer(ServerName);
         err := nil;
-        if DuckDB.open_ext(path, fDatabase, cfg, @err) <> DuckDBSuccess then
+        saved := SetFpuFlags; // the worker threads inherit the FPU flags
+        try
+          state := DuckDB.open_ext(path, fDatabase, cfg, @err);
+        finally
+          ResetFpuFlags(saved);
+        end;
+        if state <> DuckDBSuccess then
         begin
           msg := RawUtf8(err);
           if err <> nil then
@@ -990,11 +1004,19 @@ end;
 procedure TSqlDBDuckDBStatement.Prepare(const aSql: RawUtf8; ExpectResults: boolean);
 var
   msg: RawUtf8;
+  state: TDuckDBState;
+  saved: cardinal;
 begin
   SqlLogBegin(sllDB);
   inherited Prepare(aSql, ExpectResults); // set fSql + Connect if necessary
-  if DuckDB.prepare(TSqlDBDuckDBConnection(fConnection).fConn,
-       pointer(fSql), fStmt) <> DuckDBSuccess then
+  saved := SetFpuFlags; // the optimizer may fold constants
+  try
+    state := DuckDB.prepare(TSqlDBDuckDBConnection(fConnection).fConn,
+      pointer(fSql), fStmt);
+  finally
+    ResetFpuFlags(saved);
+  end;
+  if state <> DuckDBSuccess then
   begin
     msg := RawUtf8(DuckDB.prepare_error(fStmt));
     DuckDB.destroy_prepare(fStmt);
@@ -1066,6 +1088,7 @@ var
   col: PSqlDBColumnProperty;
   name: RawUtf8;
   res: TDuckDBState;
+  saved: cardinal;
 begin
   SqlLogBegin(sllSQL);
   inherited ExecutePrepared; // set fConnection.fLastAccessTicks
@@ -1081,13 +1104,18 @@ begin
     ESqlDBDuckDB.RaiseUtf8('%.ExecutePrepared: BindArray() is not supported - ' +
       'use OnBatchInsert or a transaction', [self]);
   FillCharFast(fRes, SizeOf(fRes), 0);
-  if fDirectQuery then
-    res := DuckDB.query(TSqlDBDuckDBConnection(fConnection).fConn,
-      pointer(fSql), @fRes) // multi-statement SQL, without parameters
-  else
-  begin
-    BindParams;
-    res := DuckDB.execute_prepared(fStmt, @fRes);
+  saved := SetFpuFlags; // the C++ engine expects masked FPU exceptions
+  try
+    if fDirectQuery then
+      res := DuckDB.query(TSqlDBDuckDBConnection(fConnection).fConn,
+        pointer(fSql), @fRes) // multi-statement SQL, without parameters
+    else
+    begin
+      BindParams;
+      res := DuckDB.execute_prepared(fStmt, @fRes);
+    end;
+  finally
+    ResetFpuFlags(saved);
   end;
   if res <> DuckDBSuccess then
   begin
@@ -1133,13 +1161,19 @@ end;
 function TSqlDBDuckDBStatement.NextChunk: boolean;
 var
   i: PtrInt;
+  saved: cardinal;
 begin
   result := false;
   if fChunk <> nil then
     DuckDB.destroy_data_chunk(fChunk);
   fChunk := nil;
   repeat
-    fChunk := DuckDB.fetch_chunk(fRes);
+    saved := SetFpuFlags; // the chunks are computed during this call
+    try
+      fChunk := DuckDB.fetch_chunk(fRes);
+    finally
+      ResetFpuFlags(saved);
+    end;
     if fChunk = nil then
       exit; // no more data
     fChunkSize := DuckDB.data_chunk_get_size(fChunk);
@@ -1264,7 +1298,8 @@ begin
     DUCKDB_TYPE_DATE:
       result := PDuckI32Array(c^.Data)^[fChunkRow];
     DUCKDB_TYPE_TIME, DUCKDB_TYPE_TIMESTAMP, DUCKDB_TYPE_TIMESTAMP_TZ,
-    DUCKDB_TYPE_TIMESTAMP_S, DUCKDB_TYPE_TIMESTAMP_MS, DUCKDB_TYPE_TIMESTAMP_NS:
+    DUCKDB_TYPE_TIMESTAMP_S, DUCKDB_TYPE_TIMESTAMP_MS, DUCKDB_TYPE_TIMESTAMP_NS,
+    DUCKDB_TYPE_TIMESTAMP_TZ_NS:
       result := PDuckI64Array(c^.Data)^[fChunkRow];
   else
     result := GetInt64(pointer(ColumnUtf8(Col)));
@@ -1350,7 +1385,8 @@ begin
         result := us / DUCKDB_MICROSPERDAY;
       end;
     DUCKDB_TYPE_TIMESTAMP, DUCKDB_TYPE_TIMESTAMP_TZ, DUCKDB_TYPE_TIMESTAMP_S,
-    DUCKDB_TYPE_TIMESTAMP_MS, DUCKDB_TYPE_TIMESTAMP_NS:
+    DUCKDB_TYPE_TIMESTAMP_MS, DUCKDB_TYPE_TIMESTAMP_NS,
+    DUCKDB_TYPE_TIMESTAMP_TZ_NS:
       result := DuckTimestampToDateTime(
         TimestampMicros(c^.Info.TypeId, PDuckI64Array(c^.Data)^[fChunkRow]));
   else
@@ -1389,7 +1425,8 @@ begin
   result := '';
   if not IsValid(c^.Validity, fChunkRow) then
     exit;
-  if c^.Info.TypeId in [DUCKDB_TYPE_BLOB, DUCKDB_TYPE_VARCHAR] then
+  if c^.Info.TypeId in [DUCKDB_TYPE_BLOB, DUCKDB_TYPE_VARCHAR,
+                        DUCKDB_TYPE_GEOMETRY] then
   begin
     p := DuckStringPtr(DuckStringAt(c^.Data, fChunkRow), len);
     FastSetRawByteString(result, p, len);
@@ -1422,7 +1459,7 @@ begin
         W.AddJsonEscape(p, len);
         W.Add('"');
       end;
-    DUCKDB_TYPE_BLOB:
+    DUCKDB_TYPE_BLOB, DUCKDB_TYPE_GEOMETRY:
       if dsfForceBlobAsNull in fFlags then
         W.AddNull
       else
@@ -1432,7 +1469,8 @@ begin
       end;
     DUCKDB_TYPE_DATE, DUCKDB_TYPE_TIME, DUCKDB_TYPE_TIME_TZ, DUCKDB_TYPE_TIME_NS,
     DUCKDB_TYPE_TIMESTAMP, DUCKDB_TYPE_TIMESTAMP_S, DUCKDB_TYPE_TIMESTAMP_MS,
-    DUCKDB_TYPE_TIMESTAMP_NS, DUCKDB_TYPE_TIMESTAMP_TZ:
+    DUCKDB_TYPE_TIMESTAMP_NS, DUCKDB_TYPE_TIMESTAMP_TZ,
+    DUCKDB_TYPE_TIMESTAMP_TZ_NS:
       begin
         W.Add('"');
         W.AddDateTime(ColumnDateTime(Col), dsfForceDateWithMS in fFlags);
@@ -1597,23 +1635,47 @@ begin
 end;
 
 procedure TSqlDBDuckDBAppender.EndRow;
+var
+  res: TDuckDBState;
+  saved: cardinal;
 begin
-  Check(DuckDB.appender_end_row(fAppender), 'EndRow');
+  saved := SetFpuFlags; // a full chunk is written to the table
+  try
+    res := DuckDB.appender_end_row(fAppender);
+  finally
+    ResetFpuFlags(saved);
+  end;
+  Check(res, 'EndRow');
   inc(fRowCount);
 end;
 
 procedure TSqlDBDuckDBAppender.Flush;
+var
+  res: TDuckDBState;
+  saved: cardinal;
 begin
-  Check(DuckDB.appender_flush(fAppender), 'Flush');
+  saved := SetFpuFlags; // the C++ engine expects masked FPU exceptions
+  try
+    res := DuckDB.appender_flush(fAppender);
+  finally
+    ResetFpuFlags(saved);
+  end;
+  Check(res, 'Flush');
 end;
 
 procedure TSqlDBDuckDBAppender.Close;
 var
   res: TDuckDBState;
+  saved: cardinal;
 begin
   if fAppender = nil then
     exit;
-  res := DuckDB.appender_close(fAppender);
+  saved := SetFpuFlags; // the pending rows are flushed to the table
+  try
+    res := DuckDB.appender_close(fAppender);
+  finally
+    ResetFpuFlags(saved);
+  end;
   try
     Check(res, 'Close');
   finally
