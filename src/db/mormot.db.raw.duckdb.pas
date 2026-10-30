@@ -1579,47 +1579,6 @@ begin
   result := 'SELECT ' + list + ' FROM (' + text + ')';
 end;
 
-function DuckDBTypeHasVariant(const Info: TDuckDBTypeInfo): boolean;
-var
-  i: PtrInt;
-begin
-  result := Info.TypeId = DUCKDB_TYPE_VARIANT;
-  if not result then
-    for i := 0 to Info.ChildCount - 1 do
-      if DuckDBTypeHasVariant(Info.Children^[i]) then
-      begin
-        result := true;
-        exit;
-      end;
-end;
-
-function DuckDBVariantSql(const Sql: RawUtf8; const Names: TRawUtf8DynArray;
-  const IsVariant: TBooleanDynArray): RawUtf8;
-var
-  i: PtrInt;
-  list, text: RawUtf8;
-begin
-  // positional #n references support duplicated column names
-  list := '';
-  for i := 0 to high(Names) do
-  begin
-    if i > 0 then
-      list := list + ', ';
-    text := QuotedStr(Names[i], '"');
-    if IsVariant[i] then
-      // the VARIANT NULL is converted to JSON 'null' by some DuckDB versions
-      list := FormatUtf8('%NULLIF(#%::JSON, ''null''::JSON) AS %',
-        [list, i + 1, text])
-    else
-      list := FormatUtf8('%#% AS %', [list, i + 1, text]);
-  end;
-  text := TrimU(Sql);
-  while (text <> '') and
-        (text[length(text)] = ';') do
-    SetLength(text, length(text) - 1); // within a sub-query
-  result := 'SELECT ' + list + ' FROM (' + text + ')';
-end;
-
 procedure DuckDBTypeInfoDone(var Info: TDuckDBTypeInfo);
 var
   i: PtrInt;
