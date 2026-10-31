@@ -11487,6 +11487,41 @@ var
     end;
   end;
 
+  procedure StreamLevel0;
+  // AddDeflatedStream(..., CompressLevel=0) should create a valid entry
+  var
+    w: TRawByteStringStream;
+    s: TStream;
+    z: TZipWrite;
+  begin
+    w := TRawByteStringStream.Create;
+    try
+      z := TZipWrite.Create(w);
+      try
+        s := z.AddDeflatedStream('lvl0.txt', 0, 0);
+        try
+          s.WriteBuffer(pointer(Data)^, length(Data));
+        finally
+          s.Free;
+        end;
+      finally
+        z.Free;
+      end;
+      with TZipRead.Create(pointer(w.DataString), length(w.DataString)) do
+      try
+        if CheckEqual(Count, 1, 'lvl0 count') then
+        begin
+          Check(TestAll, 'lvl0 testall');
+          Check(UnZip(0) = Data, 'lvl0 unzip');
+        end;
+      finally
+        Free;
+      end;
+    finally
+      w.Free;
+    end;
+  end;
+
   procedure DataDescriptorLastEntry;
   // some tools (e.g. LibreOffice for .xlsx) set FLAG_DATADESCRIPTOR on all
   // entries: retrieving the last one from a memory buffer should not need fSource
@@ -11596,6 +11631,29 @@ begin
   CheckEqual(FileSize(FN), SizeOf(minim), 'TZipWrite void .zip');
   Check(DeleteFile(FN));
   DataDescriptorLastEntry;
+  // AddEmptyFolder() should store crc32=0 for a folder entry (no data)
+  S := TRawByteStringStream.Create;
+  try
+    with TZipWrite.Create(S) do
+    try
+      AddEmptyFolder('emptydir\');
+      CheckEqual(Count, 1, 'emptydir1');
+    finally
+      Free;
+    end;
+    with TZipRead.Create(pointer(S.DataString), length(S.DataString)) do
+    try
+      CheckEqual(Count, 1, 'emptydir2');
+      Check(Entry[0].dir^.fileInfo.zcrc32 = 0, 'emptydir crc');
+      Check(Entry[0].local^.fileInfo.zcrc32 = 0, 'emptydir local crc');
+      Check(TestAll, 'emptydir testall');
+    finally
+      Free;
+    end;
+  finally
+    S.Free;
+  end;
+  StreamLevel0;
   // onprog := TStreamRedirect.ProgressInfoToConsole;
   onprog := TSynLog.ProgressInfo;
   for m := 1 to 2 do
