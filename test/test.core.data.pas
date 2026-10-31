@@ -98,6 +98,7 @@ uses
   mormot.core.threads,
   mormot.core.log,
   mormot.core.zip,
+  mormot.crypt.zip,
   mormot.core.test,
   mormot.lib.z,
   mormot.lib.lizard,
@@ -11599,6 +11600,177 @@ var
     end;
   end;
 
+  procedure ZipEncryption;
+  const
+    INFOZIP: array[0..151] of byte = (
+      $50, $4b, $03, $04, $0a, $00, $09, $00, $00, $00, $26, $a3, $5f, $5d,
+      $15, $3f, $91, $3f, $1c, $00, $00, $00, $10, $00, $00, $00, $05, $00,
+      $00, $00, $61, $2e, $74, $78, $74, $01, $4d, $91, $b2, $a2, $9e, $8c,
+      $23, $5d, $b5, $18, $64, $ea, $89, $3b, $ec, $c5, $f6, $b7, $c1, $78,
+      $e8, $6c, $0e, $91, $41, $b7, $5b, $50, $4b, $07, $08, $15, $3f, $91,
+      $3f, $1c, $00, $00, $00, $10, $00, $00, $00, $50, $4b, $01, $02, $1e,
+      $03, $0a, $00, $09, $00, $00, $00, $26, $a3, $5f, $5d, $15, $3f, $91,
+      $3f, $1c, $00, $00, $00, $10, $00, $00, $00, $05, $00, $00, $00, $00,
+      $00, $00, $00, $00, $00, $00, $00, $a4, $81, $00, $00, $00, $00, $61,
+      $2e, $74, $78, $74, $50, $4b, $05, $06, $00, $00, $00, $00, $01, $00,
+      $01, $00, $33, $00, $00, $00, $4f, $00, $00, $00, $00, $00);
+    // 'mORMot AES-256' encrypted by 7-Zip "7z a -tzip -mem=AES256 -mx=0
+    // -mtm=off -mtc=off -mta=off -pmormot v7.zip b.txt"
+    SEVENZIP: array[0..171] of byte = (
+      $50, $4b, $03, $04, $33, $00, $01, $00, $63, $00, $00, $00, $21, $00,
+      $00, $00, $00, $00, $2a, $00, $00, $00, $0e, $00, $00, $00, $05, $00,
+      $0b, $00, $62, $2e, $74, $78, $74, $01, $99, $07, $00, $02, $00, $41,
+      $45, $03, $00, $00, $50, $2d, $ad, $63, $1a, $e4, $1d, $ef, $61, $49,
+      $c4, $bd, $84, $36, $dc, $32, $cb, $3f, $d7, $8b, $17, $b3, $ba, $81,
+      $0a, $4c, $4e, $61, $16, $4d, $d3, $42, $b6, $ab, $c2, $d3, $fb, $18,
+      $9a, $d9, $9a, $6b, $50, $4b, $01, $02, $3f, $03, $33, $00, $01, $00,
+      $63, $00, $00, $00, $21, $00, $00, $00, $00, $00, $2a, $00, $00, $00,
+      $0e, $00, $00, $00, $05, $00, $0b, $00, $00, $00, $00, $00, $00, $00,
+      $20, $80, $a4, $81, $00, $00, $00, $00, $62, $2e, $74, $78, $74, $01,
+      $99, $07, $00, $02, $00, $41, $45, $03, $00, $00, $50, $4b, $05, $06,
+      $00, $00, $00, $00, $01, $00, $01, $00, $3e, $00, $00, $00, $58, $00,
+      $00, $00, $00, $00);
+  var
+    z: TZipRead;
+    w: TZipWrite;
+    zip: RawByteString;
+    zipfn: TFileName;
+    S: TRawByteStringStream;
+    st: TStream;
+
+    function Raised(i: integer): boolean;
+    begin
+      result := false;
+      try
+        z.UnZip(i);
+      except
+        on ESynZip do
+          result := true;
+      end;
+    end;
+
+    procedure Vector(p: pointer; len: integer; const expected: RawUtf8);
+    begin
+      z := TZipRead.Create(p, len);
+      try
+        CheckEqual(z.Count, 1, 'vector count');
+        z.Password := 'mormot';
+        CheckEqual(z.UnZip(0), expected, 'vector');
+      finally
+        z.Free;
+      end;
+    end;
+
+    procedure CheckRead(reader: TZipRead; enc: TZipEncryption);
+    begin
+      z := reader;
+      try
+        CheckEqual(z.Count, 5, 'crypt count');
+        Check(z.Entry[0].dir^.fileInfo.flags and 1 <> 0, 'encrypted');
+        Check((z.Entry[0].aes <> nil) = (enc = zeAes256), 'aes');
+        Check(z.Entry[4].dir^.fileInfo.flags and 1 = 0, 'plain');
+        Check(Raised(0), 'no password');
+        z.Password := 'mormot';
+        Check(Raised(1), 'wrong password');
+        Check(not Raised(4), 'plain with password');
+        z.Password := 'mORMot';
+        Check(z.TestAll, 'crypt testall');
+        CheckEqual(z.UnZip('crypt\deflated'), Data, 'crypt1');
+        CheckEqual(z.UnZip('crypt\stored'), Data, 'crypt2');
+        CheckEqual(z.UnZip('crypt\file'), Data, 'crypt3');
+        CheckEqual(z.UnZip('crypt\filestored'), Data, 'crypt4');
+        CheckEqual(z.UnZip('plain'), Data, 'crypt5');
+      finally
+        z.Free;
+      end;
+    end;
+
+    procedure RoundTrip(enc: TZipEncryption);
+    begin
+      S := TRawByteStringStream.Create;
+      try
+        w := TZipWrite.Create(S);
+        try
+          w.Password := 'mORMot';
+          w.Encryption := enc;
+          w.AddDeflated('crypt\deflated', pointer(Data), length(Data));
+          w.AddStored('crypt\stored', pointer(Data), length(Data));
+          w.AddDeflated(DataFile, true, Z_USUAL_COMPRESSION, 'crypt\file');
+          w.AddStored(DataFile, true, 'crypt\filestored');
+          w.Password := '';
+          w.AddDeflated('plain', pointer(Data), length(Data));
+        finally
+          w.Free;
+        end;
+        zip := S.DataString;
+      finally
+        S.Free;
+      end;
+      FileFromString(zip, zipfn);
+      CheckRead(TZipRead.Create(pointer(zip), length(zip)), enc);
+      CheckRead(TZipRead.Create(zipfn), enc);
+      CheckRead(TZipRead.Create(zipfn, 0, 0, 1024), enc); // force fSource
+      // detect tampered content (via crc32 or HMAC-SHA1)
+      zip[length(zip) shr 2] := AnsiChar(ord(zip[length(zip) shr 2]) xor 1);
+      z := TZipRead.Create(pointer(zip), length(zip));
+      try
+        z.Password := 'mORMot';
+        Check(not z.TestAll, 'tampered');
+      finally
+        z.Free;
+      end;
+    end;
+
+  begin
+    Vector(@INFOZIP, SizeOf(INFOZIP), 'mORMot ZipCrypto');
+    Vector(@SEVENZIP, SizeOf(SEVENZIP), 'mORMot AES-256');
+    zipfn := WorkDir + 'zipcrypt.zip';
+    TSynLog.Family.ExceptionIgnoreCurrentThread := true;
+    try
+      S := TRawByteStringStream.Create;
+      try
+        w := TZipWrite.Create(S);
+        try
+          Check(w.Encryption = zeAes256, 'default encryption');
+          w.Password := 'mORMot';
+          // AES-CTR encrypts on the fly: AddDeflatedStream is supported
+          st := w.AddDeflatedStream('crypt\stream');
+          st.WriteBuffer(pointer(Data)^, length(Data));
+          st.Free;
+          // ZipCrypto needs the crc32 ahead of time: AddDeflatedStream fails
+          w.Encryption := zeZipCrypto; // available with mormot.crypt.zip
+          Check(w.Encryption = zeZipCrypto, 'set encryption');
+          try
+            w.AddDeflatedStream('crypt\stream2').Free;
+            Check(false, 'zipcrypto stream');
+          except
+            on ESynZip do
+              CheckEqual(w.Count, 1, 'zipcrypto stream count');
+          end;
+        finally
+          w.Free;
+        end;
+        zip := S.DataString;
+      finally
+        S.Free;
+      end;
+      z := TZipRead.Create(pointer(zip), length(zip));
+      try
+        CheckEqual(z.Count, 1, 'stream count');
+        z.Password := 'mORMot';
+        Check(z.TestAll, 'stream testall');
+        CheckEqual(z.UnZip(0), Data, 'stream');
+      finally
+        z.Free;
+      end;
+      RoundTrip(zeAes256);
+      RoundTrip(zeZipCrypto);
+    finally
+      TSynLog.Family.ExceptionIgnoreCurrentThread := false;
+    end;
+    Check(DeleteFile(zipfn));
+  end;
+
 var
   i, m: integer;
   mem: QWord;
@@ -11654,6 +11826,7 @@ begin
     S.Free;
   end;
   StreamLevel0;
+  ZipEncryption;
   // onprog := TStreamRedirect.ProgressInfoToConsole;
   onprog := TSynLog.ProgressInfo;
   for m := 1 to 2 do
