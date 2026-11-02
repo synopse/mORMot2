@@ -9168,34 +9168,6 @@ end;
 
 { TCryptPrivateKey }
 
-function PrivateKeyToPkcs8(Algorithm: TCryptKeyAlgo;
-  const Der: RawByteString): RawByteString;
-var
-  pos, vers: integer;
-  oct: RawByteString;
-begin
-  // PKCS#8 PrivateKeyInfo ::= SEQ { INT version, SEQ algorithm, OCTSTR key }
-  // PKCS#1 RSAPrivateKey  ::= SEQ { INT version, INT modulus, ... }
-  pos := 1;
-  if (Algorithm in CKA_RSA) and
-     (AsnNext(pos, Der) = ASN1_SEQ) and
-     (AsnNextInt32(pos, Der, vers) = ASN1_INT) and
-     (pos <= length(Der)) and
-     (ord(Der[pos]) = ASN1_INT) then
-  begin
-    // wrap TCryptPrivateKeyRsa.ToDer PKCS#1 into a PKCS#8 PrivateKeyInfo
-    oct := AsnOctStr(Der);
-    result := Asn(ASN1_SEQ, [
-                Asn(0), // version
-                CkaToSeq(Algorithm),
-                oct
-              ]);
-    FillZero(oct);
-  end
-  else
-    result := Der; // ECC/EdDSA ToDer is already a PKCS#8 PrivateKeyInfo
-end;
-
 function TCryptPrivateKey.Save(AsPem: boolean;
   const Password: SpiUtf8): RawByteString;
 var
@@ -9292,7 +9264,7 @@ begin
       // standard PKCS#8 EncryptedPrivateKeyInfo, e.g. from OpenSSL -aes256
       saved := Pkcs8DecryptPrivateKey(der, Password);
       if saved = '' then
-        // our proprietary PrivateKeyEncrypt() format
+        // fallbac to mORMot proprietary PrivateKeyEncrypt() format
         saved := PrivateKeyDecrypt(
           der, CKA_SALT[Algorithm], Password, CKA_ROUNDS[Algorithm]);
       if saved = '' then

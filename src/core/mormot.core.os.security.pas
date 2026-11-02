@@ -3255,6 +3255,7 @@ function IsAiaDisabledInWindowsRegistry: boolean;
 type
   /// the result of WinVerifyExeSignature()
   // - wvsValid: the signature is valid and its certificates chain is trusted
+  // - wvsUnsupported: this operating system does not support wintrust.dll
   // - wvsNotSigned: the file has no (embedded) signature
   // - wvsBadDigest: the file content has been tampered after signing
   // - wvsUntrustedRoot: certificate chain ends with an untrusted root
@@ -3267,6 +3268,7 @@ type
   // - wvsError: the file can't be read, or any other WinVerifyTrust() error
   TWinVerifyStatus = (
     wvsValid,
+    wvsUnsupported,
     wvsNotSigned,
     wvsBadDigest,
     wvsUntrustedRoot,
@@ -3276,6 +3278,8 @@ type
     wvsNotTrusted,
     wvsNoRevocationCheck,
     wvsError);
+
+function ToText(st: TWinVerifyStatus): PShortString; overload;
 
 /// verify the Authenticode digital signature of a file using the Windows API
 // - calls WinVerifyTrust(WINTRUST_ACTION_GENERIC_VERIFY_V2) without any UI
@@ -9200,6 +9204,11 @@ begin
     'Software\Policies\Microsoft\SystemCertificates\ChainEngine', 'Config') = 2;
 end;
 
+function ToText(st: TWinVerifyStatus): PShortString;
+begin
+  result := GetEnumNameRtti(TypeInfo(TWinVerifyStatus), ord(st));
+end;
+
 {$ifdef CPU64}
 {$A8}
 {$else}
@@ -9275,11 +9284,13 @@ var
   tmp: TW32Temp;
   res: cardinal;
 begin
-  result := wvsError;
   if ErrorCode <> nil then
     ErrorCode^ := 0;
-  if (FileName = '') or
-     not DelayedProc(WinVerifyTrust, WinTrustDll, wintrust, 'WinVerifyTrust') then
+  result := wvsError;
+  if FileName = '' then
+    exit;
+  result := wvsUnsupported;
+  if not DelayedProc(WinVerifyTrust, WinTrustDll, wintrust, 'WinVerifyTrust') then
     exit;
   FillCharFast(fi, SizeOf(fi), 0);
   fi.cbStruct := SizeOf(fi);

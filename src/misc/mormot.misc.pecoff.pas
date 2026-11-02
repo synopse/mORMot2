@@ -9,8 +9,7 @@ unit mormot.misc.pecoff;
    Cross-Platform Portable Executable (PE) and COFF File Reader
     - Low-Level DOS/PE/COFF Encoding Structures
     - High-Level PE (.exe, .dll...) File Reader
-    - Windows Executable Digital Signature Stuffing
-    - Windows Executable Digital Signature Retrieval
+    - Windows Executable Digital Signature Support
 
   *****************************************************************************
 }
@@ -626,7 +625,7 @@ type
 function GetPEFileVersion(const aFileName: TFileName): TDocVariantData;
 
 
-{ ************** Windows Executable Digital Signature Stuffing }
+{ ************** Windows Executable Digital Signature Support }
 
 type
   /// exception raised by StuffExeCertificate() in case of processing error
@@ -654,9 +653,6 @@ procedure StuffExeCertificate(const MainFile, NewFile: TFileName;
 // - returns the stuffed text, or '' if no text has been included
 // - this function does not require mormot.crypt.openssl
 function FindStuffExeCertificate(const FileName: TFileName): RawUtf8;
-
-
-{ ************** Windows Executable Digital Signature Retrieval }
 
 /// return the raw PKCS#7 signed data embedded in a Windows executable
 // - i.e. the Authenticode signature content of the PE certificate table
@@ -1139,7 +1135,7 @@ begin
 end;
 
 
-{ ************** Windows Executable Digital Signature Stuffing }
+{ ************** Windows Executable Digital Signature Support }
 
 type
   // see http://msdn.microsoft.com/en-us/library/ms920091
@@ -1479,9 +1475,6 @@ begin
       end;
     end;
 end;
-
-
-{ ************** Windows Executable Digital Signature Retrieval }
 
 function GetExeSignature(const FileName: TFileName): RawByteString;
 var
