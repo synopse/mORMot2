@@ -3266,7 +3266,6 @@ type
   // - wvsNoRevocationCheck: revocation could not be checked (e.g. offline)
   // - wvsError: the file can't be read, or any other WinVerifyTrust() error
   TWinVerifyStatus = (
-    wvsError,
     wvsValid,
     wvsNotSigned,
     wvsBadDigest,
@@ -3275,7 +3274,8 @@ type
     wvsRevoked,
     wvsDistrust,
     wvsNotTrusted,
-    wvsNoRevocationCheck);
+    wvsNoRevocationCheck,
+    wvsError);
 
 /// verify the Authenticode digital signature of a file using the Windows API
 // - calls WinVerifyTrust(WINTRUST_ACTION_GENERIC_VERIFY_V2) without any UI
@@ -9232,28 +9232,30 @@ type
 {$A+}
 
 const
+  wintrust = 'wintrust.dll';
   WINTRUST_ACTION_GENERIC_VERIFY_V2: TGuid =
     '{00AAC56B-CD44-11D0-8CC2-00C04FC295EE}';
-  WTD_UI_NONE = 2;
-  WTD_REVOKE_NONE = 0;
-  WTD_REVOKE_WHOLECHAIN = 1;
-  WTD_CHOICE_FILE = 1;
+
+  WTD_UI_NONE            = 2;
+  WTD_REVOKE_NONE        = 0;
+  WTD_REVOKE_WHOLECHAIN  = 1;
+  WTD_CHOICE_FILE        = 1;
   WTD_STATEACTION_VERIFY = 1;
-  WTD_STATEACTION_CLOSE = 2;
-  WTD_REVOCATION_CHECK_NONE = $00000010;
-  WTD_REVOCATION_CHECK_CHAIN = $00000040;
+  WTD_STATEACTION_CLOSE  = 2;
+  WTD_REVOCATION_CHECK_NONE    = $00000010;
+  WTD_REVOCATION_CHECK_CHAIN   = $00000040;
   WTD_CACHE_ONLY_URL_RETRIEVAL = $00001000;
 
-  TRUST_E_PROVIDER_UNKNOWN     = $800B0001;
-  TRUST_E_SUBJECT_FORM_UNKNOWN = $800B0003;
-  TRUST_E_SUBJECT_NOT_TRUSTED  = $800B0004;
-  TRUST_E_NOSIGNATURE          = $800B0100;
-  CERT_E_EXPIRED               = $800B0101;
-  CERT_E_UNTRUSTEDROOT         = $800B0109;
-  CERT_E_CHAINING              = $800B010A;
-  CERT_E_REVOKED               = $800B010C;
-  CERT_E_UNTRUSTEDTESTROOT     = $800B010D;
-  TRUST_E_EXPLICIT_DISTRUST    = $800B0111;
+  TRUST_E_PROVIDER_UNKNOWN     = $800b0001;
+  TRUST_E_SUBJECT_FORM_UNKNOWN = $800b0003;
+  TRUST_E_SUBJECT_NOT_TRUSTED  = $800b0004;
+  TRUST_E_NOSIGNATURE          = $800b0100;
+  CERT_E_EXPIRED               = $800b0101;
+  CERT_E_UNTRUSTEDROOT         = $800b0109;
+  CERT_E_CHAINING              = $800b010a;
+  CERT_E_REVOKED               = $800b010c;
+  CERT_E_UNTRUSTEDTESTROOT     = $800b010d;
+  TRUST_E_EXPLICIT_DISTRUST    = $800b0111;
   CRYPT_E_REVOKED              = $80092010;
   CRYPT_E_NO_REVOCATION_CHECK  = $80092012;
   CRYPT_E_REVOCATION_OFFLINE   = $80092013;
@@ -9277,8 +9279,7 @@ begin
   if ErrorCode <> nil then
     ErrorCode^ := 0;
   if (FileName = '') or
-     not DelayedProc(WinVerifyTrust, WinTrustDll, 'wintrust.dll',
-       'WinVerifyTrust') then
+     not DelayedProc(WinVerifyTrust, WinTrustDll, wintrust, 'WinVerifyTrust') then
     exit;
   FillCharFast(fi, SizeOf(fi), 0);
   fi.cbStruct := SizeOf(fi);
@@ -9306,7 +9307,7 @@ begin
   if ErrorCode <> nil then
     ErrorCode^ := res;
   case res of
-    0:
+    NO_ERROR:
       result := wvsValid;
     TRUST_E_NOSIGNATURE,
     TRUST_E_SUBJECT_FORM_UNKNOWN,
