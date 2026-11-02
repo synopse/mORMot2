@@ -1209,8 +1209,6 @@ const
   DUCKDB_FIRST_DAY           = -719468;   // 0000-03-01
   DUCKDB_FIRST_TDATETIME_DAY = -719162;   // 0001-01-01
   DUCKDB_LAST_DAY            = 2932896;   // 9999-12-31
-  DUCKDB_MICROSPERSEC        = Int64(1000000);
-  DUCKDB_MICROSPERHOUR       = Int64(3600000000);
 
 procedure DuckCheckDay(Days: Int64; ForDateTime: boolean = false);
 begin
@@ -1266,8 +1264,8 @@ begin
   if Micro = 0 then
     exit;
   tmp[0] := #0;
-  AppendShortQWord(Micro + DUCKDB_MICROSPERSEC, tmp);
-  tmp[1] := '.'; // replace first '1' = DUCKDB_MICROSPERSEC
+  AppendShortQWord(Micro + MicroSecsPerSec, tmp);
+  tmp[1] := '.'; // replace first '1' = MicroSecsPerSec
   while tmp[length(tmp)] = '0' do
     dec(tmp[0]);
   Append(result, @tmp[1], length(tmp));
@@ -1286,9 +1284,9 @@ begin
   st.FromMS(PtrUInt((u mod QWord(MicroSecsPerDay)) div 1000));
   st.ToIsoTime(result, '');
   if u >= QWord(MicroSecsPerDay) then
-    result := Int64ToUtf8(Int64(u div QWord(DUCKDB_MICROSPERHOUR))) +
+    result := Int64ToUtf8(Int64(u div MicroSecsPerHour)) +
               copy(result, 3, maxInt);
-  DuckAppendMicroFraction(Int64(u) mod DUCKDB_MICROSPERSEC, result);
+  DuckAppendMicroFraction(Int64(u mod MicroSecsPerSec), result);
   if Micros < 0 then
     result := '-' + result;
 end;
@@ -1305,7 +1303,7 @@ begin
   else
   begin
     // Floor division correctly handles timestamps before the Unix epoch
-    FloorDivMod(Micros, DUCKDB_MICROSPERSEC, secs, micro);
+    FloorDivMod(Micros, MicroSecsPerSec, secs, micro);
     FloorDivMod(secs, SecsPerDay, days, rem);
     DuckCheckDay(days);
     st.FromUnixTime(secs);
@@ -1694,7 +1692,7 @@ begin
         DoubleToStr(d, result); // very long text
       end;
     DUCKDB_TYPE_DATE:
-      DuckDateToText(PCardinal(P)^, result);
+      DuckDateToText(PInteger(P)^, result);
     DUCKDB_TYPE_TIME:
       DuckTimeToText(PInt64(P)^, result);
     DUCKDB_TYPE_TIME_NS:
@@ -1919,7 +1917,7 @@ begin
   result := true;
   case TypeId of
     DUCKDB_TYPE_DATE:
-      Value := PCardinal(P)^ + UnixDelta;
+      Value := PInteger(P)^ + UnixDelta;
     DUCKDB_TYPE_TIME:
       Value := PInt64(P)^ / MicroSecsPerDay;
     DUCKDB_TYPE_TIME_NS:
