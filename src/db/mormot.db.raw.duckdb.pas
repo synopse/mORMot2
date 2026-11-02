@@ -2479,7 +2479,7 @@ end;
 
 function TQuackVector.StringAt(Index: PtrInt; out Len: integer): PUtf8Char;
 begin
-  result := PUtf8Char(StrBytes + StrOffs^[Index]);
+  result := @StrBytes[StrOffs^[Index]];
   Len := StrOffs^[StoredCount + Index];
 end;
 
@@ -2494,6 +2494,7 @@ begin
     begin
       MoveFast(StrBytes[StrOffs^[Index]], Temp, len);
       Temp[len] := #0;
+      result := @Temp;
       exit;
     end;
   end;
