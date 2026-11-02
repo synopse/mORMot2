@@ -765,9 +765,9 @@ type
     /// return a pointer and the length of a stored string
     function StringAt(Index: PtrInt; out Len: integer): PUtf8Char;
     /// return a pointer to a VType.Storage = qsString text, or nil
+    // - makes a local #0-ended copy to Temp for safety
     // - used e.g. as fallback for ColumnInt/ColumnDouble/ColumnCurrency() methods
-    function TextAt(Index: PtrInt): PUtf8Char;
-      {$ifdef HASINLINE} inline; {$endif}
+    function TextAt(Index: PtrInt; var Temp: TTemp47): PUtf8Char;
   end;
   TQuackVectorDynArray = array of TQuackVector;
 
@@ -2483,12 +2483,21 @@ begin
   Len := StrOffs^[StoredCount + Index];
 end;
 
-function TQuackVector.TextAt(Index: PtrInt): PUtf8Char;
+function TQuackVector.TextAt(Index: PtrInt; var Temp: TTemp47): PUtf8Char;
+var
+  len: PtrInt;
 begin
   if VType.Storage = qsString then
-    result := PUtf8Char(StrBytes + StrOffs^[Index])
-  else
-    result := nil;
+  begin
+    len := StrOffs^[StoredCount + Index]; // inlined StringAt()
+    if len < high(Temp) then
+    begin
+      MoveFast(StrBytes[StrOffs^[Index]], Temp, len);
+      Temp[len] := #0;
+      exit;
+    end;
+  end;
+  result := nil;
 end;
 
 
@@ -2937,7 +2946,7 @@ begin
             if ColumnTypes[i].HasVariant then
             begin
               // the rows can't be decoded: ask them again as JSON
-              SetLength(VariantColumns, (n + 31) shr 5);
+              SetLength(VariantColumns, (n + 31) shr 3);
               SetBitPtr(VariantColumns, i);
               for j := i + 1 to n - 1 do
                 if ColumnTypes[j].HasVariant then

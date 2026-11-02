@@ -749,6 +749,8 @@ var
   ids: TIDDynArray;
   i: integer;
 begin
+  if fExternalModel = nil then
+    exit; // avoid GPF if previous methods of TTestExternalDatabase were not run
   props := nil;
   {$ifdef CPU64}
   // the DuckDB library should be within the main executable folder
