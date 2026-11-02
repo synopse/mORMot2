@@ -71,7 +71,9 @@ begin
     TSynLog.Family.ExceptionIgnoreCurrentThread := false;
   end;
   result := fProps <> nil;
-  if not result then
+  if result then
+    fIdent := MakeString(['Duck DB (', DuckDB.LibraryName, ' ', DuckDB.Version, ')'])
+  else
     NotifyProgress(['DuckDB library failed to load - tests skipped']);
   {$endif CPU64}
 end;
@@ -80,7 +82,6 @@ procedure TTestDuckDB.CleanUp;
 begin
   FreeAndNil(fProps);
 end;
-
 
 procedure TTestDuckDB.BasicTypes;
 var
@@ -493,19 +494,21 @@ procedure TTestDuckDB.BatchInsert;
 const
   COUNT = 1000;
 var
-  names, names2: TRawUtf8DynArray;
+  names: TRawUtf8DynArray;
   types: TSqlDBFieldTypeArray;
-  values, values2: TRawUtf8DynArrayDynArray;
-  i, pass: integer;
+  values: TRawUtf8DynArrayDynArray;
+  i: integer;
   rows: ISqlDBRows;
   timer: TPrecisionTimer;
 begin
+  // setup the new table
   if fProps = nil then
     exit;
   Check(Assigned(fProps.OnBatchInsert), 'OnBatchInsert');
-  CheckEqual(ord(fProps.BatchSendingAbilities = [cCreate]), 1);
+  Check(fProps.BatchSendingAbilities = [cCreate], 'abilities');
   fProps.ExecuteNoResult('create or replace table arr (id INTEGER, ' +
     'name VARCHAR, amount DECIMAL(19,4), d TIMESTAMP, v DOUBLE)', []);
+  // pre-computed inserted values
   SetLength(names, 5);
   names[0] := 'id';
   names[1] := 'name';
@@ -520,41 +523,35 @@ begin
   SetLength(values, 5);
   for i := 0 to 4 do
     SetLength(values[i], COUNT);
-  // pass 0 uses the Appender, pass 1 the multi-values INSERT fallback
-  // (inserting only id and name for 100 more rows)
-  for pass := 0 to 1 do
+  for i := 0 to COUNT - 1 do
   begin
-    for i := 0 to COUNT - 1 do
-    begin
-      values[0, i] := Int32ToUtf8(pass * COUNT + i + 1);
-      values[1, i] := QuotedStr(FormatUtf8('it''s #%', [i + 1]), '''');
-      values[2, i] := Int32ToUtf8(i + 1) + '.5';
-      values[3, i] := QuotedStr(DateToIso8601Text(EncodeDate(2025, 1, 1) + i), '''');
-      if i = 0 then
-        values[4, i] := 'null'
-      else
-        values[4, i] := DoubleToStr(i / 8);
-    end;
-    timer.Start;
-    if pass = 0 then
-      // the ORM supplies schema-qualified table names
-      fProps.OnBatchInsert(fProps, 'main.arr', names, types, COUNT, values, [])
+    Int32ToUtf8(i + 1, values[0, i]);
+    values[1, i] := QuotedStr(FormatUtf8('it''s #%', [i + 1]), '''');
+    Make([i + 1, '.5'], values[2, i]);
+    values[3, i] := QuotedStr(DateToIso8601Text(EncodeDate(2025, 1, 1) + i), '''');
+    if i = 0 then
+      values[4, i] := 'null'
     else
-    begin
-      // not all columns: the Appender is not usable -> regular INSERT
-      SetLength(names2, 2);
-      SetLength(values2, 2);
-      for i := 0 to 1 do
-      begin
-        names2[i] := names[i];
-        values2[i] := values[i];
-      end;
-      fProps.OnBatchInsert(fProps, 'arr', names2, types, 100, values2, []);
-    end;
-    NotifyTestSpeed('insert', COUNT, 0, @timer);
+      values[4, i] := DoubleToStr(i / 8);
   end;
+  // first pass uses the Appender
+  timer.Start;
+  // the ORM supplies all schema-qualified field names
+  fProps.OnBatchInsert(fProps, 'main.arr', names, types, COUNT, values, []);
+  NotifyTestSpeed('insert all', COUNT, 0, @timer);
+  // second pass validates the multi-values INSERT fallback
+  // (inserting only id and name for 100 more rows)
+  SetLength(names, 2);
+  SetLength(values, 2);
+  for i := 0 to 100 - 1 do
+    Int32ToUtf8(COUNT + i + 1, values[0, i]);
+  timer.Start;
+  // not all columns: the Appender is not usable -> regular INSERT
+  fProps.OnBatchInsert(fProps, 'arr', names, types, 100, values, []);
+  NotifyTestSpeed('insert two', 100, 0, @timer);
+  // verify added values
   rows := fProps.Execute('select count(*), sum(amount), max(d), ' +
-    'max(name) filter (where id = 1000), sum(v), count(v) from arr', []);
+    'max(name) filter (where id = ?), sum(v), count(v) from arr', [1000]);
   Check(rows.Step, 'batch select');
   CheckEqual(rows.ColumnInt(0), COUNT + 100, 'batch count');
   Check(rows.ColumnCurrency(1) = 501000, 'batch sum(decimal)');

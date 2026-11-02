@@ -5320,7 +5320,7 @@ begin
 end;
 
 const
-  HTTP_CONTINUE_RESPONSE: string[25] = 'HTTP/1.1 100 Continue'#13#10#13#10;
+  HTTP_CONTINUE_RESPONSE: TShort31 = 'HTTP/1.1 100 Continue'#13#10#13#10;
 
 function THttpAsyncServerConnection.DoHeaders: TPollAsyncSocketOnReadWrite;
 var

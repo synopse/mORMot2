@@ -1317,7 +1317,7 @@ var
   begin
     with props.Execute(FormatUtf8('select count(*) from %', [table]), []) do
     begin
-      Check(Step, table);
+      CheckUtf8(Step, table);
       result := ColumnInt(0);
     end;
   end;
