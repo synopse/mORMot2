@@ -1544,7 +1544,7 @@ begin
       result := PWord(P)^;
     DUCKDB_TYPE_INTEGER,
     DUCKDB_TYPE_DATE:
-      result := PCardinal(P)^;
+      result := PInteger(P)^;
     DUCKDB_TYPE_UINTEGER:
       result := PCardinal(P)^;
   else // BIGINT, UBIGINT and the 64-bit date/time kinds
@@ -1784,7 +1784,7 @@ begin
     DUCKDB_TYPE_SMALLINT:
       result := PSmallInt(P)^;
     DUCKDB_TYPE_INTEGER:
-      result := PCardinal(P)^;
+      result := PInteger(P)^;
   else
     result := PInt64(P)^;
   end;
@@ -2939,7 +2939,7 @@ begin
             if ColumnTypes[i].HasVariant then
             begin
               // the rows can't be decoded: ask them again as JSON
-              SetLength(VariantColumns, (n + 7) shr 3);
+              SetLength(VariantColumns, (n + 31) shr 5);
               SetBitPtr(VariantColumns, i);
               for j := i + 1 to n - 1 do
                 if ColumnTypes[j].HasVariant then
