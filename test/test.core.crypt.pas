@@ -6746,9 +6746,9 @@ end;
 
 procedure TTestCoreCrypto._Authenticode;
 var
-  wvs: TWinVerifyStatus;
   fn: TFileName;
   {$ifdef OSWINDOWS}
+  wvs: TWinVerifyStatus;
   exe: TFileName;
   sig, bin: RawByteString;
   {$endif OSWINDOWS}

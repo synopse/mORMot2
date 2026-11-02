@@ -327,11 +327,11 @@ type
     append_null: function(appender: TDuckDBAppender): TDuckDBState; cdecl;
     /// TRUE if the appender API was successfully resolved
     HasAppender: boolean;
+    /// return the DuckDB library version as text, e.g. 'v1.4.1'
+    Version: RawUtf8;
     /// load the library and resolve all entries
     // - raise ESqlDBDuckDB on failure
     constructor Create; override;
-    /// return the DuckDB library version as text, e.g. 'v1.4.1'
-    function Version: RawUtf8;
     /// raise ESqlDBDuckDB with the error message of a duckdb_result
     procedure RaiseResultError(res: PDuckDBResult; const ctxt: RawUtf8);
     /// low-level execution of a SQL query, raising ESqlDBDuckDB on error
@@ -698,9 +698,13 @@ type
 
 /// read a 16-bit/32-bit/64-bit value which may be unaligned in the response
 function QuackInt16(P: pointer): integer;
+  {$ifdef HASINLINE} inline; {$endif}
 function QuackInt32(P: pointer): integer;
+  {$ifdef HASINLINE} inline; {$endif}
 function QuackInt64(P: pointer): Int64;
+  {$ifdef HASINLINE} inline; {$endif}
 function QuackDouble(P: pointer): double;
+  {$ifdef HASSAFEINLINE} inline; {$endif}
 
 
 { ************ TQuackResponse Messages Decoding }
@@ -971,12 +975,8 @@ begin
   TryLoadLibrary([DuckDBLibraryName, DUCKDB_LIBNAME], ESqlDBDuckDB);
   ResolveAll(@DUCKDB_ENTRIES, @@library_version, 'duckdb_', ESqlDBDuckDB);
   HasAppender := ResolveAll(@DUCKDB_APPENDER_ENTRIES, @@appender_create,
-    'duckdb_', nil);
-end;
-
-function TDuckDBLib.Version: RawUtf8;
-begin
-  result := RawUtf8(library_version);
+    'duckdb_', nil); // no exception if appender API is not supported
+  Version := RawUtf8(library_version);
 end;
 
 procedure TDuckDBLib.RaiseResultError(res: PDuckDBResult; const ctxt: RawUtf8);
@@ -1443,17 +1443,17 @@ begin
   DuckTimeTzDecode(Bits, us, offs);
   DuckTimeToText(us, result);
   if offs < 0 then
-    result := result + '-'
+    Append(result, '-')
   else
-    result := result + '+';
+    Append(result, '+');
   offs := abs(offs);
   AppendShortToUtf8(UInt2DigitsToShortFast(offs div 3600), result);
-  if offs mod 3600 <> 0 then
-  begin
-    result := result + ':';
-    AppendShortToUtf8(UInt2DigitsToShortFast((offs div 60) mod 60), result);
-  end;
+  if offs mod 3600 = 0 then
+    exit;
+  Append(result, ':');
+  AppendShortToUtf8(UInt2DigitsToShortFast((offs div 60) mod 60), result);
 end;
+
 function DuckTimestampMicros(TypeId: TDuckDBType; Value: Int64): Int64;
 begin
   case TypeId of
@@ -1468,23 +1468,22 @@ begin
   end;
 end;
 
+
 { ************ DuckDB Logical Type Cache }
 
+function DuckDBInitChildren(var nfo: TDuckDBTypeInfo; n: PtrInt): PDuckDBTypeInfo;
+begin
+  nfo.ChildCount := n;
+  if n > 0 then
+    nfo.Children := AllocMem(n * SizeOf(TDuckDBTypeInfo));
+  result := pointer(nfo.Children);
+end;
+
 procedure DuckDBTypeInfoInit(var Info: TDuckDBTypeInfo; Handle: TDuckDBLogicalType);
-
-  procedure InitChildren(n: PtrInt);
-  begin
-    Info.ChildCount := n;
-    if n > 0 then
-    begin
-      GetMem(Info.Children, n * SizeOf(TDuckDBTypeInfo));
-      FillCharFast(Info.Children^, n * SizeOf(TDuckDBTypeInfo), 0);
-    end;
-  end;
-
 var
   i: PtrInt;
   p: PUtf8Char;
+  nfo: PDuckDBTypeInfo;
 begin
   FillCharFast(Info, SizeOf(Info), 0);
   Info.Handle := Handle;
@@ -1498,41 +1497,39 @@ begin
     DUCKDB_TYPE_ENUM:
       Info.Internal := DuckDB.enum_internal_type(Handle);
     DUCKDB_TYPE_LIST:
-      begin
-        InitChildren(1);
-        DuckDBTypeInfoInit(Info.Children^[0], DuckDB.list_type_child_type(Handle));
-      end;
+      DuckDBTypeInfoInit(DuckDBInitChildren(Info, 1)^, DuckDB.list_type_child_type(Handle));
     DUCKDB_TYPE_ARRAY:
       begin
         Info.Scale := DuckDB.array_type_array_size(Handle);
-        InitChildren(1);
-        DuckDBTypeInfoInit(Info.Children^[0], DuckDB.array_type_child_type(Handle));
+        DuckDBTypeInfoInit(DuckDBInitChildren(Info, 1)^, DuckDB.array_type_child_type(Handle));
       end;
     DUCKDB_TYPE_MAP:
       begin
-        InitChildren(2);
+        DuckDBInitChildren(Info, 2);
         DuckDBTypeInfoInit(Info.Children^[0], DuckDB.map_type_key_type(Handle));
         DuckDBTypeInfoInit(Info.Children^[1], DuckDB.map_type_value_type(Handle));
       end;
     DUCKDB_TYPE_STRUCT:
       begin
-        InitChildren(DuckDB.struct_type_child_count(Handle));
+        nfo := DuckDBInitChildren(Info, DuckDB.struct_type_child_count(Handle));
         SetLength(Info.Names, Info.ChildCount);
         for i := 0 to Info.ChildCount - 1 do
         begin
           p := DuckDB.struct_type_child_name(Handle, i);
           FastSetString(Info.Names[i], p, StrLen(p));
           DuckDB.free_(p);
-          DuckDBTypeInfoInit(Info.Children^[i],
-            DuckDB.struct_type_child_type(Handle, i));
+          DuckDBTypeInfoInit(nfo^, DuckDB.struct_type_child_type(Handle, i));
+          inc(nfo);
         end;
       end;
     DUCKDB_TYPE_UNION:
       begin
-        InitChildren(DuckDB.union_type_member_count(Handle));
+        nfo := DuckDBInitChildren(Info, DuckDB.union_type_member_count(Handle));
         for i := 0 to Info.ChildCount - 1 do
-          DuckDBTypeInfoInit(Info.Children^[i],
-            DuckDB.union_type_member_type(Handle, i));
+        begin
+          DuckDBTypeInfoInit(nfo^, DuckDB.union_type_member_type(Handle, i));
+          inc(nfo);
+        end;
       end;
   end;
   Info.Size := DuckFixedSize(Info.TypeId, Info.Internal);
@@ -1541,15 +1538,22 @@ end;
 function DuckDBTypeHasVariant(const Info: TDuckDBTypeInfo): boolean;
 var
   i: PtrInt;
+  p: PDuckDBTypeInfo;
 begin
   result := Info.TypeId = DUCKDB_TYPE_VARIANT;
-  if not result then
-    for i := 0 to Info.ChildCount - 1 do
-      if DuckDBTypeHasVariant(Info.Children^[i]) then
-      begin
-        result := true;
-        exit;
-      end;
+  if result then
+    exit;
+  p := pointer(Info.Children);
+  for i := 1 to Info.ChildCount do
+    if (p^.TypeId = DUCKDB_TYPE_VARIANT) or
+       ((p^.ChildCount > 0) and
+        DuckDBTypeHasVariant(p^)) then
+    begin
+      result := true;
+      exit;
+    end
+    else
+      inc(p);
 end;
 
 function DuckDBVariantSql(const Sql: RawUtf8; const Names: TRawUtf8DynArray;
