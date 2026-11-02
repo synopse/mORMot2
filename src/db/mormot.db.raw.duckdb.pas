@@ -10,9 +10,13 @@ unit mormot.db.raw.duckdb;
    Native DuckDB C API (v1.1+) - tested with DuckDB v1.4.1
     - DuckDB C API Types and Constants
     - TDuckDBLib Dynamic Library Loader
-    - Value Conversion Helpers (hugeint, decimal, date/time, string_t)
+    - DuckDB Values Conversion Helpers
     - DuckDB Logical Type Cache
-    - Quack Client/Server Wire Protocol Encoding and Decoding
+    - Quack API Constants and Exception
+    - TQuackType Logical Types Description
+    - TQuackVector and TQuackChunk Result Data Access
+    - TQuackResponse Messages Decoding
+    - Quack Requests Encoding
 
   *****************************************************************************
 
@@ -73,7 +77,7 @@ type
   /// duckdb_type enumeration (DUCKDB_TYPE_* constants)
   TDuckDBType = integer;
 
-  /// opaque handles - pointers to a struct (void* internal_ptr)
+  // opaque DuckDB API handles - pointers to a struct (void* internal_ptr)
   TDuckDBDatabase          = type pointer;
   TDuckDBConnection        = type pointer;
   TDuckDBConfig            = type pointer;
@@ -200,10 +204,6 @@ const
   /// DuckDB TIMESTAMP 'infinity' / '-infinity' special values
   DUCKDB_TIMESTAMP_INFINITY  = $7fffffffffffffff;
   DUCKDB_TIMESTAMP_NINFINITY = -$7fffffffffffffff;
-
-  /// days between the TDateTime epoch (1899-12-30) and 1970-01-01
-  DUCKDB_UNIXDATE_DELTA = 25569;
-  DUCKDB_MICROSPERDAY   = Int64(86400000000);
 
 {$ifdef OSWINDOWS}
   DUCKDB_LIBNAME = 'duckdb.dll';
@@ -357,7 +357,7 @@ procedure DuckDBLibraryInitialize;
 function DuckDBLibraryAvailable: boolean;
 
 
-{ ************ Value Conversion Helpers (hugeint, decimal, date/time, string_t) }
+{ ************ DuckDB Values Conversion Helpers  }
 
 /// return the text pointer and length of a duckdb_string_t
 // - warning: len should be defined as an exact integer type, not a PtrInt
@@ -381,7 +381,8 @@ procedure DuckHugeIntToText(const v: TDuckDBHugeInt; Signed: boolean;
   var result: RawUtf8; Scale: integer = 0);
 
 /// return TRUE if the hugeint fits into an Int64
-function DuckHugeIntIsInt64(const v: TDuckDBHugeInt; Signed: boolean): boolean;
+function DuckHugeIntIsInt64(var v: TDuckDBHugeInt; Signed: boolean): boolean;
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// convert a DuckDB DATE into Y/M/D (years 0000-03-01 through 9999-12-31)
 procedure DuckDaysToYmd(Days: integer; out Y, M, D: integer);
@@ -419,6 +420,7 @@ procedure DuckBitToText(P: PDuckU8Array; Len: integer; var result: RawUtf8);
 
 /// decode a DuckDB TIME_TZ 64-bit value into micros and offset in seconds
 procedure DuckTimeTzDecode(Bits: Int64; out Micros: Int64; out OffsetSec: integer);
+  {$ifdef HASINLINE} inline; {$endif}
 
 /// convert a DuckDB TIME_TZ 64-bit value into 'hh:mm:ss[.ffffff]+hh[:mm]'
 procedure DuckTimeTzToText(Bits: Int64; var result: RawUtf8);
@@ -428,10 +430,85 @@ function DuckTimestampMicros(TypeId: TDuckDBType; Value: Int64): Int64;
 
 const
   /// powers of 10 up to the Int64 limit, e.g. to scale a DECIMAL mantissa
-  DUCKDB_POW10: array[0..18] of Int64 = (1, 10, 100, 1000, 10000, 100000,
-    1000000, 10000000, 100000000, 1000000000, 10000000000, 100000000000,
-    1000000000000, 10000000000000, 100000000000000, 1000000000000000,
-    10000000000000000, 100000000000000000, 1000000000000000000);
+  DUCKDB_POW10: array[0..18] of Int64 = (
+    1,
+    10,
+    100,
+    1000,
+    10000,
+    100000,
+    1000000,
+    10000000,
+    100000000,
+    1000000000,
+    10000000000,
+    100000000000,
+    1000000000000,
+    10000000000000,
+    100000000000000,
+    1000000000000000,
+    10000000000000000,
+    100000000000000000,
+    1000000000000000000);
+
+/// the size in bytes of a DuckDB fixed-size value, 0 for variable-size types
+// - Internal is the storage type of a DECIMAL or an ENUM
+function DuckFixedSize(TypeId, Internal: TDuckDBType): PtrInt;
+
+/// decode a BOOLEAN, DATE or integer value as Int64, from a possibly unaligned P
+// - UBIGINT is returned as its two's complement Int64 bits
+function DuckFixedInt(TypeId: TDuckDBType; P: PAnsiChar): Int64;
+
+/// convert a fixed-size value into a text buffer, with no memory allocation
+// - handles BOOLEAN, integers, HUGEINT, DECIMAL, FLOAT, DOUBLE and UUID
+// - returns the text length, 0 for SQLNULL, or -1 for other types
+// - P may be unaligned: it is the address of the value, not of its vector
+function DuckFixedToTextBuf(TypeId, Internal: TDuckDBType; Scale: integer;
+  P: PAnsiChar; var Buffer: TTemp47): PtrInt;
+
+/// convert a fixed-size value into its DuckDB text representation
+// - handles DuckFixedToTextBuf() types, dates, times, timestamps and INTERVAL
+// - returns '' for other types, e.g. ENUM which needs its dictionary
+procedure DuckFixedToText(TypeId, Internal: TDuckDBType; Scale: integer;
+  P: PAnsiChar; var result: RawUtf8);
+
+/// append a fixed-size value as JSON: number, boolean or quoted text
+// - handles all DuckFixedToText() types but not ENUM
+procedure DuckFixedToJson(TypeId, Internal: TDuckDBType; Scale: integer;
+  P: PAnsiChar; W: TJsonWriter);
+
+type
+  /// result of DuckFixedToInt64()
+  TDuckConvert = (
+    dcFallback,
+    dcOk,
+    dcOverflow);
+
+/// convert a fixed-size value into an Int64
+// - handles integers, BOOLEAN, HUGEINT, DECIMAL, floats, dates and times:
+// the 64-bit date/time kinds are returned as their raw integer value
+// - returns dcFallback if the value type should be converted from its text,
+// or dcOverflow if a 128-bit value does not fit in an Int64
+function DuckFixedToInt64(TypeId, Internal: TDuckDBType; Scale: integer;
+  P: PAnsiChar; out Value: Int64): TDuckConvert;
+
+/// convert a fixed-size value into a double
+// - handles BOOLEAN, integers (but UBIGINT), FLOAT, DOUBLE and DECIMAL
+// - returns false if the value type should be converted from its text
+function DuckFixedToDouble(TypeId, Internal: TDuckDBType; Scale: integer;
+  P: PAnsiChar; out Value: double): boolean;
+
+/// convert a fixed-size value into a currency, with no precision loss for
+// DECIMAL with up to 4 decimals
+// - returns false if the value type should be converted from its text
+function DuckFixedToCurrency(TypeId, Internal: TDuckDBType; Scale: integer;
+  P: PAnsiChar; out Value: currency): boolean;
+
+/// convert a fixed-size date, time or timestamp value into a TDateTime
+// - returns false if the value type should be converted from its text
+function DuckFixedToDateTime(TypeId: TDuckDBType; P: PAnsiChar;
+  out Value: TDateTime): boolean;
+
 
 { ************ DuckDB Logical Type Cache }
 
@@ -473,7 +550,7 @@ procedure DuckDBTypeInfoInit(var Info: TDuckDBTypeInfo; Handle: TDuckDBLogicalTy
 procedure DuckDBTypeInfoDone(var Info: TDuckDBTypeInfo);
 
 /// retrieve the text of an ENUM value, caching all the ENUM dictionary
-function DuckDBEnumValue(var Info: TDuckDBTypeInfo; Index: PtrInt): RawUtf8;
+procedure DuckDBEnumValue(var Info: TDuckDBTypeInfo; Index: PtrInt; var Result: RawUtf8);
 
 /// return true if a type is a VARIANT, or contains a VARIANT as nested type
 function DuckDBTypeHasVariant(const Info: TDuckDBTypeInfo): boolean;
@@ -485,14 +562,14 @@ function DuckDBTypeHasVariant(const Info: TDuckDBTypeInfo): boolean;
 // is always returned as SQL NULL (DuckDB 1.5 returned a JSON 'null')
 // - IsVariant[] flags the columns to be converted
 function DuckDBVariantSql(const Sql: RawUtf8; const Names: TRawUtf8DynArray;
-  const IsVariant: TBooleanDynArray): RawUtf8;
+  const IsVariant: TBytes): RawUtf8;
 
 /// convert a DuckDB type into the corresponding mormot.db field type
 function DuckDBTypeToField(TypeId: TDuckDBType; Scale: integer): TSqlDBFieldType;
 
 
 
-{ ************ Quack Constants and Exception }
+{ ************ Quack API Constants and Exception }
 
 type
   /// exception raised by the Quack client and its protocol decoding
@@ -621,6 +698,12 @@ type
     procedure SetStorage;
     /// return true if this type is a VARIANT, or contains a VARIANT
     function HasVariant: boolean;
+    /// decode a 8/16/32-bit enumerate value from a memory buffer
+    function EnumIndexAt(D: PAnsiChar): PtrInt;
+      {$ifdef HASINLINE} inline; {$endif}
+    /// compute the corresponding raw DuckDB integer type from its ElemSize
+    function ElemSizeInternal: TDuckDBType;
+      {$ifdef HASINLINE} inline; {$endif}
   end;
   PQuackType = ^TQuackType;
   TQuackTypeDynArray = array of TQuackType;
@@ -681,6 +764,10 @@ type
       {$ifdef HASINLINE} inline; {$endif}
     /// return a pointer and the length of a stored string
     function StringAt(Index: PtrInt; out Len: integer): PUtf8Char;
+    /// return a pointer to a VType.Storage = qsString text, or nil
+    // - used e.g. as fallback for ColumnInt/ColumnDouble/ColumnCurrency() methods
+    function TextAt(Index: PtrInt): PUtf8Char;
+      {$ifdef HASINLINE} inline; {$endif}
   end;
   TQuackVectorDynArray = array of TQuackVector;
 
@@ -696,13 +783,7 @@ type
   end;
   TQuackChunkDynArray = array of TQuackChunk;
 
-/// read a 16-bit/32-bit/64-bit value which may be unaligned in the response
-function QuackInt16(P: pointer): integer;
-  {$ifdef HASINLINE} inline; {$endif}
-function QuackInt32(P: pointer): integer;
-  {$ifdef HASINLINE} inline; {$endif}
-function QuackInt64(P: pointer): Int64;
-  {$ifdef HASINLINE} inline; {$endif}
+/// read a 64-bit floating-point value which may be unaligned in the response
 function QuackDouble(P: pointer): double;
   {$ifdef HASSAFEINLINE} inline; {$endif}
 
@@ -755,7 +836,7 @@ type
     // - the VARIANT binary layout is not decoded: the response is not decoded
     // after the columns names, and the SQL should be wrapped by DuckDBVariantSql()
     // - nil if there is no VARIANT in the result
-    VariantColumns: TBooleanDynArray;
+    VariantColumns: TBytes;
     /// PREPARE_RESPONSE: true if some FETCH_REQUEST are needed to get all rows
     NeedsMoreFetch: boolean;
     /// PREPARE_RESPONSE: the query identifier
@@ -825,65 +906,8 @@ function QuackUriParse(const Uri: RawUtf8; out Host: RawUtf8;
 function QuackHostIsLocal(const Host: RawUtf8): boolean;
 
 
-{ ************ DuckDB Fixed-Size Values Conversion }
 
-/// the size in bytes of a DuckDB fixed-size value, 0 for variable-size types
-// - Internal is the storage type of a DECIMAL or an ENUM
-function DuckFixedSize(TypeId, Internal: TDuckDBType): PtrInt;
-
-/// decode a BOOLEAN, DATE or integer value as Int64, from a possibly unaligned P
-// - UBIGINT is returned as its two's complement Int64 bits
-function DuckFixedInt(TypeId: TDuckDBType; P: PAnsiChar): Int64;
-
-/// convert a fixed-size value into a text buffer, with no memory allocation
-// - handles BOOLEAN, integers, HUGEINT, DECIMAL, FLOAT, DOUBLE and UUID
-// - returns the text length, 0 for SQLNULL, or -1 for other types
-// - P may be unaligned: it is the address of the value, not of its vector
-function DuckFixedToTextBuf(TypeId, Internal: TDuckDBType; Scale: integer;
-  P: PAnsiChar; var Buffer: TTemp47): PtrInt;
-
-/// convert a fixed-size value into its DuckDB text representation
-// - handles DuckFixedToTextBuf() types, dates, times, timestamps and INTERVAL
-// - returns '' for other types, e.g. ENUM which needs its dictionary
-procedure DuckFixedToText(TypeId, Internal: TDuckDBType; Scale: integer;
-  P: PAnsiChar; var result: RawUtf8);
-
-/// append a fixed-size value as JSON: number, boolean or quoted text
-// - handles all DuckFixedToText() types but not ENUM
-procedure DuckFixedToJson(TypeId, Internal: TDuckDBType; Scale: integer;
-  P: PAnsiChar; W: TJsonWriter);
-
-type
-  /// result of DuckFixedToInt64()
-  TDuckConvert = (
-    dcFallback,
-    dcOk,
-    dcOverflow);
-
-/// convert a fixed-size value into an Int64
-// - handles integers, BOOLEAN, HUGEINT, DECIMAL, floats, dates and times:
-// the 64-bit date/time kinds are returned as their raw integer value
-// - returns dcFallback if the value type should be converted from its text,
-// or dcOverflow if a 128-bit value does not fit in an Int64
-function DuckFixedToInt64(TypeId, Internal: TDuckDBType; Scale: integer;
-  P: PAnsiChar; out Value: Int64): TDuckConvert;
-
-/// convert a fixed-size value into a double
-// - handles BOOLEAN, integers (but UBIGINT), FLOAT, DOUBLE and DECIMAL
-// - returns false if the value type should be converted from its text
-function DuckFixedToDouble(TypeId, Internal: TDuckDBType; Scale: integer;
-  P: PAnsiChar; out Value: double): boolean;
-
-/// convert a fixed-size value into a currency, with no precision loss for
-// DECIMAL with up to 4 decimals
-// - returns false if the value type should be converted from its text
-function DuckFixedToCurrency(TypeId, Internal: TDuckDBType; Scale: integer;
-  P: PAnsiChar; out Value: currency): boolean;
-
-/// convert a fixed-size date, time or timestamp value into a TDateTime
-// - returns false if the value type should be converted from its text
-function DuckFixedToDateTime(TypeId: TDuckDBType; P: PAnsiChar;
-  out Value: TDateTime): boolean;implementation
+implementation
 
 
 { ************ TDuckDBLib Dynamic Library Loader }
@@ -1048,7 +1072,7 @@ begin
 end;
 
 type
-  TU128 = TBlock128; // little-endian 32-bit limbs
+  TU128 = TBlock128; // direct 128-bit access by little-endian 32-bit limbs
 
 procedure U128Negate(var v: TU128);
 var
@@ -1170,7 +1194,7 @@ begin
   FastSetString(result, @tmp[0], len);
 end;
 
-function DuckHugeIntIsInt64(const v: TDuckDBHugeInt; Signed: boolean): boolean;
+function DuckHugeIntIsInt64(var v: TDuckDBHugeInt; Signed: boolean): boolean;
 begin
   if Signed then
     result := ((v.Upper = 0) and (v.Lower >= 0)) or
@@ -1183,7 +1207,7 @@ const
   // TSynSystemTime.FromUnixTime supports year 0000 only from March onward
   // - all earlier dates and years >= 10000 are outside this unit's scope
   DUCKDB_FIRST_DAY           = -719468;   // 0000-03-01
-  DUCKDB_FIRST_TDATETIME_DAY = -719162; // 0001-01-01
+  DUCKDB_FIRST_TDATETIME_DAY = -719162;   // 0001-01-01
   DUCKDB_LAST_DAY            = 2932896;   // 9999-12-31
   DUCKDB_MICROSPERSEC        = Int64(1000000);
   DUCKDB_MICROSPERHOUR       = Int64(3600000000);
@@ -1254,17 +1278,17 @@ var
   st: TSynSystemTime;
   u: QWord;
 begin
-  // DuckDB INTERVAL uses this formatter too, including negative/>24h values.
+  // DuckDB INTERVAL uses this formatter too, including negative/>24h values
   if Micros < 0 then
     u := QWord(-(Micros + 1)) + 1 // also safe for Low(Int64)
   else
     u := QWord(Micros);
-  st.FromMS(PtrUInt((u mod QWord(DUCKDB_MICROSPERDAY)) div 1000));
+  st.FromMS(PtrUInt((u mod QWord(MicroSecsPerDay)) div 1000));
   st.ToIsoTime(result, '');
-  if u >= QWord(DUCKDB_MICROSPERDAY) then
+  if u >= QWord(MicroSecsPerDay) then
     result := Int64ToUtf8(Int64(u div QWord(DUCKDB_MICROSPERHOUR))) +
               copy(result, 3, maxInt);
-  DuckAppendMicroFraction(Int64(u mod DUCKDB_MICROSPERSEC), result);
+  DuckAppendMicroFraction(Int64(u) mod DUCKDB_MICROSPERSEC, result);
   if Micros < 0 then
     result := '-' + result;
 end;
@@ -1280,7 +1304,7 @@ begin
     result := '-infinity'
   else
   begin
-    // Floor division correctly handles timestamps before the Unix epoch.
+    // Floor division correctly handles timestamps before the Unix epoch
     FloorDivMod(Micros, DUCKDB_MICROSPERSEC, secs, micro);
     FloorDivMod(secs, SecsPerDay, days, rem);
     DuckCheckDay(days);
@@ -1304,8 +1328,8 @@ begin
   st.FromUnixMsTime(ms);
   result := st.ToDateTime;
   // TSynSystemTime.ToDateTime uses a positive time fraction. Delphi instead
-  // requires a negative fraction when the date part is before 1899-12-30.
-  if days + DUCKDB_UNIXDATE_DELTA < 0 then
+  // requires a negative fraction when the date part is before 1899-12-30
+  if days + UnixDelta < 0 then
     result := result - 2 * (rem / MSecsPerDay);
 end;
 
@@ -1393,8 +1417,7 @@ begin
   result := p - PUtf8Char(@Buffer[0]);
 end;
 
-procedure DuckUuidToText(const v: TDuckDBHugeInt;
-  var result: RawUtf8);
+procedure DuckUuidToText(const v: TDuckDBHugeInt; var result: RawUtf8);
 var
   tmp: TTemp47;
   len: PtrInt;
@@ -1406,23 +1429,19 @@ end;
 procedure DuckBitToText(P: PDuckU8Array; Len: integer; var result: RawUtf8);
 var
   padding, i, n: PtrInt;
-  c: PUtf8Char;
+  c: PByte;
 begin
-  result := '';
+  FastAssignNew(result);
   if Len < 1 then
     exit;
   padding := P^[0];
   n := (Len - 1) * 8 - padding;
   if n <= 0 then
     exit;
-  FastSetString(result, nil, n);
-  c := pointer(result);
+  c := FastSetString(result, n);
   for i := padding to (Len - 1) * 8 - 1 do
   begin
-    if (P^[1 + i shr 3] shr (7 - (i and 7))) and 1 <> 0 then
-      c^ := '1'
-    else
-      c^ := '0';
+    c^ := ord('0') + ((P^[1 + i shr 3] shr (7 - (i and 7))) and 1);
     inc(c);
   end;
 end;
@@ -1449,7 +1468,7 @@ begin
   offs := abs(offs);
   AppendShortToUtf8(UInt2DigitsToShortFast(offs div 3600), result);
   if offs mod 3600 = 0 then
-    exit;
+    exit; // no microseconds
   Append(result, ':');
   AppendShortToUtf8(UInt2DigitsToShortFast((offs div 60) mod 60), result);
 end;
@@ -1461,10 +1480,465 @@ begin
       result := Value * 1000000;
     DUCKDB_TYPE_TIMESTAMP_MS:
       result := Value * 1000;
-    DUCKDB_TYPE_TIMESTAMP_NS, DUCKDB_TYPE_TIMESTAMP_TZ_NS:
+    DUCKDB_TYPE_TIMESTAMP_NS,
+    DUCKDB_TYPE_TIMESTAMP_TZ_NS:
       result := Value div 1000;
   else
     result := Value;
+  end;
+end;
+
+function DuckFixedSize(TypeId, Internal: TDuckDBType): PtrInt;
+begin
+  case TypeId of
+    DUCKDB_TYPE_SQLNULL,
+    DUCKDB_TYPE_BOOLEAN,
+    DUCKDB_TYPE_TINYINT,
+    DUCKDB_TYPE_UTINYINT:
+      result := 1;
+    DUCKDB_TYPE_SMALLINT,
+    DUCKDB_TYPE_USMALLINT:
+      result := 2;
+    DUCKDB_TYPE_INTEGER,
+    DUCKDB_TYPE_UINTEGER,
+    DUCKDB_TYPE_FLOAT,
+    DUCKDB_TYPE_DATE:
+      result := 4;
+    DUCKDB_TYPE_BIGINT,
+    DUCKDB_TYPE_UBIGINT,
+    DUCKDB_TYPE_DOUBLE,
+    DUCKDB_TYPE_TIME,
+    DUCKDB_TYPE_TIME_NS,
+    DUCKDB_TYPE_TIME_TZ,
+    DUCKDB_TYPE_TIMESTAMP,
+    DUCKDB_TYPE_TIMESTAMP_S,
+    DUCKDB_TYPE_TIMESTAMP_MS,
+    DUCKDB_TYPE_TIMESTAMP_NS,
+    DUCKDB_TYPE_TIMESTAMP_TZ,
+    DUCKDB_TYPE_TIMESTAMP_TZ_NS:
+      result := 8;
+    DUCKDB_TYPE_HUGEINT,
+    DUCKDB_TYPE_UHUGEINT,
+    DUCKDB_TYPE_UUID,
+    DUCKDB_TYPE_INTERVAL:
+      result := 16;
+    DUCKDB_TYPE_DECIMAL,
+    DUCKDB_TYPE_ENUM:
+      result := DuckFixedSize(Internal, DUCKDB_TYPE_INVALID);
+  else
+    result := 0;
+  end;
+end;
+
+function DuckFixedInt(TypeId: TDuckDBType; P: PAnsiChar): Int64;
+begin
+  case TypeId of
+    DUCKDB_TYPE_BOOLEAN,
+    DUCKDB_TYPE_UTINYINT:
+      result := PByte(P)^;
+    DUCKDB_TYPE_TINYINT:
+      result := PShortInt(P)^;
+    DUCKDB_TYPE_SMALLINT:
+      result := PSmallInt(P)^;
+    DUCKDB_TYPE_USMALLINT:
+      result := PWord(P)^;
+    DUCKDB_TYPE_INTEGER,
+    DUCKDB_TYPE_DATE:
+      result := PCardinal(P)^;
+    DUCKDB_TYPE_UINTEGER:
+      result := PCardinal(P)^;
+  else // BIGINT, UBIGINT and the 64-bit date/time kinds
+    result := PInt64(P)^;
+  end;
+end;
+
+procedure DuckFixedHuge(P: PAnsiChar; var H: TDuckDBHugeInt);
+  {$ifdef HASINLINE} inline; {$endif}
+begin
+  H.Lower := PInt64(P)^;
+  H.Upper := PInt64(P + 8)^;
+end;
+
+function DuckFixedToTextBuf(TypeId, Internal: TDuckDBType; Scale: integer;
+  P: PAnsiChar; var Buffer: TTemp47): PtrInt;
+var
+  b, num: PAnsiChar;
+  h: TDuckDBHugeInt;
+  s: single;
+  d: double;
+  tmp: ShortString;
+begin
+  result := 0;
+  Buffer[0] := #0;
+  num := nil;
+  case TypeId of
+    DUCKDB_TYPE_BOOLEAN:
+      begin
+        b := @BOOL_STR[P^ <> #0]; // 'false'/'true'
+        PInt64(@Buffer)^ := PInt64(b + 1)^; // include ending #0
+        result := ord(b[0]);
+      end;
+    DUCKDB_TYPE_TINYINT,
+    DUCKDB_TYPE_SMALLINT,
+    DUCKDB_TYPE_INTEGER,
+    DUCKDB_TYPE_BIGINT,
+    DUCKDB_TYPE_UTINYINT,
+    DUCKDB_TYPE_USMALLINT,
+    DUCKDB_TYPE_UINTEGER:
+      num := StrInt64(@Buffer[high(Buffer)], DuckFixedInt(TypeId, P));
+    DUCKDB_TYPE_UBIGINT:
+      num := StrUInt64(@Buffer[high(Buffer)], PQWord(P)^);
+    DUCKDB_TYPE_HUGEINT,
+    DUCKDB_TYPE_UHUGEINT:
+      begin
+        DuckFixedHuge(P, h);
+        result := DuckHugeIntToTextBuf(h, TypeId = DUCKDB_TYPE_HUGEINT, 0, Buffer);
+      end;
+    DUCKDB_TYPE_DECIMAL:
+      begin
+        case Internal of
+          DUCKDB_TYPE_HUGEINT:
+            DuckFixedHuge(P, h);
+          DUCKDB_TYPE_SMALLINT,
+          DUCKDB_TYPE_INTEGER:
+            begin
+              h.Lower := DuckFixedInt(Internal, P);
+              if h.Lower < 0 then
+                h.Upper := -1 // sign extension
+              else
+                h.Upper := 0;
+            end;
+        else
+          begin
+            h.Lower := PInt64(P)^;
+            if h.Lower < 0 then
+              h.Upper := -1
+            else
+              h.Upper := 0;
+          end;
+        end;
+        result := DuckHugeIntToTextBuf(h, true, Scale, Buffer);
+      end;
+    DUCKDB_TYPE_FLOAT,
+    DUCKDB_TYPE_DOUBLE:
+      begin
+        if TypeId = DUCKDB_TYPE_FLOAT then
+        begin
+          MoveFast(P^, s, SizeOf(s));
+          d := s;
+        end
+        else
+          d := QuackDouble(P);
+        if PInt64(@d)^ = 0 then
+        begin
+          PCardinal(@Buffer)^ := ord('0');
+          result := 1;
+        end
+        else
+        begin
+          result := DoubleToShort(@tmp, d);
+          if result > high(Buffer) then
+            result := -1 // very unlikely
+          else
+          begin
+            MoveFast(tmp[1], Buffer[0], result);
+            Buffer[result] := #0;
+          end;
+        end;
+      end;
+    DUCKDB_TYPE_UUID:
+      begin
+        DuckFixedHuge(P, h);
+        result := DuckUuidToTextBuf(h, Buffer);
+      end;
+    DUCKDB_TYPE_SQLNULL:
+      ; // NULL -> empty buffer
+  else
+    result := -1; // dates, times, intervals, ENUM, VARCHAR, BIT and nested types
+  end;
+  // normalize the backward-generated 64-bit integer text
+  if num = nil then
+    exit;
+  result := @Buffer[high(Buffer)] - num;
+  MoveFast(num^, Buffer[0], result);
+  Buffer[result] := #0;
+end;
+
+procedure DuckFixedToText(TypeId, Internal: TDuckDBType; Scale: integer;
+  P: PAnsiChar; var result: RawUtf8);
+var
+  len: PtrInt;
+  iv: TDuckDBInterval;
+  s: single;
+  d: double;
+  buf: TTemp47;
+begin
+  len := DuckFixedToTextBuf(TypeId, Internal, Scale, P, buf);
+  if len >= 0 then
+  begin
+    FastSetString(result, @buf[0], len); // most simple types
+    exit;
+  end;
+  FastAssignNew(result);
+  case TypeId of
+    DUCKDB_TYPE_FLOAT,
+    DUCKDB_TYPE_DOUBLE:
+      begin
+        if TypeId = DUCKDB_TYPE_FLOAT then
+        begin
+          MoveFast(P^, s, SizeOf(s));
+          d := s;
+        end
+        else
+          d := QuackDouble(P);
+        DoubleToStr(d, result); // very long text
+      end;
+    DUCKDB_TYPE_DATE:
+      DuckDateToText(PCardinal(P)^, result);
+    DUCKDB_TYPE_TIME:
+      DuckTimeToText(PInt64(P)^, result);
+    DUCKDB_TYPE_TIME_NS:
+      DuckTimeToText(PInt64(P)^ div 1000, result);
+    DUCKDB_TYPE_TIME_TZ:
+      DuckTimeTzToText(PInt64(P)^, result);
+    DUCKDB_TYPE_TIMESTAMP,
+    DUCKDB_TYPE_TIMESTAMP_S,
+    DUCKDB_TYPE_TIMESTAMP_MS,
+    DUCKDB_TYPE_TIMESTAMP_NS:
+      DuckTimestampToText(DuckTimestampMicros(TypeId, PInt64(P)^), result);
+    DUCKDB_TYPE_TIMESTAMP_TZ,
+    DUCKDB_TYPE_TIMESTAMP_TZ_NS:
+      begin
+        DuckTimestampToText(DuckTimestampMicros(TypeId, PInt64(P)^), result);
+        result := result + '+00'; // stored as UTC
+      end;
+    DUCKDB_TYPE_INTERVAL:
+      begin
+        iv.Months := PCardinal(P)^;
+        iv.Days   := PCardinal(P + 4)^;
+        iv.Micros := PInt64(P + 8)^;
+        DuckIntervalToText(iv, result);
+      end;
+  end;
+end;
+
+procedure DuckFixedToJson(TypeId, Internal: TDuckDBType; Scale: integer;
+  P: PAnsiChar; W: TJsonWriter);
+var
+  n: PtrInt;
+  s: single;
+  buf: TTemp47;
+  txt: pointer;
+begin
+  case TypeId of
+    DUCKDB_TYPE_BOOLEAN:
+      W.Add(P^ <> #0);
+    DUCKDB_TYPE_TINYINT,
+    DUCKDB_TYPE_SMALLINT,
+    DUCKDB_TYPE_INTEGER,
+    DUCKDB_TYPE_BIGINT,
+    DUCKDB_TYPE_UTINYINT,
+    DUCKDB_TYPE_USMALLINT,
+    DUCKDB_TYPE_UINTEGER:
+      W.Add(DuckFixedInt(TypeId, P));
+    DUCKDB_TYPE_FLOAT:
+      begin
+        MoveFast(P^, s, SizeOf(s));
+        W.AddSingle(s);
+      end;
+    DUCKDB_TYPE_DOUBLE:
+      W.AddDouble(QuackDouble(P));
+    DUCKDB_TYPE_SQLNULL:
+      W.AddNull;
+    DUCKDB_TYPE_UBIGINT,
+    DUCKDB_TYPE_HUGEINT,
+    DUCKDB_TYPE_UHUGEINT,
+    DUCKDB_TYPE_DECIMAL:
+      begin
+        n := DuckFixedToTextBuf(TypeId, Internal, Scale, P, buf);
+        W.AddNoJsonEscape(@buf[0], n);
+      end;
+  else
+    begin
+      // UUID, dates, times, INTERVAL -> JSON string
+      W.AddDirect('"');
+      n := DuckFixedToTextBuf(TypeId, Internal, Scale, P, buf);
+      if n >= 0 then
+        W.AddJsonEscape(@buf[0], n)
+      else
+      begin
+        txt := nil;
+        DuckFixedToText(TypeId, Internal, Scale, P, RawUtf8(txt));
+        W.AddJsonEscape(txt, length(RawUtf8(txt)));
+        FastAssignNew(txt); // manual RawUtf8 release
+      end;
+      W.AddDirect('"');
+    end;
+  end;
+end;
+
+function DuckDecimalMantissa(Internal: TDuckDBType; P: PAnsiChar): Int64;
+  {$ifdef HASINLINE} inline; {$endif}
+begin
+  case Internal of
+    DUCKDB_TYPE_SMALLINT:
+      result := PSmallInt(P)^;
+    DUCKDB_TYPE_INTEGER:
+      result := PCardinal(P)^;
+  else
+    result := PInt64(P)^;
+  end;
+end;
+
+function DuckFixedToInt64(TypeId, Internal: TDuckDBType; Scale: integer;
+  P: PAnsiChar; out Value: Int64): TDuckConvert;
+var
+  h: TDuckDBHugeInt;
+  d: double;
+begin
+  result := dcOk;
+  case TypeId of
+    DUCKDB_TYPE_BOOLEAN,
+    DUCKDB_TYPE_TINYINT,
+    DUCKDB_TYPE_SMALLINT,
+    DUCKDB_TYPE_INTEGER,
+    DUCKDB_TYPE_BIGINT,
+    DUCKDB_TYPE_UTINYINT,
+    DUCKDB_TYPE_USMALLINT,
+    DUCKDB_TYPE_UINTEGER,
+    DUCKDB_TYPE_UBIGINT,
+    DUCKDB_TYPE_DATE,
+    DUCKDB_TYPE_TIME,
+    DUCKDB_TYPE_TIMESTAMP,
+    DUCKDB_TYPE_TIMESTAMP_TZ,
+    DUCKDB_TYPE_TIMESTAMP_S,
+    DUCKDB_TYPE_TIMESTAMP_MS,
+    DUCKDB_TYPE_TIMESTAMP_NS,
+    DUCKDB_TYPE_TIMESTAMP_TZ_NS:
+      Value := DuckFixedInt(TypeId, P);
+    DUCKDB_TYPE_HUGEINT,
+    DUCKDB_TYPE_UHUGEINT:
+      begin
+        DuckFixedHuge(P, h);
+        Value := h.Lower;
+        if not DuckHugeIntIsInt64(h, TypeId = DUCKDB_TYPE_HUGEINT) then
+          result := dcOverflow;
+      end;
+    DUCKDB_TYPE_DECIMAL:
+      if Internal = DUCKDB_TYPE_HUGEINT then
+        result := dcFallback // integer part from the text
+      else
+        Value := DuckDecimalMantissa(Internal, P) div DUCKDB_POW10[Scale];
+    DUCKDB_TYPE_FLOAT,
+    DUCKDB_TYPE_DOUBLE:
+      begin
+        DuckFixedToDouble(TypeId, Internal, Scale, P, d);
+        Value := trunc(d);
+      end;
+  else
+    result := dcFallback;
+  end;
+end;
+
+function DuckFixedToDouble(TypeId, Internal: TDuckDBType; Scale: integer;
+  P: PAnsiChar; out Value: double): boolean;
+var
+  s: single;
+begin
+  result := true;
+  case TypeId of
+    DUCKDB_TYPE_FLOAT:
+      begin
+        MoveFast(P^, s, SizeOf(s));
+        Value := s;
+      end;
+    DUCKDB_TYPE_DOUBLE:
+      Value := QuackDouble(P);
+    DUCKDB_TYPE_DECIMAL:
+      if Internal = DUCKDB_TYPE_HUGEINT then
+        result := false
+      else
+        Value := DuckDecimalMantissa(Internal, P) / DUCKDB_POW10[Scale];
+    DUCKDB_TYPE_BOOLEAN,
+    DUCKDB_TYPE_TINYINT,
+    DUCKDB_TYPE_SMALLINT,
+    DUCKDB_TYPE_INTEGER,
+    DUCKDB_TYPE_BIGINT,
+    DUCKDB_TYPE_UTINYINT,
+    DUCKDB_TYPE_USMALLINT,
+    DUCKDB_TYPE_UINTEGER:
+      Value := DuckFixedInt(TypeId, P);
+  else
+    result := false;
+  end;
+end;
+
+function DuckFixedToCurrency(TypeId, Internal: TDuckDBType; Scale: integer;
+  P: PAnsiChar; out Value: currency): boolean;
+var
+  v: Int64;
+  d: double;
+begin
+  result := true;
+  case TypeId of
+    DUCKDB_TYPE_DECIMAL:
+      if (Internal <> DUCKDB_TYPE_HUGEINT) and
+         (Scale <= 4) then
+      begin
+        v := DuckDecimalMantissa(Internal, P) * DUCKDB_POW10[4 - Scale];
+        Value := PCurrency(@v)^;
+      end
+      else
+        result := false;
+    DUCKDB_TYPE_FLOAT,
+    DUCKDB_TYPE_DOUBLE:
+      begin
+        DuckFixedToDouble(TypeId, Internal, Scale, P, d);
+        Value := d;
+      end;
+    DUCKDB_TYPE_BOOLEAN,
+    DUCKDB_TYPE_TINYINT,
+    DUCKDB_TYPE_SMALLINT,
+    DUCKDB_TYPE_INTEGER,
+    DUCKDB_TYPE_BIGINT,
+    DUCKDB_TYPE_UTINYINT,
+    DUCKDB_TYPE_USMALLINT,
+    DUCKDB_TYPE_UINTEGER:
+      Value := DuckFixedInt(TypeId, P);
+  else
+    result := false;
+  end;
+end;
+
+function DuckFixedToDateTime(TypeId: TDuckDBType; P: PAnsiChar;
+  out Value: TDateTime): boolean;
+var
+  us: Int64;
+  offs: integer;
+begin
+  result := true;
+  case TypeId of
+    DUCKDB_TYPE_DATE:
+      Value := PCardinal(P)^ + UnixDelta;
+    DUCKDB_TYPE_TIME:
+      Value := PInt64(P)^ / MicroSecsPerDay;
+    DUCKDB_TYPE_TIME_NS:
+      Value := (PInt64(P)^ div 1000) / MicroSecsPerDay;
+    DUCKDB_TYPE_TIME_TZ:
+      begin
+        DuckTimeTzDecode(PInt64(P)^, us, offs);
+        Value := us / MicroSecsPerDay;
+      end;
+    DUCKDB_TYPE_TIMESTAMP,
+    DUCKDB_TYPE_TIMESTAMP_TZ,
+    DUCKDB_TYPE_TIMESTAMP_S,
+    DUCKDB_TYPE_TIMESTAMP_MS,
+    DUCKDB_TYPE_TIMESTAMP_NS,
+    DUCKDB_TYPE_TIMESTAMP_TZ_NS:
+      Value := DuckTimestampToDateTime(
+        DuckTimestampMicros(TypeId, PInt64(P)^));
+  else
+    result := false;
   end;
 end;
 
@@ -1540,69 +2014,73 @@ var
   i: PtrInt;
   p: PDuckDBTypeInfo;
 begin
-  result := Info.TypeId = DUCKDB_TYPE_VARIANT;
-  if result then
+  result := true;
+  if Info.TypeId = DUCKDB_TYPE_VARIANT then
     exit;
   p := pointer(Info.Children);
   for i := 1 to Info.ChildCount do
     if (p^.TypeId = DUCKDB_TYPE_VARIANT) or
        ((p^.ChildCount > 0) and
         DuckDBTypeHasVariant(p^)) then
-    begin
-      result := true;
-      exit;
-    end
+      exit
     else
       inc(p);
+  result := false;
 end;
 
 function DuckDBVariantSql(const Sql: RawUtf8; const Names: TRawUtf8DynArray;
-  const IsVariant: TBooleanDynArray): RawUtf8;
+  const IsVariant: TBytes): RawUtf8;
+const
+  _SQL_: array[boolean] of RawUtf8 = (
+    // default positional #n references to support duplicated column names
+    '%#% AS %',
+    // the VARIANT NULL is converted to JSON 'null' by some DuckDB versions
+    '%NULLIF(#%::JSON, ''null''::JSON) AS %');
 var
   i: PtrInt;
   list, text: RawUtf8;
 begin
-  // positional #n references support duplicated column names
-  list := '';
   for i := 0 to high(Names) do
   begin
     if i > 0 then
-      list := list + ', ';
-    text := QuotedStr(Names[i], '"');
-    if IsVariant[i] then
-      // the VARIANT NULL is converted to JSON 'null' by some DuckDB versions
-      list := FormatUtf8('%NULLIF(#%::JSON, ''null''::JSON) AS %',
-        [list, i + 1, text])
-    else
-      list := FormatUtf8('%#% AS %', [list, i + 1, text]);
+      Append(list, ', ');
+    list := FormatUtf8(_SQL_[GetBitPtr(IsVariant, i)],
+                       [list, i + 1, QuotedStr(Names[i], '"')]);
   end;
   text := TrimU(Sql);
   while (text <> '') and
         (text[length(text)] = ';') do
     SetLength(text, length(text) - 1); // within a sub-query
-  result := 'SELECT ' + list + ' FROM (' + text + ')';
+  Join(['SELECT ', list, ' FROM (', text, ')'], result);
 end;
 
 procedure DuckDBTypeInfoDone(var Info: TDuckDBTypeInfo);
 var
   i: PtrInt;
+  p: PDuckDBTypeInfo;
 begin
-  for i := 0 to Info.ChildCount - 1 do
-    DuckDBTypeInfoDone(Info.Children^[i]);
-  if Info.Children <> nil then
+  p := pointer(Info.Children);
+  if p <> nil then
+  begin
+    for i := 1 to Info.ChildCount do
+    begin
+      DuckDBTypeInfoDone(p^);
+      inc(p);
+    end;
     FreeMem(Info.Children);
+  end;
   if Info.Handle <> nil then
     DuckDB.destroy_logical_type(Info.Handle);
   Info.Names := nil;
   FillCharFast(Info, SizeOf(Info), 0);
 end;
 
-function DuckDBEnumValue(var Info: TDuckDBTypeInfo; Index: PtrInt): RawUtf8;
+procedure DuckDBEnumValue(var Info: TDuckDBTypeInfo; Index: PtrInt; var Result: RawUtf8);
 var
   i: PtrInt;
   p: PUtf8Char;
 begin
-  if Info.Names = nil then
+  if Info.Names = nil then // retrieve once all values of this enumerate
   begin
     SetLength(Info.Names, DuckDB.enum_dictionary_size(Info.Handle));
     for i := 0 to high(Info.Names) do
@@ -1613,37 +2091,52 @@ begin
     end;
   end;
   if cardinal(Index) < cardinal(length(Info.Names)) then
-    result := Info.Names[Index]
+    Result := Info.Names[Index]
   else
-    result := '';
+    FastAssignNew(Result);
 end;
 
 function DuckDBTypeToField(TypeId: TDuckDBType; Scale: integer): TSqlDBFieldType;
 begin
   case TypeId of
-    DUCKDB_TYPE_BOOLEAN, DUCKDB_TYPE_TINYINT, DUCKDB_TYPE_SMALLINT,
-    DUCKDB_TYPE_INTEGER, DUCKDB_TYPE_BIGINT, DUCKDB_TYPE_UTINYINT,
-    DUCKDB_TYPE_USMALLINT, DUCKDB_TYPE_UINTEGER, DUCKDB_TYPE_UBIGINT,
-    DUCKDB_TYPE_HUGEINT, DUCKDB_TYPE_UHUGEINT:
+    DUCKDB_TYPE_BOOLEAN,
+    DUCKDB_TYPE_TINYINT,
+    DUCKDB_TYPE_SMALLINT,
+    DUCKDB_TYPE_INTEGER,
+    DUCKDB_TYPE_BIGINT,
+    DUCKDB_TYPE_UTINYINT,
+    DUCKDB_TYPE_USMALLINT,
+    DUCKDB_TYPE_UINTEGER,
+    DUCKDB_TYPE_UBIGINT,
+    DUCKDB_TYPE_HUGEINT,
+    DUCKDB_TYPE_UHUGEINT:
       result := ftInt64;
-    DUCKDB_TYPE_FLOAT, DUCKDB_TYPE_DOUBLE:
+    DUCKDB_TYPE_FLOAT,
+    DUCKDB_TYPE_DOUBLE:
       result := ftDouble;
     DUCKDB_TYPE_DECIMAL:
       if Scale <= 4 then
         result := ftCurrency
       else
         result := ftDouble;
-    DUCKDB_TYPE_DATE, DUCKDB_TYPE_TIME, DUCKDB_TYPE_TIME_TZ, DUCKDB_TYPE_TIME_NS,
-    DUCKDB_TYPE_TIMESTAMP, DUCKDB_TYPE_TIMESTAMP_S, DUCKDB_TYPE_TIMESTAMP_MS,
-    DUCKDB_TYPE_TIMESTAMP_NS, DUCKDB_TYPE_TIMESTAMP_TZ,
+    DUCKDB_TYPE_DATE,
+    DUCKDB_TYPE_TIME,
+    DUCKDB_TYPE_TIME_TZ,
+    DUCKDB_TYPE_TIME_NS,
+    DUCKDB_TYPE_TIMESTAMP,
+    DUCKDB_TYPE_TIMESTAMP_S,
+    DUCKDB_TYPE_TIMESTAMP_MS,
+    DUCKDB_TYPE_TIMESTAMP_NS,
+    DUCKDB_TYPE_TIMESTAMP_TZ,
     DUCKDB_TYPE_TIMESTAMP_TZ_NS:
       result := ftDate;
-    DUCKDB_TYPE_BLOB, DUCKDB_TYPE_GEOMETRY: // GEOMETRY as WKB
+    DUCKDB_TYPE_BLOB,
+    DUCKDB_TYPE_GEOMETRY: // GEOMETRY as WKB
       result := ftBlob;
     DUCKDB_TYPE_SQLNULL:
       result := ftNull;
   else
-    result := ftUtf8; // VARCHAR, UUID, ENUM, INTERVAL, BIT, nested as JSON
+    result := ftUtf8; // VARCHAR, UUID, ENUM, INTERVAL, BIT, or nested as JSON
   end;
 end;
 
@@ -1668,19 +2161,11 @@ const
   INFO_ARRAY   = 9;
 
 
-{ ************ Low-Level Reading Functions }
+{ Low-Level Reading Functions }
 
 procedure RaiseQuack(const Msg: RawUtf8; const Args: array of const);
 begin
-  ESqlDBQuack.RaiseUtf8(Msg, Args);
-end;
-
-function PeekField(var R: TFastReader): cardinal;
-  {$ifdef HASINLINE} inline; {$endif}
-begin
-  if R.P + 1 >= R.Last then
-    R.ErrorOverflow;
-  result := PWord(R.P)^;
+  raise ESqlDBQuack.CreateUtf8(Msg, Args);
 end;
 
 procedure ExpectField(var R: TFastReader; Id: cardinal);
@@ -1693,11 +2178,13 @@ begin
 end;
 
 procedure ExpectEnd(var R: TFastReader);
+  {$ifdef HASINLINE}inline;{$endif}
 begin
   ExpectField(R, FIELD_END);
 end;
 
 function ReadLen(var R: TFastReader): PtrInt;
+  {$ifdef HASINLINE}inline;{$endif}
 var
   v: QWord;
 begin
@@ -1709,6 +2196,7 @@ begin
 end;
 
 function ReadCount(var R: TFastReader; MinBytesPerItem: PtrInt): PtrInt;
+  {$ifdef HASINLINE}inline;{$endif}
 var
   v: QWord;
 begin
@@ -1729,6 +2217,7 @@ begin
 end;
 
 function ReadIdx(var R: TFastReader): Int64;
+  {$ifdef HASINLINE}inline;{$endif}
 begin
   result := Int64(R.VarUInt64); // optional_idx: stored as idx_t
 end;
@@ -1756,21 +2245,6 @@ procedure ReadHugeInt(var R: TFastReader; out V: TDuckDBHugeInt);
 begin
   V.Upper := ReadSVarInt64(R);
   V.Lower := Int64(R.VarUInt64);
-end;
-
-function QuackInt16(P: pointer): integer;
-begin
-  result := SmallInt(PWord(P)^);
-end;
-
-function QuackInt32(P: pointer): integer;
-begin
-  result := PInteger(P)^;
-end;
-
-function QuackInt64(P: pointer): Int64;
-begin
-  result := PInt64(P)^;
 end;
 
 function QuackDouble(P: pointer): double;
@@ -1838,6 +2312,33 @@ begin
         result := true;
         exit;
       end;
+end;
+
+function TQuackType.EnumIndexAt(D: PAnsiChar): PtrInt;
+begin
+  case ElemSize of
+    1:
+      result := PByte(D)^;
+    2:
+      result := PWord(D)^;
+  else
+    result := PCardinal(D)^;
+  end;
+end;
+
+function TQuackType.ElemSizeInternal: TDuckDBType;
+begin
+  // storage type of a DECIMAL
+  case ElemSize of
+    2:
+      result := DUCKDB_TYPE_SMALLINT;
+    4:
+      result := DUCKDB_TYPE_INTEGER;
+    8:
+      result := DUCKDB_TYPE_BIGINT;
+  else
+    result := DUCKDB_TYPE_HUGEINT;
+  end;
 end;
 
 procedure TQuackType.SetStorage;
@@ -1956,7 +2457,7 @@ begin
     qvmConstant:
       result := 0;
     qvmDictionary:
-      result := cardinal(QuackInt32(Sel + Row * 4));
+      result := PCardinal(Sel + Row * 4)^;
   else
     result := Row;
   end;
@@ -1983,6 +2484,15 @@ begin
   result := PUtf8Char(StrBytes + StrOffs^[Index]);
   Len := StrOffs^[StoredCount + Index];
 end;
+
+function TQuackVector.TextAt(Index: PtrInt): PUtf8Char;
+begin
+  if VType.Storage = qsString then
+    result := PUtf8Char(StrBytes + StrOffs^[Index])
+  else
+    result := nil;
+end;
+
 
 { TQuackChunk }
 
@@ -2132,7 +2642,7 @@ begin
   if t.Storage = qsUnsupported then
     RaiseQuack('unsupported type %', [t.Id]);
   if t.Id = QTYPE_GEOMETRY then
-    if PeekField(R) = 99 then
+    if R.Peek2 = 99 then
     begin
       R.Next2;
       R.VarUInt32; // geometry_format: WKB as plain blob
@@ -2159,7 +2669,7 @@ begin
       begin
         o := FastNewRawByteString(V.fOwned, Count * 8 + 8);
         V.StrOffs := o;
-        if PeekField(R) = 107 then
+        if R.Peek2 = 107 then
         begin
           // lengths and bytes as two blobs
           R.Next2;
@@ -2178,7 +2688,7 @@ begin
           for i := 0 to Count - 1 do
           begin
             o^[i] := acc;
-            o^[Count + i] := cardinal(QuackInt32(lens + i * 4));
+            o^[Count + i] := PCardinal(lens + i * 4)^;
             inc(acc, o^[Count + i]);
             if acc > total then
               RaiseQuack('string lengths overflow', []);
@@ -2275,7 +2785,7 @@ begin
     result.VType := T;
     result.Count := Count;
     vt := VECTOR_FLAT;
-    if PeekField(R) = 90 then
+    if R.Peek2 = 90 then
     begin
       R.Next2;
       vt := R.VarUInt32;
@@ -2303,7 +2813,7 @@ begin
             RaiseQuack('dictionary size overflow', []);
           ReadVectorBody(R, result, len);
           for i := 0 to Count - 1 do
-            if cardinal(QuackInt32(result.Sel + i * 4)) >= cardinal(len) then
+            if PCardinal(result.Sel + i * 4)^ >= cardinal(len) then
               RaiseQuack('dictionary index out of range', []);
         end;
       VECTOR_SEQUENCE:
@@ -2429,9 +2939,11 @@ begin
             if ColumnTypes[i].HasVariant then
             begin
               // the rows can't be decoded: ask them again as JSON
-              SetLength(VariantColumns, n);
-              for j := 0 to n - 1 do
-                VariantColumns[j] := ColumnTypes[j].HasVariant;
+              SetLength(VariantColumns, (n + 7) shr 3);
+              SetBitPtr(VariantColumns, i);
+              for j := i + 1 to n - 1 do
+                if ColumnTypes[j].HasVariant then
+                  SetBitPtr(VariantColumns, j);
               exit;
             end;
         end;
@@ -2633,6 +3145,7 @@ end;
 { ************ Quack Requests Encoding }
 
 procedure WriteField(W: TBufferWriter; Id: cardinal);
+  {$ifdef HASINLINE} inline; {$endif}
 begin
   W.Write2(Id); // raw 16-bit little endian field id
 end;
@@ -2869,399 +3382,6 @@ begin
             (Host = '::1');
 end;
 
-
-{ ************ DuckDB Fixed-Size Values Conversion }
-
-function DuckFixedSize(TypeId, Internal: TDuckDBType): PtrInt;
-begin
-  case TypeId of
-    DUCKDB_TYPE_SQLNULL, DUCKDB_TYPE_BOOLEAN, DUCKDB_TYPE_TINYINT,
-    DUCKDB_TYPE_UTINYINT:
-      result := 1;
-    DUCKDB_TYPE_SMALLINT, DUCKDB_TYPE_USMALLINT:
-      result := 2;
-    DUCKDB_TYPE_INTEGER, DUCKDB_TYPE_UINTEGER, DUCKDB_TYPE_FLOAT,
-    DUCKDB_TYPE_DATE:
-      result := 4;
-    DUCKDB_TYPE_BIGINT, DUCKDB_TYPE_UBIGINT, DUCKDB_TYPE_DOUBLE,
-    DUCKDB_TYPE_TIME, DUCKDB_TYPE_TIME_NS, DUCKDB_TYPE_TIME_TZ,
-    DUCKDB_TYPE_TIMESTAMP, DUCKDB_TYPE_TIMESTAMP_S, DUCKDB_TYPE_TIMESTAMP_MS,
-    DUCKDB_TYPE_TIMESTAMP_NS, DUCKDB_TYPE_TIMESTAMP_TZ,
-    DUCKDB_TYPE_TIMESTAMP_TZ_NS:
-      result := 8;
-    DUCKDB_TYPE_HUGEINT, DUCKDB_TYPE_UHUGEINT, DUCKDB_TYPE_UUID,
-    DUCKDB_TYPE_INTERVAL:
-      result := 16;
-    DUCKDB_TYPE_DECIMAL, DUCKDB_TYPE_ENUM:
-      result := DuckFixedSize(Internal, DUCKDB_TYPE_INVALID);
-  else
-    result := 0;
-  end;
-end;
-
-function DuckFixedInt(TypeId: TDuckDBType; P: PAnsiChar): Int64;
-begin
-  case TypeId of
-    DUCKDB_TYPE_BOOLEAN, DUCKDB_TYPE_UTINYINT:
-      result := PByte(P)^;
-    DUCKDB_TYPE_TINYINT:
-      result := PShortInt(P)^;
-    DUCKDB_TYPE_SMALLINT:
-      result := QuackInt16(P);
-    DUCKDB_TYPE_USMALLINT:
-      result := word(QuackInt16(P));
-    DUCKDB_TYPE_INTEGER, DUCKDB_TYPE_DATE:
-      result := QuackInt32(P);
-    DUCKDB_TYPE_UINTEGER:
-      result := cardinal(QuackInt32(P));
-  else // BIGINT, UBIGINT and the 64-bit date/time kinds
-    result := QuackInt64(P);
-  end;
-end;
-
-procedure DuckFixedHuge(P: PAnsiChar; var H: TDuckDBHugeInt);
-begin
-  H.Lower := QuackInt64(P);
-  H.Upper := QuackInt64(P + 8);
-end;
-
-function DuckFixedToTextBuf(TypeId, Internal: TDuckDBType; Scale: integer;
-  P: PAnsiChar; var Buffer: TTemp47): PtrInt;
-var
-  b, num: PAnsiChar;
-  h: TDuckDBHugeInt;
-  s: single;
-  d: double;
-  tmp: ShortString;
-begin
-  result := 0;
-  Buffer[0] := #0;
-  num := nil;
-  case TypeId of
-    DUCKDB_TYPE_BOOLEAN:
-      begin
-        b := @BOOL_STR[P^ <> #0]; // 'false'/'true'
-        PInt64(@Buffer)^ := PInt64(b + 1)^; // include ending #0
-        result := ord(b[0]);
-      end;
-    DUCKDB_TYPE_TINYINT, DUCKDB_TYPE_SMALLINT, DUCKDB_TYPE_INTEGER,
-    DUCKDB_TYPE_BIGINT, DUCKDB_TYPE_UTINYINT, DUCKDB_TYPE_USMALLINT,
-    DUCKDB_TYPE_UINTEGER:
-      num := StrInt64(@Buffer[high(Buffer)], DuckFixedInt(TypeId, P));
-    DUCKDB_TYPE_UBIGINT:
-      num := StrUInt64(@Buffer[high(Buffer)], QWord(QuackInt64(P)));
-    DUCKDB_TYPE_HUGEINT, DUCKDB_TYPE_UHUGEINT:
-      begin
-        DuckFixedHuge(P, h);
-        result := DuckHugeIntToTextBuf(h, TypeId = DUCKDB_TYPE_HUGEINT, 0, Buffer);
-      end;
-    DUCKDB_TYPE_DECIMAL:
-      begin
-        case Internal of
-          DUCKDB_TYPE_HUGEINT:
-            DuckFixedHuge(P, h);
-          DUCKDB_TYPE_SMALLINT,
-          DUCKDB_TYPE_INTEGER:
-            begin
-              h.Lower := DuckFixedInt(Internal, P);
-              if h.Lower < 0 then
-                h.Upper := -1 // sign extension
-              else
-                h.Upper := 0;
-            end;
-        else
-          begin
-            h.Lower := QuackInt64(P);
-            if h.Lower < 0 then
-              h.Upper := -1
-            else
-              h.Upper := 0;
-          end;
-        end;
-        result := DuckHugeIntToTextBuf(h, true, Scale, Buffer);
-      end;
-    DUCKDB_TYPE_FLOAT, DUCKDB_TYPE_DOUBLE:
-      begin
-        if TypeId = DUCKDB_TYPE_FLOAT then
-        begin
-          MoveFast(P^, s, SizeOf(s));
-          d := s;
-        end
-        else
-          d := QuackDouble(P);
-        if PInt64(@d)^ = 0 then
-        begin
-          PCardinal(@Buffer)^ := ord('0');
-          result := 1;
-        end
-        else
-        begin
-          result := DoubleToShort(@tmp, d);
-          if result > high(Buffer) then
-            result := -1 // very unlikely
-          else
-          begin
-            MoveFast(tmp[1], Buffer[0], result);
-            Buffer[result] := #0;
-          end;
-        end;
-      end;
-    DUCKDB_TYPE_UUID:
-      begin
-        DuckFixedHuge(P, h);
-        result := DuckUuidToTextBuf(h, Buffer);
-      end;
-    DUCKDB_TYPE_SQLNULL:
-      ; // NULL -> empty buffer
-  else
-    result := -1; // dates, times, intervals, ENUM, VARCHAR, BIT and nested types
-  end;
-  // normalize the backward-generated 64-bit integer text
-  if num = nil then
-    exit;
-  result := @Buffer[high(Buffer)] - num;
-  MoveFast(num^, Buffer[0], result);
-  Buffer[result] := #0;
-end;
-
-procedure DuckFixedToText(TypeId, Internal: TDuckDBType; Scale: integer;
-  P: PAnsiChar; var result: RawUtf8);
-var
-  len: PtrInt;
-  iv: TDuckDBInterval;
-  s: single;
-  d: double;
-  buf: TTemp47;
-begin
-  len := DuckFixedToTextBuf(TypeId, Internal, Scale, P, buf);
-  if len >= 0 then
-  begin
-    FastSetString(result, @buf[0], len); // most simple types
-    exit;
-  end;
-  FastAssignNew(result);
-  case TypeId of
-    DUCKDB_TYPE_FLOAT, DUCKDB_TYPE_DOUBLE:
-      begin
-        if TypeId = DUCKDB_TYPE_FLOAT then
-        begin
-          MoveFast(P^, s, SizeOf(s));
-          d := s;
-        end
-        else
-          d := QuackDouble(P);
-        DoubleToStr(d, result); // very long text
-      end;
-    DUCKDB_TYPE_DATE:
-      DuckDateToText(QuackInt32(P), result);
-    DUCKDB_TYPE_TIME:
-      DuckTimeToText(QuackInt64(P), result);
-    DUCKDB_TYPE_TIME_NS:
-      DuckTimeToText(QuackInt64(P) div 1000, result);
-    DUCKDB_TYPE_TIME_TZ:
-      DuckTimeTzToText(QuackInt64(P), result);
-    DUCKDB_TYPE_TIMESTAMP, DUCKDB_TYPE_TIMESTAMP_S,
-    DUCKDB_TYPE_TIMESTAMP_MS, DUCKDB_TYPE_TIMESTAMP_NS:
-      DuckTimestampToText(DuckTimestampMicros(TypeId, QuackInt64(P)), result);
-    DUCKDB_TYPE_TIMESTAMP_TZ, DUCKDB_TYPE_TIMESTAMP_TZ_NS:
-      begin
-        DuckTimestampToText(DuckTimestampMicros(TypeId, QuackInt64(P)), result);
-        result := result + '+00'; // stored as UTC
-      end;
-    DUCKDB_TYPE_INTERVAL:
-      begin
-        iv.Months := QuackInt32(P);
-        iv.Days := QuackInt32(P + 4);
-        iv.Micros := QuackInt64(P + 8);
-        DuckIntervalToText(iv, result);
-      end;
-  end;
-end;
-
-procedure DuckFixedToJson(TypeId, Internal: TDuckDBType; Scale: integer;
-  P: PAnsiChar; W: TJsonWriter);
-var
-  n: PtrInt;
-  s: single;
-  buf: TTemp47;
-  txt: RawUtf8;
-begin
-  case TypeId of
-    DUCKDB_TYPE_BOOLEAN:
-      W.Add(P^ <> #0);
-    DUCKDB_TYPE_TINYINT, DUCKDB_TYPE_SMALLINT, DUCKDB_TYPE_INTEGER,
-    DUCKDB_TYPE_BIGINT, DUCKDB_TYPE_UTINYINT, DUCKDB_TYPE_USMALLINT,
-    DUCKDB_TYPE_UINTEGER:
-      W.Add(DuckFixedInt(TypeId, P));
-    DUCKDB_TYPE_FLOAT:
-      begin
-        MoveFast(P^, s, SizeOf(s));
-        W.AddSingle(s);
-      end;
-    DUCKDB_TYPE_DOUBLE:
-      W.AddDouble(QuackDouble(P));
-    DUCKDB_TYPE_SQLNULL:
-      W.AddNull;
-    DUCKDB_TYPE_UBIGINT, DUCKDB_TYPE_HUGEINT, DUCKDB_TYPE_UHUGEINT,
-    DUCKDB_TYPE_DECIMAL:
-      begin
-        n := DuckFixedToTextBuf(TypeId, Internal, Scale, P, buf);
-        W.AddNoJsonEscape(@buf[0], n);
-      end;
-  else
-    begin
-      // UUID, dates, times, INTERVAL -> JSON string
-      W.AddDirect('"');
-      n := DuckFixedToTextBuf(TypeId, Internal, Scale, P, buf);
-      if n >= 0 then
-        W.AddJsonEscape(@buf[0], n)
-      else
-      begin
-        DuckFixedToText(TypeId, Internal, Scale, P, txt);
-        W.AddJsonEscape(pointer(txt), length(txt));
-      end;
-      W.AddDirect('"');
-    end;
-  end;
-end;
-
-function DuckDecimalMantissa(Internal: TDuckDBType; P: PAnsiChar): Int64;
-begin
-  case Internal of
-    DUCKDB_TYPE_SMALLINT:
-      result := QuackInt16(P);
-    DUCKDB_TYPE_INTEGER:
-      result := QuackInt32(P);
-  else
-    result := QuackInt64(P);
-  end;
-end;
-
-function DuckFixedToInt64(TypeId, Internal: TDuckDBType; Scale: integer;
-  P: PAnsiChar; out Value: Int64): TDuckConvert;
-var
-  h: TDuckDBHugeInt;
-  d: double;
-begin
-  result := dcOk;
-  case TypeId of
-    DUCKDB_TYPE_BOOLEAN, DUCKDB_TYPE_TINYINT, DUCKDB_TYPE_SMALLINT,
-    DUCKDB_TYPE_INTEGER, DUCKDB_TYPE_BIGINT, DUCKDB_TYPE_UTINYINT,
-    DUCKDB_TYPE_USMALLINT, DUCKDB_TYPE_UINTEGER, DUCKDB_TYPE_UBIGINT,
-    DUCKDB_TYPE_DATE, DUCKDB_TYPE_TIME, DUCKDB_TYPE_TIMESTAMP,
-    DUCKDB_TYPE_TIMESTAMP_TZ, DUCKDB_TYPE_TIMESTAMP_S,
-    DUCKDB_TYPE_TIMESTAMP_MS, DUCKDB_TYPE_TIMESTAMP_NS,
-    DUCKDB_TYPE_TIMESTAMP_TZ_NS:
-      Value := DuckFixedInt(TypeId, P);
-    DUCKDB_TYPE_HUGEINT, DUCKDB_TYPE_UHUGEINT:
-      begin
-        DuckFixedHuge(P, h);
-        Value := h.Lower;
-        if not DuckHugeIntIsInt64(h, TypeId = DUCKDB_TYPE_HUGEINT) then
-          result := dcOverflow;
-      end;
-    DUCKDB_TYPE_DECIMAL:
-      if Internal = DUCKDB_TYPE_HUGEINT then
-        result := dcFallback // integer part from the text
-      else
-        Value := DuckDecimalMantissa(Internal, P) div DUCKDB_POW10[Scale];
-    DUCKDB_TYPE_FLOAT, DUCKDB_TYPE_DOUBLE:
-      begin
-        DuckFixedToDouble(TypeId, Internal, Scale, P, d);
-        Value := trunc(d);
-      end;
-  else
-    result := dcFallback;
-  end;
-end;
-
-function DuckFixedToDouble(TypeId, Internal: TDuckDBType; Scale: integer;
-  P: PAnsiChar; out Value: double): boolean;
-var
-  s: single;
-begin
-  result := true;
-  case TypeId of
-    DUCKDB_TYPE_FLOAT:
-      begin
-        MoveFast(P^, s, SizeOf(s));
-        Value := s;
-      end;
-    DUCKDB_TYPE_DOUBLE:
-      Value := QuackDouble(P);
-    DUCKDB_TYPE_DECIMAL:
-      if Internal = DUCKDB_TYPE_HUGEINT then
-        result := false
-      else
-        Value := DuckDecimalMantissa(Internal, P) / DUCKDB_POW10[Scale];
-    DUCKDB_TYPE_BOOLEAN, DUCKDB_TYPE_TINYINT, DUCKDB_TYPE_SMALLINT,
-    DUCKDB_TYPE_INTEGER, DUCKDB_TYPE_BIGINT, DUCKDB_TYPE_UTINYINT,
-    DUCKDB_TYPE_USMALLINT, DUCKDB_TYPE_UINTEGER:
-      Value := DuckFixedInt(TypeId, P);
-  else
-    result := false;
-  end;
-end;
-
-function DuckFixedToCurrency(TypeId, Internal: TDuckDBType; Scale: integer;
-  P: PAnsiChar; out Value: currency): boolean;
-var
-  v: Int64;
-  d: double;
-begin
-  result := true;
-  case TypeId of
-    DUCKDB_TYPE_DECIMAL:
-      if (Internal <> DUCKDB_TYPE_HUGEINT) and
-         (Scale <= 4) then
-      begin
-        v := DuckDecimalMantissa(Internal, P) * DUCKDB_POW10[4 - Scale];
-        Value := PCurrency(@v)^;
-      end
-      else
-        result := false;
-    DUCKDB_TYPE_FLOAT, DUCKDB_TYPE_DOUBLE:
-      begin
-        DuckFixedToDouble(TypeId, Internal, Scale, P, d);
-        Value := d;
-      end;
-    DUCKDB_TYPE_BOOLEAN, DUCKDB_TYPE_TINYINT, DUCKDB_TYPE_SMALLINT,
-    DUCKDB_TYPE_INTEGER, DUCKDB_TYPE_BIGINT, DUCKDB_TYPE_UTINYINT,
-    DUCKDB_TYPE_USMALLINT, DUCKDB_TYPE_UINTEGER:
-      Value := DuckFixedInt(TypeId, P);
-  else
-    result := false;
-  end;
-end;
-
-function DuckFixedToDateTime(TypeId: TDuckDBType; P: PAnsiChar;
-  out Value: TDateTime): boolean;
-var
-  us: Int64;
-  offs: integer;
-begin
-  result := true;
-  case TypeId of
-    DUCKDB_TYPE_DATE:
-      Value := QuackInt32(P) + DUCKDB_UNIXDATE_DELTA;
-    DUCKDB_TYPE_TIME:
-      Value := QuackInt64(P) / DUCKDB_MICROSPERDAY;
-    DUCKDB_TYPE_TIME_NS:
-      Value := (QuackInt64(P) div 1000) / DUCKDB_MICROSPERDAY;
-    DUCKDB_TYPE_TIME_TZ:
-      begin
-        DuckTimeTzDecode(QuackInt64(P), us, offs);
-        Value := us / DUCKDB_MICROSPERDAY;
-      end;
-    DUCKDB_TYPE_TIMESTAMP, DUCKDB_TYPE_TIMESTAMP_TZ, DUCKDB_TYPE_TIMESTAMP_S,
-    DUCKDB_TYPE_TIMESTAMP_MS, DUCKDB_TYPE_TIMESTAMP_NS,
-    DUCKDB_TYPE_TIMESTAMP_TZ_NS:
-      Value := DuckTimestampToDateTime(
-        DuckTimestampMicros(TypeId, QuackInt64(P)));
-  else
-    result := false;
-  end;
-end;
 
 initialization
 
