@@ -198,6 +198,7 @@ type
     // inside fRowBuffer[] internal buffer
     // - for TSqlDBDatasetStatement: maps TField pointer value
     // - for TSqlDBPostgresStatement: contains the column type OID
+    // - for TSqlDBDuckDBStatement: contains the column Info.TypeId
     ColumnAttr: PtrUInt;
     /// the Column type, used for storage
     // - for SqlCreate: should not be ftUnknown nor ftNull
