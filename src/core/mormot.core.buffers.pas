@@ -800,6 +800,15 @@ type
     /// read the next 8 bytes from the buffer as a 64-bit unsigned value
     function Next8: Qword;
       {$ifdef HASINLINE}inline;{$endif}
+    /// read in-place the next 2 bytes from the buffer as a 16-bit unsigned value
+    function Peek2: cardinal;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// read in-place the next 4 bytes from the buffer as a 32-bit unsigned value
+    function Peek4: cardinal;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// read in-place the next 8 bytes from the buffer as a 64-bit unsigned value
+    function Peek8: QWord;
+      {$ifdef HASINLINE}inline;{$endif}
     /// consumes the next byte from the buffer, if matches a given value
     function NextByteEquals(Value: byte): boolean;
       {$ifdef HASINLINE}inline;{$endif}
@@ -3495,6 +3504,27 @@ begin
     ErrorOverflow;
   result := PQWord(P)^;
   inc(P, 8);
+end;
+
+function TFastReader.Peek2: cardinal;
+begin
+  if P + 1 >= Last then
+    ErrorOverflow;
+  result := PWord(P)^;
+end;
+
+function TFastReader.Peek4: cardinal;
+begin
+  if P + 3 >= Last then
+    ErrorOverflow;
+  result := PCardinal(P)^;
+end;
+
+function TFastReader.Peek8: Qword;
+begin
+  if P + 7 >= Last then
+    ErrorOverflow;
+  result := PQWord(P)^;
 end;
 
 function TFastReader.NextByteEquals(Value: byte): boolean;
