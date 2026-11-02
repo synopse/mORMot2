@@ -2760,7 +2760,11 @@ function GetBitPtr(Bits: pointer; aIndex: PtrInt): boolean;
 
 /// set a particular bit into a bit array
 // - SetBit() can't be inlined, whereas this pointer-oriented function can
-procedure SetBitPtr(Bits: pointer; aIndex: PtrInt);
+procedure SetBitPtr(Bits: pointer; aIndex: PtrInt); overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// set or unset a particular bit into a bit array
+procedure SetBitPtr(Bits: pointer; aIndex: PtrInt; const aSet: boolean); overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// set a particular bit into a bit array, if it has not be already set
@@ -9612,6 +9616,19 @@ procedure SetBitPtr(Bits: pointer; aIndex: PtrInt);
 begin
   PIntegerArray(Bits)[aIndex shr 5] :=
     PIntegerArray(Bits)[aIndex shr 5] or (1 shl (aIndex and 31));
+end;
+
+procedure SetBitPtr(Bits: pointer; aIndex: PtrInt; const aSet: boolean);
+var
+  p: PInteger;
+  v: integer;
+begin
+  p := @PIntegerArray(Bits)[aIndex shr 5];
+  v := 1 shl (aIndex and 31);
+  if aSet then
+    p^ := p^ or v
+  else
+    p^:= p^ and (not v);
 end;
 
 function TrySetBitPtr(Bits: pointer; aIndex: cardinal): boolean;
