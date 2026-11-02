@@ -1370,7 +1370,7 @@ begin
      (tmp[0] = #0) then
   begin
     if tmp[0] <> #0 then
-      AppendShortChar(' ', @result);
+      AppendShortChar(' ', @tmp);
     t := nil;
     DuckTimeToText(v.Micros, RawUtf8(t));
     AppendShortAnsi7String(RawUtf8(t), tmp);

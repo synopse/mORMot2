@@ -1356,13 +1356,25 @@ begin
     result := not IsValid(Validity, fChunkRow);
 end;
 
-function ColumnTemp(c: PDuckDBTypeInfo; d: pointer; var tmp: TTemp47): PUtf8Char;
-  {$ifdef HASINLINE} inline; {$endif}
+function ColumnTemp(c: PDuckDBColumnInfo; d: pointer; row: PtrInt;
+  var tmp: TTemp47): PUtf8Char;
+var
+  len: integer; // not PtrInt
 begin
-  if DuckFixedToTextBuf(c^.TypeId, c^.Internal, c^.Scale, d, tmp) < 0 then
-    result := nil // too complex type to be reduced as a number or date/time
-  else
-    result := @tmp;
+  result := @tmp;
+  if DuckFixedToTextBuf(c^.Info.TypeId, c^.Info.Internal, c^.Info.Scale, d, tmp) >= 0 then
+    exit;
+  if c^.Info.TypeID = DUCKDB_TYPE_VARCHAR then // short strings as #0-ended buffer
+  begin
+    d := DuckStringPtr(DuckStringAt(c^.Data, Row), len);
+    if len < high(tmp) then
+    begin
+      MoveFast(d^, tmp, len);
+      tmp[len] := #0;
+      exit;
+    end;
+  end;
+  result := nil; // too complex type to be reduced as a number or date/time
 end;
 
 function TSqlDBDuckDBStatement.ColumnInt(Col: integer): Int64;
@@ -1380,7 +1392,7 @@ begin
     dcOverflow:
       ESqlDBDuckDB.RaiseUtf8('%.ColumnInt(%): 128-bit overflow', [self, Col]);
     dcFallback:
-      result := GetInt64(ColumnTemp(@c^.Info, p, tmp));
+      result := GetInt64(ColumnTemp(c, p, fChunkRow, tmp));
   end;
 end;
 
@@ -1396,7 +1408,7 @@ begin
     exit;
   p := PAnsiChar(c^.Data) + fChunkRow * c^.Info.Size;
   if not DuckFixedToDouble(c^.Info.TypeId, c^.Info.Internal, c^.Info.Scale, p, result) then
-    result := GetExtended(ColumnTemp(@c^.Info, p, tmp));
+    result := GetExtended(ColumnTemp(c, p, fChunkRow, tmp));
 end;
 
 function TSqlDBDuckDBStatement.ColumnCurrency(Col: integer): currency;
@@ -1411,7 +1423,7 @@ begin
     exit;
   p := PAnsiChar(c^.Data) + fChunkRow * c^.Info.Size;
   if not DuckFixedToCurrency(c^.Info.TypeId, c^.Info.Internal, c^.Info.Scale, p, result) then
-    PInt64(@result)^ := StrToCurr64(ColumnTemp(@c^.Info, p, tmp));
+    PInt64(@result)^ := StrToCurr64(ColumnTemp(c, p, fChunkRow, tmp));
 end;
 
 function TSqlDBDuckDBStatement.ColumnDateTime(Col: integer): TDateTime;
@@ -1427,7 +1439,7 @@ begin
   p := PAnsiChar(c^.Data) + fChunkRow * c^.Info.Size;
   if DuckFixedToDateTime(c^.Info.TypeId, p, result) then
     exit;
-  p := ColumnTemp(@c^.Info, p, tmp);
+  p := ColumnTemp(c, p, fChunkRow, tmp);
   Iso8601ToDateTimePUtf8CharVar(p, StrLen(p), result);
 end;
 
