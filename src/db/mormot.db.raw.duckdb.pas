@@ -1005,11 +1005,11 @@ end;
 
 procedure TDuckDBLib.RaiseResultError(res: PDuckDBResult; const ctxt: RawUtf8);
 var
-  msg: PUtf8Char;
+  E: Exception;
 begin
-  msg := pointer(result_error(res));
-  destroy_result(res);
-  ESqlDBDuckDB.RaiseUtf8('DuckDB % failed: %', [ctxt, msg]);
+  E := ESqlDBDuckDB.CreateUtf8('DuckDB % failed: %', [ctxt, result_error(res)]);
+  destroy_result(res); // release result_error(res)
+  raise E;
 end;
 
 function TDuckDBLib.Exec(conn: TDuckDBConnection; const sql: RawUtf8): Int64;
