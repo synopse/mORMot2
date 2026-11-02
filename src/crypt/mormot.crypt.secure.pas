@@ -4017,7 +4017,11 @@ function PrivateKeyDecrypt(const Input, Salt: RawByteString;
   const PrivatePassword: SpiUtf8; AfSplitRounds: integer = 31;
   Pbkdf2Rounds: integer = 1000): RawByteString;
 
-/// uncipher a standard PKCS#8 EncryptedPrivateKeyInfo into its PrivateKeyInfo
+/// cipher a PrivateKeyInfo DER binary into standard PKCS#8 encryptedPrivateKeyInfo
+function PrivateKeyToPkcs8(Algorithm: TCryptKeyAlgo;
+  const Der: RawByteString): RawByteString;
+
+/// uncipher a standard PKCS#8 encryptedPrivateKeyInfo into its PrivateKeyInfo
 // - as generated e.g. by "openssl genpkey -aes256" or "openssl pkcs8 -topk8"
 // i.e. '-----BEGIN ENCRYPTED PRIVATE KEY-----' PEM content
 // - Input can be either PEM text or DER binary
@@ -4025,20 +4029,20 @@ function PrivateKeyDecrypt(const Input, Salt: RawByteString;
 // SHA512 and AES-128/192/256-CBC, i.e. all OpenSSL 1.1/3.x default formats -
 // but not the legacy PBES1 or 3DES/DES encryption schemes
 // - returns the decrypted PKCS#8 PrivateKeyInfo DER binary, or '' if Input is
-// not a supported EncryptedPrivateKeyInfo or if Password is wrong
+// not a supported encryptedPrivateKeyInfo or if Password is wrong
 // - used by TCryptPrivateKey.Load and TCryptCertX509.Load to load OpenSSL
 // encrypted private keys without OpenSSL
 // - warning: don't forget FillZero() once done with the sensitive result
 function Pkcs8DecryptPrivateKey(const Input: RawByteString;
   const Password: SpiUtf8): RawByteString;
 
-/// cipher a PKCS#8 PrivateKeyInfo into a standard EncryptedPrivateKeyInfo
+/// cipher a PKCS#8 PrivateKeyInfo into a standard encryptedPrivateKeyInfo
 // - use PBES2 + PBKDF2 HMAC-SHA256 + AES-256-CBC with random salt and IV, i.e.
 // the same algorithms than "openssl pkcs8 -topk8 -v2 aes256"
 // - default 100000 PBKDF2 Rounds is safer than OpenSSL 3.x 2048 default
 // - PrivateKeyInfo is expected to be a PKCS#8 PrivateKeyInfo DER binary, not
 // a PKCS#1 RSAPrivateKey as returned by TCryptPrivateKeyRsa.ToDer
-// - returns the EncryptedPrivateKeyInfo DER binary, or '' on invalid input:
+// - returns the encryptedPrivateKeyInfo DER binary, or '' on invalid input:
 // use DerToPem(result, pemEncryptedPrivateKey) for the PEM text
 // - can be decrypted by Pkcs8DecryptPrivateKey() or any PKCS#8 library
 function Pkcs8EncryptPrivateKey(const PrivateKeyInfo: RawByteString;
@@ -9194,7 +9198,7 @@ begin
         k := pemUnspecified // save as ccfBinary
     else if PrivateKeySavePkcs8 then
     begin
-      // standard PKCS#8 EncryptedPrivateKeyInfo, as OpenSSL -aes256
+      // standard PKCS#8 encryptedPrivateKeyInfo, as OpenSSL -aes256
       bin := PrivateKeyToPkcs8(fKeyAlgo, der);
       if pointer(bin) <> pointer(der) then
         FillZero(der);
@@ -9261,7 +9265,7 @@ begin
     if Password <> '' then
     begin
       der := PemToDer(saved); // see also TCryptCertX509.Load
-      // standard PKCS#8 EncryptedPrivateKeyInfo, e.g. from OpenSSL -aes256
+      // standard PKCS#8 encryptedPrivateKeyInfo, e.g. from OpenSSL -aes256
       saved := Pkcs8DecryptPrivateKey(der, Password);
       if saved = '' then
         // fallbac to mORMot proprietary PrivateKeyEncrypt() format
@@ -11032,6 +11036,34 @@ begin
   end;
 end;
 
+function PrivateKeyToPkcs8(Algorithm: TCryptKeyAlgo;
+  const Der: RawByteString): RawByteString;
+var
+  pos, vers: integer;
+  oct: RawByteString;
+begin
+  // PKCS#8 PrivateKeyInfo ::= SEQ { INT version, SEQ algorithm, OCTSTR key }
+  // PKCS#1 RSAPrivateKey  ::= SEQ { INT version, INT modulus, ... }
+  pos := 1;
+  if (Algorithm in CKA_RSA) and
+     (AsnNext(pos, Der) = ASN1_SEQ) and
+     (AsnNextInt32(pos, Der, vers) = ASN1_INT) and
+     (pos <= length(Der)) and
+     (ord(Der[pos]) = ASN1_INT) then
+  begin
+    // wrap TCryptPrivateKeyRsa.ToDer PKCS#1 into a PKCS#8 PrivateKeyInfo
+    oct := AsnOctStr(Der);
+    result := Asn(ASN1_SEQ, [
+                Asn(0), // version
+                CkaToSeq(Algorithm),
+                oct
+              ]);
+    FillZero(oct);
+  end
+  else
+    result := Der; // ECC/EdDSA ToDer is already a PKCS#8 PrivateKeyInfo
+end;
+
 const
   ASN1_OID_PBES2      = '1.2.840.113549.1.5.13';
   ASN1_OID_PBKDF2     = '1.2.840.113549.1.5.12';
@@ -11060,7 +11092,7 @@ begin
     exit;
   der := PemToDer(Input);
   try
-    // EncryptedPrivateKeyInfo ::= SEQUENCE {
+    // encryptedPrivateKeyInfo ::= SEQUENCE {
     //   encryptionAlgorithm AlgorithmIdentifier {{ PBES2 }},
     //   encryptedData OCTET STRING }
     pos := 1;
@@ -11166,7 +11198,7 @@ begin
   try
     enc := AesPkcs7(PrivateKeyInfo, {encrypt=}true, pointer(key)^, 256, mCbc,
       pointer(iv));
-    // EncryptedPrivateKeyInfo with PBES2-params, as OpenSSL does
+    // encryptedPrivateKeyInfo with PBES2-params, as OpenSSL does
     result := Asn(ASN1_SEQ, [
       Asn(ASN1_SEQ, [
         AsnOid(ASN1_OID_PBES2),
