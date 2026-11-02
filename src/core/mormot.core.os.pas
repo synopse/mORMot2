@@ -4434,6 +4434,8 @@ type
     /// return TRUE if the library and all procedures were found
     function Exists: boolean;
       {$ifdef HASINLINE} inline; {$endif}
+    /// truncate the path from LibraryPath value
+    function LibraryName: TFileName;
     /// the associated library handle
     property Handle: TLibHandle
       read fHandle write fHandle;
@@ -4749,7 +4751,7 @@ type
     /// wait for the lock to be accessible for writing
     // - the write lock is exclusive
     // - calling WriteLock within a ReadWriteLock is allowed and won't block
-    // - but calling WriteLock within a ReadOnlyLock would deaadlock
+    // - but calling WriteLock within a ReadOnlyLock would dead lock
     // - this method is reentrant from a single thread
     // - typical usage is the following:
     // ! rwlock.WriteLock; // block any ReadOnlyLock/ReadWriteLock/WriteLock
@@ -9908,6 +9910,14 @@ begin
             (fHandle <> 0);
 end;
 
+function TSynLibrary.LibraryName: TFileName;
+begin
+  if (self = nil) or
+     (fLibraryPath = '') then
+    result := ''
+  else
+    result := ExtractFileName(fLibraryPath);
+end;
 
 procedure DoLibraryAvailableInit(var State: TLibraryState; Init: TProcedure);
 begin
