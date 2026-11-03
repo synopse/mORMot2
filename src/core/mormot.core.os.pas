@@ -11559,7 +11559,11 @@ end;
 
 function TLightLock.IsLocked: boolean;
 begin
+  {$ifdef CPUINTEL}
   result := Flags <> 0;
+  {$else}
+  result := not LockedExc32(Flags, {to=}0, {from=}0); // atomic compare
+  {$endif CPUINTEL}
 end;
 
 procedure TLightLock.LockSpin;
@@ -11758,7 +11762,11 @@ end;
 
 function TRWLightLock.IsLocked: boolean;
 begin
-  result := (Flags <> 0);
+  {$ifdef CPUINTEL}
+  result := Flags <> 0;
+  {$else}
+  result := not LockedExc32(Flags, {to=}0, {from=}0); // atomic compare
+  {$endif CPUINTEL}
 end;
 
 
@@ -11908,7 +11916,11 @@ end;
 
 function TRWLock.IsLocked: boolean;
 begin
-  result := (Flags <> 0);
+  {$ifdef CPUINTEL}
+  result := Flags <> 0;
+  {$else}
+  result := not LockedExc(Flags, {to=}0, {from=}0); // atomic compare
+  {$endif CPUINTEL}
 end;
 
 
@@ -12185,7 +12197,11 @@ end;
 
 function TOSRWLightLock.IsLocked: boolean;
 begin
+  {$ifdef CPUINTEL}
   result := Flags <> 0;
+  {$else}
+  result := not LockedExc32(Flags, {to=}0, {from=}0); // atomic compare
+  {$endif CPUINTEL}
 end;
 
 
