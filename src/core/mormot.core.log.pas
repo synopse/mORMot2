@@ -195,6 +195,8 @@ type
     // - the executable name must be specified, because it's impossible to
     // write to the executable of a running process
     // - this method will work for .exe and for .dll (or .ocx)
+    // - raise ESynLogException if the file has an Authenticode signature,
+    // which would be invalidated: embed the .mab first, then sign
     procedure SaveToExe(const aExeName: TFileName;
       Scope: TDebugFileScope = []);
     /// save all debugging information as JSON content
@@ -4105,6 +4107,32 @@ begin
     FileSetDateFrom(aFileName, fExeFile);
 end;
 
+function IsPeSigned(P: PAnsiChar; Len: PtrUInt): boolean;
+var
+  pe: PtrUInt;
+  sec: PCardinalArray;
+begin
+  // check IMAGE_DIRECTORY_ENTRY_SECURITY of a PE32/PE32+ executable buffer
+  result := false;
+  if (Len < 1024) or
+     (PWord(P)^ <> $5a4d) then // 'MZ'
+    exit;
+  pe := PCardinal(P + $3c)^; // DOS header e_lfanew
+  if (pe > Len - $b0) or
+     (PCardinal(P + pe)^ <> $00004550) then // 'PE'#0#0
+    exit;
+  case PWord(P + pe + 24)^ of // optional header Magic
+    $010b:
+      sec := pointer(P + pe + $98); // PE32
+    $020b:
+      sec := pointer(P + pe + $a8); // PE32+
+  else
+    exit;
+  end;
+  result := (sec[0] <> 0) and // file offset of the certificate table
+            (sec[1] <> 0);    // its size
+end;
+
 procedure TDebugFile.SaveToExe(const aExeName: TFileName; Scope: TDebugFileScope);
 var
   exe, mab: TMemoryStream;
@@ -4124,6 +4152,11 @@ begin
       exesize := exe.Size;
       if exesize < 16 then
         exit;
+      // the Authenticode digest covers any data before the certificate table,
+      // which should be at the end of the file: appending would break it
+      if IsPeSigned(exe.Memory, exesize) then
+        ESynLogException.RaiseUtf8('%.SaveToExe: % is digitally signed ' +
+          '- embed the debug info before signing', [self, aExeName]);
       exesize := AlgoSynLZ.StreamComputeLen(exe.Memory, exesize, MAGIC_MAB);
       exe.Size := exesize + mabsize; // trim and reserve space for .mab
       MoveFast(mab.Memory^, PAnsiChar(exe.Memory)[exesize], mabsize); // append
