@@ -2845,7 +2845,10 @@ function ZagZigInt64(r: Int64): QWord;
 begin
   {$ifdef CPU32}
   if r <= 0 then
-    result := (-r) shl 1 // 0->0, -1->2, -2->4..
+    if r = Low(Int64) then
+      result := QWord(-1)
+    else
+      result := (-r) shl 1 // 0->0, -1->2, -2->4..
   else
     result := (r shl 1) - 1; // 1->1, 2->3..
   {$else}
@@ -3649,7 +3652,7 @@ e:  ErrorOverflow;
   inc(P);
   if b < $80 then
   begin
-    result := (PtrInt(b) xor $40) - $40; // single-byte SLEB128: -64..63
+    result := Int64(PtrInt(b) xor $40) - $40; // single-byte SLEB128: -64..63
     exit;
   end;
   result := b and $7f;
