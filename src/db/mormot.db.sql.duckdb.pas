@@ -1367,7 +1367,7 @@ begin
   if c^.Info.TypeID = DUCKDB_TYPE_VARCHAR then // short strings as #0-ended buffer
   begin
     d := DuckStringPtr(DuckStringAt(c^.Data, Row), len);
-    if len < high(tmp) then
+    if len <= high(tmp) then
     begin
       MoveFast(d^, tmp, len);
       tmp[len] := #0;

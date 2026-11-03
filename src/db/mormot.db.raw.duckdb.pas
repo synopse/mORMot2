@@ -1712,8 +1712,8 @@ begin
       end;
     DUCKDB_TYPE_INTERVAL:
       begin
-        iv.Months := PCardinal(P)^;
-        iv.Days   := PCardinal(P + 4)^;
+        iv.Months := PInteger(P)^;
+        iv.Days   := PInteger(P + 4)^;
         iv.Micros := PInt64(P + 8)^;
         DuckIntervalToText(iv, result);
       end;
@@ -2220,28 +2220,9 @@ begin
   result := Int64(R.VarUInt64); // optional_idx: stored as idx_t
 end;
 
-// signed LEB128, which differs from the zigzag TFastReader.VarInt64
-function ReadSVarInt64(var R: TFastReader): Int64;
-var
-  shift: integer;
-  b: cardinal;
-begin
-  result := 0;
-  shift := 0;
-  repeat
-    b := R.NextByte;
-    if shift < 64 then
-      result := result or (Int64(b and $7f) shl shift);
-    inc(shift, 7);
-  until b < $80;
-  if (shift < 64) and
-     (b and $40 <> 0) then
-    result := result or (Int64(-1) shl shift); // sign extension
-end;
-
 procedure ReadHugeInt(var R: TFastReader; out V: TDuckDBHugeInt);
 begin
-  V.Upper := ReadSVarInt64(R);
+  V.Upper := R.VarLeb64;
   V.Lower := Int64(R.VarUInt64);
 end;
 
@@ -2259,44 +2240,6 @@ function TQuackType.FieldType: TSqlDBFieldType;
 begin
   result := DuckDBTypeToField(DuckType, Scale); // same mapping as the C API
 end;
-
-type
-  TQuackFixedType = record
-    Id: byte;
-    DuckType: byte;
-  end;
-  PQuackFixedType = ^TQuackFixedType;
-
-const
-  // the fixed-size types, with their DUCKDB_TYPE_* equivalent
-  FIXED_TYPES: array[0..26] of TQuackFixedType = (
-    (Id: QTYPE_SQLNULL;          DuckType: DUCKDB_TYPE_SQLNULL),
-    (Id: QTYPE_BOOLEAN;          DuckType: DUCKDB_TYPE_BOOLEAN),
-    (Id: QTYPE_TINYINT;          DuckType: DUCKDB_TYPE_TINYINT),
-    (Id: QTYPE_UTINYINT;         DuckType: DUCKDB_TYPE_UTINYINT),
-    (Id: QTYPE_SMALLINT;         DuckType: DUCKDB_TYPE_SMALLINT),
-    (Id: QTYPE_USMALLINT;        DuckType: DUCKDB_TYPE_USMALLINT),
-    (Id: QTYPE_INTEGER;          DuckType: DUCKDB_TYPE_INTEGER),
-    (Id: QTYPE_UINTEGER;         DuckType: DUCKDB_TYPE_UINTEGER),
-    (Id: QTYPE_DATE;             DuckType: DUCKDB_TYPE_DATE),
-    (Id: QTYPE_FLOAT;            DuckType: DUCKDB_TYPE_FLOAT),
-    (Id: QTYPE_BIGINT;           DuckType: DUCKDB_TYPE_BIGINT),
-    (Id: QTYPE_UBIGINT;          DuckType: DUCKDB_TYPE_UBIGINT),
-    (Id: QTYPE_POINTER;          DuckType: DUCKDB_TYPE_UBIGINT),
-    (Id: QTYPE_DOUBLE;           DuckType: DUCKDB_TYPE_DOUBLE),
-    (Id: QTYPE_TIME;             DuckType: DUCKDB_TYPE_TIME),
-    (Id: QTYPE_TIME_NS;          DuckType: DUCKDB_TYPE_TIME_NS),
-    (Id: QTYPE_TIME_TZ;          DuckType: DUCKDB_TYPE_TIME_TZ),
-    (Id: QTYPE_TIMESTAMP;        DuckType: DUCKDB_TYPE_TIMESTAMP),
-    (Id: QTYPE_TIMESTAMP_SEC;    DuckType: DUCKDB_TYPE_TIMESTAMP_S),
-    (Id: QTYPE_TIMESTAMP_MS;     DuckType: DUCKDB_TYPE_TIMESTAMP_MS),
-    (Id: QTYPE_TIMESTAMP_NS;     DuckType: DUCKDB_TYPE_TIMESTAMP_NS),
-    (Id: QTYPE_TIMESTAMP_TZ;     DuckType: DUCKDB_TYPE_TIMESTAMP_TZ),
-    (Id: QTYPE_TIMESTAMP_TZ_NS;  DuckType: DUCKDB_TYPE_TIMESTAMP_TZ_NS),
-    (Id: QTYPE_INTERVAL;         DuckType: DUCKDB_TYPE_INTERVAL),
-    (Id: QTYPE_HUGEINT;          DuckType: DUCKDB_TYPE_HUGEINT),
-    (Id: QTYPE_UHUGEINT;         DuckType: DUCKDB_TYPE_UHUGEINT),
-    (Id: QTYPE_UUID;             DuckType: DUCKDB_TYPE_UUID));
 
 function TQuackType.HasVariant: boolean;
 var
@@ -2341,12 +2284,66 @@ end;
 
 procedure TQuackType.SetStorage;
 var
-  i, n: PtrInt;
-  f: PQuackFixedType;
+  n: PtrInt;
 begin
   Storage := qsFixed;
   case Id of
-    QTYPE_DECIMAL: // the storage depends on the width
+    // fixed-size types
+    QTYPE_SQLNULL:
+      DuckType := DUCKDB_TYPE_SQLNULL;
+    QTYPE_BOOLEAN:
+      DuckType := DUCKDB_TYPE_BOOLEAN;
+    QTYPE_TINYINT:
+      DuckType := DUCKDB_TYPE_TINYINT;
+    QTYPE_UTINYINT:
+      DuckType := DUCKDB_TYPE_UTINYINT;
+    QTYPE_SMALLINT:
+      DuckType := DUCKDB_TYPE_SMALLINT;
+    QTYPE_USMALLINT:
+      DuckType := DUCKDB_TYPE_USMALLINT;
+    QTYPE_INTEGER:
+      DuckType := DUCKDB_TYPE_INTEGER;
+    QTYPE_UINTEGER:
+      DuckType := DUCKDB_TYPE_UINTEGER;
+    QTYPE_BIGINT:
+      DuckType := DUCKDB_TYPE_BIGINT;
+    QTYPE_UBIGINT,
+    QTYPE_POINTER:
+      DuckType := DUCKDB_TYPE_UBIGINT;
+    QTYPE_HUGEINT:
+      DuckType := DUCKDB_TYPE_HUGEINT;
+    QTYPE_UHUGEINT:
+      DuckType := DUCKDB_TYPE_UHUGEINT;
+    QTYPE_FLOAT:
+      DuckType := DUCKDB_TYPE_FLOAT;
+    QTYPE_DOUBLE:
+      DuckType := DUCKDB_TYPE_DOUBLE;
+    QTYPE_DATE:
+      DuckType := DUCKDB_TYPE_DATE;
+    QTYPE_TIME:
+      DuckType := DUCKDB_TYPE_TIME;
+    QTYPE_TIME_NS:
+      DuckType := DUCKDB_TYPE_TIME_NS;
+    QTYPE_TIME_TZ:
+      DuckType := DUCKDB_TYPE_TIME_TZ;
+    QTYPE_TIMESTAMP:
+      DuckType := DUCKDB_TYPE_TIMESTAMP;
+    QTYPE_TIMESTAMP_SEC:
+      DuckType := DUCKDB_TYPE_TIMESTAMP_S;
+    QTYPE_TIMESTAMP_MS:
+      DuckType := DUCKDB_TYPE_TIMESTAMP_MS;
+    QTYPE_TIMESTAMP_NS:
+      DuckType := DUCKDB_TYPE_TIMESTAMP_NS;
+    QTYPE_TIMESTAMP_TZ:
+      DuckType := DUCKDB_TYPE_TIMESTAMP_TZ;
+    QTYPE_TIMESTAMP_TZ_NS:
+      DuckType := DUCKDB_TYPE_TIMESTAMP_TZ_NS;
+    QTYPE_INTERVAL:
+      DuckType := DUCKDB_TYPE_INTERVAL;
+    QTYPE_UUID:
+      DuckType := DUCKDB_TYPE_UUID;
+    // variable-width fixed-size types
+    QTYPE_DECIMAL:
       begin
         DuckType := DUCKDB_TYPE_DECIMAL;
         if Width <= 4 then
@@ -2359,7 +2356,7 @@ begin
           ElemSize := 16;
         exit;
       end;
-    QTYPE_ENUM: // the storage depends on the dictionary size
+    QTYPE_ENUM:
       begin
         DuckType := DUCKDB_TYPE_ENUM;
         n := length(EnumValues);
@@ -2371,25 +2368,15 @@ begin
           ElemSize := 4;
         exit;
       end;
-  end;
-  f := @FIXED_TYPES;
-  for i := 1 to length(FIXED_TYPES) do
-    if f^.Id = Id then
-    begin
-      DuckType := f^.DuckType;
-      ElemSize := DuckFixedSize(DuckType, DUCKDB_TYPE_INVALID);
-      exit;
-    end
-    else
-      inc(f);
-  // variable-length or nested storage
-  case Id of
-    QTYPE_CHAR, QTYPE_VARCHAR:
+    // strings and blobs
+    QTYPE_CHAR,
+    QTYPE_VARCHAR:
       begin
         Storage := qsString;
         DuckType := DUCKDB_TYPE_VARCHAR;
       end;
-    QTYPE_BLOB, QTYPE_GEOMETRY:
+    QTYPE_BLOB,
+    QTYPE_GEOMETRY:
       begin
         Storage := qsString;
         DuckType := DUCKDB_TYPE_BLOB;
@@ -2404,7 +2391,9 @@ begin
         Storage := qsString;
         DuckType := DUCKDB_TYPE_BIGNUM;
       end;
-    QTYPE_STRUCT, QTYPE_TUPLE:
+    // nested types
+    QTYPE_STRUCT,
+    QTYPE_TUPLE:
       begin
         Storage := qsStruct;
         DuckType := DUCKDB_TYPE_STRUCT;
@@ -2432,8 +2421,10 @@ begin
   else
     Storage := qsUnsupported; // e.g. VARIANT
   end;
-  if (Storage in [qsList, qsArray]) and
-     (length(Children) <> 1) then
+  if Storage = qsFixed then
+    ElemSize := DuckFixedSize(DuckType, DUCKDB_TYPE_INVALID)
+  else if (Storage in [qsList, qsArray]) and
+          (length(Children) <> 1) then
     Storage := qsUnsupported;
 end;
 
@@ -2487,16 +2478,22 @@ function TQuackVector.TextAt(Index: PtrInt; var Temp: TTemp47): PUtf8Char;
 var
   len: PtrInt;
 begin
-  if VType.Storage = qsString then
-  begin
-    len := StrOffs^[StoredCount + Index]; // inlined StringAt()
-    if len < high(Temp) then
-    begin
-      MoveFast(StrBytes[StrOffs^[Index]], Temp, len);
-      Temp[len] := #0;
-      result := @Temp;
-      exit;
-    end;
+  result := @Temp;
+  case VType.Storage of
+    qsFixed: // convert e.g. UBIGINT or 128-bit DECIMAL into temporary text
+      if DuckFixedToTextBuf(VType.DuckType, VType.ElemSizeInternal,
+          VType.Scale, DataAt(Index), Temp) >= 0 then
+        exit;
+    qsString:
+      begin
+        len := StrOffs^[StoredCount + Index]; // inlined StringAt()
+        if len <= high(Temp) then
+        begin
+          MoveFast(StrBytes[StrOffs^[Index]], Temp, len);
+          Temp[len] := #0;
+          exit;
+        end;
+      end;
   end;
   result := nil;
 end;
@@ -2828,9 +2825,9 @@ begin
         begin
           // materialize the sequence as a regular flat vector
           ExpectField(R, 91);
-          start := ReadSVarInt64(R);
+          start := R.VarLeb64;
           ExpectField(R, 92);
-          step := ReadSVarInt64(R);
+          step := R.VarLeb64;
           if (T.Storage <> qsFixed) or
              (T.ElemSize > 8) then
             RaiseQuack('unsupported sequence type %', [T.Id]);
