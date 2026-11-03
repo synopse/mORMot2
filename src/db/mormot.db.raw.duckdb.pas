@@ -787,6 +787,10 @@ type
 function QuackDouble(P: pointer): double;
   {$ifdef HASSAFEINLINE} inline; {$endif}
 
+/// read a 32-bit floating-point value which may be unaligned in the response
+function QuackSingle(P: pointer): double;
+  {$ifdef HASSAFEINLINE} inline; {$endif}
+
 
 { ************ TQuackResponse Messages Decoding }
 
@@ -1562,7 +1566,6 @@ function DuckFixedToTextBuf(TypeId, Internal: TDuckDBType; Scale: integer;
 var
   b, num: PAnsiChar;
   h: TDuckDBHugeInt;
-  s: single;
   d: double;
   tmp: ShortString;
 begin
@@ -1621,10 +1624,7 @@ begin
     DUCKDB_TYPE_DOUBLE:
       begin
         if TypeId = DUCKDB_TYPE_FLOAT then
-        begin
-          MoveFast(P^, s, SizeOf(s));
-          d := s;
-        end
+          d := QuackSingle(P)
         else
           d := QuackDouble(P);
         if PInt64(@d)^ = 0 then
@@ -1667,8 +1667,6 @@ procedure DuckFixedToText(TypeId, Internal: TDuckDBType; Scale: integer;
 var
   len: PtrInt;
   iv: TDuckDBInterval;
-  s: single;
-  d: double;
   buf: TTemp47;
 begin
   len := DuckFixedToTextBuf(TypeId, Internal, Scale, P, buf);
@@ -1679,18 +1677,10 @@ begin
   end;
   FastAssignNew(result);
   case TypeId of
-    DUCKDB_TYPE_FLOAT,
+    DUCKDB_TYPE_FLOAT:
+      DoubleToStr(QuackSingle(P), result);
     DUCKDB_TYPE_DOUBLE:
-      begin
-        if TypeId = DUCKDB_TYPE_FLOAT then
-        begin
-          MoveFast(P^, s, SizeOf(s));
-          d := s;
-        end
-        else
-          d := QuackDouble(P);
-        DoubleToStr(d, result); // very long text
-      end;
+      DoubleToStr(QuackDouble(P), result);
     DUCKDB_TYPE_DATE:
       DuckDateToText(PInteger(P)^, result);
     DUCKDB_TYPE_TIME:
@@ -1741,7 +1731,7 @@ begin
       W.Add(DuckFixedInt(TypeId, P));
     DUCKDB_TYPE_FLOAT:
       begin
-        MoveFast(P^, s, SizeOf(s));
+        PInteger(@s)^ := PInteger(P)^;
         W.AddSingle(s);
       end;
     DUCKDB_TYPE_DOUBLE:
@@ -1840,16 +1830,11 @@ end;
 
 function DuckFixedToDouble(TypeId, Internal: TDuckDBType; Scale: integer;
   P: PAnsiChar; out Value: double): boolean;
-var
-  s: single;
 begin
   result := true;
   case TypeId of
     DUCKDB_TYPE_FLOAT:
-      begin
-        MoveFast(P^, s, SizeOf(s));
-        Value := s;
-      end;
+      Value := QuackSingle(P);
     DUCKDB_TYPE_DOUBLE:
       Value := QuackDouble(P);
     DUCKDB_TYPE_DECIMAL:
@@ -2161,18 +2146,13 @@ const
 
 { Low-Level Reading Functions }
 
-procedure RaiseQuack(const Msg: RawUtf8; const Args: array of const);
-begin
-  raise ESqlDBQuack.CreateUtf8(Msg, Args);
-end;
-
 procedure ExpectField(var R: TFastReader; Id: cardinal);
 var
   f: cardinal;
 begin
   f := R.Next2;
   if f <> Id then
-    RaiseQuack('unexpected field % instead of %', [f, Id]);
+    ESqlDBQuack.RaiseUtf8('unexpected field % instead of %', [f, Id]);
 end;
 
 procedure ExpectEnd(var R: TFastReader);
@@ -2189,7 +2169,7 @@ begin
   v := R.VarUInt64;
   if (Int64(v) < 0) or
      (Int64(v) > R.Last - R.P) then
-    RaiseQuack('length % overflow', [Int64(v)]);
+    ESqlDBQuack.RaiseUtf8('length % overflow', [Int64(v)]);
   result := v;
 end;
 
@@ -2202,16 +2182,21 @@ begin
   v := R.VarUInt64;
   if (Int64(v) < 0) or
      (Int64(v) > (R.Last - R.P) div MinBytesPerItem) then
-    RaiseQuack('list count % overflow', [Int64(v)]);
+    ESqlDBQuack.RaiseUtf8('list count % overflow', [Int64(v)]);
   result := v;
 end;
 
-function ReadStr(var R: TFastReader): RawUtf8;
+procedure ReadStr(var R: TFastReader; var Str: RawUtf8);
 var
   len: PtrInt;
 begin
   len := ReadLen(R);
-  FastSetString(result, R.Next(len), len);
+  FastSetString(Str, R.Next(len), len);
+end;
+
+procedure SkipStr(var R: TFastReader);
+begin
+  R.Next(ReadLen(R));
 end;
 
 function ReadIdx(var R: TFastReader): Int64;
@@ -2228,7 +2213,15 @@ end;
 
 function QuackDouble(P: pointer): double;
 begin
-  PInt64(@result)^ := PInt64(P)^; // as integer, not as FPU register
+  PInt64(@result)^ := PInt64(P)^; // may be unaligned
+end;
+
+function QuackSingle(P: pointer): double;
+var
+  s: single;
+begin
+  PInteger(@s)^ := PInteger(P)^;
+  result := s;
 end;
 
 
@@ -2529,12 +2522,12 @@ begin
   // a LogicalType is an object with its id and an optional LogicalTypeInfo
   inc(fTypeDepth);
   if fTypeDepth > 32 then
-    RaiseQuack('types nesting overflow', []);
+    ESqlDBQuack.RaiseU('types nesting overflow');
   result := NewType;
   ExpectField(R, 100);
   n := R.VarUInt32;
   if n > 255 then
-    RaiseQuack('unexpected type %', [n]);
+    ESqlDBQuack.RaiseUtf8('unexpected type %', [n]);
   result.Id := n;
   infotype := 0;
   repeat
@@ -2554,15 +2547,15 @@ begin
               100:
                 infotype := R.VarUInt32;
               101:
-                result.Alias := ReadStr(R);
+                ReadStr(R, result.Alias);
               103:
-                RaiseQuack('unsupported extension type %', [result.Alias]);
+                ESqlDBQuack.RaiseUtf8('unsupported extension type %', [result.Alias]);
               200:
                 case infotype of
                   INFO_DECIMAL:
                     result.Width := R.VarUInt32;
                   INFO_STRING:
-                    ReadStr(R); // collation
+                    SkipStr(R); // collation
                   INFO_LIST, INFO_ARRAY:
                     begin
                       SetLength(result.Children, 1);
@@ -2576,7 +2569,7 @@ begin
                       for i := 0 to n - 1 do
                       begin
                         ExpectField(R, 0);
-                        result.ChildNames[i] := ReadStr(R);
+                        ReadStr(R, result.ChildNames[i]);
                         ExpectField(R, 1);
                         result.Children[i] := ReadType(R);
                         ExpectEnd(R);
@@ -2586,11 +2579,11 @@ begin
                     begin
                       n := R.VarUInt32; // values_count
                       if n > cardinal(R.Last - R.P) then
-                        RaiseQuack('enum size % overflow', [n]);
+                        ESqlDBQuack.RaiseUtf8('enum size % overflow', [n]);
                       SetLength(result.EnumValues, n);
                     end;
                 else
-                  RaiseQuack('unsupported type info %', [infotype]);
+                  ESqlDBQuack.RaiseUtf8('unsupported type info %', [infotype]);
                 end;
               201:
                 case infotype of
@@ -2602,20 +2595,20 @@ begin
                     begin
                       w := ReadCount(R, 1);
                       if w <> cardinal(length(result.EnumValues)) then
-                        RaiseQuack('enum values count mismatch', []);
+                        ESqlDBQuack.RaiseU('enum values count mismatch');
                       for i := 0 to w - 1 do
-                        result.EnumValues[i] := ReadStr(R);
+                        ReadStr(R, result.EnumValues[i]);
                     end;
                 else
-                  RaiseQuack('unsupported type info % field', [infotype]);
+                  ESqlDBQuack.RaiseUtf8('unsupported type info % field', [infotype]);
                 end;
             else
-              RaiseQuack('unexpected type info field %', [f]);
+              ESqlDBQuack.RaiseUtf8('unexpected type info field %', [f]);
             end;
           until false;
         end;
     else
-      RaiseQuack('unexpected type field %', [f]);
+      ESqlDBQuack.RaiseUtf8('unexpected type field %', [f]);
     end;
   until false;
   result.SetStorage;
@@ -2645,7 +2638,7 @@ begin
   t := V.VType;
   V.StoredCount := Count;
   if t.Storage = qsUnsupported then
-    RaiseQuack('unsupported type %', [t.Id]);
+    ESqlDBQuack.RaiseUtf8('unsupported type %', [t.Id]);
   if t.Id = QTYPE_GEOMETRY then
     if R.Peek2 = 99 then
     begin
@@ -2658,7 +2651,7 @@ begin
     ExpectField(R, 101);
     len := ReadLen(R);
     if len <> ((Count + 63) shr 6) * 8 then
-      RaiseQuack('validity size mismatch', []);
+      ESqlDBQuack.RaiseU('validity size mismatch');
     V.Validity := R.Next(len);
   end;
   case t.Storage of
@@ -2667,7 +2660,7 @@ begin
         ExpectField(R, 102);
         len := ReadLen(R);
         if len <> Count * t.ElemSize then
-          RaiseQuack('data size mismatch for type %', [t.Id]);
+          ESqlDBQuack.RaiseUtf8('data size mismatch for type %', [t.Id]);
         V.Data := R.Next(len);
       end;
     qsString:
@@ -2682,12 +2675,12 @@ begin
           ExpectField(R, 108);
           len := ReadLen(R);
           if len <> Count * 4 then
-            RaiseQuack('string lengths size mismatch', []);
+            ESqlDBQuack.RaiseU('string lengths size mismatch');
           lens := R.Next(len);
           ExpectField(R, 109);
           len := ReadLen(R);
           if len <> total then
-            RaiseQuack('string bytes size mismatch', []);
+            ESqlDBQuack.RaiseU('string bytes size mismatch');
           V.StrBytes := R.Next(len);
           acc := 0;
           for i := 0 to Count - 1 do
@@ -2696,10 +2689,10 @@ begin
             o^[Count + i] := PCardinal(lens + i * 4)^;
             inc(acc, o^[Count + i]);
             if acc > total then
-              RaiseQuack('string lengths overflow', []);
+              ESqlDBQuack.RaiseU('string lengths overflow');
           end;
           if acc <> total then
-            RaiseQuack('string lengths mismatch', []);
+            ESqlDBQuack.RaiseU('string lengths mismatch');
         end
         else
         begin
@@ -2707,7 +2700,7 @@ begin
           ExpectField(R, 102);
           n := ReadCount(R, 1);
           if n <> Count then
-            RaiseQuack('strings count mismatch', []);
+            ESqlDBQuack.RaiseU('strings count mismatch');
           V.StrBytes := R.P;
           for i := 0 to Count - 1 do
           begin
@@ -2723,7 +2716,8 @@ begin
         ExpectField(R, 103);
         n := ReadCount(R, 2);
         if n <> length(t.Children) then
-          RaiseQuack('struct children count mismatch', []);
+          ESqlDBQuack.RaiseUtf8('struct children count mismatch %<>%',
+            [n, length(t.Children)]);
         SetLength(V.Children, n);
         for i := 0 to n - 1 do
         begin
@@ -2737,11 +2731,11 @@ begin
         total := Int64(R.VarUInt64); // list_size
         if (total < 0) or
            (total > MaxInt) then
-          RaiseQuack('list size overflow', []);
+          ESqlDBQuack.RaiseUtf8('list size=% overflow', [total]);
         ExpectField(R, 105);
         n := ReadCount(R, 6);
         if n <> Count then
-          RaiseQuack('list entries count mismatch', []);
+          ESqlDBQuack.RaiseUtf8('list entries count mismatch %<>%', [n, Count]);
         e := FastNewRawByteString(V.fOwned, n * SizeOf(TDuckDBListEntry));
         V.Entries := e;
         for i := 0 to n - 1 do
@@ -2756,7 +2750,7 @@ begin
              (e^.Offset > total) or
              (e^.Length > total - e^.Offset) then
             if V.IsStoredValid(i) then // 0,0 on NULL
-              RaiseQuack('list entry out of range', []);
+              ESqlDBQuack.RaiseU('list entry out of range');
           inc(e);
         end;
         ExpectField(R, 106);
@@ -2767,10 +2761,10 @@ begin
       begin
         ExpectField(R, 103);
         if Int64(R.VarUInt64) <> t.ArraySize then
-          RaiseQuack('array size mismatch', []);
+          ESqlDBQuack.RaiseU('array size mismatch');
         ExpectField(R, 104);
         if Int64(Count) * t.ArraySize > MaxInt then
-          RaiseQuack('array size overflow', []);
+          ESqlDBQuack.RaiseU('array size overflow');
         V.Child := ReadVector(R, t.Children[0], Count * integer(t.ArraySize));
         ExpectEnd(R);
       end;
@@ -2809,17 +2803,17 @@ begin
           ExpectField(R, 91);
           len := ReadLen(R);
           if len <> Count * 4 then
-            RaiseQuack('dictionary selection size mismatch', []);
+            ESqlDBQuack.RaiseU('dictionary selection size mismatch');
           result.Sel := R.Next(len);
           ExpectField(R, 92);
           len := Int64(R.VarUInt64); // dict_count
           if (len < 0) or
              (len > R.Last - R.P) then
-            RaiseQuack('dictionary size overflow', []);
+            ESqlDBQuack.RaiseU('dictionary size overflow');
           ReadVectorBody(R, result, len);
           for i := 0 to Count - 1 do
             if PCardinal(result.Sel + i * 4)^ >= cardinal(len) then
-              RaiseQuack('dictionary index out of range', []);
+              ESqlDBQuack.RaiseU('dictionary index out of range');
         end;
       VECTOR_SEQUENCE:
         begin
@@ -2830,7 +2824,7 @@ begin
           step := R.VarLeb64;
           if (T.Storage <> qsFixed) or
              (T.ElemSize > 8) then
-            RaiseQuack('unsupported sequence type %', [T.Id]);
+            ESqlDBQuack.RaiseUtf8('unsupported sequence type %', [T.Id]);
           d := FastNewRawByteString(result.fOwned, Count * T.ElemSize);
           result.Data := d;
           result.StoredCount := Count;
@@ -2843,7 +2837,7 @@ begin
           end;
         end;
     else
-      RaiseQuack('unsupported vector type %', [vt]);
+      ESqlDBQuack.RaiseUtf8('unsupported vector type %', [vt]);
     end;
   except
     result.Free;
@@ -2882,7 +2876,7 @@ begin
     ExpectField(R, 102);
     n := ReadCount(R, 2);
     if n <> length(types) then
-      RaiseQuack('chunk columns count mismatch', []);
+      ESqlDBQuack.RaiseU('chunk columns count mismatch');
     SetLength(result.Vectors, n);
     for i := 0 to n - 1 do
     begin
@@ -2906,7 +2900,7 @@ begin
   for i := 0 to n - 1 do
   begin
     if R.NextByte = 0 then
-      RaiseQuack('unexpected void chunk', []);
+      ESqlDBQuack.RaiseU('unexpected void chunk');
     ExpectField(R, 300);
     Chunks[i] := ReadChunk(R);
     ExpectEnd(R);
@@ -2937,9 +2931,9 @@ begin
           n := ReadCount(R, 1);
           SetLength(ColumnNames, n);
           for i := 0 to n - 1 do
-            ColumnNames[i] := ReadStr(R);
+            ReadStr(R, ColumnNames[i]);
           if length(ColumnNames) <> length(ColumnTypes) then
-            RaiseQuack('columns names and types count mismatch', []);
+            ESqlDBQuack.RaiseU('columns names and types count mismatch');
           for i := 0 to n - 1 do
             if ColumnTypes[i].HasVariant then
             begin
@@ -2959,11 +2953,11 @@ begin
       5:
         ReadHugeInt(R, QueryUuid);
     else
-      RaiseQuack('unexpected prepare response field %', [f]);
+      ESqlDBQuack.RaiseUtf8('unexpected prepare response field %', [f]);
     end;
   until false;
   if length(ColumnNames) <> length(ColumnTypes) then
-    RaiseQuack('columns names and types count mismatch', []);
+    ESqlDBQuack.RaiseU('columns names and types count mismatch');
 end;
 
 procedure TQuackResponse.ReadFetch(var R: TFastReader);
@@ -2984,7 +2978,7 @@ begin
         2:
           BatchIndex := ReadIdx(R);
       else
-        RaiseQuack('unexpected fetch response field %', [f]);
+        ESqlDBQuack.RaiseUtf8('unexpected fetch response field %', [f]);
       end;
     until false;
     exit;
@@ -3002,7 +2996,7 @@ begin
       3:
         BatchIndex := ReadIdx(R);
     else
-      RaiseQuack('unexpected fetch response field %', [f]);
+      ESqlDBQuack.RaiseUtf8('unexpected fetch response field %', [f]);
     end;
   until false;
   // the chunks are sent as raw objects just after the message
@@ -3021,15 +3015,15 @@ begin
       FIELD_END:
         break;
       1:
-        ServerVersion := ReadStr(R);
+        ReadStr(R, ServerVersion);
       2:
-        ServerPlatform := ReadStr(R);
+        ReadStr(R, ServerPlatform);
       3:
         QuackVersion := R.VarUInt32;
       4:
         HeartbeatSeconds := R.VarUInt32;
     else
-      RaiseQuack('unexpected connection response field %', [f]);
+      ESqlDBQuack.RaiseUtf8('unexpected connection response field %', [f]);
     end;
   until false;
 end;
@@ -3045,25 +3039,25 @@ begin
       FIELD_END:
         break;
       1:
-        ErrorMessage := ReadStr(R);
+        ReadStr(R, ErrorMessage);
       2:
-        ErrorType := ReadStr(R);
+        ReadStr(R, ErrorType);
       3: // extra_info map as a list of key/value objects: ignored
         begin
           n := ReadCount(R, 2);
           for i := 0 to n - 1 do
           begin
             ExpectField(R, 0);
-            ReadStr(R);
+            SkipStr(R);
             ExpectField(R, 1);
-            ReadStr(R);
+            SkipStr(R);
             ExpectEnd(R);
           end;
         end;
       4:
         MustInvalidate := R.NextByte <> 0;
     else
-      RaiseQuack('unexpected error response field %', [f]);
+      ESqlDBQuack.RaiseUtf8('unexpected error response field %', [f]);
     end;
   until false;
 end;
@@ -3101,11 +3095,11 @@ begin
         FIELD_END:
           break;
         2:
-          ConnectionId := ReadStr(R);
+          ReadStr(R, ConnectionId);
         3:
           ReadIdx(R); // client_query_id
       else
-        RaiseQuack('unexpected header field %', [f]);
+        ESqlDBQuack.RaiseUtf8('unexpected header field %', [f]);
       end;
     until false;
     // message body object
@@ -3121,14 +3115,14 @@ begin
       QUACK_SUCCESS_RESPONSE, QUACK_SEND_DATA_RESPONSE:
         begin
           while R.Next2 <> FIELD_END do
-            RaiseQuack('unexpected response field', []);
+            ESqlDBQuack.RaiseU('unexpected response field');
         end;
     else
-      RaiseQuack('unexpected response message type %', [MessageType]);
+      ESqlDBQuack.RaiseUtf8('unexpected response message type %', [MessageType]);
     end;
   except
     on E: EFastReader do // the destructor is called by the exception
-      RaiseQuack('malformed response (%)', [E.Message]);
+      ESqlDBQuack.RaiseUtf8('malformed response (%)', [E.Message]);
   end;
 end;
 
@@ -3164,33 +3158,11 @@ begin
   W.Write(pointer(Value), length(Value));
 end;
 
-procedure WriteSVarInt64(W: TBufferWriter; Value: Int64);
-var
-  b: cardinal;
-begin
-  repeat
-    b := Value and $7f;
-    if Value < 0 then
-      Value := not (not Value shr 7) // arithmetic shift
-    else
-      Value := Value shr 7;
-    if ((Value = 0) and
-        (b and $40 = 0)) or
-       ((Value = -1) and
-        (b and $40 <> 0)) then
-    begin
-      W.Write1(b);
-      exit;
-    end;
-    W.Write1(b or $80);
-  until false;
-end;
-
 procedure WriteHugeInt(W: TBufferWriter; Id: cardinal;
   const Value: TDuckDBHugeInt);
 begin
   WriteField(W, Id);
-  WriteSVarInt64(W, Value.Upper);
+  W.WriteVarLeb64(Value.Upper);
   W.WriteVarUInt64(QWord(Value.Lower));
 end;
 
