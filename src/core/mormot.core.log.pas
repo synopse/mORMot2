@@ -2683,7 +2683,6 @@ type
     numoptable: array[1..255] of byte; // start at index 1 -> no THash2048
     function LoadSections: boolean;
     procedure ReadInit(aBase, aLimit: Int64);
-    function ReadLeb128: Int64;
     function ReadAddress(addr_size: PtrInt; ctx: PUtf8Char): cardinal;
     procedure SkipAttr(form: PtrUInt; const header64: TDwarfDebugInfoHeader64);
     procedure ReadAbbrevTable(file_offset, file_size: QWord);
@@ -2789,30 +2788,6 @@ begin
   if aBase + aLimit > Int64(Map.Size) then
     Read.ErrorOverflow;
   Read.Init(Map.Buffer + aBase, aLimit);
-end;
-
-function TDwarfReader.ReadLeb128: Int64;
-var
-  shift: byte;
-  data: PtrInt;
-  val: Int64;
-begin // LEB-128 encoding does not match our FromVarInt64 sign extension
-  data := Read.NextByte;
-  if data <= 127 then
-    // optimize the most common case of -64..+63 range
-    exit((not ((data and (Int64(1) shl 6)) - 1)) or data);
-  result := 0;
-  shift := 0;
-  repeat
-    val := data and $7f;
-    result := result or (val shl shift);
-    inc(shift, 7);
-    if data <= 127 then
-      break;
-    data := Read.NextByte;
-  until false;
-  // extend sign from current shifted bits
-  result := (not ((result and (Int64(1) shl (shift - 1))) - 1)) or result;
 end;
 
 function TDwarfReader.ReadAddress(addr_size: PtrInt; ctx: PUtf8Char): cardinal;
@@ -3154,8 +3129,8 @@ begin
       DW_LNS_ADVANCE_PC:
         inc(state.address, Read.VarUInt32 * header64.minimum_instruction_length);
       DW_LNS_ADVANCE_LINE:
-        // use ReadLeb128 < 0 to decrease state.line when needed
-        state.line := Int64(state.line) + ReadLeb128;
+        // LEB128 values < 0 would decrease state.line when needed
+        state.line := Int64(state.line) + Read.VarLeb64;
       DW_LNS_SET_FILE:
         state.fileid := Read.VarUInt32;
       DW_LNS_NEGATE_STMT:
