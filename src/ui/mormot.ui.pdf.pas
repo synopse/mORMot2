@@ -1927,6 +1927,8 @@ type
     function DevPixelY: single;
     // inclusive-inclusive GDI box (EMR_RECTANGLE, EMR_ELLIPSE)
     function BoxInclI(Box: TRect): TPdfBox;
+    // r normalized, one device pixel added on the device's right and bottom
+    procedure AddDevicePixel(var r: TPdfRect);
     // exclusive GDI box (FillRect = EMR_BITBLT PATCOPY)
     function BoxExclI(Box: TRect): TPdfBox;
     procedure DrawXObjectPrepare(const AXObjectName: PdfString);
@@ -3585,7 +3587,6 @@ end;
 const
   // those constants are not defined in earlier Delphi revisions
   {$ifdef USE_METAFILE}
-  cPI: single = 3.141592654;
   cPIdiv180: single = 0.017453292;
   c180divPI: single = 57.29577951;
   {$endif USE_METAFILE}
@@ -9673,27 +9674,30 @@ begin
   result := ((Y - fWinOrg.Y) * fViewSize.cy / fWinSize.cy) + fViewOrg.Y
 end;
 
+// GDI maps world -> page -> device: the world scale and move first, then
+// the window and viewport (they were applied the other way round)
 function TPdfCanvas.I2X(X: integer): single;
 begin
-  result := fOffsetXDef + (fWorldOffsetX + ViewOffsetX(X) * fWorldFactorX) * fDevScaleX
+  result := fOffsetXDef +
+            ViewOffsetX(fWorldOffsetX + X * fWorldFactorX) * fDevScaleX
 end;
 
 function TPdfCanvas.I2Y(Y: integer): single;
 begin
   result := fPage.GetPageHeight - fOffsetYDef -
-            (fWorldOffsetY + ViewOffsetY(Y) * fWorldFactorY) * fDevScaleY
+            ViewOffsetY(fWorldOffsetY + Y * fWorldFactorY) * fDevScaleY
 end;
 
 function TPdfCanvas.S2X(X: single): single;
 begin
   result := fOffsetXDef +
-            (fWorldOffsetX + ViewOffsetX(X) * fWorldFactorX) * fDevScaleX;
+            ViewOffsetX(fWorldOffsetX + X * fWorldFactorX) * fDevScaleX;
 end;
 
 function TPdfCanvas.S2Y(Y: single): single;
 begin
   result := fPage.GetPageHeight - fOffsetYDef -
-            (fWorldOffsetY + ViewOffsetY(Y) * fWorldFactorY) * fDevScaleY;
+            ViewOffsetY(fWorldOffsetY + Y * fWorldFactorY) * fDevScaleY;
 end;
 
 procedure TPdfCanvas.LineToI(x, y: integer);
@@ -9727,13 +9731,12 @@ var
 begin
   // the corner size goes through the same window/viewport mapping as the
   // coordinates (MM_ANISOTROPIC metafiles), and the GDI box is
-  // inclusive-inclusive: one device pixel is added to the recorded
-  // right/bottom edges, before normalizing - see BoxInclI
+  // inclusive-inclusive - see BoxInclI
   r.Left   := I2X(x1);
-  r.Right  := S2X(x2 + DevPixelX);
+  r.Right  := I2X(x2);
   r.Top    := I2Y(y1);
-  r.Bottom := S2Y(y2 + DevPixelY);
-  NormalizeRect(r);
+  r.Bottom := I2Y(y2);
+  AddDevicePixel(r);
   RoundRect(r.Left, r.Bottom, r.Right, r.Top,
     Abs(I2X(x1 + cx) - I2X(x1)), -Abs(I2Y(y1 + cy) - I2Y(y1)));
 end;
@@ -9819,20 +9822,33 @@ begin
   result.Height := r.Bottom - r.Top;
 end;
 
-// GDI records the Right/Bottom of Rectangle/Ellipse one DEVICE pixel inside
-// the shape, i.e. several logical units with a screen reference DC: RectI()
-// removed one logical unit instead, and shapes were too small
-// - under a mirrored mapping the recorded Right is the smaller value (500,110
-// for 100..500 at -10 units per pixel): the signed pixel is added before the
-// box is normalized
+// GDI paints Rectangle/Ellipse with their right and bottom edges: one DEVICE
+// pixel more on the device's right and bottom, however the box was recorded
+// (one device pixel inside in GM_COMPATIBLE, as called in GM_ADVANCED) and
+// the map mode mirrored - a logical unit of the map mode was wrong under a
+// world scale; a negative render scale puts the device's right at the left
+procedure TPdfCanvas.AddDevicePixel(var r: TPdfRect);
+begin
+  NormalizeRect(r);
+  if fDevScaleX >= 0 then
+    r.Right := r.Right + fDevScaleX
+  else
+    r.Left := r.Left + fDevScaleX;
+  if fDevScaleY >= 0 then
+    r.Top := r.Top - fDevScaleY // PDF Y goes up: the device's bottom
+  else
+    r.Bottom := r.Bottom - fDevScaleY;
+end;
+
 function TPdfCanvas.BoxInclI(Box: TRect): TPdfBox;
 var
   r: TPdfRect;
 begin
   r.Left   := I2X(Box.Left);
-  r.Right  := S2X(Box.Right + DevPixelX);
+  r.Right  := I2X(Box.Right);
   r.Top    := I2Y(Box.Top);
-  r.Bottom := S2Y(Box.Bottom + DevPixelY);
+  r.Bottom := I2Y(Box.Bottom);
+  AddDevicePixel(r);
   result := PdfRectToBox(r);
 end;
 
@@ -11117,7 +11133,10 @@ end;
 type
   TFontSpec = packed record
     angle: SmallInt; // -360..+360
-    ascent, descent, cell: SmallInt;
+    // logical units: a fraction for a stock font under a map mode
+    ascent, descent, cell: single;
+    // abs(lfHeight) of the same units: the integer rounds to 0 there
+    height: single;
   end;
 
   TPdfEnumStatePen = record
@@ -11185,6 +11204,9 @@ type
       Selected: boolean;
       // the code page of the stock font while none is (StockFontCodePage)
       StockCodePage: cardinal;
+      // that stock font (GetStockObject index), measured again when the map
+      // mode changes: its size is of device pixels
+      StockFont: integer;
       LogFont: TLogFontW; // better be the last entry in TPdfEnumState record
     end;
   end;
@@ -11281,11 +11303,15 @@ type
     procedure ScaleMatrix(Custom: PXForm; iMode: integer);
     procedure HandleComment(Kind: TPdfGdiComment; P: PAnsiChar; Len: integer);
     procedure CreateFont(ALogFont: PEMRExtCreateFontIndirect);
+    // Source as the reference DC selects it: its pitch and metrics
+    procedure MeasureFont(const Source: TLogFontW; var LogFont: TLogFontW;
+      var Spec: TFontSpec);
     // if Canvas.Doc.JPEGCompression<>0, draw not as a bitmap but jpeg encoded
     procedure DrawBitmap(xs, ys, ws, hs, xd, yd, wd, hd, usage: integer;
       Bmi: PBitmapInfo; bits: pointer; clipRect: PRect; xSrcTransform: PXForm;
       dwRop: DWord; transparent: TPdfColorRGB = $FFFFFFFF);
     procedure FillRectangle(const Rect: TRect);
+    procedure FillBox(const Box: TPdfBox);
     // the current value set to SetRGBFillColor (rg)
     property FillColor: integer
       read fFillColor write SetFillColor;
@@ -11298,9 +11324,19 @@ type
     // MetaRgn - clipping
     procedure InitMetaRgn(const ClientRect: TRect);
     procedure SetMetaRgn;
-    // intersect - clipping
+    // the part of two boxes both cover, normalized: empty if none
     function IntersectClipRect(
       const ClpRect: TPdfBox; const CurrRect: TPdfBox): TPdfBox;
+    // the box around the rectangles of Region (1-based in fClipRegions)
+    function RegionBox(Region: integer): TPdfBox;
+    // EMR_INTERSECTCLIPRECT: a new region, the current one within Rect
+    procedure IntersectClip(const Rect: TRect);
+    // a rectangle of device units, as the region of EMR_EXTSELECTCLIPRGN:
+    // no window, viewport nor world transform - unnormalized, as BoxI
+    function DeviceBox(const Rect: TRect): TPdfBox;
+    // the bounds of a record (rclBounds): device units, right and bottom
+    // included - normalized
+    function DeviceBoundsBox(const Rect: TRect): TPdfBox;
     procedure ExtSelectClipRgn(data: PEMRExtSelectClipRgn);
     // get current clipping area
     function GetClipRect: TPdfBox;
@@ -11360,6 +11396,8 @@ begin
           E.InitTransformMatrix := InitTransX;
           E.ScaleMatrix(@InitTransX, MWT_SET); // keep init
           E.InitMetaRgn(TRect(PEnhMetaHeader(R)^.rclBounds));
+          // the font of a new DC: text before any selection had size 0
+          E.SelectObjectFromIndex(integer(cardinal($80000000) or SYSTEM_FONT));
         end;
       EMR_SETWINDOWEXTEX:
         WinSize := PEMRSetWindowExtEx(R)^.szlExtent;
@@ -11982,8 +12020,7 @@ begin
       EMR_EXTSELECTCLIPRGN:
         E.ExtSelectClipRgn(PEMRExtSelectClipRgn(R));
       EMR_INTERSECTCLIPRECT:
-        ClipRgn := E.IntersectClipRect(E.Canvas.BoxI(
-          TRect(PEMRIntersectClipRect(R)^.rclClip), true), ClipRgn);
+        E.IntersectClip(TRect(PEMRIntersectClipRect(R)^.rclClip));
       EMR_SETMAPMODE:
         MappingMode := PEMRSetMapMode(R)^.iMode;
       EMR_BEGINPATH:
@@ -12073,7 +12110,7 @@ begin
           // prepare pixel size and color
           if pen.width <> 1 then
           begin
-            E.fPenWidth := E.Canvas.fWorldFactorX * E.Canvas.fDevScaleX;
+            E.fPenWidth := Abs(E.Canvas.fWorldFactorX) * E.Canvas.fDevScaleX;
             E.Canvas.SetLineWidth(E.fPenWidth * E.Canvas.fFactorX);
           end;
           if PEMRSetPixelV(R)^.crColor <> cardinal(pen.color) then
@@ -12087,7 +12124,7 @@ begin
           // rollback pixel size and color
           if pen.width <> 1 then
           begin
-            E.fPenWidth := pen.width * E.Canvas.fWorldFactorX * E.Canvas.fDevScaleX;
+            E.fPenWidth := pen.width * Abs(E.Canvas.fWorldFactorX) * E.Canvas.fDevScaleX;
             E.Canvas.SetLineWidth(E.fPenWidth * E.Canvas.fFactorX);
           end;
           if PEMRSetPixelV(R)^.crColor <> cardinal(pen.color) then
@@ -12196,7 +12233,8 @@ begin
   DC[0].StretchBltMode := STRETCH_DELETESCANS;
 end;
 
-procedure TPdfEnum.CreateFont(aLogFont: PEMRExtCreateFontIndirect);
+procedure TPdfEnum.MeasureFont(const Source: TLogFontW;
+  var LogFont: TLogFontW; var Spec: TFontSpec);
 var
   hf: HFONT;
   tm: TTextMetric;
@@ -12204,25 +12242,33 @@ var
   dest: HDC;
 begin
   dest := Canvas.fDoc.fDC;
-  hf := CreateFontIndirectW(aLogFont.elfw.elfLogFont);
+  hf := CreateFontIndirectW(PLogFontW(@Source)^); // a var of FPC
   old := SelectObject(dest, hf);
   GetTextMetrics(dest, tm);
   SelectObject(dest, old);
   DeleteObject(hf);
-  if aLogFont^.ihFont - 1 < cardinal(length(Obj)) then
-    with Obj[aLogFont^.ihFont - 1] do
-    begin
-      kind := OBJ_FONT;
-      MoveFast(aLogFont^.elfw.elfLogFont, LogFont, SizeOf(LogFont));
-      LogFont.lfPitchAndFamily := tm.tmPitchAndFamily;
-      if LogFont.lfOrientation <> 0 then
-        FontSpec.angle := LogFont.lfOrientation div 10 // -360..+360
-      else
-        FontSpec.angle := LogFont.lfEscapement div 10;
-      FontSpec.ascent := tm.tmAscent;
-      FontSpec.descent := tm.tmDescent;
-      FontSpec.cell := tm.tmHeight - tm.tmInternalLeading;
-    end;
+  MoveFast(Source, LogFont, SizeOf(LogFont));
+  LogFont.lfPitchAndFamily := tm.tmPitchAndFamily;
+  if LogFont.lfOrientation <> 0 then
+    Spec.angle := LogFont.lfOrientation div 10 // -360..+360
+  else
+    Spec.angle := LogFont.lfEscapement div 10;
+  Spec.ascent := tm.tmAscent;
+  Spec.descent := tm.tmDescent;
+  Spec.cell := tm.tmHeight - tm.tmInternalLeading;
+  Spec.height := Abs(Source.lfHeight);
+end;
+
+procedure TPdfEnum.CreateFont(aLogFont: PEMRExtCreateFontIndirect);
+var
+  n: cardinal;
+begin
+  n := aLogFont^.ihFont - 1;
+  if n < cardinal(length(Obj)) then
+  begin
+    Obj[n].kind := OBJ_FONT;
+    MeasureFont(aLogFont^.elfw.elfLogFont, Obj[n].LogFont, Obj[n].FontSpec);
+  end;
 end;
 
 procedure TPdfEnum.DrawBitmap(xs, ys, ws, hs, xd, yd, wd, hd, usage: integer;
@@ -12446,12 +12492,16 @@ end;
 
 procedure TPdfEnum.FillRectangle(const Rect: TRect);
 begin
+  FillBox(Canvas.BoxExclI(Rect));
+end;
+
+procedure TPdfEnum.FillBox(const Box: TPdfBox);
+begin
   if DC[nDC].brush.null then
     exit;
   Canvas.NewPath;
   FillColor := DC[nDC].brush.color;
-  with Canvas.BoxExclI(Rect) do
-    Canvas.Rectangle(Left, Top, Width, Height);
+  Canvas.Rectangle(Box.Left, Box.Top, Box.Width, Box.Height);
   Canvas.Fill;
 end;
 
@@ -12476,6 +12526,9 @@ begin
 end;
 
 procedure TPdfEnum.SelectObjectFromIndex(iObject: integer);
+var
+  lf: TLogFontW;
+  px: single;
 begin
   with DC[nDC] do
   begin
@@ -12494,10 +12547,33 @@ begin
         SYSTEM_FIXED_FONT,
         DEFAULT_GUI_FONT:
           begin
-            // its LogFont is not known: EMR_EXTTEXTOUTA decodes in the code
-            // page of its charset, not in the one of the font selected before
+            // EMR_EXTTEXTOUTA decodes in the code page of its charset, not in
+            // the one of the font selected before
             Font.Selected := false;
             Font.StockCodePage := StockFontCodePage(iObject);
+            Font.StockFont := 0;
+            // the metafile does not record it: its LOGFONT on this system, or
+            // the text kept the size, face and metrics of the font before
+            if GetObjectW(GetStockObject(iObject), SizeOf(lf), @lf) <> 0 then
+            begin
+              MeasureFont(lf, Font.LogFont, Font.Spec);
+              // a TrueType or vector face (DEFAULT_GUI_FONT) is sized in
+              // logical units, as a font of the metafile
+              if Font.LogFont.lfPitchAndFamily and
+                 (TMPF_TRUETYPE or TMPF_VECTOR) <> 0 then
+                exit;
+              // a raster face keeps its size of device pixels under any map
+              // mode, as in GDI: measured again when it changes; TextOut sizes
+              // its positive lfHeight by the cell
+              Font.StockFont := iObject;
+              px := Abs(Canvas.DevPixelY);
+              Font.LogFont.lfHeight := Round(lf.lfHeight * px);
+              Font.LogFont.lfWidth := Round(lf.lfWidth * Abs(Canvas.DevPixelX));
+              Font.Spec.ascent := Font.Spec.ascent * px;
+              Font.Spec.descent := Font.Spec.descent * px;
+              Font.Spec.cell := Font.Spec.cell * px;
+              Font.Spec.height := Abs(lf.lfHeight) * px;
+            end;
           end;
         NULL_PEN:
           begin
@@ -12646,12 +12722,12 @@ begin
         end;
         fPenStyle := pen.style;
       end;
-      if pen.width * Canvas.fWorldFactorX * Canvas.fDevScaleX <> fPenWidth then
+      if pen.width * Abs(Canvas.fWorldFactorX) * Canvas.fDevScaleX <> fPenWidth then
       begin
         if pen.width = 0 then
-          fPenWidth := Canvas.fWorldFactorX * Canvas.fDevScaleX
+          fPenWidth := Abs(Canvas.fWorldFactorX) * Canvas.fDevScaleX
         else
-          fPenWidth := pen.width * Canvas.fWorldFactorX * Canvas.fDevScaleX;
+          fPenWidth := pen.width * Abs(Canvas.fWorldFactorX) * Canvas.fDevScaleX;
         Canvas.SetLineWidth(fPenWidth * Canvas.fFactorX);
       end;
     end
@@ -12792,13 +12868,18 @@ begin
           WorldTransform := Custom^;
       end;
     end;
-    // use transformation
+    // use transformation: the canvas maps a scale only; any other transform
+    // is drawn unscaled, never with the scale and move of the one before
     xf := WorldTransform;
-    if (xf.eM11 > 0) and
-       (xf.eM22 > 0) and
+    fWorldFactorX := 1;
+    fWorldFactorY := 1;
+    fWorldOffsetX := 0;
+    fWorldOffsetY := 0;
+    if (xf.eM11 <> 0) and
+       (xf.eM22 <> 0) and
        (xf.eM12 = 0) and
        (xf.eM21 = 0) then
-    begin // Scale
+    begin // Scale, a negative factor mirrors
       fWorldFactorX := xf.eM11;
       fWorldFactorY := xf.eM22;
       fWorldOffsetX := WorldTransform.eDx;
@@ -12827,11 +12908,17 @@ begin
 
     end;
   end;
+  // a stock font in logical units of the new map mode, the default one of
+  // EMR_HEADER too
+  if not DC[nDC].Font.Selected and
+     (DC[nDC].Font.StockFont <> 0) then
+    SelectObjectFromIndex(integer(cardinal($80000000) or
+      cardinal(DC[nDC].Font.StockFont)));
 end;
 
 procedure TPdfEnum.InitMetaRgn(const ClientRect: TRect);
 begin
-  fInitMetaRgn := Canvas.BoxI(ClientRect, true);
+  fInitMetaRgn := DeviceBoundsBox(ClientRect); // BoxI lost two pixels
   DC[nDC].ClipRgnNull := true;
   DC[nDC].MetaRgn := fInitMetaRgn;
 end;
@@ -12866,27 +12953,137 @@ begin
   end;
 end;
 
+function SingleMin(A, B: single): single;
+begin
+  if A < B then
+    result := A
+  else
+    result := B;
+end;
+
+function SingleMax(A, B: single): single;
+begin
+  if A > B then
+    result := A
+  else
+    result := B;
+end;
+
+function NormalizedBox(const Box: TPdfBox): TPdfBox;
+begin
+  result := Box;
+  if result.Width < 0 then
+  begin
+    result.Left := result.Left + result.Width;
+    result.Width := -result.Width;
+  end;
+  if result.Height < 0 then
+  begin
+    result.Top := result.Top + result.Height;
+    result.Height := -result.Height;
+  end;
+end;
+
 function TPdfEnum.IntersectClipRect(const ClpRect: TPdfBox;
   const CurrRect: TPdfBox): TPdfBox;
+var
+  a, b: TPdfBox;
+  r, t: single;
 begin
-  result := CurrRect;
-  if (ClpRect.Width <> 0) or
-     (ClpRect.Height <> 0) then
-  begin // ignore null clipping area
-    if ClpRect.Left > result.Left then
-      result.Left := ClpRect.Left;
-    if ClpRect.Top > result.Top then
-      result.Top := ClpRect.Top;
-    if (ClpRect.Left + ClpRect.Width) < (result.Left + result.Width) then
-      result.Width := (ClpRect.Left + ClpRect.Width) - result.Left;
-    if (ClpRect.Top + ClpRect.Height) < (result.Top + result.Height) then
-      result.Height := (ClpRect.Top + ClpRect.Height) - result.Top;
-    // fix rect
-    if result.Width < 0 then
-      result.Width := 0;
-    if result.Height < 0 then
-      result.Height := 0;
+  // from both ends: the old code moved Left before it took the old right
+  a := NormalizedBox(ClpRect);
+  b := NormalizedBox(CurrRect);
+  result.Left := SingleMax(a.Left, b.Left);
+  result.Top := SingleMax(a.Top, b.Top);
+  r := SingleMin(a.Left + a.Width, b.Left + b.Width);
+  t := SingleMin(a.Top + a.Height, b.Top + b.Height);
+  result.Width := SingleMax(r - result.Left, 0);
+  result.Height := SingleMax(t - result.Top, 0);
+end;
+
+function TPdfEnum.RegionBox(Region: integer): TPdfBox;
+var
+  i: PtrInt;
+  b: TPdfBox;
+  r, t: single;
+begin
+  if fClipRegions[Region - 1] = nil then
+  begin
+    result := PdfBox(0, 0, 0, 0); // a region without rectangles
+    exit;
   end;
+  result := NormalizedBox(fClipRegions[Region - 1][0]);
+  r := result.Left + result.Width;
+  t := result.Top + result.Height;
+  for i := 1 to high(fClipRegions[Region - 1]) do
+  begin
+    b := NormalizedBox(fClipRegions[Region - 1][i]);
+    result.Left := SingleMin(result.Left, b.Left);
+    result.Top := SingleMin(result.Top, b.Top);
+    r := SingleMax(r, b.Left + b.Width);
+    t := SingleMax(t, b.Top + b.Height);
+  end;
+  result.Width := r - result.Left;
+  result.Height := t - result.Top;
+end;
+
+function TPdfEnum.DeviceBox(const Rect: TRect): TPdfBox;
+var
+  h: single;
+begin
+  // BoxI mapped these as logical units: wrong under any other map mode
+  h := Canvas.fPage.GetPageHeight - Canvas.fOffsetYDef;
+  result.Left := Canvas.fOffsetXDef + Rect.Left * Canvas.fDevScaleX;
+  result.Width := (Rect.Right - Rect.Left) * Canvas.fDevScaleX;
+  result.Top := h - Rect.Top * Canvas.fDevScaleY;
+  result.Height := (Rect.Top - Rect.Bottom) * Canvas.fDevScaleY;
+end;
+
+function TPdfEnum.DeviceBoundsBox(const Rect: TRect): TPdfBox;
+var
+  r: TRect;
+begin
+  r := Rect;
+  inc(r.Right);
+  inc(r.Bottom);
+  result := NormalizedBox(DeviceBox(r));
+end;
+
+procedure TPdfEnum.IntersectClip(const Rect: TRect);
+var
+  box: TPdfBox;
+  cur, n, i, c: PtrInt;
+begin
+  // GDI clips all output to the current region within Rect, or to Rect
+  // without a region: a region of its own, selected as EMR_EXTSELECTCLIPRGN
+  box := Canvas.BoxExclI(Rect); // exclusive, as GDI records it
+  cur := DC[nDC].ClipRegion;
+  n := length(fClipRegions);
+  SetLength(fClipRegions, n + 1);
+  if cur = 0 then
+  begin
+    SetLength(fClipRegions[n], 1);
+    fClipRegions[n][0] := box;
+  end
+  else
+  begin
+    SetLength(fClipRegions[n], length(fClipRegions[cur - 1]));
+    c := 0;
+    for i := 0 to high(fClipRegions[cur - 1]) do
+    begin
+      fClipRegions[n][c] := IntersectClipRect(box, fClipRegions[cur - 1][i]);
+      if (fClipRegions[n][c].Width > 0) and
+         (fClipRegions[n][c].Height > 0) then
+        inc(c);
+    end;
+    if c = 0 then
+      c := 1; // one empty box: it clips everything, as an empty region
+    SetLength(fClipRegions[n], c);
+  end;
+  DC[nDC].ClipRegion := n + 1;
+  DC[nDC].ClipRgn := RegionBox(n + 1);
+  DC[nDC].ClipRgnNull := false;
+  SelectClip(DC[nDC].MetaClip, n + 1);
 end;
 
 procedure TPdfEnum.ExtSelectClipRgn(data: PEMRExtSelectClipRgn);
@@ -12894,7 +13091,6 @@ var
   i, n: integer;
   d: PRgnData;
   pr: PRect;
-  r: TRect;
 begin
   // see http://www.codeproject.com/Articles/1944/Guide-to-WIN-Regions
   if data^.iMode <> RGN_COPY then
@@ -12908,13 +13104,12 @@ begin
     SetLength(fClipRegions[n], d^.rdh.nCount);
     for i := 0 to integer(d^.rdh.nCount) - 1 do
     begin
-      r := pr^;
-      inc(r.Bottom);
-      inc(r.Right);
-      fClipRegions[n][i] := Canvas.BoxI(r, false);
+      fClipRegions[n][i] := DeviceBox(pr^);
       inc(pr);
     end;
     DC[nDC].ClipRegion := n + 1;
+    // the text and bitmaps clip to its box: it was never set, so empty
+    DC[nDC].ClipRgn := RegionBox(n + 1);
   end
   else
     DC[nDC].ClipRegion := 0;
@@ -13170,7 +13365,7 @@ var
   cp: cardinal;
   tmp2: array[0..1] of WideChar;
   clip: TPdfBox;
-  back: TRect;
+  backbox: TPdfBox;
   po: TPdfCanvasRenderMetaFileTextPositioning;
   {$ifdef USE_UNISCRIBE}
   fnt: TPdfFont;
@@ -13194,13 +13389,19 @@ var
   var
     c, s, a: single;
 
-    procedure Corner(cx, cy: single; Move: boolean);
+    // Adv along the text and Across below its baseline, from where TextOut
+    // starts the glyphs; turned, then mirrored back by sx and sy, as the
+    // upright glyphs go on the device
+    procedure Corner(Adv, Across: single; Move: boolean);
+    var
+      x, y: single;
     begin
-      cy := cy - h;
+      x := posi.X - w * c - h * s + sx * (Adv * c + Across * s);
+      y := posi.Y - h * c + w * s + sy * (Across * c - Adv * s);
       if Move then
-        Canvas.MoveToS(posi.X + cx * c + cy * s, posi.Y + cy * c - cx * s)
+        Canvas.MoveToS(x, y)
       else
-        Canvas.LineToS(posi.X + cx * c + cy * s, posi.Y + cy * c - cx * s);
+        Canvas.LineToS(x, y);
     end;
 
   begin
@@ -13213,10 +13414,10 @@ var
       s := sin(a);
     end;
     PathIn;
-    Corner(-w, Top, true);
-    Corner(-w + ww, Top, false);
-    Corner(-w + ww, Bottom, false);
-    Corner(-w, Bottom, false);
+    Corner(0, Top, true);
+    Corner(ww, Top, false);
+    Corner(ww, Bottom, false);
+    Corner(0, Bottom, false);
     Canvas.ClosePath;
     PathOut;
   end;
@@ -13250,20 +13451,22 @@ var
         // (-w,-h) = delta to text start pos (at baseline)
         // ww = text width
         // aH = delta h for drawed line (from baseline)
-        Canvas.MoveToS(P.X - w, (P.Y - (h - aH)));
+        // sx and sy: the line under the upright glyphs of a mirrored text
+        Canvas.MoveToS(P.X - w, (P.Y - (h - aH * sy)));
         //  deltax := -w     deltaY := (-h+aH)
-        Canvas.LineToS(P.X - w + ww, (P.Y - (h - aH)));
+        Canvas.LineToS(P.X - w + ww * sx, (P.Y - (h - aH * sy)));
         //  deltax := -w+ww  deltaY := (-h+aH)
       end
       else
       begin
-        // rotation pattern:
+        // rotation pattern, from the glyphs' start (-w, -h) - the offsets
+        // along and across the text mirrored back by sx and sy, as PathFrame:
         //   rdx = deltax * acos + deltay * asin
         //   rdy = deltay * acos - deltax * asin
-        Canvas.MoveToS(P.X + ((-w) * acos + (-h + aH) * asin),
-                       P.Y + ((-h + aH) * acos - (-w) * asin));
-        Canvas.LineToS(P.X + ((-w + ww) * acos + (-h + aH) * asin),
-                       P.Y + ((-h + aH) * acos - (-w + ww) * asin));
+        Canvas.MoveToS(P.X - w * acos - h * asin + sx * aH * asin,
+                       P.Y - h * acos + w * asin + sy * aH * acos);
+        Canvas.LineToS(P.X - w * acos - h * asin + sx * (ww * acos + aH * asin),
+                       P.Y - h * acos + w * asin + sy * (aH * acos - ww * asin));
       end;
       Canvas.Stroke;
       Pen := tmp;
@@ -13301,10 +13504,17 @@ begin
       tmp[n] := #0;
       sy := 1;
       sx := 1;
-      if (Canvas.fWorldFactorY) < 0 then
-        sy := -1;
-      if (Canvas.fWorldFactorX) < 0 then
-        sx := -1;
+      // one axis mirrored: upright glyphs; both: a turn by 180 degrees, the
+      // glyphs and their lines turned with it - unless the font's angle turns
+      // them, which TextOut does first, without the world's turn
+      if ((Canvas.fWorldFactorX < 0) <> (Canvas.fWorldFactorY < 0)) or
+         (Font.spec.angle <> 0) then
+      begin
+        if Canvas.fWorldFactorY < 0 then
+          sy := -1;
+        if Canvas.fWorldFactorX < 0 then
+          sx := -1;
+      end;
       fscaleY := Abs(Canvas.fFactorY * Canvas.fWorldFactorY * Canvas.fDevScaleY);
       fscaleX := Abs(Canvas.fFactorX * Canvas.fWorldFactorX * Canvas.fDevScaleX);
       // guess the font size
@@ -13402,16 +13612,18 @@ begin
       // V Align mask = TA_BASELINE or TA_BOTTOM or TA_TOP = TA_BASELINE
       if (Font.Align and TA_BASELINE) = TA_BASELINE then
       // always zero ?
-        h := Abs(Font.LogFont.lfHeight) - Abs(Font.spec.cell)  // center y
+        h := Font.spec.height - Abs(Font.spec.cell)  // center y
       else if (Font.Align and TA_BASELINE) = TA_BOTTOM then
         h := Abs(Font.spec.descent)  // bottom y
       else
         // needs - vertical coords of baseline from top
         h := -abs(Font.spec.ascent); // top
-      if sy < 0 then // inverted coordinates
-        h := Abs(Font.LogFont.lfHeight) + h;
+      // a world scale that mirrors: the upright glyphs where GDI's mirrored
+      // ones are, their box mirrored around the reference point
+      if sy < 0 then
+        h := h + Abs(Font.spec.ascent) - Abs(Font.spec.descent);
       if sx < 0 then
-        w := w + ww;
+        w := w - ww;
       if (Font.align and TA_UPDATECP) = TA_UPDATECP then
         posi := position
       else
@@ -13422,14 +13634,14 @@ begin
         with R.emrtext.rcl do
           clipped := (Right > Left) and (Bottom > Top);
         if clipped then
-          clip := Canvas.BoxI(TRect(R.emrtext.rcl), true)
+          clip := Canvas.BoxExclI(TRect(R.emrtext.rcl)) // exclusive
         else
         begin
           if Canvas.fUseMetaFileTextClipping = tcClipExplicit then
             with R.rclBounds do
               clipped := (Right > Left) and (Bottom > Top);
           if clipped then
-            clip := Canvas.BoxI(TRect(R.rclBounds), true)
+            clip := DeviceBoundsBox(TRect(R.rclBounds))
           else
           begin
             clipped := not ClipRgnNull and
@@ -13465,15 +13677,13 @@ begin
                    (Font.BkColor = brush.color)));
       if isopaque then
         if clipped then
-          back := TRect(R.emrtext.rcl)
+          backbox := Canvas.BoxExclI(TRect(R.emrtext.rcl))
         else
-        begin
-          back.TopLeft := posi;
-          back.BottomRight := posi;
-          inc(back.Right, Trunc(ww));
-          inc(back.Bottom, Abs(Font.LogFont.lfHeight));
-        end;
-      NormalizeRect(back);
+          // in single precision: a fraction of a logical unit is not lost
+          backbox := NormalizedBox(PdfBox(Canvas.S2X(posi.X),
+            Canvas.S2Y(posi.Y), Canvas.S2X(posi.X + ww) -
+            Canvas.S2X(posi.X), Canvas.S2Y(posi.Y + Font.spec.height) -
+            Canvas.S2Y(posi.Y)));
       if clipped then
       begin
         Canvas.GSave;
@@ -13484,7 +13694,7 @@ begin
         Canvas.Clip;
         if isopaque then
         begin
-          FillRectangle(back);
+          FillBox(backbox);
           isopaque := false; //do not handle more
         end
         else
@@ -13494,7 +13704,7 @@ begin
       if isopaque then
         // don't handle BkMode, since global to the page, but only specific text
         // don't handle rotation here, since should not be used much
-        FillRectangle(back);
+        FillBox(backbox);
       // draw text
       if not inpath then // else the brush or the pen of the painting record
         FillColor := Font.color;
@@ -13513,28 +13723,32 @@ begin
           Canvas.I2X(posi.X - Round(w * acos + h * asin)),
           Canvas.I2Y(posi.Y - Round(h * acos - w * asin)));
       end
-      else if (WorldTransform.eM11 = WorldTransform.eM22) and
-              (WorldTransform.eM12 = -WorldTransform.eM21) and
-              // a pure positive uniform scaling is no rotation: default branch below
-              not ((WorldTransform.eM12 = 0) and (WorldTransform.eM11 > 0)) and
-              // the angle by ArcTan2: ArcCos(eM11) fails for a scaled rotation
-              not SameValue(ArcTan2(WorldTransform.eM12, WorldTransform.eM11),
-                0, 0.0001) then
+      else if ((WorldTransform.eM11 = WorldTransform.eM22) and
+               (WorldTransform.eM12 = -WorldTransform.eM21) and
+               // a pure positive uniform scaling is no rotation: default branch below
+               not ((WorldTransform.eM12 = 0) and (WorldTransform.eM11 > 0)) and
+               // the angle by ArcTan2: ArcCos(eM11) fails for a scaled rotation
+               not SameValue(ArcTan2(WorldTransform.eM12, WorldTransform.eM11),
+                 0, 0.0001)) or
+              // both factors negative, equal or not: a turn by 180 degrees
+              ((WorldTransform.eM12 = 0) and
+               (WorldTransform.eM21 = 0) and
+               (WorldTransform.eM11 < 0) and
+               (WorldTransform.eM22 < 0)) then
       begin
         xs := 0;
         ys := 0;
-        a := Abs(ArcTan2(WorldTransform.eM12, WorldTransform.eM11));
-        if SameValue(a, 0, 0.0001) or    // 0 grad
-           SameValue(a, cPI, 0.0001) then // 180 grad
-          Canvas.SetTextMatrix(WorldTransform.eM11, WorldTransform.eM12,
-            WorldTransform.eM21, WorldTransform.eM22,
-            Canvas.S2X(posi.X * WorldTransform.eM11 +
-              posi.Y * WorldTransform.eM21 + WorldTransform.eDx),
-            Canvas.S2Y(posi.X * WorldTransform.eM12 +
-              posi.Y * WorldTransform.eM22 + WorldTransform.eDy))
+        // GDI's Y goes down, PDF's up: negating all four terms was right at
+        // 90 and 270 degrees only
+        if WorldTransform.eM12 = 0 then
+          // both factors negative: the canvas maps them and the move, the font
+          // size has the scale - the turn by 180 degrees only, from the
+          // aligned start as DrawLine draws from it
+          Canvas.SetTextMatrix(-1, 0, 0, -1, Canvas.S2X(posi.X - w),
+            Canvas.S2Y(posi.Y - h))
         else
-          Canvas.SetTextMatrix(-WorldTransform.eM11, -WorldTransform.eM12, -
-            WorldTransform.eM21, -WorldTransform.eM22,
+          Canvas.SetTextMatrix(WorldTransform.eM11, -WorldTransform.eM12,
+            -WorldTransform.eM21, WorldTransform.eM22,
             Canvas.S2X(posi.X * WorldTransform.eM11 +
               posi.Y * WorldTransform.eM21 + WorldTransform.eDx),
             Canvas.S2Y(posi.X * WorldTransform.eM12 +
