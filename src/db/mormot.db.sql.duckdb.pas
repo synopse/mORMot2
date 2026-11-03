@@ -616,7 +616,7 @@ begin
     W.AddDirect('[');
     for i := PtrInt(e^.Offset) to PtrInt(e^.Offset + e^.Length) - 1 do
     begin
-      DuckDBVectorValueToJson(child, @T^.Children^[0], i, W);
+      DuckDBVectorValueToJson(child, pointer(T^.Child), i, W);
       W.AddComma;
     end;
     W.CancelLastComma(']');
@@ -629,15 +629,15 @@ begin
     W.AddDirect('{');
     for i := PtrInt(e^.Offset) to PtrInt(e^.Offset + e^.Length) - 1 do
     begin
-      n := DuckDBVectorValueToTextBuf(kvec, @T^.Children^[0], i, buf);
+      n := DuckDBVectorValueToTextBuf(kvec, pointer(T^.Child), i, buf);
       if n >= 0 then
         W.AddProp(@buf[0], n)
       else
       begin
-        DuckDBVectorValueToText(kvec, @T^.Children^[0], i, txt);
+        DuckDBVectorValueToText(kvec, pointer(T^.Child), i, txt);
         W.AddProp(pointer(txt), length(txt));
       end;
-      DuckDBVectorValueToJson(vvec, @T^.Children^[1], i, W);
+      DuckDBVectorValueToJson(vvec, @T^.Child[1], i, W);
       W.AddComma;
     end;
     W.CancelLastComma('}');
@@ -686,7 +686,7 @@ begin
         W.AddDirect('[');
         for i := row * size to row * size + size - 1 do
         begin
-          DuckDBVectorValueToJson(child, @T^.Children^[0], i, W);
+          DuckDBVectorValueToJson(child, pointer(T^.Child), i, W);
           W.AddComma;
         end;
         W.CancelLastComma(']');
@@ -694,11 +694,11 @@ begin
     DUCKDB_TYPE_STRUCT:
       begin
         W.AddDirect('{');
-        for i := 0 to T^.ChildCount - 1 do
+        for i := 0 to length(T^.Child) - 1 do
         begin
           W.AddProp(pointer(T^.Names[i]), length(T^.Names[i]));
           DuckDBVectorValueToJson(DuckDB.struct_vector_get_child(vec, i),
-            @T^.Children^[i], row, W);
+            @T^.Child[i], row, W);
           W.AddComma;
         end;
         W.CancelLastComma('}');
@@ -709,7 +709,7 @@ begin
         tag := PDuckU8Array(DuckDB.vector_get_data(
           DuckDB.struct_vector_get_child(vec, 0)))^[row];
         DuckDBVectorValueToJson(DuckDB.struct_vector_get_child(vec, tag + 1),
-          @T^.Children^[tag], row, W);
+          @T^.Child[tag], row, W);
       end;
     DUCKDB_TYPE_ENUM,
     DUCKDB_TYPE_BIT:

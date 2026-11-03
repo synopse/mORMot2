@@ -513,9 +513,6 @@ function DuckFixedToDateTime(TypeId: TDuckDBType; P: PAnsiChar;
 { ************ DuckDB Logical Type Cache }
 
 type
-  PDuckDBTypeInfo = ^TDuckDBTypeInfo;
-  PDuckDBTypeInfoArray = ^TDuckDBTypeInfoArray;
-
   /// a DuckDB logical type, parsed once with all its nested types
   // - to avoid calling the DuckDB C API for every row of a result set
   // - initialized by DuckDBTypeInfoInit() and released by DuckDBTypeInfoDone()
@@ -528,19 +525,15 @@ type
     Scale: integer;
     /// size in bytes of a fixed-size value, 0 for variable-size types
     Size: PtrInt;
-    /// number of nested types in Children[]
-    ChildCount: integer;
     /// the DuckDB logical type handle, owned by this structure
     Handle: TDuckDBLogicalType;
     /// STRUCT field names, or ENUM values (cached on first use)
     Names: TRawUtf8DynArray;
     /// nested types of a LIST/ARRAY (item), MAP (key, value),
     // STRUCT (fields) or UNION (members)
-    Children: PDuckDBTypeInfoArray;
+    Child: array of TDuckDBTypeInfo;
   end;
-
-  /// pointer-based array of TDuckDBTypeInfo nested types
-  TDuckDBTypeInfoArray = array[0..1023] of TDuckDBTypeInfo;
+  PDuckDBTypeInfo = ^TDuckDBTypeInfo;
 
 /// parse a DuckDB logical type and all its nested types, once
 // - the supplied Handle is owned by Info, and released by DuckDBTypeInfoDone()
@@ -1928,12 +1921,10 @@ end;
 
 { ************ DuckDB Logical Type Cache }
 
-function DuckDBInitChildren(var nfo: TDuckDBTypeInfo; n: PtrInt): PDuckDBTypeInfo;
+function DuckDBInitChild(var nfo: TDuckDBTypeInfo): PDuckDBTypeInfo;
 begin
-  nfo.ChildCount := n;
-  if n > 0 then
-    nfo.Children := AllocMem(n * SizeOf(TDuckDBTypeInfo));
-  result := pointer(nfo.Children);
+  SetLength(nfo.Child, 1);
+  result := pointer(nfo.Child);
 end;
 
 procedure DuckDBTypeInfoInit(var Info: TDuckDBTypeInfo; Handle: TDuckDBLogicalType);
@@ -1954,23 +1945,24 @@ begin
     DUCKDB_TYPE_ENUM:
       Info.Internal := DuckDB.enum_internal_type(Handle);
     DUCKDB_TYPE_LIST:
-      DuckDBTypeInfoInit(DuckDBInitChildren(Info, 1)^, DuckDB.list_type_child_type(Handle));
+      DuckDBTypeInfoInit(DuckDBInitChild(Info)^, DuckDB.list_type_child_type(Handle));
     DUCKDB_TYPE_ARRAY:
       begin
         Info.Scale := DuckDB.array_type_array_size(Handle);
-        DuckDBTypeInfoInit(DuckDBInitChildren(Info, 1)^, DuckDB.array_type_child_type(Handle));
+        DuckDBTypeInfoInit(DuckDBInitChild(Info)^, DuckDB.array_type_child_type(Handle));
       end;
     DUCKDB_TYPE_MAP:
       begin
-        DuckDBInitChildren(Info, 2);
-        DuckDBTypeInfoInit(Info.Children^[0], DuckDB.map_type_key_type(Handle));
-        DuckDBTypeInfoInit(Info.Children^[1], DuckDB.map_type_value_type(Handle));
+        SetLength(Info.Child, 2);
+        DuckDBTypeInfoInit(Info.Child[0], DuckDB.map_type_key_type(Handle));
+        DuckDBTypeInfoInit(Info.Child[1], DuckDB.map_type_value_type(Handle));
       end;
     DUCKDB_TYPE_STRUCT:
       begin
-        nfo := DuckDBInitChildren(Info, DuckDB.struct_type_child_count(Handle));
-        SetLength(Info.Names, Info.ChildCount);
-        for i := 0 to Info.ChildCount - 1 do
+        SetLength(Info.Child, DuckDB.struct_type_child_count(Handle));
+        nfo := pointer(Info.Child);
+        SetLength(Info.Names, length(Info.Child));
+        for i := 0 to length(Info.Names) - 1 do
         begin
           p := DuckDB.struct_type_child_name(Handle, i);
           FastSetString(Info.Names[i], p, StrLen(p));
@@ -1981,8 +1973,9 @@ begin
       end;
     DUCKDB_TYPE_UNION:
       begin
-        nfo := DuckDBInitChildren(Info, DuckDB.union_type_member_count(Handle));
-        for i := 0 to Info.ChildCount - 1 do
+        SetLength(Info.Child, DuckDB.union_type_member_count(Handle));
+        nfo := pointer(Info.Child);
+        for i := 0 to length(Info.Child) - 1 do
         begin
           DuckDBTypeInfoInit(nfo^, DuckDB.union_type_member_type(Handle, i));
           inc(nfo);
@@ -1994,20 +1987,21 @@ end;
 
 function DuckDBTypeHasVariant(const Info: TDuckDBTypeInfo): boolean;
 var
-  i: PtrInt;
+  i: TDALen;
   p: PDuckDBTypeInfo;
 begin
   result := true;
   if Info.TypeId = DUCKDB_TYPE_VARIANT then
     exit;
-  p := pointer(Info.Children);
-  for i := 1 to Info.ChildCount do
-    if (p^.TypeId = DUCKDB_TYPE_VARIANT) or
-       ((p^.ChildCount > 0) and
-        DuckDBTypeHasVariant(p^)) then
-      exit
-    else
-      inc(p);
+  p := pointer(Info.Child);
+  if p <> nil then
+    for i := 1 to PDALen(PAnsiChar(p) - _DALEN)^ + _DAOFF do
+      if (p^.TypeId = DUCKDB_TYPE_VARIANT) or
+         ((p^.Child <> nil) and
+          DuckDBTypeHasVariant(p^)) then
+        exit
+      else
+        inc(p);
   result := false;
 end;
 
@@ -2039,23 +2033,18 @@ end;
 
 procedure DuckDBTypeInfoDone(var Info: TDuckDBTypeInfo);
 var
-  i: PtrInt;
+  i: TDALen;
   p: PDuckDBTypeInfo;
 begin
-  p := pointer(Info.Children);
+  p := pointer(Info.Child);
   if p <> nil then
-  begin
-    for i := 1 to Info.ChildCount do
+    for i := 1 to PDALen(PAnsiChar(p) - _DALEN)^ + _DAOFF do
     begin
-      DuckDBTypeInfoDone(p^);
+      DuckDBTypeInfoDone(p^); // released nested instances
       inc(p);
     end;
-    FreeMem(Info.Children);
-  end;
   if Info.Handle <> nil then
     DuckDB.destroy_logical_type(Info.Handle);
-  Info.Names := nil;
-  FillCharFast(Info, SizeOf(Info), 0);
 end;
 
 procedure DuckDBEnumValue(var Info: TDuckDBTypeInfo; Index: PtrInt; var Result: RawUtf8);
@@ -2173,7 +2162,7 @@ begin
   result := v;
 end;
 
-function ReadCount(var R: TFastReader; MinBytesPerItem: PtrInt): PtrInt;
+function ReadCount(var R: TFastReader; const MinBytesPerItem: PtrInt): PtrInt;
   {$ifdef HASINLINE}inline;{$endif}
 var
   v: QWord;
@@ -2238,14 +2227,13 @@ function TQuackType.HasVariant: boolean;
 var
   i: PtrInt;
 begin
-  result := Id = QTYPE_VARIANT;
-  if not result then
-    for i := 0 to high(Children) do
-      if Children[i].HasVariant then
-      begin
-        result := true;
-        exit;
-      end;
+  result := true;
+  if Id = QTYPE_VARIANT then
+    exit;
+  for i := 0 to length(Children) - 1 do
+    if Children[i].HasVariant then
+      exit;
+  result := false;
 end;
 
 function TQuackType.EnumIndexAt(D: PAnsiChar): PtrInt;
