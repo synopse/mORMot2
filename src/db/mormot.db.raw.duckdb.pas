@@ -2024,6 +2024,8 @@ begin
   end;
   if Handle <> nil then
     DuckDB.destroy_logical_type(Handle);
+  if Names <> nil then
+    Names := nil; // needed for nested levels only
 end;
 
 procedure TDuckDBTypeInfo.EnumValue(Index: PtrInt; var Result: RawUtf8);
