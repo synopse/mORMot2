@@ -3994,6 +3994,10 @@ function IsPemEncrypted(const pem: TCertPem): boolean;
 function PemToCertAndPrivKey(const MultiPartPem: RawUtf8;
   out Cert, PrivKey: RawByteString): boolean;
 
+/// extract the first pemCertificate concatenated in a PEM text file
+// - used e.g. by TX509.HashForChannelBinding
+function PemToCert(const MultiPartPem: RawUtf8): RawByteString;
+
 /// low-level binary-to-DER encoder of small buf with buflen < 127
 function DerAppend(P: PAnsiChar; buf: PByteArray; buflen: PtrUInt): PAnsiChar;
 
@@ -10830,7 +10834,7 @@ var
 
 function PemHeader(lab: PUtf8Char): TPemKind;
 begin
-  if PEM_LEN[low(TPemKind)] = 0 then // compute once
+  if PEM_LEN[high(TPemKind)] = 0 then // compute once
     for result := low(result) to high(result) do
       PEM_LEN[result] := PosEx('--', PEM_BEGIN[result], 14) - 12;
   for result := succ(low(result)) to high(result) do
@@ -10950,7 +10954,7 @@ begin
       break;
     if k = pemCertificate then // pemSynopseCertificate is out-of-scope here
       if {%H-}Cert <> '' then
-        exit // should contain a single Certificate
+        exit                   // should contain a single Certificate
       else
         Cert := PemToDer(pem)
     else
@@ -10959,6 +10963,24 @@ begin
   until false;
   result := ({%H-}Cert <> '') and
             ({%H-}PrivKey <> '');
+end;
+
+function PemToCert(const MultiPartPem: RawUtf8): RawByteString;
+var
+  P: PUtf8Char;
+  pem: RawUtf8;
+  k: TPemKind;
+begin
+  FastAssignNew(result);
+  P := pointer(MultiPartPem);
+  repeat
+    pem := NextPem(P, @k);
+    if pem = '' then
+      break;
+    if k = pemCertificate then // pemSynopseCertificate is out-of-scope here
+      result := PemToDer(pem);
+    FillZero(pem);
+  until result <> ''; // stop at the first valid certificate (assume leaf)
 end;
 
 function DerAppend(P: PAnsiChar; buf: PByteArray; buflen: PtrUInt): PAnsiChar;
