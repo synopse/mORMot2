@@ -5299,7 +5299,7 @@ begin
   end;
   if Assigned(fServer.Services) and
      not (soaNoSoaContract in fOptions) then
-    body.AddValue('soa', fServer.Services.AsSoa);
+    body.AddValue('soa', fServer.ServicesInfo);
   include(Ctxt.fServiceExecutionOptions, optNoLogOutput); // hide sensitive info
   Ctxt.ReturnsJson(variant(body), HTTP_SUCCESS, false, twJsonEscape, false, header);
 end;
@@ -8136,7 +8136,7 @@ begin
   begin
     case Ctxt.Method of
       mGET:
-        Ctxt.ReturnsJson(fServices.AsSoa);  // GET /stat/soa from ParseSoa()
+        Ctxt.ReturnsJson(ServicesInfo);     // GET /stat/soa from ParseSoa()
       mPOST:
         if (Ctxt.Call^.InBody <> '') and
            (Ctxt.Call^.InBody <> '[]') then // POST /stat/soa from SetUser()

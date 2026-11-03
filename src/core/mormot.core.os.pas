@@ -4523,7 +4523,7 @@ procedure PatchCodeProtectBack;
 { **************** TSynLocker/TSynLocked and Low-Level Threading Features }
 
 type
-  /// a lightweight exclusive non-reentrant lock, stored in a PtrUInt value
+  /// a lightweight exclusive non-reentrant lock, stored in a 32-bit slot
   // - calls SwitchToThread after some spinning, but don't use any R/W OS API
   // - warning: methods are non reentrant, i.e. calling Lock twice in a raw would
   // deadlock: see reentrant TMultiLightLock or TRWLock or TSynLocker/TOSLock

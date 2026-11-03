@@ -440,9 +440,9 @@ type
     fRun: TRestRunThreads;
     fLogClass: TSynLogClass;
     fLogFamily: TSynLogFamily;
-    fServerTimestampCacheSafe: TLightLock;
-    fServerTimestampCacheTix: cardinal;
+    fStatSafe: TLightLock;    // 32-bit
     fLogLevel: TSynLogLevels; // 32-bit
+    fServerTimestampCacheTix: cardinal;
     fLogResponseMaxBytes: integer;
     fAcquireExecution: TRestAcquireExecutions;
     fPrivateGarbageCollector: TSynObjectListLocked;
@@ -596,6 +596,8 @@ type
     function ServiceContainer: TServiceContainer; virtual; abstract;
     /// internal procedure called to implement TServiceContainer.Release
     procedure ServicesRelease(Caller: TServiceContainer);
+    /// thread-safe wrapper around Services.AsSoa
+    function ServicesInfo: variant;
     /// access to the Multi-Threading process of this instance
     property Run: TRestRunThreads
       read fRun;
@@ -2112,6 +2114,13 @@ begin
     result := fServices.Resolve(aInterface, Obj);
 end;
 
+function TRest.ServicesInfo: variant;
+begin
+  fStatSafe.Lock;
+  result := fServices.AsSoa;
+  fStatSafe.UnLock;
+end;
+
 procedure TRest.SetLogClass(aClass: TSynLogClass);
 begin
   fLogClass := aClass;
@@ -2185,13 +2194,13 @@ begin
      LockedExc32(fServerTimestampCacheTix, tix32, c32) then
   begin
     tmp.From(NowUtc + fServerTimestampOffset);
-    fServerTimestampCacheSafe.Lock;
+    fStatSafe.Lock;
     fServerTimestampCacheValue.Value := tmp.Value; // fast 64-bit copy
   end
   else
-    fServerTimestampCacheSafe.Lock;
+    fStatSafe.Lock;
   result := fServerTimestampCacheValue.Value;
-  fServerTimestampCacheSafe.UnLock;
+  fStatSafe.UnLock;
 end;
 
 procedure TRest.SetServerTimestamp(const Value: TTimeLog);
