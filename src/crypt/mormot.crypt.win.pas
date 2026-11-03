@@ -580,11 +580,13 @@ begin
          (result <> '') then
         // CNG returns fixed-width r || s whereas ICryptCert expects DER
         result := SetSignatureSecurityRaw(DigAlgo, RawUtf8(result));
-      log.Log(sllTrace,
-        'SignDigest: returns len=%', [length(result)], self);
+      if Assigned(log) then
+        log.Log(sllTrace,
+         'SignDigest: returns len=%', [length(result)], self);
     except
       on E: Exception do
-        log.Log(sllTrace, 'SignDigest failed due to %', [E], self);
+        if Assigned(log) then
+          log.Log(sllTrace, 'SignDigest failed due to %', [E], self);
     end;
   finally
     key.Done; // release the private key handle ASAP for safety
