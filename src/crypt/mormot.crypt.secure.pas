@@ -4088,6 +4088,7 @@ function SetSignatureSecurityRaw(algo: TCryptAsymAlgo;
 // - returns the size of the corresponding Hash in bytes, or 0 on error
 // - as defined by RFC 5929 - side note: we follow this RFC, which does not take
 // into account SHA-224 substitution to SHA-256 as it should
+// - see also TX509.HashForChannelBinding() class method in mormot.crypt.X509
 function HashForChannelBinding(const CertRaw: TCertDer;
   const SignatureHashAlgo: RawUtf8; out Hash: THash512Rec): integer;
 
