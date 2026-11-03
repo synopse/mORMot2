@@ -5462,7 +5462,7 @@ begin
   result := pointer(Self);
   if result = nil then
     exit;
-  // inlined Rtti.Find(ClassType)
+  // inlined Rtti.Find(ClassType) - no need to check Rtti.RegisterSafe.IsLocked
   {$ifdef NOPATCHVMT}
   result := LastFamily;
   if (result <> nil) and
@@ -5498,7 +5498,7 @@ begin
   result := nil;
   if self = nil then
     exit;
-  {$ifdef NOPATCHVMT}
+  {$ifdef NOPATCHVMT} // no need to check Rtti.RegisterSafe.IsLocked
   lf := LastFamily;
   if (lf = nil) or
      (lf.SynLogClass <> self) then
