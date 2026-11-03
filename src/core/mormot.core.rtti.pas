@@ -10201,9 +10201,9 @@ begin // seldom called: from RegisterFromText() or ORM model initialization
   // try latest found name e.g. calling from JsonRetrieveObjectRttiCustom()
   result := fLastHashName; // accessing aligned pointer is expected to be atomic
   if (result <> nil) and
+     (not RegisterSafe.IsLocked) and
      (PStrLen(PAnsiChar(pointer(result.Name)) - _STRLEN)^ = NameLen) and
-     IdemPropNameUSameLenNotNull(pointer(result.Name), Name, NameLen) and
-     not RegisterSafe.IsLocked then
+     IdemPropNameUSameLenNotNull(pointer(result.Name), Name, NameLen) then
     exit;
   // our dedicated "hash table of the poor" (tm) lookup
   result := nil;
@@ -10893,7 +10893,7 @@ begin
   // inlined Rtti.Find(ClassType): we know it is the first slot
   {$ifdef NOPATCHVMT}
   result := Rtti.FindType(PPointer(PAnsiChar(self) + vmtTypeInfo)^);
-  {$else} // no Rtti.RegisterSafe.IsLocked needed
+  {$else} // no Rtti.RegisterSafe.IsLocked needed since Create was done
   result := PPointer(PAnsiChar(self) + vmtAutoTable)^; 
   {$endif NOPATCHVMT}
   // assert(result.InheritsFrom(TRttiCustom));
