@@ -3154,7 +3154,7 @@ begin
     Value := Value xor $7f;
   end;
   Dest^ := byte(Value);
-  result := Dest + 1;
+  result := @PByteArray(Dest)^[1];
 end;
 
 function ToVarUInt64(Value: QWord; Dest: PByte): PByte;

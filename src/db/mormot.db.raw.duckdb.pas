@@ -1068,25 +1068,17 @@ begin
   result := pointer(PAnsiChar(data) + row * SizeOf(TDuckDBStringT));
 end;
 
-type
-  TU128 = TBlock128; // direct 128-bit access by little-endian 32-bit limbs
-
-procedure U128Negate(var v: TU128);
+procedure U128Negate(var v: THash128Rec);
+  {$ifdef HASINLINE} inline; {$endif}
 var
-  i: PtrInt;
-  c: Int64;
+  lo: QWord;
 begin
-  c := 1;
-  for i := 0 to 3 do
-  begin
-    c := Int64(not v[i]) + c;
-    v[i] := cardinal(c);
-    c := c shr 32;
-  end;
+  lo := v.L;
+  v.L := not lo + 1;
+  v.H := not v.H + ord(lo = 0);
 end;
 
-function DivU128By1B(var u: TU128): cardinal;
-  {$ifdef HASINLINE} inline; {$endif}
+function DivU128By1B(var u: THash128Rec): cardinal;
 var
   r, cur: QWord;
   i: PtrInt;
@@ -1094,11 +1086,11 @@ begin // see mormot.db.nosql.bson's div128bits9digits()
   r := 0;
   for i := 3 downto 0 do
   begin
-    cur := (r shl 32) or QWord(u[i]);
+    cur := (r shl 32) or QWord(u.c[i]);
     if cur = 0 then
       continue;
-    u[i] := cardinal(cur div 1000000000);
-    r := cur - QWord(u[i]) * 1000000000;
+    u.c[i] := cardinal(cur div 1000000000);
+    r := cur - QWord(u.c[i]) * 1000000000;
   end;
   result := cardinal(r);
 end;
@@ -1106,7 +1098,7 @@ end;
 function DuckHugeIntToTextBuf(const v: TDuckDBHugeInt;
   Signed: boolean; Scale: integer; var Buffer: TTemp47): PtrInt;
 var
-  u: TU128;
+  u: THash128Rec;
   neg: boolean;
   i, digits: PtrInt;
   n, q: cardinal;
@@ -1116,8 +1108,8 @@ begin
     Scale := 0
   else if Scale > 38 then
     ESqlDBDuckDB.RaiseUtf8('Invalid DuckDB decimal scale=%', [Scale]);
-  PInt64(@u[0])^ := v.Lower;
-  PInt64(@u[2])^ := v.Upper;
+  u.L := v.Lower;
+  u.H := v.Upper;
   neg := Signed and (v.Upper < 0);
   if neg then
     U128Negate(u);
@@ -1126,7 +1118,8 @@ begin
   p := last - 1;
   repeat
     n := DivU128By1B(u);
-    if (u[0] or u[1] or u[2] or u[3]) = 0 then
+    if (u.L = 0) and
+       (u.H = 0) then
     begin
       repeat
         q := n div 10;
