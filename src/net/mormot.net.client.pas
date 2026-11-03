@@ -5114,10 +5114,8 @@ begin
   len := length(CbtHash);
   if len <> 0 then
   begin
-    if (len <> 32) and
-       (len <> 48) and
-       (len <> 64) then
-      exit;
+    if len > SizeOf(THash512) then
+      exit; // clearly not a common digital hash as expected by the RFC
     {$ifdef OSWINDOWS}
     if OSVersion < wSeven then
       exit;

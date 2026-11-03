@@ -4607,9 +4607,7 @@ begin
       [self, SECPKGNAMEAPI]);
   len := length(CbtHash);
   if (len <> 0) and
-     (len <> 32) and
-     (len <> 48) and
-     (len <> 64) then
+     (len > SizeOf(THash512)) then
     EHttpServer.RaiseUtf8('%.SetAuthorizeNegotiate: invalid CbtHash length=%',
       [self, len]);
   fAuthorize := hraNegotiate;

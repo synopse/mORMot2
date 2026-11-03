@@ -2157,7 +2157,7 @@ var
 begin
   v := R.VarUInt64;
   if (Int64(v) < 0) or
-     (Int64(v) > R.Last - R.P) then
+     (v > PtrUInt(R.Last - R.P)) then
     ESqlDBQuack.RaiseUtf8('length % overflow', [Int64(v)]);
   result := v;
 end;

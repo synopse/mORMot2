@@ -5100,7 +5100,7 @@ begin
   CheckEqual(length(i32), 2);
   CheckEqual(i32[0], 1);
   CheckEqual(i32[1], 2);
-  // validate signed LEB128 as used by DWARF and DuckDB/Quack
+  // validate signed LEB128 as used by DWARF/DuckDB/Quack/WebAssembly
   CheckLeb('00', 0);
   CheckLeb('01', 1);
   CheckLeb('3F', 63);
