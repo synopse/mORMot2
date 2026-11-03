@@ -581,6 +581,7 @@ type
     // or, using generics:
     // ! if fServer.Services.Resolve<ICalculator>(Calc) then
     // !   ...
+    // - Services registration is not thread-safe and should be done at startup
     property Services: TServiceContainer
       read fServices;
     /// access or initialize the internal IoC resolver, used for interface-based
@@ -593,6 +594,7 @@ type
     // ! aRest.ServiceContainer.InjectResolver([TInfraRepoUserFactory.Create(aRest)], true);
     // - overriden methods will return TServiceContainerClient or
     // TServiceContainerServer instances, on TRestClient or TRestServer
+    // - Services registration is not thread-safe and should be done at startup
     function ServiceContainer: TServiceContainer; virtual; abstract;
     /// internal procedure called to implement TServiceContainer.Release
     procedure ServicesRelease(Caller: TServiceContainer);
@@ -2117,8 +2119,11 @@ end;
 function TRest.ServicesInfo: variant;
 begin
   fStatSafe.Lock;
-  result := fServices.AsSoa;
-  fStatSafe.UnLock;
+  try
+    result := fServices.AsSoa;
+  finally
+    fStatSafe.UnLock;
+  end;
 end;
 
 procedure TRest.SetLogClass(aClass: TSynLogClass);

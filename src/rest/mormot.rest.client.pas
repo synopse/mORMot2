@@ -738,6 +738,7 @@ type
     // remote services, and more generaly any Services.Resolve() call
     // - create and initialize the internal TServiceContainerClient if no
     // service interface has been registered yet
+    // - Services registration is not thread-safe and should be done at startup
     // - may be used to inject some dependencies, which are not interface-based
     // remote services, but internal IoC, without the ServiceRegister()
     // or ServiceDefine() methods - e.g.
@@ -752,6 +753,7 @@ type
     // - that is, server side will be called to check for the availability of
     // each interface
     // - you can specify an optional custom contract for the first interface
+    // - Services registration is not thread-safe and should be done at startup
     function ServiceRegister(const aInterfaces: array of PRttiInfo;
       aInstanceCreation: TServiceInstanceImplementation = sicSingle;
       const aContractExpected: RawUtf8 = ''): boolean; overload; virtual;
@@ -765,6 +767,7 @@ type
     // - that is, server side will be called to check for the availability of
     // each interface
     // - you can specify an optional custom contract for the first interface
+    // - Services registration is not thread-safe and should be done at startup
     function ServiceRegister(aInterface: PRttiInfo;
       aInstanceCreation: TServiceInstanceImplementation = sicSingle;
       const aContractExpected: RawUtf8 = '';
@@ -773,15 +776,18 @@ type
     // - will return TRUE on success, filling Obj output variable with the
     // corresponding interface instance
     // - will return FALSE on error
+    // - Services registration is not thread-safe and should be done at startup
     function ServiceRegisterClientDriven(aInterface: PRttiInfo; out Obj;
       const aContractExpected: RawUtf8 = ''): boolean; overload;
     /// register one or several Services on the client side via their interfaces
+    // - Services registration is not thread-safe and should be done at startup
     // - this method expects the interface(s) to have been registered previously:
     // ! TInterfaceFactory.RegisterInterfaces([TypeInfo(IMyInterface),...]);
     function ServiceDefine(const aInterfaces: array of TGuid;
       aInstanceCreation: TServiceInstanceImplementation = sicSingle;
       const aContractExpected: RawUtf8 = ''): boolean; overload;
     /// register a Service on the client side via its interface
+    // - Services registration is not thread-safe and should be done at startup
     // - this method expects the interface to have been registered previously:
     // ! TInterfaceFactory.RegisterInterfaces([TypeInfo(IMyInterface),...]);
     function ServiceDefine(const aInterface: TGuid;
@@ -789,6 +795,7 @@ type
       const aContractExpected: RawUtf8 = '';
       aIgnoreAnyException: boolean = true): TServiceFactoryClient; overload;
     /// register and retrieve the sicClientDriven Service instance
+    // - Services registration is not thread-safe and should be done at startup
     // - this method expects the interface to have been registered previously:
     // ! TInterfaceFactory.RegisterInterfaces([TypeInfo(IMyInterface),...]);
     function ServiceDefineClientDriven(const aInterface: TGuid; out Obj;
@@ -796,6 +803,7 @@ type
     /// register a sicShared Service instance communicating via JSON objects
     // - will force SERVICE_CONTRACT_NONE_EXPECTED, ParamsAsJsonObject=true and
     // ResultAsJsonObjectWithoutResult=true
+    // - Services registration is not thread-safe and should be done at startup
     // - may be used e.g. for accessing a sessionless public REST/JSON API, i.e.
     // ! TRestServer.ServiceDefine(...).ResultAsJsonObjectWithoutResult := true
     // - this method expects the interface to have been registered previously:
