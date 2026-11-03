@@ -4768,6 +4768,38 @@ procedure TTestCoreBase.Integers;
     Includes64;
   end;
 
+  procedure CheckLeb(const hex: RawUtf8; expected: Int64);
+  var
+    bin: RawByteString;
+    r: TFastReader;
+  begin
+    bin := HexToBin(hex);
+    CheckEqual(length(bin), length(hex) shr 1, 'HexToBin');
+    r.Init(bin);
+    CheckEqual(r.VarLeb64, expected, hex);
+    Check(r.EOF, 'VarLeb64 EOF');
+  end;
+
+  procedure CheckLebError(const hex: RawUtf8);
+  var
+    bin: RawByteString;
+    r: TFastReader;
+    failed: boolean;
+  begin
+    if IsDebuggerPresent then
+      exit;
+    bin := HexToBin(hex);
+    r.Init(bin);
+    failed := false;
+    try
+      r.VarLeb64;
+    except
+      on E: EFastReader do
+        failed := true;
+    end;
+    Check(failed, 'VarLeb64 invalid input');
+  end;
+
 var
   i8: TByteDynArray;
   i16: TWordDynArray;
@@ -5039,6 +5071,25 @@ begin
   CheckEqual(length(i32), 2);
   CheckEqual(i32[0], 1);
   CheckEqual(i32[1], 2);
+  // validate signed LEB128 as used by DWARF and DuckDB/Quack
+  CheckLeb('00', 0);
+  CheckLeb('01', 1);
+  CheckLeb('3F', 63);
+  CheckLeb('40', -64);
+  CheckLeb('7F', -1);
+  CheckLeb('C000', 64);
+  CheckLeb('BF7F', -65);
+  CheckLeb('807F', -128);
+  CheckLeb('8001', 128);
+  CheckLeb('9BF159', -624485);
+  CheckLeb('E58E26', 624485);
+  CheckLeb('8080808080808080807F', Low(Int64));
+  CheckLeb('8180808080808080807F', Low(Int64) + 1);
+  CheckLeb('FEFFFFFFFFFFFFFFFF00', High(Int64) - 1);
+  CheckLeb('FFFFFFFFFFFFFFFFFF00', High(Int64));
+  CheckLebError('80');
+  CheckLebError('80808080808080808001');
+  CheckLebError('80808080808080808080');
 end;
 
 function TestAddFloatStr(const str: RawUtf8): RawUtf8;

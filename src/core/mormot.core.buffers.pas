@@ -745,6 +745,10 @@ type
       {$ifdef FPC}inline;{$endif}
     /// read the next 64-bit unsigned value from the buffer
     function VarUInt64: QWord;
+    /// read the next LEB-128 signed value from the buffer as a 64-bit integer
+    // - not the same zigzag encoding as VarInt64, but the one used e.g. for
+    // DWARF debugging information or DuckDB numbers1
+    function VarLeb64: Int64;
     /// read the next RawUtf8 value from the buffer
     function VarUtf8: RawUtf8; overload;
       {$ifdef HASINLINE}inline;{$endif}
@@ -3598,6 +3602,35 @@ end;
 function TFastReader.VarInt64: Int64;
 begin
   result := ZigZagInt64(VarUInt64);
+end;
+
+function TFastReader.VarLeb64: Int64;
+var
+  b: PtrUInt;
+  shift: integer;
+begin
+  b := NextByte;
+  if b < $80 then
+  begin
+    result := (PtrInt(b) xor $40) - $40; // single-byte signed LEB128: -64..63
+    exit;
+  end;
+  result := b and $7f;
+  shift := 7;
+  repeat
+    b := NextByte;
+    if shift = 63 then // the tenth byte can only be $00 or $7f
+    begin
+      if (b <> 0) and (b <> $7f) then
+        ErrorData('Invalid signed LEB128');
+      result := result or (Int64(b and 1) shl 63);
+      exit;
+    end;
+    result := result or (Int64(b and $7f) shl shift);
+    inc(shift, 7);
+  until b <= $7f;
+  if b and $40 <> 0 then // extend sign from current shifted bits
+    result := result or (Int64(-1) shl shift);
 end;
 
 {$ifdef CPUX86} // not enough CPU registers
