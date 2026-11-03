@@ -3129,7 +3129,7 @@ begin
       DW_LNS_ADVANCE_PC:
         inc(state.address, Read.VarUInt32 * header64.minimum_instruction_length);
       DW_LNS_ADVANCE_LINE:
-        // LEB128 values < 0 would decrease state.line when needed
+        // LEB128 negative values would decrease state.line when needed
         state.line := Int64(state.line) + Read.VarLeb64;
       DW_LNS_SET_FILE:
         state.fileid := Read.VarUInt32;
