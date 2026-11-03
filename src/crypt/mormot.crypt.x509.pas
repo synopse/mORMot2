@@ -2958,10 +2958,9 @@ begin
   FastAssignNew(result);
   der := PemToCert(Cert);
   if der = '' then
-    if AsnDecChunk(Cert) then // basic input validation
-      der := Cert  // assume a DER was specified
-    else
-      exit;        // no certificate
+    der := Cert;  // assume a DER was specified
+  if not AsnDecChunk(Cert) then // basic input validation
+    exit;
   x := TX509.Create;
   try
     if not x.LoadFromDer(Der) or
