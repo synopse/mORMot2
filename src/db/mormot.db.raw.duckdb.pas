@@ -513,16 +513,26 @@ function DuckFixedToDateTime(TypeId: TDuckDBType; P: PAnsiChar;
 { ************ DuckDB Logical Type Cache }
 
 type
+  PDuckDBTypeInfoArray = ^TDuckDBTypeInfoArray;
+  PDuckDBTypeInfo = ^TDuckDBTypeInfo;
+
   /// a DuckDB logical type, parsed once with all its nested types
   // - to avoid calling the DuckDB C API for every row of a result set
   // - initialized by DuckDBTypeInfoInit() and released by DuckDBTypeInfoDone()
+  {$ifdef USERECORDWITHMETHODS}
   TDuckDBTypeInfo = record
+  {$else}
+  TDuckDBTypeInfo = object
+  {$endif USERECORDWITHMETHODS}
+  public
     /// 32-bit ordinal number corresponding to DUCKDB_TYPE_* constants
     TypeId: TDuckDBType;
     /// internal storage type of a DECIMAL or an ENUM
     Internal: TDuckDBType;
     /// number of decimals of a DECIMAL, or fixed size of an ARRAY
     Scale: integer;
+    /// how many items are actually stored in Child[]
+    ChildCount: integer;
     /// size in bytes of a fixed-size value, 0 for variable-size types
     Size: PtrInt;
     /// the DuckDB logical type handle, owned by this structure
@@ -531,22 +541,20 @@ type
     Names: TRawUtf8DynArray;
     /// nested types of a LIST/ARRAY (item), MAP (key, value),
     // STRUCT (fields) or UNION (members)
-    Child: array of TDuckDBTypeInfo;
+    Child: PDuckDBTypeInfoArray;
+    /// parse a DuckDB logical type and all its nested types, once
+    // - the supplied Handle is owned by Info, and released by DuckDBTypeInfoDone()
+    procedure Init(aHandle: TDuckDBLogicalType);
+    /// release the DuckDB logical type handles of a DuckDBTypeInfoInit() structure
+    procedure Done;
+    /// allocate Child[0 .. ChildCount - 1] items
+    function Nest(n: PtrInt = 1): PDuckDBTypeInfo;
+    /// retrieve the text of an ENUM value, caching all the ENUM dictionary
+    procedure EnumValue(Index: PtrInt; var Result: RawUtf8);
+    /// return true if a type is a VARIANT, or contains a VARIANT as nested type
+    function HasVariant: boolean;
   end;
-  PDuckDBTypeInfo = ^TDuckDBTypeInfo;
-
-/// parse a DuckDB logical type and all its nested types, once
-// - the supplied Handle is owned by Info, and released by DuckDBTypeInfoDone()
-procedure DuckDBTypeInfoInit(var Info: TDuckDBTypeInfo; Handle: TDuckDBLogicalType);
-
-/// release the DuckDB logical type handles of a DuckDBTypeInfoInit() structure
-procedure DuckDBTypeInfoDone(var Info: TDuckDBTypeInfo);
-
-/// retrieve the text of an ENUM value, caching all the ENUM dictionary
-procedure DuckDBEnumValue(var Info: TDuckDBTypeInfo; Index: PtrInt; var Result: RawUtf8);
-
-/// return true if a type is a VARIANT, or contains a VARIANT as nested type
-function DuckDBTypeHasVariant(const Info: TDuckDBTypeInfo): boolean;
+  TDuckDBTypeInfoArray = array[word] of TDuckDBTypeInfo;
 
 /// wrap a SELECT statement to retrieve its VARIANT columns as JSON
 // - the VARIANT binary layout is not decoded by our drivers: DuckDB converts
@@ -1914,88 +1922,129 @@ end;
 
 { ************ DuckDB Logical Type Cache }
 
-function DuckDBInitChild(var nfo: TDuckDBTypeInfo): PDuckDBTypeInfo;
+{ TDuckDBTypeInfo }
+
+function TDuckDBTypeInfo.Nest(n: PtrInt): PDuckDBTypeInfo;
 begin
-  SetLength(nfo.Child, 1);
-  result := pointer(nfo.Child);
+  ChildCount := n;
+  Child := AllocMem(n * SizeOf(Child[0]));
+  result := pointer(Child);
 end;
 
-procedure DuckDBTypeInfoInit(var Info: TDuckDBTypeInfo; Handle: TDuckDBLogicalType);
+procedure TDuckDBTypeInfo.Init(aHandle: TDuckDBLogicalType);
 var
   i: PtrInt;
   p: PUtf8Char;
   nfo: PDuckDBTypeInfo;
 begin
-  FillCharFast(Info, SizeOf(Info), 0);
-  Info.Handle := Handle;
-  Info.TypeId := DuckDB.get_type_id(Handle);
-  case Info.TypeId of
+  FillCharFast(self, SizeOf(self), 0);
+  Handle := aHandle;
+  TypeId := DuckDB.get_type_id(Handle);
+  case TypeId of
     DUCKDB_TYPE_DECIMAL:
       begin
-        Info.Internal := DuckDB.decimal_internal_type(Handle);
-        Info.Scale := DuckDB.decimal_scale(Handle);
+        Internal := DuckDB.decimal_internal_type(Handle);
+        Scale := DuckDB.decimal_scale(Handle);
       end;
     DUCKDB_TYPE_ENUM:
-      Info.Internal := DuckDB.enum_internal_type(Handle);
+      Internal := DuckDB.enum_internal_type(Handle);
     DUCKDB_TYPE_LIST:
-      DuckDBTypeInfoInit(DuckDBInitChild(Info)^, DuckDB.list_type_child_type(Handle));
+      Nest^.Init(DuckDB.list_type_child_type(Handle));
     DUCKDB_TYPE_ARRAY:
       begin
-        Info.Scale := DuckDB.array_type_array_size(Handle);
-        DuckDBTypeInfoInit(DuckDBInitChild(Info)^, DuckDB.array_type_child_type(Handle));
+        Scale := DuckDB.array_type_array_size(Handle);
+        Nest^.Init(DuckDB.array_type_child_type(Handle));
       end;
     DUCKDB_TYPE_MAP:
       begin
-        SetLength(Info.Child, 2);
-        DuckDBTypeInfoInit(Info.Child[0], DuckDB.map_type_key_type(Handle));
-        DuckDBTypeInfoInit(Info.Child[1], DuckDB.map_type_value_type(Handle));
+        Nest(2);
+        Child[0].Init(DuckDB.map_type_key_type(Handle));
+        Child[1].Init(DuckDB.map_type_value_type(Handle));
       end;
     DUCKDB_TYPE_STRUCT:
       begin
-        SetLength(Info.Child, DuckDB.struct_type_child_count(Handle));
-        nfo := pointer(Info.Child);
-        SetLength(Info.Names, length(Info.Child));
-        for i := 0 to length(Info.Names) - 1 do
+        nfo := Nest(DuckDB.struct_type_child_count(Handle));
+        SetLength(Names, ChildCount);
+        for i := 0 to ChildCount - 1 do
         begin
           p := DuckDB.struct_type_child_name(Handle, i);
-          FastSetString(Info.Names[i], p, StrLen(p));
+          FastSetString(Names[i], p, StrLen(p));
           DuckDB.free_(p);
-          DuckDBTypeInfoInit(nfo^, DuckDB.struct_type_child_type(Handle, i));
+          nfo^.Init(DuckDB.struct_type_child_type(Handle, i));
           inc(nfo);
         end;
       end;
     DUCKDB_TYPE_UNION:
       begin
-        SetLength(Info.Child, DuckDB.union_type_member_count(Handle));
-        nfo := pointer(Info.Child);
-        for i := 0 to length(Info.Child) - 1 do
+        nfo := Nest(DuckDB.union_type_member_count(Handle));
+        for i := 0 to ChildCount - 1 do
         begin
-          DuckDBTypeInfoInit(nfo^, DuckDB.union_type_member_type(Handle, i));
+          nfo^.Init(DuckDB.union_type_member_type(Handle, i));
           inc(nfo);
         end;
       end;
   end;
-  Info.Size := DuckFixedSize(Info.TypeId, Info.Internal);
+  Size := DuckFixedSize(TypeId, Internal);
 end;
 
-function DuckDBTypeHasVariant(const Info: TDuckDBTypeInfo): boolean;
+function TDuckDBTypeInfo.HasVariant: boolean;
 var
   i: TDALen;
   p: PDuckDBTypeInfo;
 begin
   result := true;
-  if Info.TypeId = DUCKDB_TYPE_VARIANT then
+  if TypeId = DUCKDB_TYPE_VARIANT then
     exit;
-  p := pointer(Info.Child);
-  if p <> nil then
-    for i := 1 to PDALen(PAnsiChar(p) - _DALEN)^ + _DAOFF do
-      if (p^.TypeId = DUCKDB_TYPE_VARIANT) or
-         ((p^.Child <> nil) and
-          DuckDBTypeHasVariant(p^)) then
-        exit
-      else
-        inc(p);
+  p := pointer(Child);
+  for i := 1 to ChildCount do
+    if (p^.TypeId = DUCKDB_TYPE_VARIANT) or
+       ((p^.ChildCount <> 0) and
+        p^.HasVariant) then
+      exit
+    else
+      inc(p);
   result := false;
+end;
+
+procedure TDuckDBTypeInfo.Done;
+var
+  i: TDALen;
+  p: PDuckDBTypeInfo;
+begin
+  p := pointer(Child);
+  if p <> nil then
+  begin
+    for i := 1 to ChildCount do
+    begin
+      p^.Done; // released nested instances
+      inc(p);
+    end;
+    FreeMem(Child);
+    Child := nil;
+  end;
+  if Handle <> nil then
+    DuckDB.destroy_logical_type(Handle);
+end;
+
+procedure TDuckDBTypeInfo.EnumValue(Index: PtrInt; var Result: RawUtf8);
+var
+  i: PtrInt;
+  p: PUtf8Char;
+begin
+  if Names = nil then // retrieve once all values of this enumerate
+  begin
+    SetLength(Names, DuckDB.enum_dictionary_size(Handle));
+    for i := 0 to high(Names) do
+    begin
+      p := DuckDB.enum_dictionary_value(Handle, i);
+      FastSetString(Names[i], p, StrLen(p));
+      DuckDB.free_(p);
+    end;
+  end;
+  if PtrUInt(Index) < PtrUInt(length(Names)) then
+    Result := Names[Index]
+  else
+    FastAssignNew(Result);
 end;
 
 function DuckDBVariantSql(const Sql: RawUtf8; const Names: TRawUtf8DynArray;
@@ -2022,43 +2071,6 @@ begin
         (text[length(text)] = ';') do
     SetLength(text, length(text) - 1); // within a sub-query
   Join(['SELECT ', list, ' FROM (', text, ')'], result);
-end;
-
-procedure DuckDBTypeInfoDone(var Info: TDuckDBTypeInfo);
-var
-  i: TDALen;
-  p: PDuckDBTypeInfo;
-begin
-  p := pointer(Info.Child);
-  if p <> nil then
-    for i := 1 to PDALen(PAnsiChar(p) - _DALEN)^ + _DAOFF do
-    begin
-      DuckDBTypeInfoDone(p^); // released nested instances
-      inc(p);
-    end;
-  if Info.Handle <> nil then
-    DuckDB.destroy_logical_type(Info.Handle);
-end;
-
-procedure DuckDBEnumValue(var Info: TDuckDBTypeInfo; Index: PtrInt; var Result: RawUtf8);
-var
-  i: PtrInt;
-  p: PUtf8Char;
-begin
-  if Info.Names = nil then // retrieve once all values of this enumerate
-  begin
-    SetLength(Info.Names, DuckDB.enum_dictionary_size(Info.Handle));
-    for i := 0 to high(Info.Names) do
-    begin
-      p := DuckDB.enum_dictionary_value(Info.Handle, i);
-      FastSetString(Info.Names[i], p, StrLen(p));
-      DuckDB.free_(p);
-    end;
-  end;
-  if cardinal(Index) < cardinal(length(Info.Names)) then
-    Result := Info.Names[Index]
-  else
-    FastAssignNew(Result);
 end;
 
 function DuckDBTypeToField(TypeId: TDuckDBType; Scale: integer): TSqlDBFieldType;

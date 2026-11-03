@@ -576,7 +576,7 @@ begin
         DuckBitToText(p, len, result);
       end;
     DUCKDB_TYPE_ENUM:
-      DuckDBEnumValue(T^, ReadInteger(T^.Internal, data, row), result);
+      T^.EnumValue(ReadInteger(T^.Internal, data, row), result);
     DUCKDB_TYPE_LIST,
     DUCKDB_TYPE_ARRAY,
     DUCKDB_TYPE_STRUCT,
@@ -694,7 +694,7 @@ begin
     DUCKDB_TYPE_STRUCT:
       begin
         W.AddDirect('{');
-        for i := 0 to length(T^.Child) - 1 do
+        for i := 0 to T^.ChildCount - 1 do
         begin
           W.AddProp(pointer(T^.Names[i]), length(T^.Names[i]));
           DuckDBVectorValueToJson(DuckDB.struct_vector_get_child(vec, i),
@@ -1044,7 +1044,7 @@ begin
   nfo := pointer(fInfo);
   for i := 1 to length(fInfo) do
   begin
-    DuckDBTypeInfoDone(nfo^.Info);
+    nfo^.Info.Done;
     inc(nfo);
   end;
   fInfo := nil;
@@ -1198,11 +1198,11 @@ begin
   nfo := pointer(fInfo);
   for i := 0 to length(fInfo) - 1 do
   begin
-    DuckDBTypeInfoInit(nfo^.Info, DuckDB.column_logical_type(@fRes, i));
+    nfo^.Info.Init(DuckDB.column_logical_type(@fRes, i));
     col := AddColumn(RawUtf8(DuckDB.column_name(@fRes, i)));
     col^.ColumnType := DuckDBTypeToField(nfo^.Info.TypeId, nfo^.Info.Scale);
     col^.ColumnAttr := nfo^.Info.TypeId;
-    if DuckDBTypeHasVariant(nfo^.Info) then
+    if nfo^.Info.HasVariant then
     begin
       if fVariants = nil then
         SetLength(fVariants, (length(fInfo) + 31) shr 3);
