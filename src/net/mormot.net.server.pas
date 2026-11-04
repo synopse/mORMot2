@@ -1076,6 +1076,7 @@ type
     fAuthorizerDigest: IDigestAuthServer;
     fAuthorizeBasic: TOnHttpServerBasicAuth;
     fAuthorizeBasicRealm: RawUtf8;
+    fAuthorizeNegotiateCbtHash: RawByteString;
     fStats: array[THttpServerSocketGetRequestResult] of integer;
     fBlackListUriReloadMin: integer;
     fBlackListUriNextTix, fBlackListUriCrc: cardinal;
@@ -1206,7 +1207,9 @@ type
     /// allow optional NEGOTIATE authentication for some URIs via Kerberos
     // - will use mormot.lib.sspi or mormot.lib.gssapi
     // - if OnBeforeBody returns 401, Kerberos will be used to authenticate
-    procedure SetAuthorizeNegotiate;
+    // - optional CbtHash is the binary tls-server-end-point certificate digest;
+    // if supplied, a matching client channel binding is mandatory
+    procedure SetAuthorizeNegotiate(const CbtHash: RawByteString = '');
     /// set after a call to SetAuthDigest/SetAuthBasic/SetAuthorizeNegotiate
     property Authorize: THttpServerRequestAuthentication
       read fAuthorize;
@@ -4557,6 +4560,7 @@ begin
   fAuthorizerDigest := nil;
   fAuthorizeBasic := nil;
   fAuthorizeBasicRealm := '';
+  fAuthorizeNegotiateCbtHash := '';
 end;
 
 procedure THttpServerSocketGeneric.SetAuthorizeDigest(
@@ -4592,13 +4596,22 @@ begin
     fAuthorizeBasicRealm);
 end;
 
-procedure THttpServerSocketGeneric.SetAuthorizeNegotiate;
+procedure THttpServerSocketGeneric.SetAuthorizeNegotiate(
+  const CbtHash: RawByteString);
+var
+  len: integer;
 begin
   SetAuthorizeNone;
   if not InitializeDomainAuth then
     EHttpServer.RaiseUtf8('%.SetAuthorizeNegotiate: no % available',
       [self, SECPKGNAMEAPI]);
-   fAuthorize := hraNegotiate;
+  len := length(CbtHash);
+  if (len <> 0) and
+     (len > SizeOf(THash512)) then
+    EHttpServer.RaiseUtf8('%.SetAuthorizeNegotiate: invalid CbtHash length=%',
+      [self, len]);
+  fAuthorize := hraNegotiate;
+  fAuthorizeNegotiateCbtHash := CbtHash;
 end;
 
 function THttpServerSocketGeneric.AuthorizeServerMem: TDigestAuthServerMem;
@@ -4687,7 +4700,8 @@ begin
           if Assigned(fSspiKeyTab) then
             fSspiKeyTab.PrepareKeyTab; // do nothing if no KeyTab changed or set
           {$endif OSPOSIX}
-          header := KerberosServerAuthHeader('', auth + 10, @user);
+          header := KerberosServerAuthHeader('', auth + 10,
+                      @user, fAuthorizeNegotiateCbtHash);
           if header <> '' then
           begin
             Http.ResponseHeaders := header;
@@ -5390,6 +5404,7 @@ begin
       fKeepAliveClient := false;
     if (Http.ContentLength < 0) and
        (KeepAliveClient or
+        not (rfHttp10 in Http.ResponseFlags) or
         IsGet(Http.CommandMethod)) then
       Http.ContentLength := 0; // HTTP/1.1 and no content length -> no eof
     if (headerMaxTix > 0) and

@@ -1563,7 +1563,7 @@ const
     '?mime_data',
     '?mime_name',
     '?mime_type',
-    {$ifdef LIBCURLMULTI},
+    {$ifdef LIBCURLMULTI}
     'multi_add_handle',
     'multi_assign',
     'multi_cleanup',

@@ -8275,6 +8275,8 @@ begin
   end;
   props := TOrm(Instance).Orm.Fields;
   W.BlockBegin('{', Options);
+  if woStoreClassName in Options then // as in _JS_RttiCustom()
+    W.AddPropJsonShort('ClassName', ClassNameShort(PClass(Instance)^)^);
   if woIDAsIDstr in Options then
   begin
     W.AddPropInt64('ID', TOrm(Instance).fID);

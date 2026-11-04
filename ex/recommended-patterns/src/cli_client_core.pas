@@ -41,7 +41,6 @@ uses
   mormot.core.interfaces,
   mormot.orm.core,
   shared_types,
-  task,
   task_dtos,
   task_command,
   task_query,

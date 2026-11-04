@@ -918,11 +918,16 @@ var
 begin
   SynDBLog.EnterLocal(log, self, 'StartTransaction');
   inherited StartTransaction;
-  {$ifdef ZEOS73UP}
-  fDatabase.StartTransaction; //returns the txn level
-  {$else}
-  fDatabase.SetAutoCommit(false);
-  {$endif ZEOS73UP}
+  try
+    {$ifdef ZEOS73UP}
+    fDatabase.StartTransaction; //returns the txn level
+    {$else}
+    fDatabase.SetAutoCommit(false);
+    {$endif ZEOS73UP}
+  except
+    dec(fTransactionCount); // no transaction was actually started
+    raise;
+  end;
 end;
 
 procedure TSqlDBZeosConnection.Commit;

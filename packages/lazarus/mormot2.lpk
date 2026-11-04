@@ -49,7 +49,7 @@
     <Description Value="mORMot 2 ORM/SOA/MVC framework"/>
     <License Value="MPL, GPL or LGPL"/>
     <Version Major="2" Minor="4"/>
-    <Files Count="126">
+    <Files Count="128">
       <Item1>
         <Filename Value="../../src/app/mormot.app.console.pas"/>
         <UnitName Value="mormot.app.console"/>
@@ -552,9 +552,17 @@
         <UnitName Value="mormot.crypt.win"/>
       </Item125>
       <Item126>
+        <Filename Value="../../src/db/mormot.db.raw.duckdb.pas"/>
+        <UnitName Value="mormot.db.raw.duckdb"/>
+      </Item126>
+      <Item127>
+        <Filename Value="../../src/db/mormot.db.sql.duckdb.pas"/>
+        <UnitName Value="mormot.db.sql.duckdb"/>
+      </Item127>
+      <Item128>
         <Filename Value="../../src/net/mormot.net.mail.pas"/>
         <UnitName Value="mormot.net.mail"/>
-      </Item126>
+      </Item128>
     </Files>
     <CompatibilityMode Value="True"/>
     <UsageOptions>

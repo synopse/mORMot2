@@ -393,7 +393,7 @@ Pascal record member is the same name in `PascalCase`.
 | updatedAt | TDateTime | Last update timestamp |
 | commentCount | integer | Number of comments |
 | tagIDs | TIDDynArray | Associated tag IDs |
-| comments | TTaskCommentDynArray | Embedded comments |
+| comments | TTaskCommentDTODynArray | Embedded comments |
 
 ### TTaskListItemDTO
 | Field | Type | Description |

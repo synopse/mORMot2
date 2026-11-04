@@ -4768,6 +4768,65 @@ procedure TTestCoreBase.Integers;
     Includes64;
   end;
 
+  procedure CheckLeb(const hex: RawUtf8; expected: Int64);
+  var
+    bin, encoded: RawByteString;
+    p: PByte;
+    n: PtrInt;
+    r: TFastReader;
+    w: TBufferWriter;
+    tmp, buf: TTemp16;
+  begin
+    bin := HexToBin(hex);
+    CheckEqual(length(bin), length(hex) shr 1, 'HexToBin');
+    // standard signed LEB128: compare with known encoding
+    p := ToVarLeb64(expected, @tmp[0]);
+    n := PtrUInt(p) - PtrUInt(@tmp[0]);
+    CheckEqual(n, length(bin), 'ToVarLeb64 length');
+    Check(CompareMem(@tmp[0], pointer(bin), length(bin)),
+      'ToVarLeb64 content');
+    r.Init(bin);
+    CheckEqual(r.VarLeb64, expected, hex);
+    Check(r.EOF, 'VarLeb64 EOF');
+    w := TBufferWriter.Create(TRawByteStringStream, @buf, SizeOf(buf));
+    try
+      w.WriteVarLeb64(expected);
+      Check(w.FlushTo = bin, 'WriteVarLeb64');
+      // regular mORMot ZigZag encoding
+      w.CancelAll;
+      w.WriteVarInt64(expected);
+      encoded := w.FlushTo;
+    finally
+      w.Free;
+    end;
+    p := ToVarInt64(expected, @tmp[0]);
+    n := PtrUInt(p) - PtrUInt(@tmp[0]);
+    CheckEqual(n, length(encoded), 'ToVarInt64 length');
+    Check(CompareMem(@tmp[0], pointer(encoded), n),
+      'ToVarInt64 content');
+    r.Init(encoded);
+    CheckEqual(r.VarInt64, expected, 'VarInt64');
+    Check(r.EOF, 'VarInt64 EOF');
+  end;
+
+  procedure CheckLebError(const hex: RawUtf8);
+  var
+    bin: RawByteString;
+    r: TFastReader;
+    failed: boolean;
+  begin
+    bin := HexToBin(hex);
+    r.Init(bin);
+    failed := false;
+    try
+      r.VarLeb64;
+    except
+      on E: EFastReader do
+        failed := true;
+    end;
+    Check(failed, 'VarLeb64 invalid input');
+  end;
+
 var
   i8: TByteDynArray;
   i16: TWordDynArray;
@@ -5039,6 +5098,34 @@ begin
   CheckEqual(length(i32), 2);
   CheckEqual(i32[0], 1);
   CheckEqual(i32[1], 2);
+  // validate signed LEB128 as used by DWARF/DuckDB/Quack/WebAssembly
+  CheckLeb('00', 0);
+  CheckLeb('01', 1);
+  CheckLeb('3F', 63);
+  CheckLeb('40', -64);
+  CheckLeb('7F', -1);
+  CheckLeb('C000', 64);
+  CheckLeb('BF7F', -65);
+  CheckLeb('807F', -128);
+  CheckLeb('8001', 128);
+  CheckLeb('FF00', 127);
+  CheckLeb('FF7E', -129);
+  CheckLeb('9BF159', -624485);
+  CheckLeb('E58E26', 624485);
+  CheckLeb('8080808080808080807F', Low(Int64));
+  CheckLeb('8180808080808080807F', Low(Int64) + 1);
+  CheckLeb('FEFFFFFFFFFFFFFFFF00', High(Int64) - 1);
+  CheckLeb('FFFFFFFFFFFFFFFFFF00', High(Int64));
+  if IsDebuggerPresent then
+    exit;
+  TSynLog.Family.ExceptionIgnoreCurrentThread := true;
+  try
+    CheckLebError('80');
+    CheckLebError('80808080808080808001');
+    CheckLebError('80808080808080808080');
+  finally
+    TSynLog.Family.ExceptionIgnoreCurrentThread := false;
+  end;
 end;
 
 function TestAddFloatStr(const str: RawUtf8): RawUtf8;
@@ -11986,7 +12073,7 @@ begin
   checkEqual(nv.AsCsv('=', ';'), 'a=1;b=be;');
   checkEqual(nv.AsJson, '{"a":"1","b":"be"}');
   tmp.Init('{a:10,b:"bee"}');
-  check(nv.InitFromJson(tmp.buf));
+  check(nv.InitFromJsonBuffer(tmp.buf, false));
   checkEqual(nv.Count, 2);
   checkEqual(nv.Str['a'], '10');
   checkEqual(nv.Str['b'], 'bee');
@@ -12005,9 +12092,13 @@ begin
   checkEqual(nv.DeleteByValue('10'), 0);
   checkEqual(nv.Count, 0);
   checkEqual(nv.AsCsv('=', ';'), '');
-  tmp.Init('{"a":20,b:"bi"]');
-  check(not nv.InitFromJson(tmp.buf));
+  check(not nv.InitFromJson('{"a":20,b:"bi"]'));
   checkEqual(nv.Count, 0);
+  checkEqual(nv.AsCsv('=', ';'), '');
+  checkEqual(nv.AsJson, '{}');
+  check(nv.InitFromJson('{a:10,b:"bee"}', false));
+  checkEqual(nv.Count, 2);
+  checkEqual(nv.AsCsv('=', ';'), 'a=10;b=bee;');
 end;
 
 procedure TTestCoreBase.TSynUniqueIdentifierSlow(Sender: TObject);

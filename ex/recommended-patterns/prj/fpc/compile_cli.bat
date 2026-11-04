@@ -19,9 +19,15 @@ if errorlevel 1 (
 
 set "DEFINE_FLAG="
 set "MODE=REMOTE"
+REM The remote client only needs the service interfaces and DTOs. Domain,
+REM infrastructure and service implementations are on the search path in local
+REM mode only, where the client runs the services itself - so a remote build
+REM fails as soon as the client reaches into the domain.
+set "SERVER_PATHS="
 if "%~1"=="local" (
     set "DEFINE_FLAG=-dLOCAL_MODE"
     set "MODE=LOCAL"
+    set "SERVER_PATHS=-Fusrc/dom/tasks -Fusrc/dom/tags -Fusrc/infra/tasks -Fusrc/infra/tags -Fusrc/app/tasks/implementation -Fusrc/app/tags/implementation"
 )
 
 echo Compiling cli_client (%MODE% mode)...
@@ -33,14 +39,9 @@ fpc src/cli_client.pas ^
     -O1 -Mobjfpc ^
     -Fi../../src ^
     -Fusrc ^
-    -Fusrc/dom/tasks ^
-    -Fusrc/dom/tags ^
-    -Fusrc/infra/tasks ^
-    -Fusrc/infra/tags ^
     -Fusrc/app/tasks/interface ^
-    -Fusrc/app/tasks/implementation ^
     -Fusrc/app/tags/interface ^
-    -Fusrc/app/tags/implementation ^
+    %SERVER_PATHS% ^
     -Fu../../src/core ^
     -Fu../../src/lib ^
     -Fu../../src/crypt ^

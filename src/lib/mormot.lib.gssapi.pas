@@ -136,6 +136,9 @@ const
   GSS_C_ROUTINE_ERROR_MASK = $ff;
   GSS_C_SUPPLEMENTARY_MASK = $ffff;
 
+  // MIT Kerberos 1.19+ reports a verified channel binding in context flags
+  GSS_C_CHANNEL_BOUND_FLAG = $00000800;
+
   GSS_S_CONTINUE_NEEDED = 1 shl (GSS_C_SUPPLEMENTARY_OFFSET + 0);
   GSS_S_DUPLICATE_TOKEN = 1 shl (GSS_C_SUPPLEMENTARY_OFFSET + 1);
   GSS_S_OLD_TOKEN       = 1 shl (GSS_C_SUPPLEMENTARY_OFFSET + 2);

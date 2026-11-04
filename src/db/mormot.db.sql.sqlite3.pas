@@ -461,11 +461,16 @@ end;
 procedure TSqlDBSQLite3Connection.StartTransaction;
 begin
   inherited;
-  fDB.Lock;
   try
-    fDB.TransactionBegin;
-  finally
-    fDB.UnLock;
+    fDB.Lock;
+    try
+      fDB.TransactionBegin;
+    finally
+      fDB.UnLock;
+    end;
+  except
+    dec(fTransactionCount); // no transaction was actually started
+    raise;
   end;
 end;
 

@@ -696,6 +696,7 @@ type
   // - used to maintain a list of interfaces implementation
   // - inherits from TInterfaceResolverInjected and its Resolve() methods,
   // compatible with TInjectableObject
+  // - this class is NOT thread-safe: the caller should protect each instance
   TServiceContainer = class(TInterfaceResolverInjected)
   protected
     fOwner: TInterfaceResolver; // is a TRest instance
@@ -703,8 +704,8 @@ type
     fInterfaces: TDynArrayHashed;
     // list of service.method ['Calculator.Add','Calculator.Multiply',...]
     fInterfaceMethod: TServiceContainerInterfaceMethods; // dynamic array
-    fInterfaceMethods: TDynArrayHashed;
     fExpectMangledUri: boolean;
+    fInterfaceMethods: TDynArrayHashed;
     fAsSoa: TDocVariantData;
     procedure SetExpectMangledUri(Mangled: boolean);
     procedure SetInterfaceMethodBits(MethodNamesCsv: PUtf8Char;

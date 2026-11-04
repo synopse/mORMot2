@@ -11465,7 +11465,7 @@ var
 begin // not inlined, since Create() are already slow and complex enough
   {$ifdef NOPATCHVMT}
   p := pointer(Rtti.FindType(PPointer(PPAnsiChar(ObjectInstance)^ + vmtTypeInfo)^));
-  {$else}
+  {$else} // Rtti.RegisterSafe.IsLocked check not needed here
   p := PPointer(PPAnsiChar(ObjectInstance)^ + vmtAutoTable)^; // = FindClass()
   {$endif NOPATCHVMT}
   if (p = nil) or

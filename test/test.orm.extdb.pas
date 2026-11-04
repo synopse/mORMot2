@@ -9,6 +9,7 @@ interface
 
 uses
   sysutils,
+  classes,
   mormot.core.base,
   mormot.core.os,
   mormot.core.text,
@@ -31,6 +32,8 @@ uses
   mormot.db.nosql.bson,
   mormot.db.raw.sqlite3,
   mormot.db.raw.sqlite3.static,
+  mormot.db.raw.duckdb,
+  mormot.db.sql.duckdb,
   mormot.db.proxy,
   mormot.orm.base,
   mormot.orm.core,
@@ -63,6 +66,12 @@ type
   protected
     fExternalModel: TOrmModel;
     fPeopleData: TOrmTable;
+    /// regular Engine*() from another thread during a BATCH of this thread
+    procedure BatchFromOtherThread(Sender: TObject);
+    /// test an external DuckDB database via direct REST calls
+    // - DuckDB is an OLAP engine, very slow for single row INSERT/UPDATE: this
+    // is a small test, and the Virtual Table (one row per statement) is not used
+    procedure ExternalDuckDB(Sender: TObject);
     /// called by ExternalViaREST/ExternalViaVirtualTable and
     // ExternalViaRESTWithChangeTracking tests method
     procedure Test(StaticVirtualTableDirect, TrackChanges: boolean);
@@ -78,6 +87,8 @@ type
     procedure NewStatementFailure;
     /// EngineLockedNextID() when 'select max(ID)' fails (e.g. connection lost)
     procedure NextIDSelectMaxFailure;
+    /// SharedTransaction() when the actual Commit fails
+    procedure SharedTransactionCommitFailure;
     /// initialize needed RESTful client (and server) instances
     // - i.e. a RESTful direct access to an external DB
     procedure ExternalRecords;
@@ -194,6 +205,30 @@ type
   public
     function NewConnection: TSqlDBConnection; override;
   end;
+
+  // a regular EngineUpdate() run from its own thread
+  TBatchOtherThreadUpdate = class(TThread)
+  protected
+    fExt: TRestStorageExternal;
+    fNdx: PtrInt;
+    procedure Execute; override;
+  public
+    Updated, Done: boolean;
+    constructor Create(aExt: TRestStorageExternal; aNdx: PtrInt);
+  end;
+
+constructor TBatchOtherThreadUpdate.Create(aExt: TRestStorageExternal; aNdx: PtrInt);
+begin
+  fExt := aExt;
+  fNdx := aNdx;
+  inherited Create({suspended=}false);
+end;
+
+procedure TBatchOtherThreadUpdate.Execute;
+begin
+  Updated := fExt.EngineUpdate(fNdx, 10, '{"FirstName":"after"}');
+  Done := true;
+end;
 
 function TSqlDBSQLite3ConnectionNoStatement.NewStatement: TSqlDBStatement;
 begin
@@ -702,6 +737,129 @@ begin
   Test(true, true);
 end;
 
+procedure TTestExternalDatabase.ExternalDuckDB;
+const
+  COUNT = 2000;
+  BLOB_COUNT = 100;
+var
+  props: TSqlDBConnectionProperties;
+  client: TRestClientDB;
+  ext: TOrmPeopleExt;
+  blob: TOrmOnlyBlob;
+  ids: TIDDynArray;
+  i: integer;
+begin
+  if fExternalModel = nil then
+    exit; // avoid GPF if previous methods of TTestExternalDatabase were not run
+  props := nil;
+  {$ifdef CPU64}
+  // the DuckDB library should be within the main executable folder
+  if FileExists(Executable.ProgramFilePath + DuckDBLibraryName) then
+  begin
+    TSynLog.Family.ExceptionIgnoreCurrentThread := true;
+    try
+      if DuckDBLibraryAvailable then
+        props := TSqlDBDuckDBConnectionProperties.Create(':memory:', '', '', '');
+    finally
+      TSynLog.Family.ExceptionIgnoreCurrentThread := false;
+    end;
+  end;
+  {$endif CPU64}
+  if props = nil then
+  begin
+    NotifyProgress(['DuckDB library not available - test skipped']);
+    exit;
+  end;
+  // map the same tables as Test(): TOrmPeopleExt has renamed fields, so its
+  // batch uses the multi-values INSERT, whereas TOrmOnlyBlob may use the Appender
+  Check(OrmMapExternal(fExternalModel, TOrmPeopleExt, props, 'PeopleExternal').
+    MapField('ID', 'Key').
+    MapField('YearOfDeath', 'YOD').
+    MapAutoKeywordFields <> nil);
+  Check(OrmMapExternal(fExternalModel, TOrmOnlyBlob, props, 'OnlyBlobExternal') <> nil);
+  Check(OrmMapExternal(fExternalModel, TOrmTestJoin, props, 'TestJoinExternal') <> nil);
+  Check(OrmMapExternal(fExternalModel, TOrmASource,  props, 'SourceExternal')   <> nil);
+  Check(OrmMapExternal(fExternalModel, TOrmADest,    props, 'DestExternal')     <> nil);
+  Check(OrmMapExternal(fExternalModel, TOrmADests,   props, 'DestsExternal')    <> nil);
+  DeleteFile('testExternal.db3');
+  client := TRestClientDB.Create(
+    fExternalModel, nil, 'testExternal.db3', TRestServerDB);
+  try
+    client.Server.Server.SetStaticVirtualTableDirect(true);
+    client.Server.Server.CreateMissingTables;
+    ext := TOrmPeopleExt.Create;
+    blob := TOrmOnlyBlob.Create;
+    try
+      // batch insert
+      CheckEqual(client.Orm.TableRowCount(TOrmPeopleExt), 0);
+      client.Client.BatchStart(TOrmPeopleExt);
+      for i := 1 to COUNT do
+      begin
+        ext.FirstName := FormatUtf8('First%', [i]);
+        ext.LastName := FormatUtf8('Last%', [i mod 10]);
+        ext.YearOfBirth := 1800 + i mod 100;
+        ext.YearOfDeath := 1900 + i mod 100;
+        ext.Value := ValuesToVariantDynArray(['text', i]);
+        client.Client.BatchAdd(ext, true);
+      end;
+      CheckEqual(client.Client.BatchSend(ids), HTTP_SUCCESS);
+      CheckEqual(length(ids), COUNT);
+      CheckEqual(ids[0], 1);
+      CheckEqual(ids[COUNT - 1], COUNT);
+      CheckEqual(client.Orm.TableRowCount(TOrmPeopleExt), COUNT);
+      CheckEqual(client.Orm.TableMaxID(TOrmPeopleExt), COUNT);
+      // retrieve
+      for i := 1 to COUNT do
+        if i mod 97 = 0 then
+        begin
+          ext.ClearProperties;
+          Check(client.Orm.Retrieve(i, ext));
+          CheckEqual(ext.FirstName, FormatUtf8('First%', [i]));
+          CheckEqual(ext.YearOfBirth, 1800 + i mod 100);
+          CheckEqual(VariantDynArrayToJson(ext.Value),
+            FormatUtf8('["text",%]', [i]));
+        end;
+      // query
+      ext.FillPrepare(client.Orm, 'LastName=? and YearOfBirth=?', ['Last3', 1803]);
+      CheckEqual(ext.FillTable.RowCount, COUNT div 100); // i mod 100 = 3 -> mod 10 = 3
+      // update and delete
+      Check(client.Orm.Retrieve(10, ext));
+      ext.YearOfBirth := 1;
+      Check(client.Orm.Update(ext));
+      ext.ClearProperties;
+      Check(client.Orm.Retrieve(10, ext));
+      CheckEqual(ext.YearOfBirth, 1);
+      CheckEqual(ext.YearOfDeath, 1910);
+      Check(client.Orm.Delete(TOrmPeopleExt, 10));
+      Check(not client.Orm.Retrieve(10, ext));
+      CheckEqual(client.Orm.TableRowCount(TOrmPeopleExt), COUNT - 1);
+      // BLOB batch
+      client.Client.ForceBlobTransfertTable[TOrmOnlyBlob] := true;
+      client.Client.BatchStart(TOrmOnlyBlob);
+      for i := 1 to BLOB_COUNT do
+      begin
+        blob.Data := Int32ToUtf8(i);
+        client.Client.BatchAdd(blob, true, false, ALL_FIELDS); // include the BLOB
+      end;
+      CheckEqual(client.Client.BatchSend(ids), HTTP_SUCCESS);
+      CheckEqual(length(ids), BLOB_COUNT);
+      for i := 1 to BLOB_COUNT do
+        if i mod 7 = 0 then
+        begin
+          blob.ClearProperties;
+          Check(client.Orm.Retrieve(i, blob));
+          CheckEqual(GetInteger(pointer(blob.Data)), i);
+        end;
+    finally
+      blob.Free;
+      ext.Free;
+    end;
+  finally
+    client.Free;
+    props.Free;
+  end;
+end;
+
 {$ifdef OSWINDOWS}
 {$ifdef USEZEOS}
 
@@ -914,8 +1072,14 @@ var
       res: ISqlDBRows;
       id, lastid, i, n, n1: integer;
       IDs: TIntegerDynArray;
+      names: TRawUtf8DynArray;
+      ndx: TSqlDBIndexDefineDynArray;
       Row, RowDoc, all: variant;
       r, v: PDocVariantData;
+      fields, expected: TSqlDBColumnDefineDynArray;
+      f, e: ^TSqlDBColumnDefine;
+      json: RawUtf8;
+      stmt: ISqlDBStatement;
 
       procedure DoInsert;
       var
@@ -924,7 +1088,7 @@ var
         for i := 0 to high(IDs) do
           Check(proxy.ExecuteNoResult(
             'INSERT INTO People (ID,FirstName,LastName,YearOfBirth,YearOfDeath) ' +
-            'VALUES (?,?,?,?,?)', [IDs[i], 'FirstName New ' + Int32ToUtf8(i),
+            'VALUES (?,?,?,?,?)', [IDs[i], Make(['FirstName New ', i]),
             'New Last', i + 1400, 1519]) = 1);
       end;
 
@@ -945,6 +1109,68 @@ var
       TSynLogTestLog.EnterLocal(log, proxy, msg);
       if proxy <> Props then
         Check(proxy.UserID = 'user');
+      // metadata should be transmitted as retrieved on the server side
+      proxy.GetFields('CustomProps', fields);
+      Props.GetFields('CustomProps', expected);
+      f := pointer(fields);
+      e := pointer(expected);
+      if CheckEqual(length(fields), length(expected), 'GetFields') then
+        for i := 1 to length(fields) do
+        begin
+          CheckEqual(f^.ColumnName, e^.ColumnName);
+          CheckEqual(f^.ColumnTypeNative, e^.ColumnTypeNative);
+          CheckEqual(f^.ColumnLength, e^.ColumnLength);
+          CheckEqual(f^.ColumnPrecision, e^.ColumnPrecision);
+          CheckEqual(f^.ColumnScale, e^.ColumnScale);
+          Check(f^.ColumnType = e^.ColumnType);
+          Check(f^.ColumnIndexed = e^.ColumnIndexed);
+          inc(f);
+          inc(e);
+        end;
+      proxy.GetFields('People', fields);
+      SaveJson(fields, TypeInfo(TSqlDBColumnDefineDynArray),
+        [twoIgnoreDefaultInRecord, twoEnumSetsAsTextInRecord], json);
+      CheckEqual(json,
+       '[{"ColumnName":"ID","ColumnTypeNative":"INTEGER","ColumnType":"ftInt64","' +
+       'ColumnIndexed":true},{"ColumnName":"FirstName","ColumnTypeNative":"TEXT",' +
+       '"ColumnType":"ftUtf8"},{"ColumnName":"LastName","ColumnTypeNative":"TEXT"' +
+       ',"ColumnType":"ftUtf8"},{"ColumnName":"Data","ColumnTypeNative":"BLOB","C' +
+       'olumnType":"ftBlob"},{"ColumnName":"YearOfBirth","ColumnTypeNative":"INTE' +
+       'GER","ColumnType":"ftInt64"},{"ColumnName":"YearOfDeath","ColumnTypeNativ' +
+       'e":"INTEGER","ColumnType":"ftInt64"}]');
+      Check(names = nil);
+      proxy.GetTableNames(names);
+      CheckEqual(RawUtf8ArrayToCsv(names),
+        'ADest,ADests,ASource,AuthGroup,AuthUser,CustomProps,Dali1,Dali2,FtsTest,F' +
+        'tsTest_content,FtsTest_segdir,FtsTest_segments,People,PeopleArray,PeopleO' +
+        'bject,test');
+      proxy.GetFieldDefinitions('PEOPLE', names, {withkeys=}false);
+      CheckEqual(RawUtf8ArrayToCsv(names),
+        'ID [INTEGER] *,FirstName [TEXT],LastName [TEXT],Data [BLOB],YearOfBirth [' +
+        'INTEGER],YearOfDeath [INTEGER]');
+      proxy.GetFieldDefinitions('PEOPLE', names, {withkeys=}true);
+      CheckEqual(RawUtf8ArrayToCsv(names),
+        'ID [INTEGER] *,FirstName [TEXT],LastName [TEXT],Data [BLOB],YearOfBirth [' +
+        'INTEGER],YearOfDeath [INTEGER]');
+      proxy.GetIndexes('ADests', ndx);
+      CheckEqual(DynArraySaveJson(ndx, TypeInfo(TSqlDBIndexDefineDynArray)),
+       '[{"IndexName":"IndexADestsDest","TypeDesc":"BTREE","Filter":"","KeyColumn' +
+       's":"Dest","IncludedColumns":"","IsUnique":false,"IsPrimaryKey":false,"IsU' +
+       'niqueConstraint":false},{"IndexName":"IndexADestsSource","TypeDesc":"BTRE' +
+       'E","Filter":"","KeyColumns":"Source","IncludedColumns":"","IsUnique":fals' +
+       'e,"IsPrimaryKey":false,"IsUniqueConstraint":false}]');
+      // the same statement instance should be executable several times
+      stmt := proxy.NewThreadSafeStatementPrepared(
+        'select count(*) from People where YearOfDeath=?', true, true);
+      for i := 1 to 3 do
+      begin
+        stmt.Bind(1, 1519);
+        stmt.ExecutePrepared;
+        Check(stmt.Step, 'reuse');
+        CheckEqual(stmt.ColumnInt(0), DoCount, 'reuse');
+        stmt.Instance.Reset;
+      end;
+      stmt := nil;
       proxy.ExecuteNoResult('delete from people where ID>=?', [50000]);
       res := proxy.Execute('select * from People where YearOfDeath=?', [1519]);
       Check(res <> nil);
@@ -1013,6 +1239,8 @@ var
 const
   ADDR = '127.0.0.1:' + HTTP_DEFAULTPORT;
 begin
+  Run(BatchFromOtherThread, self, 'BatchFromOtherThread', true, false);
+  Run(ExternalDuckDB, self, 'External DuckDB', true, false);
   Props := TSqlDBSQLite3ConnectionProperties.Create('test.db3', '', '', '');
   try
     DoTest(Props, 'raw Props');
@@ -1083,6 +1311,79 @@ begin
   end;
 end;
 
+procedure TTestExternalDatabase.SharedTransactionCommitFailure;
+var
+  props: TSqlDBSQLite3ConnectionProperties;
+  conn: TSqlDBConnection;
+  raised: boolean;
+
+  function Count(const table: RawUtf8): integer;
+  begin
+    with props.Execute(FormatUtf8('select count(*) from %', [table]), []) do
+    begin
+      CheckUtf8(Step, table);
+      result := ColumnInt(0);
+    end;
+  end;
+
+begin
+  // a failed COMMIT (here a SQLite3 deferred foreign key) left the connection
+  // with TransactionCount=1 and the database transaction open, whereas the
+  // shared transaction entry was already removed: nobody would ever close it
+  DeleteFile('sharedtx.db3');
+  props := TSqlDBSQLite3ConnectionProperties.Create('sharedtx.db3', '', '', '');
+  try
+    props.ExecuteNoResult('PRAGMA foreign_keys=ON', []);
+    props.ExecuteNoResult('CREATE TABLE p(id INTEGER PRIMARY KEY)', []);
+    props.ExecuteNoResult('CREATE TABLE c(pid INTEGER REFERENCES p(id) ' +
+      'DEFERRABLE INITIALLY DEFERRED)', []);
+    // the COMMIT failures below are expected: no exception logging
+    TSynLog.Family.ExceptionIgnoreCurrentThread := true;
+    try
+      conn := props.SharedTransaction(1, transBegin);
+      Check(conn <> nil, 'begin');
+      props.ExecuteNoResult('INSERT INTO c VALUES (999)', []);
+      Check(props.SharedTransaction(1, transCommitWithoutException) = nil, 'commit');
+      CheckEqual(conn.TransactionCount, 0, 'counter');
+      Check(not TSqlDBSQLite3Connection(conn).DB.TransactionActive, 'rolled back');
+      CheckEqual(Count('c'), 0, 'row rolled back');
+      // another transaction counted on the same connection is kept as such
+      conn := props.SharedTransaction(1, transBegin);
+      Check(conn <> nil, 'begin 2');
+      conn.StartTransaction;
+      props.ExecuteNoResult('INSERT INTO p VALUES (1)', []);
+      props.ExecuteNoResult('INSERT INTO c VALUES (999)', []);
+      Check(props.SharedTransaction(1, transCommitWithoutException) = nil, 'commit 2');
+      CheckEqual(conn.TransactionCount, 1, 'other transaction still counted');
+      Check(TSqlDBSQLite3Connection(conn).DB.TransactionActive, 'left to its owner');
+      conn.Rollback;
+      CheckEqual(conn.TransactionCount, 0, 'counter 2');
+      CheckEqual(Count('p'), 0, 'owner rolled back');
+      // with exception: same cleaning, and the error is propagated
+      conn := props.SharedTransaction(1, transBegin);
+      props.ExecuteNoResult('INSERT INTO c VALUES (999)', []);
+      raised := false;
+      try
+        props.SharedTransaction(1, transCommitWithException);
+      except
+        raised := true;
+      end;
+      Check(raised, 'commit 3 should raise');
+      CheckEqual(conn.TransactionCount, 0, 'counter 3');
+      Check(not TSqlDBSQLite3Connection(conn).DB.TransactionActive, 'rolled back 3');
+    finally
+      TSynLog.Family.ExceptionIgnoreCurrentThread := false;
+    end;
+    // and a new shared transaction works as usual
+    Check(props.SharedTransaction(1, transBegin) <> nil, 'begin again');
+    Check(props.SharedTransaction(1, transRollback) <> nil, 'rollback');
+    CheckEqual(conn.TransactionCount, 0, 'counter 4');
+  finally
+    props.Free;
+    DeleteFile('sharedtx.db3');
+  end;
+end;
+
 procedure TTestExternalDatabase.NextIDSelectMaxFailure;
 var
   model: TOrmModel;
@@ -1132,6 +1433,79 @@ begin
       finally
         props.Free;
         DeleteFile('maxidtest.db3');
+      end;
+    finally
+      server.Free;
+    end;
+  finally
+    model.Free;
+  end;
+end;
+
+procedure TTestExternalDatabase.BatchFromOtherThread;
+var
+  model: TOrmModel;
+  server: TRestServerFullMemory;
+  props: TSqlDBConnectionProperties;
+  ext: TRestStorageExternalHook;
+  ndx: PtrInt;
+  th: TBatchOtherThreadUpdate;
+  rows: ISqlDBRows;
+  i: integer;
+begin
+  // EngineAdd/Update/Delete/DeleteWhere did check fBatchMethod BEFORE the
+  // storage lock: during a BATCH POST of one thread, a regular Update from
+  // another thread returned false at once - with no exception nor DB error
+  model := TOrmModel.Create([TOrmPeopleExt]);
+  try
+    server := TRestServerFullMemory.Create(model);
+    try
+      DeleteFile('batchthread.db3');
+      props := TSqlDBSQLite3ConnectionProperties.Create(
+        'batchthread.db3', '', '', '');
+      try
+        OrmMapExternal(model, TOrmPeopleExt, props, 'BatchThread');
+        ext := TRestStorageExternalHook.Create(
+          TOrmPeopleExt, server.OrmInstance as TRestOrmServer);
+        try
+          ndx := model.GetTableIndexExisting(TOrmPeopleExt);
+          props.ExecuteNoResult(
+            'insert into BatchThread (ID,FirstName) values (?,?)', [10, 'before']);
+          th := nil;
+          Check(ext.InternalBatchStart(encPost, []), 'batch');
+          try
+            // the BATCH thread itself still appends its own rows
+            CheckEqual(ext.EngineAdd(ndx, '{"ID":20,"FirstName":"batch"}'), 20, 'add');
+            th := TBatchOtherThreadUpdate.Create(ext, ndx);
+            try
+              for i := 1 to 20 do
+                if th.Done then
+                  break
+                else
+                  SleepHiRes(10);
+              // the other thread waits for the storage lock, as a regular update
+              Check(not th.Done, 'other thread waits for the batch');
+            finally
+              ext.InternalBatchStop;
+            end;
+            th.WaitFor;
+            Check(th.Updated, 'update from other thread after the batch');
+          finally
+            th.Free;
+          end;
+          rows := props.Execute('select FirstName from BatchThread where ID=?', [10]);
+          Check(rows.Step, 'row 10');
+          CheckEqual(rows.ColumnUtf8(0), 'after', 'updated');
+          rows := props.Execute('select count(*) from BatchThread', []);
+          Check(rows.Step, 'count');
+          CheckEqual(rows.ColumnInt(0), 2, 'batch row');
+          rows := nil; // to avoid GPF when exiting this method
+        finally
+          ext.Free;
+        end;
+      finally
+        props.Free;
+        DeleteFile('batchthread.db3');
       end;
     finally
       server.Free;

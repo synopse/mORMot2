@@ -340,6 +340,7 @@ const // some time conversion constants with Milli/Micro/NanoSec resolution
   MilliSecsPerDate     = 1 / MilliSecsPerDay;
   MicroSecsPerMilliSec = 1000;
   MicroSecsPerSec      = MicroSecsPerMilliSec * MilliSecsPerSec;
+  MicroSecsPerHour     = QWord(MicroSecsPerSec) * SecsPerHour;
   MicroSecsPerDay      = QWord(MicroSecsPerSec) * SecsPerDay;
   NanoSecsPerMicroSec  = 1000;
   NanoSecsPerMilliSec  = NanoSecsPerMicroSec  * MicroSecsPerMilliSec;
@@ -4434,6 +4435,8 @@ type
     /// return TRUE if the library and all procedures were found
     function Exists: boolean;
       {$ifdef HASINLINE} inline; {$endif}
+    /// truncate the path from LibraryPath value
+    function LibraryName: TFileName;
     /// the associated library handle
     property Handle: TLibHandle
       read fHandle write fHandle;
@@ -4520,7 +4523,7 @@ procedure PatchCodeProtectBack;
 { **************** TSynLocker/TSynLocked and Low-Level Threading Features }
 
 type
-  /// a lightweight exclusive non-reentrant lock, stored in a PtrUInt value
+  /// a lightweight exclusive non-reentrant lock, stored in a 32-bit slot
   // - calls SwitchToThread after some spinning, but don't use any R/W OS API
   // - warning: methods are non reentrant, i.e. calling Lock twice in a raw would
   // deadlock: see reentrant TMultiLightLock or TRWLock or TSynLocker/TOSLock
@@ -4576,9 +4579,9 @@ type
   TMultiLightLock = object
   {$endif USERECORDWITHMETHODS}
   private
-    Flags: cardinal;     // is also the reentrant > 0 counter
-    ThreadID: TThreadID; // PtrUInt on POSIX, DWord on Windows
-    procedure LockSpin;  // called by the Lock method when inlined
+    Flags: cardinal;           // is also the reentrant > 0 counter
+    LockedThreadID: TThreadID; // PtrUInt on POSIX, DWord on Windows
+    procedure LockSpin;
   public
     /// to be called if the instance has not been filled with 0
     // - e.g. not needed if TMultiLightLock is defined as a class field
@@ -4607,6 +4610,9 @@ type
     /// leave an exclusive reentrant lock
     procedure UnLock;
       {$ifdef HASINLINE} inline; {$endif}
+    /// wait until any Lock in another thread is released
+    // - don't wait when called from a the main re-entrant Lock thread
+    procedure WaitUnlocked;
   end;
   PMultiLightLock = ^TMultiLightLock;
 
@@ -4749,7 +4755,7 @@ type
     /// wait for the lock to be accessible for writing
     // - the write lock is exclusive
     // - calling WriteLock within a ReadWriteLock is allowed and won't block
-    // - but calling WriteLock within a ReadOnlyLock would deaadlock
+    // - but calling WriteLock within a ReadOnlyLock would dead lock
     // - this method is reentrant from a single thread
     // - typical usage is the following:
     // ! rwlock.WriteLock; // block any ReadOnlyLock/ReadWriteLock/WriteLock
@@ -4997,7 +5003,7 @@ type
     fPaddingUsedCount: byte;
     fInitialized: boolean;
     fRWUse: TSynLockerUse;
-    fLockCount: integer;
+    fLockCount: cardinal;
     function GetVariant(Index: integer): Variant;
     procedure SetVariant(Index: integer; const Value: Variant);
     function GetInt64(Index: integer): Int64;
@@ -5010,7 +5016,6 @@ type
     procedure SetPointer(Index: integer; const Value: pointer);
     function GetUtf8(Index: integer): RawUtf8;
     procedure SetUtf8(Index: integer; const Value: RawUtf8);
-    function GetIsLocked: boolean;
     // - if RWUse=uSharedLock, calls EnterCriticalSection (no parallel readings)
     // - warning: if RWUse=uRWLock, this method will use the internal TRWLock
     // - defined in protected section for better inlining and to fix a Delphi
@@ -5094,6 +5099,9 @@ type
     // - each Lock/TryLock should have its exact UnLock opposite, so a
     // try..finally block is mandatory for safe code
     procedure UnLock; overload;
+    /// returns true if the mutex is currently locked by another thread
+    // - with RWUse=uRWLock, any lock (even ReadOnlyLock) would return true
+    function IsLocked: boolean;
     /// will enter the mutex until the IUnknown reference is released
     // - could be used as such under Delphi:
     // !begin
@@ -5125,10 +5133,6 @@ type
     // direct access to Padding[] values, within a Lock/UnLock safe block
     property PaddingUsedCount: byte
       read fPaddingUsedCount write fPaddingUsedCount;
-    /// returns true if the mutex is currently locked by another thread
-    // - with RWUse=uRWLock, any lock (even ReadOnlyLock) would return true
-    property IsLocked: boolean
-      read GetIsLocked;
     /// returns true if the Init method has been called for this mutex
     // - is only relevant if the whole object has been previously filled with 0,
     // i.e. as part of a class or as global variable, but won't be accurate
@@ -9908,6 +9912,14 @@ begin
             (fHandle <> 0);
 end;
 
+function TSynLibrary.LibraryName: TFileName;
+begin
+  if (self = nil) or
+     (fLibraryPath = '') then
+    result := ''
+  else
+    result := ExtractFileName(fLibraryPath);
+end;
 
 procedure DoLibraryAvailableInit(var State: TLibraryState; Init: TProcedure);
 begin
@@ -11548,7 +11560,11 @@ end;
 
 function TLightLock.IsLocked: boolean;
 begin
+  {$ifdef CPUINTEL}
   result := Flags <> 0;
+  {$else}
+  result := not LockedExc32(Flags, {to=}0, {from=}0); // atomic compare
+  {$endif CPUINTEL}
 end;
 
 procedure TLightLock.LockSpin;
@@ -11599,13 +11615,13 @@ end;
 procedure TMultiLightLock.Init;
 begin
   Flags := 0;
-  ThreadID := TThreadID(0);
+  LockedThreadID := TThreadID(0);
 end;
 
 procedure TMultiLightLock.Done;
 begin
   Flags := MaxInt;
-  ThreadID := TThreadID(0); // invalid combination to let TryLock fail
+  LockedThreadID := TThreadID(0); // invalid combination to let TryLock fail
 end;
 
 procedure TMultiLightLock.Lock;
@@ -11617,7 +11633,7 @@ end;
 procedure TMultiLightLock.UnLock;
 begin
   if Flags = 1 then
-    ThreadID := TThreadID(0); // paranoid
+    LockedThreadID := TThreadID(0); // as expected by WaitUnlocked
   LockedDec32(@Flags);
 end;
 
@@ -11626,32 +11642,34 @@ var
   tid: TThreadID;
 begin
   tid := GetCurrentThreadId;
-  if Flags = 0 then    // is not locked
-    if LockedExc32(Flags, {to=}1, {from=}0) then // try atomic acquisition
-    begin
-      ThreadID := tid;
-      result := true;  // acquired the lock
-    end
-    else
-      result := false  // impossible to acquire this lock
-  else if ThreadID <> tid then
-    result := false // locked by another thread
-  else
+  if {$ifdef CPUINTEL} (Flags = 0) and {$endif}
+     LockedExc32(Flags, {to=}1, {from=}0) then
+  begin
+    LockedThreadID := tid;
+    result := true; // acquired the lock
+  end
+  else if LockedThreadID = tid then
   begin
     inc(Flags);     // make it reentrant
-    result := true; // locked by this thread
-  end;
+    result := true;
+  end
+  else
+    result := false;
 end;
 
 procedure TMultiLightLock.ForceLock;
 begin
   Flags := MaxInt; // forced acquisition, whatever the current state is
-  ThreadID := GetCurrentThreadId;
+  LockedThreadID := GetCurrentThreadId;
 end;
 
 function TMultiLightLock.IsLocked: boolean;
 begin
+  {$ifdef CPUINTEL}
   result := Flags <> 0;
+  {$else}
+  result := not LockedExc32(Flags, {to=}0, {from=}0); // atomic compare
+  {$endif CPUINTEL}
 end;
 
 procedure TMultiLightLock.LockSpin;
@@ -11662,6 +11680,18 @@ begin
   repeat
     spin := SpinAndWait(spin);
   until TryLock;
+end;
+
+procedure TMultiLightLock.WaitUnlocked;
+var
+  spin: PtrUInt;
+begin
+  if not IsLocked or
+     (GetCurrentThreadId = LockedThreadID) then // from re-entrant Lock thread
+    exit;
+  spin := SPIN_COUNT;
+  while IsLocked do // don't acquire the lock, just ensure is unlocked
+    spin := SpinAndWait(spin);
 end;
 
 
@@ -11741,13 +11771,21 @@ begin
     f := Flags and not 1; // bit 0=WriteLock, >0=ReadLock
   until (Flags = f) and
         LockedExc32(Flags, {to=}f + 1, {from=}f);
+  {$ifdef CPUINTEL}
   while Flags <> 1 do // second loop to wait for all readers
+  {$else}
+  while not LockedExc32(Flags, {to=}1, {from=}1) do // need atomic comparison
+  {$endif CPUINTEL}
     spin := SpinAndWait(spin);
 end;
 
 function TRWLightLock.IsLocked: boolean;
 begin
-  result := (Flags <> 0);
+  {$ifdef CPUINTEL}
+  result := Flags <> 0;
+  {$else}
+  result := not LockedExc32(Flags, {to=}0, {from=}0); // atomic compare
+  {$endif CPUINTEL}
 end;
 
 
@@ -11860,8 +11898,13 @@ begin
   LastWriteLockThread := tid;
   LastWriteLockCount := 0;
   // wait for all readers to have finished their job
-  while Flags > 3 do
+  repeat
+    f := Flags;
+    if (f <= 3) {$ifndef CPUINTEL} and // need atomic comparison
+       LockedExc(Flags, {to=}f, {from=}f) {$endif} then
+      break;
     spin := SpinAndWait(spin);
+  until false;
 end;
 
 procedure TRWLock.WriteUnlock;
@@ -11897,7 +11940,11 @@ end;
 
 function TRWLock.IsLocked: boolean;
 begin
-  result := (Flags <> 0);
+  {$ifdef CPUINTEL}
+  result := Flags <> 0;
+  {$else}
+  result := not LockedExc(Flags, {to=}0, {from=}0); // atomic compare
+  {$endif CPUINTEL}
 end;
 
 
@@ -11925,13 +11972,10 @@ end;
 
 procedure TOSLock.LockAndInitIfNeeded;
 begin
-  if not IsInitializedCriticalSection(CS) then
-  begin
-    OSSafe.Lock;
-    if not IsInitializedCriticalSection(CS) then // thread-safe initialization
-      Init;
-    OSSafe.UnLock;
-  end;
+  OSSafe.Lock; // fast TLightLock is safe and enough here
+  if not IsInitializedCriticalSection(CS) then // thread-safe initialization
+    Init;
+  OSSafe.UnLock;
   Lock;
 end;
 
@@ -12174,7 +12218,11 @@ end;
 
 function TOSRWLightLock.IsLocked: boolean;
 begin
+  {$ifdef CPUINTEL}
   result := Flags <> 0;
+  {$else}
+  result := not LockedExc32(Flags, {to=}0, {from=}0); // atomic compare
+  {$endif CPUINTEL}
 end;
 
 
@@ -12338,9 +12386,9 @@ end;
 
 procedure TSynLocker.Init;
 begin
-  fLockCount := 0;
   fPaddingUsedCount := 0;
   fRW.Init;
+  fLockCount := 0;
   fSection.Init;
   fInitialized := true;
 end;
@@ -12367,15 +12415,15 @@ begin
   FreeMem(@self);
 end;
 
-function TSynLocker.GetIsLocked: boolean;
+function TSynLocker.IsLocked: boolean;
 begin
   case fRWUse of
     uSharedLock:
-      result := fLockCount <> 0; // only updated by uSharedLock
+      result := not LockedExc32(fLockCount, 0, 0); // updated by uSharedLock
     uRWLock:
-      result := fRW.Flags = 0;   // no lock at all
+      result := fRW.IsLocked;                      // direct use of Flags
   else
-    result := false;             // uNoLock will never lock
+    result := false;                               // uNoLock will never lock
   end;
 end;
 
@@ -12385,7 +12433,7 @@ begin
     uSharedLock:
       begin
         fSection.Lock;
-        inc(fLockCount);
+        LockedInc32(@fLockCount);
       end;
     uRWLock:
       fRW.Lock(context);
@@ -12397,7 +12445,7 @@ begin
   case fRWUse of
     uSharedLock:
       begin
-        dec(fLockCount);
+        LockedDec32(@fLockCount);
         fSection.UnLock;
       end;
     uRWLock:
@@ -12440,7 +12488,7 @@ begin
   result := (fRWUse = uSharedLock) and
             fSection.TryLock;
   if result then
-    inc(fLockCount);
+    LockedInc32(@fLockCount);
 end;
 
 function TSynLocker.TryLockMS(retryms: integer; terminated: PBoolean;

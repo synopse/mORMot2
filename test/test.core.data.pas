@@ -11487,6 +11487,41 @@ var
     end;
   end;
 
+  procedure StreamLevel0;
+  // AddDeflatedStream(..., CompressLevel=0) should create a valid entry
+  var
+    w: TRawByteStringStream;
+    s: TStream;
+    z: TZipWrite;
+  begin
+    w := TRawByteStringStream.Create;
+    try
+      z := TZipWrite.Create(w);
+      try
+        s := z.AddDeflatedStream('lvl0.txt', 0, 0);
+        try
+          s.WriteBuffer(pointer(Data)^, length(Data));
+        finally
+          s.Free;
+        end;
+      finally
+        z.Free;
+      end;
+      with TZipRead.Create(pointer(w.DataString), length(w.DataString)) do
+      try
+        if CheckEqual(Count, 1, 'lvl0 count') then
+        begin
+          Check(TestAll, 'lvl0 testall');
+          Check(UnZip(0) = Data, 'lvl0 unzip');
+        end;
+      finally
+        Free;
+      end;
+    finally
+      w.Free;
+    end;
+  end;
+
   procedure DataDescriptorLastEntry;
   // some tools (e.g. LibreOffice for .xlsx) set FLAG_DATADESCRIPTOR on all
   // entries: retrieving the last one from a memory buffer should not need fSource
@@ -11596,6 +11631,29 @@ begin
   CheckEqual(FileSize(FN), SizeOf(minim), 'TZipWrite void .zip');
   Check(DeleteFile(FN));
   DataDescriptorLastEntry;
+  // AddEmptyFolder() should store crc32=0 for a folder entry (no data)
+  S := TRawByteStringStream.Create;
+  try
+    with TZipWrite.Create(S) do
+    try
+      AddEmptyFolder('emptydir\');
+      CheckEqual(Count, 1, 'emptydir1');
+    finally
+      Free;
+    end;
+    with TZipRead.Create(pointer(S.DataString), length(S.DataString)) do
+    try
+      CheckEqual(Count, 1, 'emptydir2');
+      Check(Entry[0].dir^.fileInfo.zcrc32 = 0, 'emptydir crc');
+      Check(Entry[0].local^.fileInfo.zcrc32 = 0, 'emptydir local crc');
+      Check(TestAll, 'emptydir testall');
+    finally
+      Free;
+    end;
+  finally
+    S.Free;
+  end;
+  StreamLevel0;
   // onprog := TStreamRedirect.ProgressInfoToConsole;
   onprog := TSynLog.ProgressInfo;
   for m := 1 to 2 do
@@ -11734,6 +11792,33 @@ procedure TTestCoreCompression._SynLZ;
     Check(t = v);
   end;
 
+  procedure TestPartial(const hexa, suffix, expected: RawByteString;
+    maxOut: integer);
+  var
+    buffer: array[0..191] of byte;
+    count, k: integer;
+    outbuf: PAnsiChar;
+    compressed: RawByteString;
+  begin
+    compressed := Join([HumanHexToBin(hexa), suffix]);
+    Check((maxOut >= 0) and (maxOut <= SizeOf(buffer) - 16),
+      'partial test bound');
+    if (maxOut < 0) or (maxOut > SizeOf(buffer) - 16) then
+      exit;
+    outbuf := @buffer[16]; // guard 16 bytes before the output
+    FillCharFast(buffer, SizeOf(buffer), $A5);
+    count := SynLZDecompress1partial(pointer(compressed), length(compressed),
+      outbuf, maxOut);
+    CheckEqual(count, length(expected), 'partial count');
+    if expected <> '' then
+      Check(CompareMem(outbuf, pointer(expected), length(expected)),
+        'partial content');
+    for k := 0 to 15 do
+      CheckEqual(buffer[k], $A5, 'partial output underflow');
+    for k := 16 + maxOut to high(buffer) do
+      CheckEqual(buffer[k], $A5, 'partial output overflow');
+  end;
+
 var
   s, t: RawByteString;
   i, j, k, n, complen2: integer;
@@ -11800,7 +11885,62 @@ begin
   Check(CompressSynLZ(s, true) = 'synlz');
   Check(Length(s) < Length(Data), 'exelen');
   Check(CompressSynLZ(s, false) = 'synlz');
-  Check(s = Data);
+  CheckEqual(s, Data);
+  s := HumanHexToBin('0A000000000041');
+  CheckEqual(SynLZDecompressdestlen(pointer(s)), 10);
+  dec1[0] := 0;
+  CheckEqual(SynLZDecompress1partial(pointer(s), length(s), Pointer(dec1), length(dec1)), 1);
+  CheckEqual(dec1[0], $41, 'truncated');
+  dec1[0] := 0;
+  CheckEqual(SynLZDecompress1partial(pointer(s), length(s), Pointer(dec1), 0), 0);
+  CheckEqual(dec1[0], 0, 'partial0');
+  // in the ABC fixtures, hash('ABC') = $675, so 5167 encodes a 3-byte match
+  // and 506702 encodes an extended 20-byte match
+  TestPartial('', '', '',
+    8); // missing header
+  TestPartial('00', '', '',
+    8); // short header
+  TestPartial('0000', '', '',
+    8); // header alone
+  TestPartial('00000000', '', '',
+    8); // partial CW
+  TestPartial('008000', '', '',
+    8); // short extended header
+  TestPartial('010000000000', 'ABC', 'ABC',
+    16); // ignore advertised size
+  TestPartial('0080000000000000', 'ABC', 'ABC',
+    16); // extended header
+  TestPartial('000001000000', '', '',
+    8);  // missing match token
+  TestPartial('00000100000010', '', '',
+    8);  // one-byte token
+  TestPartial('0000010000000000', '', '',
+    8);  // unset hash entry
+  TestPartial('0000080000004142430000', '', 'ABC',
+    16); // invalid after literals
+  TestPartial('0000080000004142435067', '', 'ABC',
+    16); // missing length byte
+  TestPartial('0000080000004142435167', '', 'ABCABC',
+    6);  // final 2-byte token
+  TestPartial('0000080000004142435167', '', 'ABCABC',
+    16); // count < maxOut
+  TestPartial('0000080000004142435367', '', 'ABCABCAB',
+    16); // overlap
+  TestPartial('000008000000414243506702',  '','ABCABCABCABCABCABCABCAB',
+    23); // final 3-byte token
+  TestPartial('000008000000414243506702', '', 'ABCA',
+    4);  // clipped match
+  TestPartial('000008000000414243506702', '', 'ABCABCA',
+    7);
+  TestPartial('00001800000041424351675167', '', 'ABCABCABC',
+    16); // consecutive matches/hash
+  TestPartial('0000080000004142435167', '123456789', 'ABCABC123456789',
+   15);  // 8-byte match fast path
+  // literal runs across a 32-bit control-word boundary
+  TestPartial('000000000000' +
+    '4141414141414141414141414141414141414141414141414141414141414141' +
+    '00000000', 'Z', Join([RawUtf8OfChar('A', 32), 'Z']), 64);
+  TestPartial('000008000000414243506702', '', '', 0); // no writes
 end;
 
 procedure TTestCoreCompression._TAlgoCompress;
