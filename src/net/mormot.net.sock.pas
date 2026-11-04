@@ -1278,6 +1278,15 @@ var
   // issue ASAP to our forum/github for proper investigation
   SChannelEnableTls13: boolean = true;
 
+  /// let SChannel clients ignore CRYPT_E_NO_REVOCATION_CHECK errors
+  // - set e.g. when the CRL/OCSP endpoints are blocked by a proxy or a firewall,
+  // or behind a TLS inspection proxy whose CA has no revocation data
+  // - chain and server name validation are still performed
+  // - read when each connection starts, so won't affect any already opened one
+  // - useless with TNetTlsContext.IgnoreCertificateErrors=true
+  // - default false keeps the standard SChannel revocation behavior
+  SChannelIgnoreNoRevocationCheck: boolean = false;
+
 /// SChannel TLS layer communication factory - as expected by this unit
 // - can be used at runtime to override another implementation e.g.
 // @NewOpenSslNetTls from mormot.lib.openssl11 by executing:
