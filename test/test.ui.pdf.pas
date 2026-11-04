@@ -79,6 +79,7 @@ type
     procedure EmfBitmapBounds;
     procedure EmfWorldRotation;
     procedure EmfWorldReflection;
+    procedure IntegerCoordinates;
     procedure EncryptionAes256;
     procedure Pdf20File;
   end;
@@ -4251,6 +4252,32 @@ begin
       end;
     end;
   end;
+end;
+
+type
+  TPdfCanvasAccess = class(TPdfCanvas); // MoveToI, LineToI
+
+procedure TTestUiPdf.IntegerCoordinates;
+var
+  doc: TPdfDocument;
+  pdf: RawByteString;
+begin
+  { the window, viewport and world factors were 0 until a metafile set
+    them: MoveToI and LineToI of a descendant wrote NaN - see #712 }
+  doc := TPdfDocument.Create;
+  try
+    doc.CompressionMethod := cmNone;
+    doc.AddPage;
+    TPdfCanvasAccess(doc.Canvas).MoveToI(100, 100);
+    TPdfCanvasAccess(doc.Canvas).LineToI(200, 300);
+    doc.Canvas.Stroke;
+    pdf := SavedPdf(doc);
+  finally
+    doc.Free;
+  end;
+  Check(PosEx(#10'100 742 m'#10, pdf) > 0, 'MoveToI as MM_TEXT');
+  Check(PosEx(#10'200 542 l'#10, pdf) > 0, 'LineToI as MM_TEXT');
+  Check(PosEx('Nan', pdf) = 0, 'no NaN');
 end;
 
 procedure TTestUiPdf.EncryptionAes256;
