@@ -8644,6 +8644,13 @@ begin
   fFactorY := fFactor;
   fDevScaleX := 1;
   fDevScaleY := 1;
+  // identity window/viewport/world mapping until a metafile is rendered
+  fWinSize.cx := 1;
+  fWinSize.cy := 1;
+  fViewSize.cx := 1;
+  fViewSize.cy := 1;
+  fWorldFactorX := 1;
+  fWorldFactorY := 1;
   fMappingMode := MM_TEXT;
   fUseMetaFileTextPositioning := tpSetTextJustification;
   fKerningHScaleBottom := 99.0;
