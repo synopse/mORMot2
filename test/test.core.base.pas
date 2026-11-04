@@ -4815,8 +4815,6 @@ procedure TTestCoreBase.Integers;
     r: TFastReader;
     failed: boolean;
   begin
-    if IsDebuggerPresent then
-      exit;
     bin := HexToBin(hex);
     r.Init(bin);
     failed := false;
@@ -5118,9 +5116,16 @@ begin
   CheckLeb('8180808080808080807F', Low(Int64) + 1);
   CheckLeb('FEFFFFFFFFFFFFFFFF00', High(Int64) - 1);
   CheckLeb('FFFFFFFFFFFFFFFFFF00', High(Int64));
-  CheckLebError('80');
-  CheckLebError('80808080808080808001');
-  CheckLebError('80808080808080808080');
+  if IsDebuggerPresent then
+    exit;
+  TSynLog.Family.ExceptionIgnoreCurrentThread := true;
+  try
+    CheckLebError('80');
+    CheckLebError('80808080808080808001');
+    CheckLebError('80808080808080808080');
+  finally
+    TSynLog.Family.ExceptionIgnoreCurrentThread := false;
+  end;
 end;
 
 function TestAddFloatStr(const str: RawUtf8): RawUtf8;
