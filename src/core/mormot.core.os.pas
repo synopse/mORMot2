@@ -11644,21 +11644,19 @@ var
   tid: TThreadID;
 begin
   tid := GetCurrentThreadId;
-  if Flags = 0 then    // is not locked
-    if LockedExc32(Flags, {to=}1, {from=}0) then // try atomic acquisition
-    begin
-      LockedThreadID := tid;
-      result := true;  // acquired the lock
-    end
-    else
-      result := false  // impossible to acquire this lock
-  else if LockedThreadID <> tid then
-    result := false // locked by another thread
-  else
+  if {$ifdef CPUINTEL} (Flags = 0) and {$endif}
+     LockedExc32(Flags, {to=}1, {from=}0) then
+  begin
+    LockedThreadID := tid;
+    result := true; // acquired the lock
+  end
+  else if LockedThreadID = tid then
   begin
     inc(Flags);     // make it reentrant
-    result := true; // locked by this thread
-  end;
+    result := true;
+  end
+  else
+    result := false;
 end;
 
 procedure TMultiLightLock.ForceLock;
@@ -11690,7 +11688,7 @@ procedure TMultiLightLock.WaitUnlocked;
 var
   spin: PtrUInt;
 begin
-  if (Flags = 0) or
+  if not IsLocked or
      (GetCurrentThreadId = LockedThreadID) then // from re-entrant Lock thread
     exit;
   spin := SPIN_COUNT;

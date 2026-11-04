@@ -141,6 +141,10 @@ begin
   h.Lower := -1;
   n := DuckHugeIntToTextBuf(h, true, 0, buf);
   Test('170141183460469231731687303715884105727');
+  h.Lower := low(Int64);
+  h.Upper := -1;
+  n := DuckHugeIntToTextBuf(h, true, 0, buf);
+  Test('-9223372036854775808');
   // UUID representation with DuckDB's highest-bit flip
   h.Upper := Int64($8011223344556677);
   h.Lower := Int64($8899AABBCCDDEEFF);
