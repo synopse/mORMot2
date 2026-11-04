@@ -11635,7 +11635,7 @@ end;
 procedure TMultiLightLock.UnLock;
 begin
   if Flags = 1 then
-    LockedThreadID := TThreadID(0); // paranoid
+    LockedThreadID := TThreadID(0); // as expected by WaitUnlocked
   LockedDec32(@Flags);
 end;
 
@@ -11773,7 +11773,11 @@ begin
     f := Flags and not 1; // bit 0=WriteLock, >0=ReadLock
   until (Flags = f) and
         LockedExc32(Flags, {to=}f + 1, {from=}f);
+  {$ifdef CPUINTEL}
   while Flags <> 1 do // second loop to wait for all readers
+  {$else}
+  while not LockedExc32(Flags, {to=}1, {from=}1) do // need atomic comparison
+  {$endif CPUINTEL}
     spin := SpinAndWait(spin);
 end;
 
@@ -11896,8 +11900,13 @@ begin
   LastWriteLockThread := tid;
   LastWriteLockCount := 0;
   // wait for all readers to have finished their job
-  while Flags > 3 do
+  repeat
+    f := Flags;
+    if (f <= 3) {$ifndef CPUINTEL} and // need atomic comparison
+       LockedExc(Flags, {to=}f, {from=}f) {$endif} then
+      break;
     spin := SpinAndWait(spin);
+  until false;
 end;
 
 procedure TRWLock.WriteUnlock;
@@ -12417,7 +12426,7 @@ begin
     uSharedLock:
       result := fLockCount <> 0; // only updated by uSharedLock
     uRWLock:
-      result := fRW.Flags = 0;   // no lock at all
+      result := fRW.IsLocked;    // no lock at all
   else
     result := false;             // uNoLock will never lock
   end;
