@@ -1684,7 +1684,6 @@ type
   protected
     fOwner: TDhcpServer;
     fState: TDhcpState;
-    fClientBroadcast: TNetIP4;
     fClientPort, fServerPort: TNetPort;
     function DoBind: TNetResult; override;
     procedure OnFrameReceived(len: integer; var remote: TNetAddr); override;
@@ -6507,7 +6506,6 @@ begin
   fOwner := aOwner;
   fFrameLen := SizeOf(fState); // directly fill our DHCP state machine buffer
   fFrame := @fState.Recv;
-  fClientBroadcast := aScope.Broadcast;
   fClientPort := aScope.ClientPort;
   fServerPort := aScope.ServerPort;
   inherited Create(aOwner.Log, aInterface.IP, UInt32ToUtf8(aScope.ServerPort),
@@ -6564,8 +6562,8 @@ begin
     // unicast to known client IP
     remote.SetIP4Port(fState.Recv.ciaddr, fClientPort)
   else
-    // broadcast back the response
-    remote.SetIP4Port(fClientBroadcast, fClientPort);
+    // RFC 2131 4.1: broadcast back the response to 0xffffffff
+    remote.SetIP4Port(cAnyHost32, fClientPort);
   // actual send back the response frame over UDP
   nr := fSock.SendTo(@fState.Send, len, remote);
   if (nr <> nrOk) and
