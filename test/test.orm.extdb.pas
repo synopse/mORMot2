@@ -1447,11 +1447,56 @@ var
   model: TOrmModel;
   server: TRestServerFullMemory;
   props: TSqlDBConnectionProperties;
-  ext: TRestStorageExternalHook;
-  ndx: PtrInt;
-  th: TBatchOtherThreadUpdate;
-  rows: ISqlDBRows;
-  i: integer;
+
+  procedure DoTests;
+  var
+    ext: TRestStorageExternalHook;
+    ndx: PtrInt;
+    th: TBatchOtherThreadUpdate;
+    rows: ISqlDBRows;
+    i: integer;
+  begin
+    OrmMapExternal(model, TOrmPeopleExt, props, 'BatchThread');
+    ext := TRestStorageExternalHook.Create(
+      TOrmPeopleExt, server.OrmInstance as TRestOrmServer);
+    try
+      ndx := model.GetTableIndexExisting(TOrmPeopleExt);
+      props.ExecuteNoResult(
+        'insert into BatchThread (ID,FirstName) values (?,?)', [10, 'before']);
+      th := nil;
+      Check(ext.InternalBatchStart(encPost, []), 'batch');
+      try
+        // the BATCH thread itself still appends its own rows
+        CheckEqual(ext.EngineAdd(ndx, '{"ID":20,"FirstName":"batch"}'), 20, 'add');
+        th := TBatchOtherThreadUpdate.Create(ext, ndx);
+        try
+          for i := 1 to 20 do
+            if th.Done then
+              break
+            else
+              SleepHiRes(10);
+          // the other thread waits for the storage lock, as a regular update
+          Check(not th.Done, 'other thread waits for the batch');
+        finally
+          ext.InternalBatchStop;
+        end;
+        th.WaitFor;
+        Check(th.Updated, 'update from other thread after the batch');
+      finally
+        th.Free;
+      end;
+      rows := props.Execute('select FirstName from BatchThread where ID=?', [10]);
+      Check(rows.Step, 'row 10');
+      CheckEqual(rows.ColumnUtf8(0), 'after', 'updated');
+      rows := props.Execute('select count(*) from BatchThread', []);
+      Check(rows.Step, 'count');
+      CheckEqual(rows.ColumnInt(0), 2, 'batch row');
+      rows := nil; // to avoid GPF when exiting this method
+    finally
+      ext.Free;
+    end;
+  end;
+
 begin
   // EngineAdd/Update/Delete/DeleteWhere did check fBatchMethod BEFORE the
   // storage lock: during a BATCH POST of one thread, a regular Update from
@@ -1464,45 +1509,8 @@ begin
       props := TSqlDBSQLite3ConnectionProperties.Create(
         'batchthread.db3', '', '', '');
       try
-        OrmMapExternal(model, TOrmPeopleExt, props, 'BatchThread');
-        ext := TRestStorageExternalHook.Create(
-          TOrmPeopleExt, server.OrmInstance as TRestOrmServer);
-        try
-          ndx := model.GetTableIndexExisting(TOrmPeopleExt);
-          props.ExecuteNoResult(
-            'insert into BatchThread (ID,FirstName) values (?,?)', [10, 'before']);
-          th := nil;
-          Check(ext.InternalBatchStart(encPost, []), 'batch');
-          try
-            // the BATCH thread itself still appends its own rows
-            CheckEqual(ext.EngineAdd(ndx, '{"ID":20,"FirstName":"batch"}'), 20, 'add');
-            th := TBatchOtherThreadUpdate.Create(ext, ndx);
-            try
-              for i := 1 to 20 do
-                if th.Done then
-                  break
-                else
-                  SleepHiRes(10);
-              // the other thread waits for the storage lock, as a regular update
-              Check(not th.Done, 'other thread waits for the batch');
-            finally
-              ext.InternalBatchStop;
-            end;
-            th.WaitFor;
-            Check(th.Updated, 'update from other thread after the batch');
-          finally
-            th.Free;
-          end;
-          rows := props.Execute('select FirstName from BatchThread where ID=?', [10]);
-          Check(rows.Step, 'row 10');
-          CheckEqual(rows.ColumnUtf8(0), 'after', 'updated');
-          rows := props.Execute('select count(*) from BatchThread', []);
-          Check(rows.Step, 'count');
-          CheckEqual(rows.ColumnInt(0), 2, 'batch row');
-          rows := nil; // to avoid GPF when exiting this method
-        finally
-          ext.Free;
-        end;
+        // local sub-procedure to ensure all local interfaces are cleared
+        DoTests;
       finally
         props.Free;
         DeleteFile('batchthread.db3');
