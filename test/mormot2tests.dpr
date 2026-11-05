@@ -80,7 +80,6 @@ uses
   test.orm.sqlite3         in '.\test.orm.sqlite3.pas',
   test.orm.extdb           in '.\test.orm.extdb.pas',
   test.db.duckdb           in '.\test.db.duckdb.pas',
-  test.db.quack            in '.\test.db.quack.pas',
   test.orm.threads         in '.\test.orm.threads.pas',
   test.orm.network         in '.\test.orm.network.pas',
   test.soa.core            in '.\test.soa.core.pas',

@@ -392,6 +392,10 @@ begin
   end;
   EncryptedFile := ({%H-}password <> '');
   Demo := TSqlDataBase.Create(TempFileName, password);
+  // DBOpen should disable the per-opcode RDTSC profiling of the engine
+  i1 := -1;
+  if sqlite3.db_config(Demo.DB, SQLITE_DBCONFIG_STMT_SCANSTATUS, -1, @i1) = SQLITE_OK then
+    CheckEqual(i1, 0, 'STMT_SCANSTATUS');
   Demo.Synchronous := smOff;
   Demo.LockingMode := lmExclusive;
   if ClassType = TTestSqliteFileMemoryMap then

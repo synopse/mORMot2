@@ -5991,6 +5991,9 @@ begin
   r := pointer(Rtti.FindType(PPointer(PPAnsiChar(self)^ + vmtTypeInfo)^));
   {$else}
   r := PPointer(PPAnsiChar(self)^ + vmtAutoTable)^;
+  if (r <> nil) and
+     Rtti.RegisterSafe.IsLocked then
+    Rtti.RegisterSafe.WaitUnlocked;
   {$endif NOPATCHVMT}
   if (r = nil) or
      not (rcfAutoCreateFields in r.Flags) then

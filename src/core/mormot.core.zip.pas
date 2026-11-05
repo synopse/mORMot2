@@ -715,6 +715,8 @@ type
     // - limited to 4GB of data, unless ForceZip64 is set to true
     // - currently do not support any OnProgressStep notification, because
     // we don't know the input size ahead of time
+    // - CompressLevel <= 0 still uses the Z_DEFLATED method, with zlib
+    // uncompressed (stored) blocks
     function AddDeflatedStream(const aZipName: TFileName;
       FileAge: integer = 0; CompressLevel: integer = Z_USUAL_COMPRESSION): TStream;
     /// add a (huge) file to the zip file, without compression
@@ -2056,7 +2058,7 @@ end;
 
 procedure TZipWrite.AddEmptyFolder(const aZipName: TFileName; FileAge: integer);
 begin
-  NewEntry(Z_STORED, cardinal(-1), FileAge);
+  NewEntry(Z_STORED, {crc32=}0, FileAge); // crc32 of no data is 0
   WriteHeader(aZipName); // no data to write nor any fInfo progress to notify
   inc(fCount);
 end;
@@ -2223,10 +2225,8 @@ begin
   result := TZipWriteCompressor.Create(fDest, CompressLevel, szcfRaw);
   TZipWriteCompressor(result).fHeaderPos := fDest.Position;
   TZipWriteCompressor(result).fOwner := self;
-  // create the new entry
-  if CompressLevel <> 0 then
-    CompressLevel := Z_DEFLATED; // method (if not Z_STORED=0)
-  NewEntry(CompressLevel, 0, FileAge);
+  // create the new entry - level 0 still emits raw deflate (stored) blocks
+  NewEntry(Z_DEFLATED, 0, FileAge);
   WriteHeader(aZipName);
   // caller now makes TZipWriteCompressor.Write then TZipWriteCompressor.Free
 end;

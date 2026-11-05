@@ -963,6 +963,16 @@ const
   // setting is not reported back.
   SQLITE_DBCONFIG_ENABLE_LOAD_EXTENSION = 1005;
 
+  /// This option enables or disables the collection of sqlite3.stmt_scanstatus()
+  // statistics, on SQLITE_ENABLE_STMT_SCANSTATUS builds (like our static engine)
+  // - There should be two additional arguments, as for
+  // SQLITE_DBCONFIG_ENABLE_LOAD_EXTENSION
+  // - By default, our TSqlDataBase.DBOpen disables the collection
+  // - Collection costs two RDTSC per VDBE opcode, making read queries 2-5 times
+  // slower - TSqlDataBase.DBOpen disables it, so call the following to trigger
+  // statements profiling:
+  // ! db_config(DB, SQLITE_DBCONFIG_STMT_SCANSTATUS, 1, nil)
+  SQLITE_DBCONFIG_STMT_SCANSTATUS = 1018;
 
   /// Calls of the form sqlite3.vtab_config(db,SQLITE_VTAB_CONSTRAINT_SUPPORT,X)
   // are supported, where X is an integer.
@@ -2746,6 +2756,7 @@ type
     // that pOut points to unchanged.
     // - When the value returned to pOut is a string, space to hold that string is managed
     // by the prepared statement S and will be automatically freed when S is finalized.
+    // - TSqlDataBase.DBOpen disables the collection: see SQLITE_DBCONFIG_STMT_SCANSTATUS
     stmt_scanstatus: function(S: TSqlite3Statement; idx: integer; iScanStatusOp: integer;
       pOut: pointer): integer; cdecl;
 
@@ -7657,6 +7668,9 @@ begin
     fDB := 0;
     exit;
   end;
+  // no per-opcode slow RDTSC profiling by default (ignored by older engines)
+  if Assigned(sqlite3.db_config) then
+    sqlite3.db_config(fDB, SQLITE_DBCONFIG_STMT_SCANSTATUS, 0, nil);
   // initialize optional encryption (if supported by the compiled engine)
   if Assigned(sqlite3.key) and
      (fPassword <> '') and

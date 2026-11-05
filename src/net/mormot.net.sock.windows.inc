@@ -2255,6 +2255,8 @@ type
     fSessionClosed: boolean;
     fAccept: boolean;
     fAcceptFirst: boolean;
+    fCredAcquired: boolean; // an outbound SSPI credential is owned by this client
+    fClientCertificate: mormot.core.os.security.PCCERT_CONTEXT; // owned duplicate for outbound mTLS
     fServerContext: TSChannelServerContext;
     fServerContextRef: IInterface; // thread-safe shared sever-side credentials
     fAcceptContext: TNetTlsContext; // private mTLS policy for SEC_I_RENEGOTIATE
@@ -2822,8 +2824,18 @@ end;
 procedure TSChannelNetTls.FinalizeCredCtxt;
 begin
   DeleteSecurityContext(@fCtxt); // should be called first
-  if not fAccept then // clients own their per-connection credential instance
+  if fCredAcquired then // clients own their per-connection credential instance
+  begin
     FreeCredentialsHandle(@fCred);
+    fCredAcquired := false;
+  end;
+  // Keep the certificate alive until after the credential is released
+  // and also release it if AcquireCredentialsHandleW/handshake failed
+  if fClientCertificate <> nil then
+  begin
+    CertFreeCertificateContext(fClientCertificate);
+    fClientCertificate := nil;
+  end;
   fServerContext := nil;
   fServerContextRef := nil;      // thread-safe shared sever-side credentials
   FillCharFast(fCtxt, SizeOf(fCtxt), 0);
@@ -2921,6 +2933,14 @@ begin
   ResetState(Socket);
   fServerAddressW := SynUnicode(ServerAddress);
   fAccept := false;
+  // CertificateRaw is a borrowed PCCERT_CONTEXT (e.g. ICryptCertCng.WinContext):
+  // we retain an independent reference for the entire SSPI credential lifetime
+  if Context.CertificateRaw <> nil then
+  begin
+    fClientCertificate := CertDuplicateCertificateContext(Context.CertificateRaw);
+    if fClientCertificate = nil then
+      RaiseLastError('AfterConnection: CertDuplicateCertificateContext', ESChannel);
+  end;
   // prepare execution context
   f := SCH_CRED_NO_DEFAULT_CREDS;
   if Context.IgnoreCertificateErrors then
@@ -2928,10 +2948,15 @@ begin
   else
     f := f or SCH_CRED_REVOCATION_CHECK_CHAIN or
               SCH_CRED_IGNORE_REVOCATION_OFFLINE;
-  CredInit(cred, Context, f, nil, nil);
+  // paCred is an array of PCCERT_CONTEXT, not the context itself
+  if fClientCertificate = nil then
+    CredInit(cred, Context, f, nil, nil)
+  else
+    CredInit(cred, Context, f, @fClientCertificate, nil);
   CheckOK('AfterConnection AcquireCredentialsHandleW',
     AcquireCredentialsHandleW(nil, UNISP_NAME, SECPKG_CRED_OUTBOUND,
       nil, @cred, nil, nil, @fCred, nil));
+  fCredAcquired := true;
   fFlags := ISC_REQ_FLAGS;
   // initiate a ClientHello TLS message and a new fCtxt
   HandshakeBufInit(b);
@@ -3117,8 +3142,12 @@ begin
        (not fAccept) and
        ((fFlags and ISC_REQ_USE_SUPPLIED_CREDS) = 0) then
     begin
-      // Server requested a client certificate: since we don't supply one here,
-      // tell SChannel to continue without automatically selected credentials
+      // an explicit certificate was not acceptable (e.g. wrong issuer):
+      // do not retry anonymously when the caller selected an identity
+      if fClientCertificate <> nil then
+        ESChannelRaiseError(
+          'HandshakeLoop: explicit client certificate not accepted', res);
+      // preserve the old behavior when no client certificate was supplied
       fFlags := fFlags or ISC_REQ_USE_SUPPLIED_CREDS;
       res := HandshakeStep(pointer(fInput), fInputCount);
     end;

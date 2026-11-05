@@ -148,6 +148,8 @@ type
   // smart card/hardware KSP, or a transient PKCS#12/PFX identity
   // - the certificate is represented internally by TX509 whereas all private
   // key operations remain inside the Windows CNG Key Storage Provider
+  // - instances could be returned from a Windows store via TCryptCertAlgoCng,
+  // or from a PKCS#12/PFX identity from TCryptCertCng.LoadPkcs12()
   ICryptCertCng = interface(ICryptCert)
     /// change the asymmetric signing algorithm used with this certificate
     // - regular RSA keys may use RSxxx or PSxxx
@@ -176,6 +178,9 @@ type
     /// access the retained Windows certificate context
     // - caller should never free this context
     // - it remains valid while this ICryptCertCng instance is alive
+    // - warning: could be assigned e.g. to TNetTlsContext.CertificateRaw from
+    // any local TCryptCertAlgoCng store instances, but TCryptCertCng.LoadPkcs12
+    // instances require an explicit ForSChannel = true parameter
     function WinContext: PCCERT_CONTEXT;
   end;
 
@@ -246,6 +251,7 @@ type
     fLogClass: TSynLogClass;
     fKeyProvider: RawUtf8;
     fKeyContainer: RawUtf8;
+    fImportedStore: HCERTSTORE; // temporary store holding Schannel PFX keys
     procedure RaiseError(const Msg: ShortString); overload; override;
   public
     /// create a certificate from a context currently enumerated in a store
@@ -282,11 +288,15 @@ type
     function KeyProvider: RawUtf8;
     function KeyContainer: RawUtf8;
     function WinContext: PCCERT_CONTEXT;
-    /// load a certificate and private key from a PKCS#12/PFX buffer
-    // - private key is imported into an ephemeral CNG KSP and is never persisted
+    /// load a certificate and private key from a PKCS#12/PFX buffer as CNG key
+    // - private key is imported into an ephemeral KSP with PKCS12_NO_PERSIST_KEY
+    // unless ForSChannel is true and a named CNG key container is used so that
+    // it could be assigned on client side for mTLS connection as such:
+    // ! Http.TLS.CertificateRaw := Cert.WinContext;
     // - returns the first certificate having an accessible CNG private key
     class function LoadPkcs12(const Pfx: RawByteString;
-      const Password: SpiUtf8 = ''; aLog: TSynLogClass = nil): ICryptCertCng;
+      const Password: SpiUtf8 = ''; aLog: TSynLogClass = nil;
+      ForSChannel: boolean = false): ICryptCertCng;
   end;
 
 const
@@ -580,11 +590,13 @@ begin
          (result <> '') then
         // CNG returns fixed-width r || s whereas ICryptCert expects DER
         result := SetSignatureSecurityRaw(DigAlgo, RawUtf8(result));
-      log.Log(sllTrace,
-        'SignDigest: returns len=%', [length(result)], self);
+      if Assigned(log) then
+        log.Log(sllTrace,
+         'SignDigest: returns len=%', [length(result)], self);
     except
       on E: Exception do
-        log.Log(sllTrace, 'SignDigest failed due to %', [E], self);
+        if Assigned(log) then
+          log.Log(sllTrace, 'SignDigest failed due to %', [E], self);
     end;
   finally
     key.Done; // release the private key handle ASAP for safety
@@ -606,10 +618,12 @@ begin
     try
       result := NCrypt.KeyDecryptPkcs1(key.Handle, Input, modlen,
         wckSilent in fCert.fKeyOptions);
-      log.Log(sllTrace, 'DecryptPkcs1: returns len=%', [length(result)], self);
+      if Assigned(log) then
+        log.Log(sllTrace, 'DecryptPkcs1: returns len=%', [length(result)], self);
     except
       on E: Exception do
-        log.Log(sllTrace, 'DecryptPkcs1 failed due to %', [E], self);
+        if Assigned(log) then
+          log.Log(sllTrace, 'DecryptPkcs1 failed due to %', [E], self);
     end;
   finally
     key.Done;
@@ -683,14 +697,11 @@ begin
   fLog.EnterLocal(log, 'LoadStore %', [WINCNG_LOCATION_TEXT[Location]], self);
   store := TWinCertStore.Create(fCertStore, Location);
   try
-    if store.Handle = nil then
-      log.Log(sllLastError, 'LoadStore: CertOpenStore failed', self)
-    else
+    if store.Handle <> nil then
       while store.Next do
       begin
-        if not WinCertCtxtKeyProvider(store.Context, info) or
-           (info.ProviderType <> 0) then
-          continue; // no private key or a legacy CryptoAPI CSP
+        if WinCertCtxtKeyProvider(store.Context, info) and
+           (info.ProviderType = 0) then // no private key or legacy CryptoAPI CSP
         try
           cert := TCryptCertCng.Create(self, fLog, store.Context,
             Location, [wckCompareKey], @info);
@@ -699,10 +710,13 @@ begin
           fCert[n] := cert;
         except
           on E: Exception do
-            log.Log(sllTrace,
-              'LoadStore: ignored certificate due to %', [E], self);
+            if Assigned(log) then
+              log.Log(sllTrace, 'LoadStore: ignored % at % certificate due to %',
+                [info.Container, info.Provider, E], self);
         end;
-      end;
+      end
+    else if Assigned(log) then
+      log.Log(sllLastError, 'LoadStore: CertOpenStore failed', self)
   finally
     store.Free;
   end;
@@ -774,7 +788,7 @@ begin
   inherited Create;
   fKeyOptions := aKeyOptions;
   fLogClass := aLogClass;
-  if aOwner <> nil then
+  if aOwner <> nil then // nil from LoadPkcs12()
   begin
     fCryptAlgo := aOwner;
     fCertStore := aOwner.fCertStore;
@@ -805,47 +819,112 @@ begin
 end;
 
 const
-  // PKCS12_NO_PERSIST_KEY attached the ephemeral key to TCryptCertCng context
-  PKCS12_FLAGS = PKCS12_INCLUDE_EXTENDED_PROPERTIES or
-                 PKCS12_ALWAYS_CNG_KSP or
-                 PKCS12_NO_PERSIST_KEY;
-  PKCS12_WCK = [wckCache, wckSilent]; // wckCompareKey not needed here
+  PKCS12_FLAGS: array[boolean] of cardinal = (
+    // non-persistent key handle for in-process CNG signing/decryption
+    PKCS12_INCLUDE_EXTENDED_PROPERTIES or
+    PKCS12_ALWAYS_CNG_KSP or
+    PKCS12_NO_PERSIST_KEY,
+    // Schannel needs a KSP name it can reopen, not a process-local key handle:
+    // force current-user keys and ignore saved certificate extended properties
+    PKCS12_ALWAYS_CNG_KSP or
+    CRYPT_USER_KEYSET);
+
+  PKCS12_WCK: array[boolean] of TWinCertCngKeyOptions = (
+    // we can cache instances from the Windows store
+    [wckCache,
+     wckSilent],
+    // SChannel won't cache its transient instance but should be searchable
+    [wckCompareKey,
+     wckSilent]);
 
 class function TCryptCertCng.LoadPkcs12(const Pfx: RawByteString;
-  const Password: SpiUtf8; aLog: TSynLogClass): ICryptCertCng;
+  const Password: SpiUtf8; aLog: TSynLogClass; ForSChannel: boolean): ICryptCertCng;
 var
   store: HCERTSTORE;
   ctxt: PCCERT_CONTEXT;
   key: TWinCertCngKey;
+  cert: TCryptCertCng;
+  opt: TWinCertCngKeyOptions;
   err: cardinal;
+  info: TWinCertKeyProviderInfo;
   log: ISynLog;
 begin
   result := nil;
-  if (Pfx = '') or
-     not NCrypt.Exists then
-    exit;
   if aLog = nil then
     aLog := TSynLog;
-  aLog.EnterLocal(log, '%.LoadPkcs12 len=%', [self, length(Pfx)], nil);
+  aLog.EnterLocal(log, '%.LoadPkcs12 len=% SChannel=%',
+    [self, length(Pfx), ord(ForSChannel)], nil);
+  if Pfx = '' then
+    exit;
+  if not NCrypt.Exists then
+  begin
+    aLog.Add.Log(sllWarning, '%.LoadPkcs12: Windows CNG is not available on %',
+      [OSVersionShort]);
+    exit;
+  end;
+  store := nil;
   ctxt := nil;
-  err := WinCertStoreImportPfx(Pfx, Password, store, PKCS12_FLAGS);
+  err := WinCertStoreImportPfx(Pfx, Password, store, PKCS12_FLAGS[ForSChannel]);
   if err <> NO_ERROR then
-    log.Log(sllTrace, '%.LoadPkcs12: PFXImportCertStore failed %',
-      [self, OsErrorShort(err)], nil)
-  else
+  begin
+    if Assigned(log) then
+      log.Log(sllTrace, '%.LoadPkcs12: PFXImportCertStore failed %',
+        [self, OsErrorShort(err)], nil);
+    exit;
+  end;
   try
+    // search for the first key in this PFX
+    opt := PKCS12_WCK[ForSChannel];
     repeat
       ctxt := CertEnumCertificatesInStore(store, {prevcert=}ctxt);
       if ctxt = nil then
         exit;
-    until key.Init(ctxt, PKCS12_WCK) = NO_ERROR; // valid private key
+    until key.Init(ctxt, opt) = NO_ERROR;
     key.Done;
-    result := TCryptCertCng.Create(nil, aLog, ctxt, wcslCurrentUser, PKCS12_WCK);
-    log.Log(sllDebug, '%.LoadPkcs12: loaded %', [self, result.Instance]);
+    if not WinCertCtxtKeyProvider(ctxt, info) then
+      if ForSChannel then // CNG signing/decryption succeed without any provider
+      begin
+        if Assigned(log) then
+          log.Log(sllLastError,
+            '%.LoadPkcs12: WinCertCtxtKeyProvider failed', [self], nil);
+        exit; // Schannel cannot reopen this key in its own process
+      end;
+    if ForSChannel then
+      if (info.ProviderType <> 0) or
+         (info.Provider = '') or
+         (info.Container = '') then
+      begin
+        if Assigned(log) then
+          log.Log(sllTrace,
+            '%.LoadPkcs12: WinCertCtxtKeyProvider returned type=% prov=% cont=%',
+            [self, info.ProviderType, info.Provider, info.Container], nil);
+        exit; // Schannel cannot reopen this key in its own process
+      end;
+    cert := TCryptCertCng.Create({owner=}nil, aLog, ctxt, wcslCurrentUser, opt);
+    result := cert; // interface must own the instance even if a later step raises
+    if ForSChannel then
+    begin
+      // setup internal hidden parameters for proper ownership
+      cert.fKeyProvider := info.Provider;
+      cert.fKeyContainer := info.Container;
+      cert.fImportedStore := store; // transfer key cleanup ownership
+      store := nil; // no WinCertStoreDeleteImportedCngKeys() release below
+    end;
+    if Assigned(log) then
+      log.Log(sllDebug,
+        '%.LoadPkcs12: loaded prov=% cont=% sn=% cn=% skid=% sha1=%',
+        [self, info.Provider, info.Container, result.GetSerial,
+         result.GetSubject, result.GetSubjectKey, info.Hash]);
   finally
     if ctxt <> nil then
-      CertFreeCertificateContext(ctxt); // decrement refcount is needed
-    CertCloseStore(store, CERT_CLOSE_STORE_DEFAULT);
+      CertFreeCertificateContext(ctxt);
+    if store <> nil then
+    try
+      if ForSChannel then
+        WinCertStoreDeleteImportedCngKeys(store, aLog.DoLog);
+    finally
+      CertCloseStore(store, CERT_CLOSE_STORE_DEFAULT);
+    end;
   end;
 end;
 
@@ -858,6 +937,20 @@ begin
     fContext := nil;
   end;
   inherited Clear; // release fPrivateKey and fX509 instances
+  if fImportedStore = nil then
+    exit;
+  // the caller must already have released all Schannel TLS connections
+  try
+    WinCertStoreDeleteImportedCngKeys(fImportedStore, fLogClass.DoLog);
+  except
+    // do not propagate cleanup errors from a destructor
+    on E: Exception do
+      if fLogClass <> nil then
+        fLogClass.Add.Log(sllWarning,
+          'LoadPkcs12: imported CNG key cleanup raised %', [PClass(E)^]);
+  end;
+  CertCloseStore(fImportedStore, CERT_CLOSE_STORE_DEFAULT);
+  fImportedStore := nil;
 end;
 
 procedure TCryptCertCng.RaiseError(const Msg: ShortString);

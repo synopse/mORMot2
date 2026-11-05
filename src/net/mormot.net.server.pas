@@ -921,6 +921,7 @@ type
     function TaskProcessBody(aCaller: TSynThreadPoolWorkThread;
       aHeaderResult: THttpServerSocketGetRequestResult): boolean;
     procedure DownloadBody; {$ifdef HASINLINE} inline; {$endif}
+    procedure GetBodyInMemory;
     procedure GetBodyStream;
     // implement fServer.OnBodyDownload in GetRequest - false if rejected as 415
     function DoOnBodyDownload: boolean; virtual;
@@ -1076,6 +1077,7 @@ type
     fAuthorizerDigest: IDigestAuthServer;
     fAuthorizeBasic: TOnHttpServerBasicAuth;
     fAuthorizeBasicRealm: RawUtf8;
+    fAuthorizeNegotiateCbtHash: RawByteString;
     fStats: array[THttpServerSocketGetRequestResult] of integer;
     fBlackListUriReloadMin: integer;
     fBlackListUriNextTix, fBlackListUriCrc: cardinal;
@@ -1206,7 +1208,9 @@ type
     /// allow optional NEGOTIATE authentication for some URIs via Kerberos
     // - will use mormot.lib.sspi or mormot.lib.gssapi
     // - if OnBeforeBody returns 401, Kerberos will be used to authenticate
-    procedure SetAuthorizeNegotiate;
+    // - optional CbtHash is the binary tls-server-end-point certificate digest;
+    // if supplied, a matching client channel binding is mandatory
+    procedure SetAuthorizeNegotiate(const CbtHash: RawByteString = '');
     /// set after a call to SetAuthDigest/SetAuthBasic/SetAuthorizeNegotiate
     property Authorize: THttpServerRequestAuthentication
       read fAuthorize;
@@ -4557,6 +4561,7 @@ begin
   fAuthorizerDigest := nil;
   fAuthorizeBasic := nil;
   fAuthorizeBasicRealm := '';
+  fAuthorizeNegotiateCbtHash := '';
 end;
 
 procedure THttpServerSocketGeneric.SetAuthorizeDigest(
@@ -4592,13 +4597,22 @@ begin
     fAuthorizeBasicRealm);
 end;
 
-procedure THttpServerSocketGeneric.SetAuthorizeNegotiate;
+procedure THttpServerSocketGeneric.SetAuthorizeNegotiate(
+  const CbtHash: RawByteString);
+var
+  len: integer;
 begin
   SetAuthorizeNone;
   if not InitializeDomainAuth then
     EHttpServer.RaiseUtf8('%.SetAuthorizeNegotiate: no % available',
       [self, SECPKGNAMEAPI]);
-   fAuthorize := hraNegotiate;
+  len := length(CbtHash);
+  if (len <> 0) and
+     (len > SizeOf(THash512)) then
+    EHttpServer.RaiseUtf8('%.SetAuthorizeNegotiate: invalid CbtHash length=%',
+      [self, len]);
+  fAuthorize := hraNegotiate;
+  fAuthorizeNegotiateCbtHash := CbtHash;
 end;
 
 function THttpServerSocketGeneric.AuthorizeServerMem: TDigestAuthServerMem;
@@ -4687,7 +4701,8 @@ begin
           if Assigned(fSspiKeyTab) then
             fSspiKeyTab.PrepareKeyTab; // do nothing if no KeyTab changed or set
           {$endif OSPOSIX}
-          header := KerberosServerAuthHeader('', auth + 10, @user);
+          header := KerberosServerAuthHeader('', auth + 10,
+                      @user, fAuthorizeNegotiateCbtHash);
           if header <> '' then
           begin
             Http.ResponseHeaders := header;
@@ -5184,9 +5199,9 @@ end;
 procedure THttpServerSocket.DownloadBody; // properly inlined
 begin
   if Http.ContentStream = nil then
-    GetBody // default in-memory download into Http.Content
+    GetBodyInMemory // default in-memory download into Http.Content
   else
-    GetBodyStream; // use Http.ContentStream from OnBodyDownload event
+    GetBodyStream;  // use Http.ContentStream from OnBodyDownload event
 end;
 
 procedure THttpServerSocket.TaskProcess(aCaller: TSynThreadPoolWorkThread);
@@ -5480,6 +5495,10 @@ begin
           exit;
         end;
       end;
+      // track and limit the cumulated size of a chunked body - whether
+      // OnBodyDownload supplies a stream for it or not: the check above only
+      // applies to an explicit Content-Length
+      Http.ContentMaxSize := fServer.MaximumAllowedContentLength;
       // OnBodyDownload callback can supply a stream for the body - even for HEAD
       if Assigned(fServer.OnBodyDownload) and
          not (hfConnectionUpgrade in Http.HeaderFlags) and
@@ -5553,8 +5572,22 @@ begin // called from GetRequest() to process OnBodyDownload event
     include(Http.ResponseFlags, rfContentStreamNeedFree);
     if strm.InheritsFrom(TFileStreamEx) then
       Http.SetContentInputName(TFileStreamEx(strm));
-    // needed to track and limit the cumulated chunked body size
-    Http.ContentMaxSize := fServer.MaximumAllowedContentLength;
+  end;
+end;
+
+procedure THttpServerSocket.GetBodyInMemory;
+begin
+  try
+    GetBody; // default in-memory download into Http.Content
+  except
+    on EHttpSocketOverflow do
+    begin
+      // e.g. a chunked body over ContentMaxSize: report 413 before closing,
+      // as GetBodyStream does
+      fServer.ComputeRejectBody(Http.Content, 0, HTTP_PAYLOADTOOLARGE);
+      SockSendFlush(Http.Content);
+      raise; // the caller will close the connection
+    end;
   end;
 end;
 

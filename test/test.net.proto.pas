@@ -52,6 +52,7 @@ uses
   mormot.lib.sspi,
   mormot.lib.openssl11,
   mormot.crypt.openssl,
+  mormot.crypt.win,
   {$endif SCHANNEL_VERIFY}
   mormot.net.client,
   mormot.net.server,
@@ -168,6 +169,11 @@ type
     procedure DoTWebSocketAsyncServer(Sender: TObject);
     /// validate that THttpAsyncServer shutdown does close all its connections
     procedure DoHttpAsyncShutdown(Sender: TObject);
+    /// validate that hsoHeadersUnfiltered applies to kept-alive requests
+    procedure DoHttpKeepAliveOptions(Sender: TObject);
+    function DoKeepAliveOptionsRequest(Ctxt: THttpServerRequestAbstract): cardinal;
+    /// validate that THttpAsyncServer rejects an endless header or chunk line
+    procedure DoHttpLongLine(Sender: TObject);
   published
     {$ifdef USEWININET}
     /// validate lazy initialization of the http.sys WebSocket API
@@ -497,6 +503,8 @@ begin
   Run(DoTFTPServer, self, 'TFTPServer', true, false);
   Run(DoTWebSocketAsyncServer, self, 'WSBroadcast', true, false);
   Run(DoHttpAsyncShutdown, self, 'HttpAsyncShutdown', true, false);
+  Run(DoHttpKeepAliveOptions, self, 'HttpKeepAliveOptions', true, false);
+  Run(DoHttpLongLine, self, 'HttpLongLine', true, false);
   {$ifdef OSPOSIX}
   Run(DoUnixDomainSocket, self, 'UnixDomainSocket', true, false);
   {$endif OSPOSIX}
@@ -6970,6 +6978,116 @@ begin
   end;
 end;
 
+function TNetworkProtocols.DoKeepAliveOptionsRequest(
+  Ctxt: THttpServerRequestAbstract): cardinal;
+begin
+  // Content-Length: is only kept in InHeaders with hsoHeadersUnfiltered
+  // - the connection ID tells whether the requests did share a connection
+  if FindNameValue(pointer(Ctxt.InHeaders), 'CONTENT-LENGTH:') <> nil then
+    Ctxt.OutContent := Make(['unfiltered ', Ctxt.ConnectionID])
+  else
+    Ctxt.OutContent := Make(['filtered ', Ctxt.ConnectionID]);
+  Ctxt.OutContentType := TEXT_CONTENT_TYPE;
+  result := HTTP_SUCCESS;
+end;
+
+procedure TNetworkProtocols.DoHttpKeepAliveOptions(Sender: TObject);
+var
+  srv: THttpServerSocketGeneric;
+  clt: THttpClientSocket;
+  fam, i: integer;
+  first: RawUtf8;
+begin
+  for fam := 0 to 1 do
+  begin
+    // the request options computed from the server options should apply to
+    // every request of a connection, not only to its first one
+    if fam = 0 then
+      srv := THttpServer.Create('8885', nil, nil, 'keepopt', 2, 30000,
+        [hsoHeadersUnfiltered])
+    else
+      srv := THttpAsyncServer.Create('8886', nil, nil, 'keepopt', 2, 30000,
+        [hsoHeadersUnfiltered]);
+    try
+      srv.OnRequest := DoKeepAliveOptionsRequest;
+      srv.WaitStarted(10);
+      clt := THttpClientSocket.Open('127.0.0.1', srv.SockPort);
+      try
+        for i := 1 to 3 do // three requests on the same kept-alive connection
+        begin
+          CheckEqual(clt.Post('/opt', 'body', TEXT_CONTENT_TYPE, 30000), HTTP_SUCCESS,
+            'keepopt status');
+          CheckUtf8(IdemPChar(pointer(clt.Content), 'UNFILTERED '),
+            'keepopt fam=% #%: %', [fam, i, clt.Content]);
+          if i = 1 then
+            first := clt.Content
+          else
+            CheckEqual(clt.Content, first, 'keepopt same connection');
+        end;
+      finally
+        clt.Free;
+      end;
+    finally
+      srv.Free;
+    end;
+  end;
+end;
+
+procedure TNetworkProtocols.DoHttpLongLine(Sender: TObject);
+var
+  srv: THttpAsyncServer;
+  raw: TCrtSocket;
+  hosthead, cmd: RawUtf8;
+  chunked: boolean;
+begin
+  TSynLog.Family.ExceptionIgnore.Add(ENetSock);
+  srv := THttpAsyncServer.Create('8887', nil, nil, 'longline', 2);
+  try
+    srv.OnRequest := DoExpectRequest; // never reached
+    srv.WaitStarted(10);
+    Join(['Host: 127.0.0.1:', srv.SockPort], hosthead);
+    for chunked := false to true do
+    begin
+      // a line with no #13 yet should be rejected once over
+      // MaxHttpHeaderLineSize - not buffered until its #13 arrives, if ever:
+      // the server would wait with no response, until our 5 seconds timeout
+      raw := TCrtSocket.Open('127.0.0.1', srv.SockPort, nlTcp, 5000);
+      try
+        raw.CreateSockIn; // needed for proper SockRecvLn() below
+        raw.SockSend('POST /mem HTTP/1.1');
+        raw.SockSend(hosthead);
+        if chunked then
+        begin
+          // an endless chunk size line, e.g. with a chunk extension
+          raw.SockSend('Transfer-Encoding: chunked'#13#10);
+          raw.SockSendFlush;
+          raw.SndLow('1;x=');
+        end
+        else
+        begin
+          // an endless header line
+          raw.SockSendFlush;
+          raw.SndLow('X-Long: ');
+        end;
+        raw.SndLow(RawUtf8OfChar('a', MaxHttpHeaderLineSize * 2));
+        cmd := '';
+        try
+          raw.SockRecvLn(cmd);
+        except
+          on ENetSock do
+            cmd := ''; // timeout: no response at all
+        end;
+        CheckUtf8(PosEx(' 400 ', cmd) > 0, 'longline chunked=% %',
+          [ord(chunked), cmd]);
+      finally
+        raw.Free;
+      end;
+    end;
+  finally
+    srv.Free;
+  end;
+end;
+
 procedure TNetworkProtocols.DoHttpBodyDownload(Sender: TObject);
 var
   srv: THttpServerSocketGeneric;
@@ -7281,6 +7399,52 @@ begin
           if status <> 0 then
             WaitDeleted(bodyfile, 'chunked limit');
         end;
+        // the same limit should apply to a chunked body buffered in memory,
+        // i.e. when OnBodyDownload returns nil (/mem) or is not set at all:
+        // ContentMaxSize was only set for a stream, so the body grew up to
+        // MaxHttpInMemSize whatever MaximumAllowedContentLength said
+        bodytype := 'application/dummy';
+        for n := 0 to 3 do
+        begin
+          if n = 2 then
+            srv.OnBodyDownload := nil; // no event at all
+          status := n and 1; // 0 = 39999 = over the limit, 1 = 40000 = within
+          srv.MaximumAllowedContentLength := 39999 + status;
+          raw := TCrtSocket.Open('127.0.0.1', srv.SockPort);
+          try
+            raw.CreateSockIn; // needed for proper SockRecvLn() below
+            raw.SockSend('POST /mem HTTP/1.1');
+            raw.SockSend(hosthead);
+            raw.SockSend('Transfer-Encoding: chunked');
+            raw.SockSend('Content-Type: application/dummy'#13#10); // last header
+            raw.SockSend('4e20');
+            raw.SockSend(mptext);
+            raw.SockSend('4e20');
+            raw.SockSend(mptext);
+            raw.SockSend('0');
+            raw.SockSendCRLF; // final void line
+            cmd := '';
+            try
+              raw.SockSendFlush;
+              raw.SockRecvLn(cmd);
+            except
+              on ENetSock do
+                cmd := ''; // rejected and closed before we did send it all
+            end;
+            if status = 0 then
+            begin
+              // without the limit, the body was accepted and answered 200
+              CheckUtf8(PosEx(' 200 ', cmd) = 0, 'mem chunked limit % %', [n, cmd]);
+              if cmd <> '' then
+                CheckUtf8(PosEx(' 413 ', cmd) > 0, 'mem chunked 413 % %', [n, cmd]);
+            end
+            else
+              CheckUtf8(PosEx(' 200 ', cmd) > 0, 'mem chunked in limit % %', [n, cmd]);
+          finally
+            raw.Free;
+          end;
+        end;
+        srv.OnBodyDownload := DoBodyDownload;
         srv.MaximumAllowedContentLength := 100000;
         raw := TCrtSocket.Open('127.0.0.1', srv.SockPort);
         try
@@ -7613,7 +7777,8 @@ type
 
   TSChannelTestFlags = set of (
    stfExpected, stfCallbacks, stfRejectEach, stfDisableTls13, stfOneWayTls,
-   stfOpenSslServer, stfEachInvalid, stfHugeContent, stfKeyUpdate);
+   stfOpenSslServer, stfEachInvalid, stfHugeContent, stfKeyUpdate,
+   stfSchannelClient);
 
   TRunCase = class
   public
@@ -7630,6 +7795,7 @@ type
     fHugeHash: cardinal;
     fHugeLength: integer;
     fClientError: RawUtf8;
+    fClientKeyReady: boolean;
     Body: RawByteString;
     ExpectedHash: cardinal;
     class procedure DoRunCase(Sender: TObject);
@@ -7639,7 +7805,7 @@ type
     procedure OnAfterCertificate(Socket: TNetSocket;
       Context: PNetTlsContext; TLS, Peer: pointer);
     function DoHugeRequest(Ctxt: THttpServerRequestAbstract): cardinal;
-    function OpenSslClient(const Port: RawUtf8;
+    function TlsClient(const Port: RawUtf8;
       const Certificate: ICryptCert): boolean;
   end;
 
@@ -7690,12 +7856,17 @@ begin
   Ctxt.OutContent := Make(['ok ', fHugeLength, ' ', CardinalToHexShort(fHugeHash)]);
 end;
 
-function TRunCase.OpenSslClient(const Port: RawUtf8;
+function TRunCase.TlsClient(const Port: RawUtf8;
   const Certificate: ICryptCert): boolean;
 var
   socket: TNetSocket;
   secure: INetTls;
   tls: TNetTlsContext;
+  clientCng: ICryptCertCng;
+  provider: TWinCertKeyProviderInfo;
+  providerHandle: NCRYPT_PROV_HANDLE;
+  importedKey: NCRYPT_KEY_HANDLE;
+  providerName, keyName: SynUnicode;
   keyfile: TFileName;
   request, reply: RawByteString;
   len, pos: integer;
@@ -7704,9 +7875,10 @@ var
   net: TNetResult;
   log: ISynLog;
 begin
-  TSynLog.EnterLocal(log, 'OpenSslClient %', [Port], self);
+  TSynLog.EnterLocal(log, 'TlsClient %', [Port], self);
   result := false;
   fClientError := '';
+  fClientKeyReady := false;
   socket := nil;
   keyfile := '';
   try
@@ -7715,16 +7887,39 @@ begin
     InitNetTlsContext(tls);
     tls.IgnoreCertificateErrors := true; // the test server identity is private
     tls.DisableTls13 := stfDisableTls13 in Flags;
-    if Certificate <> nil then
+    if stfSchannelClient in Flags then
     begin
-      tls.CertificateBin := Certificate.Save(cccCertOnly, '', ccfPem);
-      keyfile := MakeString([Test.WorkDir, 'schannel-mtls-client-', Port, '.pem']);
-      if not FileFromString(
-          Certificate.Save(cccPrivateKeyOnly, '', ccfPem), keyfile) then
-        raise ESynException.Create('unable to save the focused mTLS client key');
-      tls.PrivateKeyFile := StringToUtf8(keyfile);
+      if Certificate <> nil then
+      begin
+        // Use the production ICryptCertCng factory, not a test-only KSP owner.
+        clientCng := TCryptCertCng.LoadPkcs12(
+          Certificate.Save(cccCertWithPrivateKey, '3des=mtls-test', ccfBinary),
+          'mtls-test', TSynLog, {ForSchannel=}true);
+        if clientCng = nil then
+          raise ESynException.Create('Schannel client CNG PFX import failed');
+        if not WinCertCtxtKeyProvider(clientCng.WinContext, provider) or
+           (provider.ProviderType <> 0) or
+           (provider.Provider = '') or
+           (provider.Container = '') then
+          raise ESynException.Create('Schannel client needs a persisted CNG key');
+        fClientKeyReady := true;
+        tls.CertificateRaw := clientCng.WinContext;
+      end;
+      secure := NewSChannelNetTls;
+    end
+    else
+    begin
+      if Certificate <> nil then
+      begin
+        tls.CertificateBin := Certificate.Save(cccCertOnly, '', ccfPem);
+        keyfile := MakeString([Test.WorkDir, 'schannel-mtls-client-', Port, '.pem']);
+        if not FileFromString(
+            Certificate.Save(cccPrivateKeyOnly, '', ccfPem), keyfile) then
+          raise ESynException.Create('unable to save the focused mTLS client key');
+        tls.PrivateKeyFile := StringToUtf8(keyfile);
+      end;
+      secure := NewOpenSslNetTls;
     end;
-    secure := NewOpenSslNetTls;
     secure.AfterConnection(socket, tls, 'localhost');
     if stfHugeContent in Flags then
       request := Make([
@@ -7736,7 +7931,7 @@ begin
     else
       request := 'GET / HTTP/1.0'#13#10'Host: localhost'#13#10#13#10;
     if Assigned(log) then
-      log.Log(sllDebug, 'OpenSslClient: Afterconnection cipher=% request=%',
+      log.Log(sllDebug, 'TlsClient: Afterconnection cipher=% request=%',
         [tls.CipherName, request], self);
     len := length(request);
     net := secure.Send(pointer(request), len);
@@ -7780,7 +7975,7 @@ begin
     result := (net = nrOK) and
               (PosEx('HTTP/', reply) = 1);
     if Assigned(log) then
-      log.Log(sllDebug, 'OpenSslClient Receive: reply=%', [reply], self);
+      log.Log(sllDebug, 'TlsClient Receive: reply=%', [reply], self);
     if not result then
       fClientError := FormatUtf8('mTLS server closed the connection (% %)',
         [ToText(net)^, tls.LastError])
@@ -7793,7 +7988,29 @@ begin
     on E: Exception do
       Make([E, ': ', E.Message], fClientError);
   end;
-  secure := nil;
+  secure := nil; // release Schannel credentials before deleting CNG keys
+  tls.CertificateRaw := nil;
+  clientCng := nil; // deletes test-owned persisted CNG keys
+  if fClientKeyReady then
+  begin
+    // Verify that releasing ICryptCertCng removed its temporary named key.
+    providerName := Utf8ToSynUnicode(provider.Provider);
+    keyName := Utf8ToSynUnicode(provider.Container);
+    providerHandle := nil;
+    if Test.Check(NCrypt.OpenStorageProvider(providerHandle,
+         pointer(providerName), 0) = NO_ERROR, 'open CNG cleanup provider') then
+    try
+      importedKey := nil;
+      if NCrypt.OpenKey(providerHandle, importedKey, pointer(keyName), 0,
+           provider.Flags and NCRYPT_MACHINE_KEY_FLAG) = NO_ERROR then
+      begin
+        NCrypt.FreeObject(NCRYPT_HANDLE(importedKey));
+        Test.Check(false, 'Schannel client PFX key was not deleted');
+      end;
+    finally
+      NCrypt.FreeObject(NCRYPT_HANDLE(providerHandle));
+    end;
+  end;
   if socket <> nil then
     socket.ShutdownAndClose(false);
   if keyfile <> '' then
@@ -7913,7 +8130,15 @@ begin
       DeleteFile(cafile);
     if keyfile <> '' then
       DeleteFile(keyfile);
-    connected := OpenSslClient(Port, Client);
+    connected := TlsClient(Port, Client);
+    // Reject a false-positive negative test caused by client setup failure.
+    if (stfSchannelClient in Flags) and
+       (Client <> nil) then
+    begin
+      Test.Check(fClientKeyReady, 'Schannel client PFX was not imported');
+      Test.CheckUtf8(PosEx('SEC_E_NO_CREDENTIALS', fClientError) = 0,
+        'Schannel rejected the imported CNG key: %', [fClientError]);
+    end;
     if Assigned(log) then
       log.Log(sllDebug, 'Execute: connected=% fEachCount=% fAfterCount=% ' +
         'fAfterUseful=% fEachCount=% fEachInvalid=%',
@@ -8049,6 +8274,15 @@ begin
     // validate many TLS records (huge POST) over TLS 1.2
     RunCase('19003', sttFile, server, ca, valid,
       [stfExpected, stfHugeContent, stfDisableTls13]);
+    // Schannel client using a persisted, automatically cleaned-up PFX key
+    RunCase('19006', sttFile, server, ca, valid,
+      [stfExpected, stfSchannelClient, stfDisableTls13]);
+    // no client certificate: server must reject the request
+    RunCase('19007', sttFile, server, ca, nil,
+      [stfSchannelClient, stfDisableTls13]);
+    // an unknown client CA must not be accepted
+    RunCase('19008', sttFile, server, ca, unknown,
+      [stfSchannelClient, stfDisableTls13]);
     // same with TLS 1.3 where supported
     if OSVersion >= wEleven then
     begin
@@ -8094,6 +8328,13 @@ begin
     // trigger TLS 1.3 renegotiation from client side
     RunCase('19017', sttFile, server, ca, valid,
       [stfExpected, stfHugeContent, stfKeyUpdate]);
+    // Schannel client interoperability with an OpenSSL mTLS server
+    RunCase('19018', sttFile, server, ca, valid,
+      [stfExpected, stfOpenSslServer, stfSchannelClient, stfDisableTls13]);
+    RunCase('19019', sttFile, server, ca, nil,
+      [stfOpenSslServer, stfSchannelClient, stfDisableTls13]);
+    RunCase('19020', sttFile, server, ca, unknown,
+      [stfOpenSslServer, stfSchannelClient, stfDisableTls13]);
     RunWait;
   finally
     NewNetTls := previous;

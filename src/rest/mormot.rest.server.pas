@@ -2199,6 +2199,7 @@ type
     /// access or initialize the internal IoC resolver
     // - overriden to create and initialize the internal TServiceContainerServer
     // if no service interface has been registered yet
+    // - Services registration is not thread-safe and should be done at startup
     function ServiceContainer: TServiceContainer; override;
     /// register a Service class on the server side
     // - this methods expects a class to be supplied, and the exact list of
@@ -2217,6 +2218,7 @@ type
     // on success (i.e. corresponding to aInterfaces[0] - not to the others),
     // or nil if registration failed (e.g. if any of the supplied interfaces
     // is not implemented by the given class)
+    // - Services registration is not thread-safe and should be done at startup
     function ServiceRegister(aImplementationClass: TInterfacedClass;
       const aInterfaces: array of PRttiInfo;
       aInstanceCreation: TServiceInstanceImplementation = sicSingle;
@@ -2236,6 +2238,7 @@ type
     // on success (i.e. corresponding to aInterfaces[0] - not to the others),
     // or nil if registration failed (e.g. if any of the supplied interfaces
     // is not implemented by the given class)
+    // - Services registration is not thread-safe and should be done at startup
     function ServiceRegister(aSharedImplementation: TInterfacedObject;
       const aInterfaces: array of PRttiInfo;
       const aContractExpected: RawUtf8 = ''): TServiceFactoryServerAbstract; overload; virtual;
@@ -2253,6 +2256,7 @@ type
     // - that is, server side will be called to check for the availability of
     // each interface
     // - you can specify an optional custom contract for the first interface
+    // - Services registration is not thread-safe and should be done at startup
     function ServiceRegister(aClient: TRest; const aInterfaces: array of PRttiInfo;
       aInstanceCreation: TServiceInstanceImplementation = sicSingle;
       const aContractExpected: RawUtf8 = ''): boolean; overload; virtual;
@@ -2263,6 +2267,7 @@ type
     // on success (i.e. corresponding to aInterfaces[0] - not to the others),
     // or nil if registration failed (e.g. if any of the supplied interfaces
     // is not implemented by the given class)
+    // - Services registration is not thread-safe and should be done at startup
     function ServiceDefine(aImplementationClass: TInterfacedClass;
       const aInterfaces: array of TGuid;
       aInstanceCreation: TServiceInstanceImplementation = sicSingle;
@@ -2275,12 +2280,14 @@ type
     // on success (i.e. corresponding to aInterfaces[0] - not to the others),
     // or nil if registration failed (e.g. if any of the supplied interfaces
     // is not implemented by the given class)
+    // - Services registration is not thread-safe and should be done at startup
     function ServiceDefine(aSharedImplementation: TInterfacedObject;
       const aInterfaces: array of TGuid;
       const aContractExpected: RawUtf8 = ''): TServiceFactoryServerAbstract; overload;
     /// register a remote Service via its interface
     // - this method expects the interface(s) to have been registered previously:
     // ! TInterfaceFactory.RegisterInterfaces([TypeInfo(IMyInterface),...]);
+    // - Services registration is not thread-safe and should be done at startup
     function ServiceDefine(aClient: TRest; const aInterfaces: array of TGuid;
       aInstanceCreation: TServiceInstanceImplementation = sicSingle;
       const aContractExpected: RawUtf8 = ''): boolean; overload;
@@ -5299,7 +5306,7 @@ begin
   end;
   if Assigned(fServer.Services) and
      not (soaNoSoaContract in fOptions) then
-    body.AddValue('soa', fServer.Services.AsSoa);
+    body.AddValue('soa', fServer.ServicesInfo);
   include(Ctxt.fServiceExecutionOptions, optNoLogOutput); // hide sensitive info
   Ctxt.ReturnsJson(variant(body), HTTP_SUCCESS, false, twJsonEscape, false, header);
 end;
@@ -8136,7 +8143,7 @@ begin
   begin
     case Ctxt.Method of
       mGET:
-        Ctxt.ReturnsJson(fServices.AsSoa);  // GET /stat/soa from ParseSoa()
+        Ctxt.ReturnsJson(ServicesInfo);     // GET /stat/soa from ParseSoa()
       mPOST:
         if (Ctxt.Call^.InBody <> '') and
            (Ctxt.Call^.InBody <> '[]') then // POST /stat/soa from SetUser()

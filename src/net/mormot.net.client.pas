@@ -1234,9 +1234,13 @@ procedure KerberosChannelBinding(const Tls: INetTls; var SecContext: TSecContext
 // 'WWW-Authenticate: Negotiate ...' response header without trailing CRLF
 // - SSPI/GSSAPI processing errors may raise ESynSspi/EGssApi
 // - can optionally return the authenticated user name
+// - CbtHash is the raw tls-server-end-point certificate digest (32/48/64
+// bytes), as returned by HashForChannelBinding(); when set, matching channel
+// bindings are mandatory and authentication fails if they are absent
 // - defined in this unit to avoid a dependency to mormot.net.server.pas
 function KerberosServerAuthHeader(const InputHeaders: RawUtf8;
-  InputAuth: PUtf8Char = nil; AuthUser: PRawUtf8 = nil): RawUtf8;
+  InputAuth: PUtf8Char = nil; AuthUser: PRawUtf8 = nil;
+  const CbtHash: RawByteString = ''): RawUtf8;
 {$endif NOKERBEROSCLIENT}
 
 
@@ -5092,19 +5096,31 @@ begin
     exit;
   SecContext.ChannelBindingsHashLen := HashForChannelBinding(cert, hasher, Temp);
   if SecContext.ChannelBindingsHashLen <> 0 then
-      SecContext.ChannelBindingsHash := @Temp;
+    SecContext.ChannelBindingsHash := @Temp;
 end;
 
 function KerberosServerAuthHeader(const InputHeaders: RawUtf8;
-  InputAuth: PUtf8Char; AuthUser: PRawUtf8): RawUtf8;
+  InputAuth: PUtf8Char; AuthUser: PRawUtf8; const CbtHash: RawByteString): RawUtf8;
 var
   authend: PUtf8Char;
   bin, bout: RawByteString;
   ctx: TSecContext;
+  len {$ifdef OSPOSIX}, major, minor, flags {$endif OSPOSIX}: cardinal;
 begin
   FastAssignNew(result);
   if AuthUser <> nil then
     AuthUser^ := '';
+  // reject invalid hashes and systems on which SetBind() skips channel binding
+  len := length(CbtHash);
+  if len <> 0 then
+  begin
+    if len > SizeOf(THash512) then
+      exit; // clearly not a common digital hash as expected by the RFC
+    {$ifdef OSWINDOWS}
+    if OSVersion < wSeven then
+      exit;
+    {$endif OSWINDOWS}
+  end;
   // locate and parse 'Authorization: Negotiate <base64>'
   if InputAuth = nil then
     InputAuth := FindNameValue(pointer(InputHeaders), 'AUTHORIZATION: NEGOTIATE ');
@@ -5119,11 +5135,27 @@ begin
   // make the actual authentication using SSPI or GSSAPI
   InvalidateSecContext(ctx);
   try
+    if CbtHash <> '' then
+    begin
+      ctx.ChannelBindingsHash    := pointer(CbtHash);
+      ctx.ChannelBindingsHashLen := length(CbtHash);
+    end;
     if ServerSspiAuth(ctx, bin, bout) then // may raise ESynSspi/EGssApi
       exit; // only a single roundtrip is supported yet
     {$ifdef OSWINDOWS} // explicit NTLM rejection is needed on Windows
     if not PropNameEquals(SecPackageName(ctx), 'Kerberos') then
       exit;
+    {$else}
+    if CbtHash <> '' then
+    begin
+      // providing bindings to GSSAPI is not enough
+      flags := 0;
+      major := GssApi.gss_inquire_context(minor, ctx.CtxHandle,
+                 nil, nil, nil, nil, @flags, nil, nil);
+      GssCheck(major, minor, 'KerberosServerAuthHeader: channel binding');
+      if (flags and GSS_C_CHANNEL_BOUND_FLAG) = 0 then
+        exit; // require the verified binding flag
+    end;
     {$endif OSWINDOWS}
     if AuthUser <> nil then
       ServerSspiAuthUser(ctx, AuthUser^); // retrieve the authenticated identity

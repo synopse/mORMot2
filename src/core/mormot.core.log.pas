@@ -2394,9 +2394,11 @@ var
   threadflags: ^TSynLogThreadInfoFlags;
 {$endif NOEXCEPTIONINTERCEPT}
 begin
+  {$ifndef DELPHIPOSIX}
   if skip < 0 then
     skip := 0;
   inc(skip); // ignore this very function
+  {$endif DELPHIPOSIX}
   {$ifndef NOEXCEPTIONINTERCEPT}
   // the manual stack walk makes speculative reads: intercepted exceptions
   // should not reach the logs during the process
@@ -3131,7 +3133,7 @@ begin
       DW_LNS_ADVANCE_PC:
         inc(state.address, Read.VarUInt32 * header64.minimum_instruction_length);
       DW_LNS_ADVANCE_LINE:
-        // LEB128 values < 0 would decrease state.line when needed
+        // LEB128 negative values would decrease state.line when needed
         state.line := Int64(state.line) + Read.VarLeb64;
       DW_LNS_SET_FILE:
         state.fileid := Read.VarUInt32;
@@ -5495,7 +5497,7 @@ begin
   result := pointer(Self);
   if result = nil then
     exit;
-  // inlined Rtti.Find(ClassType)
+  // inlined Rtti.Find(ClassType) - no need to check Rtti.RegisterSafe.IsLocked
   {$ifdef NOPATCHVMT}
   result := LastFamily;
   if (result <> nil) and
@@ -5531,7 +5533,7 @@ begin
   result := nil;
   if self = nil then
     exit;
-  {$ifdef NOPATCHVMT}
+  {$ifdef NOPATCHVMT} // no need to check Rtti.RegisterSafe.IsLocked
   lf := LastFamily;
   if (lf = nil) or
      (lf.SynLogClass <> self) then

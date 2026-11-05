@@ -898,7 +898,16 @@ const
   {$ifdef OSWINDOWS}
   ODBC_LIB = 'odbc32.dll';
   {$else}
+  {$ifdef OSDARWIN}
+  // unixODBC from Homebrew or MacPorts: none of their lib folders is in the
+  // default dyld search path, so they are tried explicitly
+  ODBC_LIB = 'libodbc.2.dylib';
+  ODBC_LIB_BREWARM = '/opt/homebrew/lib/libodbc.2.dylib';
+  ODBC_LIB_BREWX64 = '/usr/local/lib/libodbc.2.dylib';
+  ODBC_LIB_MACPORTS = '/opt/local/lib/libodbc.2.dylib';
+  {$else}
   ODBC_LIB = 'libodbc.so.1';
+  {$endif OSDARWIN}
   {$endif OSWINDOWS}
 
   ODBC_ENTRIES: array[0..67] of PAnsiChar = (
@@ -1041,7 +1050,9 @@ constructor TOdbcLib.Create;
 begin
   inherited Create;
   try
-    TryLoadResolve([ODBC_LIB], 'SQL', @ODBC_ENTRIES, @@AllocEnv, EOdbcException);
+    TryLoadResolve([ODBC_LIB
+      {$ifdef OSDARWIN}, ODBC_LIB_BREWARM, ODBC_LIB_BREWX64, ODBC_LIB_MACPORTS{$endif}],
+      'SQL', @ODBC_ENTRIES, @@AllocEnv, EOdbcException);
   except
     on E: Exception do
     begin

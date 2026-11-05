@@ -601,6 +601,8 @@ const
   PKCS12_INCLUDE_EXTENDED_PROPERTIES = $10;
   PKCS12_NO_PERSIST_KEY = $00008000;
 
+  CRYPT_USER_KEYSET = $00001000; // force PFX-imported keys into CurrentUser
+
   CRYPT_ACQUIRE_COMPARE_KEY_FLAG     = $00000004;
   CRYPT_ACQUIRE_SILENT_FLAG          = $00000040;
   CRYPT_ACQUIRE_ONLY_NCRYPT_KEY_FLAG = $00040000;
@@ -833,7 +835,7 @@ type
     /// the certificate algorithm name, as converted by WinCertAlgoName()
     // - typical values are 'md5RSA','sha1RSA','sha256RSA','sha384RSA','sha1ECC'
     AlgorithmName: RawUtf8;
-    /// the certificate binary SHA1 fingerprint of 20 bytes
+    /// the certificate binary SHA1 fingerprint as 40 hexadecimal chars
     Hash: RawUtf8;
     /// the certificate public key algorithm, as OID text
     // - e.g. ' 1.2.840.113549.1.1.1' for 'RSA' PublicKeyAlgorithmName
@@ -871,6 +873,8 @@ type
     Container: RawUtf8;
     /// CSP or CNG Key Storage Provider name
     Provider: RawUtf8;
+    /// binary SHA1 fingerprint as 40 hexadecimal chars
+    Hash: RawUtf8;
     /// provider type
     // - 0 identifies a CNG Key Storage Provider
     // - high(cardinal) means no provider information was available
@@ -921,6 +925,14 @@ function WinCertCtxtKeyProvider(Ctxt: PCCERT_CONTEXT;
 function WinCertStoreImportPfx(const Pfx: RawByteString;
   const Password: SpiUtf8; out Store: HCERTSTORE;
   Flags: cardinal = PKCS12_INCLUDE_EXTENDED_PROPERTIES): cardinal;
+
+/// cleanup of a certificate temporary imported into the Windows certificate store
+// - PFXImportCertStore() persists private keys separately from its temporary
+// certificate store: this deletes every imported CNG key, not just the selected leaf
+// - call only for a store freshly imported by PKCS12_SCHANNEL_FLAGS: no key from
+// TCryptCertAlgoCng's system-store catalog is ever passed to this routine
+procedure WinCertStoreDeleteImportedCngKeys(Store: HCERTSTORE;
+  const Log: TSynLogProc = nil);
 
 /// could be used to extract CERT_X500_NAME_STR values
 // - for instance, in TWinCertInfo Name := ExtractX500('CN=', SubjectName);
@@ -2012,7 +2024,6 @@ var
   ku: byte;
   len: cardinal;
   sub: RawUtf8;
-  h: THash160;
   e: PCERT_EXTENSION;
   c: PWinCertExtension;
   key: TWinCertKeyProviderInfo;
@@ -2083,10 +2094,8 @@ begin
     Cert.KeyProviderType  := key.ProviderType;
     Cert.KeyProviderFlags := key.Flags;
     Cert.KeySpec          := key.KeySpec;
+    Cert.Hash             := key.Hash;
   end;
-  len := SizeOf(h); // 20 bytes of a SHA-1 hash
-  if CertGetCertificateContextProperty(Ctxt, CERT_HASH_PROP_ID, @h, len) then
-    ToHumanHex(Cert.Hash, @h, len);
   SetLength(Cert.Extension, nfo^.cExtension);
   c := pointer(Cert.Extension);
   e := nfo^.rgExtension;
@@ -2161,6 +2170,7 @@ var
   len: cardinal;
   p: PCRYPT_KEY_PROV_INFO;
   tmp: TSynTempBuffer;
+  h: THash160 absolute tmp;
 begin
   result := false;
   Finalize(Info);
@@ -2188,6 +2198,9 @@ begin
   finally
     tmp.Done;
   end;
+  len := SizeOf(h); // 20 bytes of a SHA-1 hash
+  if CertGetCertificateContextProperty(Ctxt, CERT_HASH_PROP_ID, @h, len) then
+    ToHumanHex(Info.Hash, @h, len);
 end;
 
 function WinCertStoreImportPfx(const Pfx: RawByteString; const Password: SpiUtf8;
@@ -2218,6 +2231,66 @@ begin
       FillCharFast(tmp.buf^, tmp.len * SizeOf(WideChar), 0); // wipe UTF-16
       tmp.Done;
     end;
+  end;
+end;
+
+procedure WinCertStoreDeleteImportedCngKeys(Store: HCERTSTORE; const Log: TSynLogProc);
+var
+  ctxt: PCCERT_CONTEXT;
+  info: TWinCertKeyProviderInfo;
+  prov: NCRYPT_PROV_HANDLE;
+  key: NCRYPT_KEY_HANDLE;
+  providerName, containerName: SynUnicode;
+  id: RawUtf8;
+  ids: TRawUtf8DynArray;
+  err: cardinal;
+begin
+  if Store = nil then
+    exit;
+  ctxt := nil;
+  try
+    repeat
+      ctxt := CertEnumCertificatesInStore(Store, ctxt);
+      if ctxt = nil then
+        break;
+      if not WinCertCtxtKeyProvider(ctxt, info) or
+         (info.ProviderType <> 0) or
+         (info.Container = '') or
+         (info.Provider = '') then
+        continue;
+      // a chain may contain several certificates referencing the same key
+      Join([info.Provider, #0, Info.Container], id);
+      if (ids <> nil) and
+         (FindNonVoidRawUtf8(pointer(ids), pointer(id), length(id), length(ids)) >= 0) then
+        continue;
+      _addutf8(ids, id);
+      prov := nil;
+      providerName := SynUnicode(info.Provider);
+      err := NCrypt.OpenStorageProvider(prov, pointer(providerName), 0);
+      if err = NO_ERROR then
+        try
+          key := nil;
+          containerName := SynUnicode(info.Container);
+          err := NCrypt.OpenKey(prov, key, pointer(containerName), 0,
+            info.Flags and NCRYPT_MACHINE_KEY_FLAG);
+          if err = NO_ERROR then
+          begin
+            err := NCrypt.DeleteKey(key, 0); // also frees the key on success
+            if err <> NO_ERROR then
+              NCrypt.FreeObject(NCRYPT_HANDLE(key));
+          end;
+        finally
+          NCrypt.FreeObject(NCRYPT_HANDLE(prov));
+        end;
+      if (err <> NO_ERROR) and
+         Assigned(Log) then
+        Log(sllWarning,
+          'LoadPkcs12: unable to delete imported CNG key % via % [%]',
+          [info.Container, info.Provider, OsErrorShort(err)], nil);
+    until false;
+  finally
+    if ctxt <> nil then
+      CertFreeCertificateContext(ctxt);
   end;
 end;
 

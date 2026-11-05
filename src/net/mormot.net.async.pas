@@ -4907,6 +4907,9 @@ end;
 procedure THttpAsyncServerConnection.HttpInit;
 begin
   fHttp.ProcessInit; // ready to process a new HTTP request
+  // fHttp.Reset did clear the options of the previous request on this
+  // kept-alive connection, e.g. hroHeadersUnfiltered from hsoHeadersUnfiltered
+  fHttp.Options := fServer.fDefaultRequestOptions;
   fHeadersSec := 0;
   fBytesRecv := 0; // reset stats
   fBytesSend := 0;
@@ -4918,7 +4921,6 @@ begin
   fHttp.Interning := fServer.fInterning;
   if fServer.fCompressList.Algo <> nil then
     fHttp.CompressList := @fServer.fCompressList;
-  fHttp.Options := fServer.fDefaultRequestOptions;
   if fServer.fServerKeepAliveTimeOutSec <> 0 then // 0 = no keep alive
     fKeepAliveMaxSec := fServer.Async.fLastOperationSec +
                         fServer.fServerKeepAliveTimeOutSec;
@@ -5314,8 +5316,6 @@ begin
     include(fHttp.ResponseFlags, rfContentStreamNeedFree);
     if strm.InheritsFrom(TFileStreamEx) then
       fHttp.SetContentInputName(TFileStreamEx(strm));
-    // needed to track and limit the cumulated chunked body size
-    fHttp.ContentMaxSize := fServer.MaximumAllowedContentLength;
   end;
 end;
 
@@ -5372,6 +5372,10 @@ begin
       exit;
     end;
   end;
+  // track and limit the cumulated size of a chunked body - whatever the method
+  // and whether OnBodyDownload supplies a stream for it or not: the header
+  // check above only applies to an explicit Content-Length
+  fHttp.ContentMaxSize := fServer.MaximumAllowedContentLength;
   // OnBodyDownload callback can supply a stream for the body - even for HEAD
   if not (hfConnectionUpgrade in fHttp.HeaderFlags) and
      Assigned(fServer.fOnBodyDownload) then

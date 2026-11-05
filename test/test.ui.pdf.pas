@@ -73,6 +73,13 @@ type
     procedure EmfNullPenLines;
     procedure EmfLineAfterEndedPath;
     procedure EmfTextInPath;
+    procedure EmfStockFontMetrics;
+    procedure EmfClipBoxes;
+    procedure EmfWorldBoxes;
+    procedure EmfBitmapBounds;
+    procedure EmfWorldRotation;
+    procedure EmfWorldReflection;
+    procedure IntegerCoordinates;
     procedure EncryptionAes256;
     procedure Pdf20File;
   end;
@@ -1555,6 +1562,7 @@ const
   R_SAVEDC = 33;
   R_RESTOREDC = 34;
   R_SELECTOBJECT = 37;
+  R_EXTCREATEFONTINDIRECTW = 82;
   R_CREATEBRUSHINDIRECT = 39;
   R_STRETCHDIBITS = 81;
   R_EXTTEXTOUTA = 83;
@@ -1603,7 +1611,8 @@ end;
 
 // the metafile rendered into one page of an uncompressed PDF
 function RenderedEmf(Mf: TMetaFile; PxX: integer = 0; PxY: integer = 0;
-  TextClipping: TPdfCanvasRenderMetaFileTextClipping = tcAlwaysClip): RawUtf8;
+  TextClipping: TPdfCanvasRenderMetaFileTextClipping = tcAlwaysClip;
+  ScaleX: single = 1; ScaleY: single = 1): RawUtf8;
 var
   doc: TPdfDocumentGdi;
 begin
@@ -1617,8 +1626,8 @@ begin
     TPdfDocumentAccess(TPdfDocument(doc)).fPrinterPxPerInch.X := PxX;
     TPdfDocumentAccess(TPdfDocument(doc)).fPrinterPxPerInch.Y := PxY;
     doc.AddPage;
-    RenderMetaFile(doc.Canvas, Mf, 1, 1, 0, 0, tpSetTextJustification,
-      99, 101, TextClipping);
+    RenderMetaFile(doc.Canvas, Mf, ScaleX, ScaleY, 0, 0,
+      tpSetTextJustification, 99, 101, TextClipping);
     result := SavedPdf(doc);
   finally
     doc.Free;
@@ -3192,6 +3201,1084 @@ type
   // to read the protected file key of TPdfEncryptionAes256
   TAesAccess = class(TPdfEncryptionAes256);
 {$endif NO_USE_PDFSECURITY}
+
+// two boxes the same within the rounding of the content stream
+function SameBox(const A, B: TPdfBox): boolean;
+begin
+  result := (Abs(A.Left - B.Left) < 0.02) and
+            (Abs(A.Top - B.Top) < 0.02) and
+            (Abs(A.Width - B.Width) < 0.02) and
+            (Abs(A.Height - B.Height) < 0.02);
+end;
+
+// text in the stock font Stock after a large Arial, or (Reference) in a font
+// created from the LOGFONT of that stock font; Mapped device pixels per
+// logical unit, 1 for MM_TEXT; AsStock: selected by its stock index, as some
+// Windows builds record DEFAULT_GUI_FONT and others as a font of the metafile
+function StockFontEmf(Stock: integer; Reference: boolean;
+  Mapped: integer; AsStock: boolean = false): RawUtf8;
+var
+  mf: TMetaFile;
+  mc: TMetaFileCanvas;
+  lf: TLogFontW;
+  f, g: HFONT;
+  bytes: RawByteString;
+  fonts, sel: TIntegerDynArray;
+  i, j: PtrInt;
+begin
+  FillChar(lf, SizeOf(lf), 0);
+  lf.lfHeight := -40;
+  Utf8ToWideChar(@lf.lfFaceName, 'Arial');
+  f := CreateFontIndirectW(lf);
+  GetObjectW(GetStockObject(Stock), SizeOf(lf), @lf);
+  g := CreateFontIndirectW(lf);
+  mf := TMetaFile.Create;
+  try
+    mf.Width := 400;
+    mf.Height := 400;
+    mc := TMetaFileCanvas.Create(mf, 0);
+    try
+      if Mapped > 1 then
+      begin
+        SetMapMode(mc.Handle, MM_ANISOTROPIC);
+        SetWindowExtEx(mc.Handle, 100, 100, nil);
+        SetViewportExtEx(mc.Handle, 100 * Mapped, 100 * Mapped, nil);
+      end;
+      SelectObject(mc.Handle, f);
+      TextOutW(mc.Handle, 10, 10, 'Arial', 5);
+      if Reference then
+        SelectObject(mc.Handle, g)
+      else
+        SelectObject(mc.Handle, GetStockObject(Stock));
+      TextOutW(mc.Handle, 10, 100, 'Stock', 5);
+      SelectObject(mc.Handle, GetStockObject(SYSTEM_FONT));
+    finally
+      mc.Free;
+    end;
+    if AsStock then
+    begin
+      // a font of the metafile of the stock font's face: selected by index
+      bytes := MetaFileBytes(mf);
+      fonts := EmfRecords(bytes, R_EXTCREATEFONTINDIRECTW);
+      sel := EmfRecords(bytes, R_SELECTOBJECT);
+      for i := 0 to high(fonts) do
+        if CompareMem(@PByteArray(bytes)[fonts[i] + 40], @lf.lfFaceName,
+             SizeOf(lf.lfFaceName)) then
+          for j := 0 to high(sel) do
+            if PCardinal(@PByteArray(bytes)[sel[j] + 8])^ =
+               PCardinal(@PByteArray(bytes)[fonts[i] + 8])^ then
+              PCardinal(@PByteArray(bytes)[sel[j] + 8])^ :=
+                $80000000 or cardinal(Stock);
+      mf.Handle := SetEnhMetaFileBits(length(bytes), pointer(bytes));
+    end;
+    result := RenderedEmf(mf);
+  finally
+    mf.Free;
+    DeleteObject(f);
+    DeleteObject(g);
+  end;
+end;
+
+// SYSTEM_FONT text on an opaque background at device pixel 320,320, aligned
+// by Align, at Mapped device pixels per logical unit
+function StockTextEmf(Mapped, Align: integer): RawUtf8;
+var
+  mf: TMetaFile;
+  mc: TMetaFileCanvas;
+  brush: HBRUSH;
+  dc: HDC;
+begin
+  brush := CreateSolidBrush($0000FF);
+  mf := TMetaFile.Create;
+  try
+    mf.Width := 400;
+    mf.Height := 400;
+    mc := TMetaFileCanvas.Create(mf, 0);
+    try
+      dc := mc.Handle;
+      if Mapped > 1 then
+      begin
+        SetMapMode(dc, MM_ANISOTROPIC);
+        SetWindowExtEx(dc, 100, 100, nil);
+        SetViewportExtEx(dc, 100 * Mapped, 100 * Mapped, nil);
+      end;
+      SelectObject(dc, GetStockObject(SYSTEM_FONT));
+      SelectObject(dc, brush); // the background drawn in the brush's colour
+      SetBkMode(dc, OPAQUE);
+      SetBkColor(dc, $0000FF);
+      SetTextAlign(dc, Align);
+      TextOutW(dc, 320 div Mapped, 320 div Mapped, 'Stock', 5);
+      SelectObject(dc, GetStockObject(WHITE_BRUSH));
+    finally
+      mc.Free;
+    end;
+    result := RenderedEmf(mf);
+  finally
+    mf.Free;
+    DeleteObject(brush);
+  end;
+end;
+
+// text in a metafile that selects no font: the DC's own, SYSTEM_FONT; at two
+// device pixels per logical unit, set after the start (Mapped), and after a
+// selection of SYSTEM_FONT (Selected)
+function DefaultFontEmf(Mapped: boolean = false;
+  Selected: boolean = false): RawUtf8;
+var
+  mf: TMetaFile;
+  dc: HDC;
+begin
+  dc := CreateEnhMetaFileW(0, nil, nil, nil);
+  if Selected then
+    SelectObject(dc, GetStockObject(SYSTEM_FONT));
+  if Mapped then
+  begin
+    SetMapMode(dc, MM_ANISOTROPIC);
+    SetWindowExtEx(dc, 100, 100, nil);
+    SetViewportExtEx(dc, 200, 200, nil);
+  end;
+  TextOutW(dc, 10, 100, 'Stock', 5);
+  mf := TMetaFile.Create;
+  try
+    mf.Handle := CloseEnhMetaFile(dc);
+    result := RenderedEmf(mf);
+  finally
+    mf.Free;
+  end;
+end;
+
+// the lines of Txt from the last Tf before Marker to Marker
+function LastTextState(const Txt, Marker: RawUtf8): RawUtf8;
+var
+  m, p, q: PtrInt;
+begin
+  result := '';
+  m := PosEx(Marker, Txt);
+  p := 0;
+  q := PosEx(' Tf'#10, Txt);
+  while (q > 0) and
+        (q < m) do
+  begin
+    p := q;
+    q := PosEx(' Tf'#10, Txt, q + 1);
+  end;
+  if p = 0 then
+    exit;
+  while (p > 1) and
+        (Txt[p - 1] <> #10) do
+    dec(p);
+  result := copy(Txt, p, m - p);
+end;
+
+// the size of the last Tf before Marker, 0 if none
+function LastFontSize(const Txt, Marker: RawUtf8): double;
+var
+  state: RawUtf8;
+begin
+  state := LastTextState(Txt, Marker);
+  result := GetExtended(pointer(GetCsvItem(pointer(state), 1, ' ')));
+end;
+
+// the /BaseFont names of Txt, in their order
+function BaseFonts(const Txt: RawUtf8): RawUtf8;
+var
+  p, e: PtrInt;
+begin
+  result := '';
+  p := PosEx('/BaseFont/', Txt);
+  while p > 0 do
+  begin
+    e := p + 10;
+    while (e <= length(Txt)) and
+          not (Txt[e] in ['/', '>', ' ', #10]) do
+      inc(e);
+    result := result + copy(Txt, p + 10, e - p - 10) + ' ';
+    p := PosEx('/BaseFont/', Txt, e);
+  end;
+end;
+
+procedure TTestUiPdf.EmfStockFontMetrics;
+const
+  STOCK: array[0..2] of integer = (SYSTEM_FONT, DEFAULT_GUI_FONT,
+    ANSI_FIXED_FONT);
+  SCALES: array[0..1] of integer = (2, 32);
+  ALIGNS: array[0..1] of integer = (TA_TOP, TA_BASELINE);
+var
+  i, m, a: integer;
+  txt, ref, mapped: RawUtf8;
+  paths, mpaths: TRawUtf8DynArray;
+  b1, b2: TPdfBox;
+begin
+  { a stock font selected after a font of the metafile kept that font's
+    LOGFONT and metrics: its text was drawn in the size, face and ascent
+    of the font before; as GDI, it now takes the stock font's own, in
+    device pixels under any map mode (DEFAULT_GUI_FONT is recorded as a
+    font of the metafile) - and text before any selection had size 0 }
+  for i := 0 to high(STOCK) do
+  begin
+    txt := StockFontEmf(STOCK[i], false, 1);
+    ref := StockFontEmf(STOCK[i], true, 1);
+    Check(LastTextState(ref, '(Stock) Tj') <> '', 'the reference drawn');
+    CheckEqual(LastTextState(txt, '(Stock) Tj'),
+      LastTextState(ref, '(Stock) Tj'),
+      'the stock font''s own size and position');
+    CheckEqual(BaseFonts(txt), BaseFonts(ref), 'the stock font''s own face');
+    for m := 0 to high(SCALES) do
+    begin
+      mapped := StockFontEmf(STOCK[i], false, SCALES[m]);
+      if STOCK[i] = DEFAULT_GUI_FONT then
+      begin
+        // a TrueType face: logical units, as a font of the metafile - and
+        // so selected by its stock index
+        Check(Abs(LastFontSize(mapped, '(Stock) Tj') -
+                  SCALES[m] * LastFontSize(txt, '(Stock) Tj')) < 0.02,
+          'a font of the metafile: of logical units');
+        Check(Abs(LastFontSize(StockFontEmf(STOCK[i], false, SCALES[m], true),
+          '(Stock) Tj') - SCALES[m] * LastFontSize(txt, '(Stock) Tj')) < 0.02,
+          'by its stock index: of logical units');
+      end
+      else
+        Check(Abs(LastFontSize(mapped, '(Stock) Tj') -
+                  LastFontSize(txt, '(Stock) Tj')) < 0.02,
+          'of device pixels under a map mode');
+    end;
+  end;
+  // its position and background under a map mode: the rounded lfHeight was
+  // 0 at 32 pixels per unit
+  for a := 0 to high(ALIGNS) do
+  begin
+    txt := StockTextEmf(1, ALIGNS[a]);
+    paths := PaintedPaths(txt);
+    for m := 0 to high(SCALES) do
+    begin
+      mapped := StockTextEmf(SCALES[m], ALIGNS[a]);
+      Check((Abs(OperandAt(mapped, '(Stock) Tj', 1, 0) -
+                 OperandAt(txt, '(Stock) Tj', 1, 0)) < 0.05) and
+            (Abs(OperandAt(mapped, '(Stock) Tj', 1, 1) -
+                 OperandAt(txt, '(Stock) Tj', 1, 1)) < 0.05),
+        'the stock text where it is in device pixels');
+      // its width follows the advances, which the metafile records in
+      // whole logical units
+      mpaths := PaintedPaths(mapped);
+      if (length(paths) = 1) and
+         (length(mpaths) = 1) then
+      begin
+        b1 := PathBox(paths[0]);
+        b2 := PathBox(mpaths[0]);
+        Check((Abs(b1.Left - b2.Left) < 0.02) and
+              (Abs(b1.Top - b2.Top) < 0.02) and
+              (Abs(b1.Height - b2.Height) < 0.02), 'its background too');
+      end
+      else
+        Check(false, 'its background too');
+    end;
+  end;
+  txt := DefaultFontEmf;
+  Check(LastFontSize(txt, '(Stock) Tj') > 0, 'the default font drawn');
+  Check(Abs(LastFontSize(txt, '(Stock) Tj') - LastFontSize(
+    StockFontEmf(SYSTEM_FONT, false, 1), '(Stock) Tj')) < 0.01,
+    'in the size of SYSTEM_FONT');
+  // a map mode set after the font: still of device pixels, the default
+  // font of the start as one selected
+  Check(Abs(LastFontSize(DefaultFontEmf(true), '(Stock) Tj') -
+    LastFontSize(txt, '(Stock) Tj')) < 0.01, 'the default font after a map mode');
+  Check(Abs(LastFontSize(DefaultFontEmf(true, true), '(Stock) Tj') -
+    LastFontSize(txt, '(Stock) Tj')) < 0.01, 'a stock font after a map mode');
+end;
+
+// a polygon on 10..50, then a clip and text or a shape, recorded at K
+// logical units per pixel, VX < 0 mirroring X - Kind:
+// 0 a region of device pixels 0..90 intersected with 10..50, then text
+// 1 the rectangle 10..50 of an ETO_CLIPPED ExtTextOut
+// 2 IntersectClipRect 10..50 alone, then a rectangle and text
+// 3 the region alone, then text
+// 4 10..70 intersected with 0..50, then a rectangle
+// 5 IntersectClipRect 10..50 between SaveDC and RestoreDC, then text
+// 6 10..20 intersected with 30..40, then a rectangle
+function ClipBoxEmf(Kind, K, VX: integer): RawUtf8;
+var
+  mf: TMetaFile;
+  mc: TMetaFileCanvas;
+  r: TRect;
+  pts: array[0..3] of TPoint;
+  i: integer;
+  dc: HDC;
+  rgn: HRGN;
+begin
+  mf := TMetaFile.Create;
+  try
+    mf.Width := 100;
+    mf.Height := 100;
+    mc := TMetaFileCanvas.Create(mf, 0);
+    try
+      dc := mc.Handle;
+      if K > 1 then
+      begin
+        SetMapMode(dc, MM_ANISOTROPIC);
+        SetWindowExtEx(dc, 100 * K, 100 * K, nil);
+        SetViewportExtEx(dc, VX, 100, nil);
+        SetViewportOrgEx(dc, 60 * ord(VX < 0), 0, nil);
+      end;
+      // GDI's default brush: the canvas of mormot.ui.core selects none
+      SelectObject(dc, GetStockObject(WHITE_BRUSH));
+      for i := 0 to 3 do
+      begin
+        pts[i].X := (10 + 40 * ord(i in [1, 2])) * K;
+        pts[i].Y := (10 + 40 * ord(i >= 2)) * K;
+      end;
+      Polygon(dc, pts, 4);
+      if Kind in [0, 3] then
+      begin
+        rgn := CreateRectRgn(0, 0, 90, 90); // device pixels
+        SelectClipRgn(dc, rgn);
+        DeleteObject(rgn);
+      end;
+      if Kind = 5 then
+        SaveDC(dc);
+      case Kind of
+        0, 2, 5:
+          IntersectClipRect(dc, 10 * K, 10 * K, 50 * K, 50 * K);
+        4:
+          begin
+            IntersectClipRect(dc, 10 * K, 10 * K, 70 * K, 70 * K);
+            IntersectClipRect(dc, 0, 0, 50 * K, 50 * K);
+          end;
+        6:
+          begin
+            IntersectClipRect(dc, 10 * K, 10 * K, 20 * K, 20 * K);
+            IntersectClipRect(dc, 30 * K, 30 * K, 40 * K, 40 * K);
+          end;
+      end;
+      if Kind = 5 then
+        RestoreDC(dc, -1);
+      if Kind in [2, 4, 6] then
+        Rectangle(dc, 0, 0, 90 * K, 90 * K);
+      if Kind = 1 then
+      begin
+        r.Left := 10 * K;
+        r.Top := 10 * K;
+        r.Right := 50 * K;
+        r.Bottom := 50 * K;
+        ExtTextOutW(dc, 5 * K, 5 * K, ETO_CLIPPED, @r, 'Clipped', 7, nil);
+      end
+      else if Kind in [0, 2, 3, 5] then
+        TextOutW(dc, 5 * K, 5 * K, 'Clipped', 7);
+    finally
+      mc.Free;
+    end;
+    result := RenderedEmf(mf); // tcAlwaysClip
+  finally
+    mf.Free;
+  end;
+end;
+
+// the last clip rectangle (re h W) before Before in Txt, normalized, and
+// the position of its W; false if none
+function LastClip(const Txt: RawUtf8; Before: PtrInt; out Box: TPdfBox;
+  out At: PtrInt): boolean;
+var
+  p, l: PtrInt;
+  line: RawUtf8;
+  v: array[0..3] of double;
+  i: integer;
+begin
+  result := false;
+  p := PosEx(' re'#10'h'#10'W'#10, Txt);
+  while (p > 0) and
+        (p < Before) do
+  begin
+    l := p;
+    while (l > 1) and
+          (Txt[l - 1] <> #10) do
+      dec(l);
+    line := copy(Txt, l, p - l);
+    for i := 0 to 3 do
+      v[i] := GetExtended(pointer(GetCsvItem(pointer(line), i, ' ')));
+    Box.Left := v[0];
+    Box.Width := v[2];
+    Box.Top := v[1];
+    Box.Height := v[3];
+    if Box.Width < 0 then
+    begin
+      Box.Left := Box.Left + Box.Width;
+      Box.Width := -Box.Width;
+    end;
+    if Box.Height < 0 then
+    begin
+      Box.Top := Box.Top + Box.Height;
+      Box.Height := -Box.Height;
+    end;
+    At := p + 6;
+    result := true;
+    p := PosEx(' re'#10'h'#10'W'#10, Txt, p + 1);
+  end;
+end;
+
+// the clip at At still holds at Pos: no Q between them
+function ClipHolds(const Txt: RawUtf8; At, Pos: PtrInt): boolean;
+var
+  q: PtrInt;
+begin
+  q := PosEx(#10'Q'#10, Txt, At);
+  result := (Pos > At) and
+            ((q = 0) or
+             (q > Pos));
+end;
+
+procedure TTestUiPdf.EmfClipBoxes;
+const
+  SCALE: array[0..2] of integer = (1, 10, 10);
+  VIEW: array[0..2] of integer = (100, 100, -100);
+var
+  kind, s: integer;
+  txt: RawUtf8;
+  paths: TRawUtf8DynArray;
+  poly, clip: TPdfBox;
+  bt, paint, at: PtrInt;
+  msg: string;
+begin
+  { the clip of IntersectClipRect and of an ETO_CLIPPED ExtTextOut is the
+    exclusive rectangle, on the box of a polygon of the same points:
+    IntersectClipRect clipped nothing without a region and to an empty
+    box after one, as did any text after a region, and BoxI took a
+    logical unit off both rectangles; the region of device pixels was
+    mapped as logical units, ten times too small at 10 units per pixel }
+  for kind := 0 to 6 do
+    for s := 0 to high(SCALE) do
+    begin
+      msg := Utf8ToString(FormatUtf8('kind % at % units per pixel, view %',
+        [kind, SCALE[s], VIEW[s]]));
+      txt := ClipBoxEmf(kind, SCALE[s], VIEW[s]);
+      paths := PaintedPaths(txt);
+      if CheckFailed(length(paths) > 0, msg) then
+        continue;
+      poly := PathBox(paths[0]);
+      bt := PosEx(#10'BT'#10, txt);
+      paint := PosEx(#10'B'#10, txt, PosEx(#10'B'#10, txt) + 1); // the rectangle
+      case kind of
+        0, 1, 2:
+          Check(LastClip(txt, bt, clip, at) and
+                SameBox(clip, poly) and
+                ClipHolds(txt, at, bt), msg);
+        3:
+          Check(LastClip(txt, bt, clip, at) and
+                SameBox(clip, PdfBox(0, 842 - 67.5, 67.5, 67.5)) and
+                ClipHolds(txt, at, bt), msg);
+        4:
+          Check(LastClip(txt, paint, clip, at) and
+                SameBox(clip, poly) and
+                ClipHolds(txt, at, paint), msg);
+        5: // the text drawn, no clip left at it
+          Check((bt > 0) and
+                (not LastClip(txt, bt, clip, at) or
+                 not ClipHolds(txt, at, bt)), msg);
+        6:
+          Check(LastClip(txt, paint, clip, at) and
+                (clip.Width * clip.Height = 0) and
+                ClipHolds(txt, at, paint), msg);
+      end;
+      if kind = 2 then // the shape too
+        Check(LastClip(txt, paint, clip, at) and
+              SameBox(clip, poly) and
+              ClipHolds(txt, at, paint), msg);
+    end;
+end;
+
+// a polygon on 10..50 and four shapes on the same box under a world scale
+// World (GM_ADVANCED), at K units per pixel, rendered at the scale Render
+function WorldBoxEmf(World: single; K: integer; Render: single): RawUtf8;
+var
+  mf: TMetaFile;
+  mc: TMetaFileCanvas;
+  xf: TXForm;
+  r: TRect;
+  pts: array[0..3] of TPoint;
+  i: integer;
+  dc: HDC;
+begin
+  mf := TMetaFile.Create;
+  try
+    mf.Width := 200;
+    mf.Height := 200;
+    mc := TMetaFileCanvas.Create(mf, 0);
+    try
+      dc := mc.Handle;
+      if K > 1 then
+      begin
+        SetMapMode(dc, MM_ANISOTROPIC);
+        SetWindowExtEx(dc, 100 * K, 100 * K, nil);
+        SetViewportExtEx(dc, 100, 100, nil);
+      end;
+      SetGraphicsMode(dc, GM_ADVANCED);
+      FillChar(xf, SizeOf(xf), 0);
+      xf.eM11 := World;
+      xf.eM22 := World;
+      SetWorldTransform(dc, xf);
+      for i := 0 to 3 do
+      begin
+        pts[i].X := (10 + 40 * ord(i in [1, 2])) * K;
+        pts[i].Y := (10 + 40 * ord(i >= 2)) * K;
+      end;
+      Polygon(dc, pts, 4);
+      Rectangle(dc, 10 * K, 10 * K, 50 * K, 50 * K);
+      Ellipse(dc, 10 * K, 10 * K, 50 * K, 50 * K);
+      RoundRect(dc, 10 * K, 10 * K, 50 * K, 50 * K, 16 * K, 16 * K);
+      r.Left := 10 * K;
+      r.Top := 10 * K;
+      r.Right := 50 * K;
+      r.Bottom := 50 * K;
+      FillRect(dc, r, GetStockObject(BLACK_BRUSH));
+    finally
+      mc.Free;
+    end;
+    result := RenderedEmf(mf, 0, 0, tcAlwaysClip, Render, Render);
+  finally
+    mf.Free;
+  end;
+end;
+
+procedure TTestUiPdf.EmfWorldBoxes;
+const
+  WORLD: array[0..4] of single = (1, 2, 0.5, 3, 1.5);
+  RENDER: array[0..1] of single = (1, -1);
+  PX = 0.75; // one device pixel at 96 dpi
+var
+  w, k, i, s: integer;
+  paths: TRawUtf8DynArray;
+  poly, incl, b: TPdfBox;
+  msg: string;
+begin
+  { GM_ADVANCED records Rectangle, Ellipse and RoundRect as called and GDI
+    paints them with the right and bottom edges: 81 device pixels for
+    10..50 under a world scale of 2, 21 under 0.5 (measured on a memory
+    DC). BoxInclI added one logical unit per device pixel of the map mode,
+    not divided by the world factor: 82 and 20.5. FillRect stays exclusive.
+    Rendered at a negative scale, the device's right and bottom are the
+    left and top of the page }
+  for s := 0 to high(RENDER) do
+  for k := 1 to 2 do
+    for w := 0 to high(WORLD) do
+    begin
+      msg := Utf8ToString(FormatUtf8('world % at % units per pixel, scale %',
+        [WORLD[w], 1 + 9 * (k - 1), RENDER[s]]));
+      paths := PaintedPaths(WorldBoxEmf(WORLD[w], 1 + 9 * (k - 1), RENDER[s]));
+      if CheckFailed(length(paths) = 5, msg) then
+        continue;
+      poly := PathBox(paths[0]);
+      // one device pixel more, right and bottom
+      if RENDER[s] > 0 then
+        incl := PdfBox(poly.Left, poly.Top - PX, poly.Width + PX,
+          poly.Height + PX)
+      else
+        incl := PdfBox(poly.Left - PX, poly.Top, poly.Width + PX,
+          poly.Height + PX);
+      for i := 1 to 4 do
+      begin
+        b := PathBox(paths[i]);
+        if i = 4 then
+          Check(SameBox(b, poly), msg) // FillRect
+        else
+          Check(SameBox(b, incl), msg);
+      end;
+    end;
+end;
+
+// a bitmap on 10..50 at K logical units per pixel, alone in the metafile
+function BitmapBoundsEmf(K: integer): RawUtf8;
+var
+  mf: TMetaFile;
+  mc: TMetaFileCanvas;
+  bmi: TBitmapInfo;
+  pix: array[0..15] of cardinal;
+  i: integer;
+begin
+  mf := TMetaFile.Create;
+  try
+    mf.Width := 100;
+    mf.Height := 100;
+    mc := TMetaFileCanvas.Create(mf, 0);
+    try
+      if K > 1 then
+      begin
+        SetMapMode(mc.Handle, MM_ANISOTROPIC);
+        SetWindowExtEx(mc.Handle, 100 * K, 100 * K, nil);
+        SetViewportExtEx(mc.Handle, 100, 100, nil);
+      end;
+      FillChar(bmi, SizeOf(bmi), 0);
+      bmi.bmiHeader.biSize := SizeOf(bmi.bmiHeader);
+      bmi.bmiHeader.biWidth := 4;
+      bmi.bmiHeader.biHeight := 4;
+      bmi.bmiHeader.biPlanes := 1;
+      bmi.bmiHeader.biBitCount := 32;
+      for i := 0 to high(pix) do
+        pix[i] := cardinal(i) * $00101010;
+      StretchDIBits(mc.Handle, 10 * K, 10 * K, 40 * K, 40 * K, 0, 0, 4, 4,
+        @pix, bmi, DIB_RGB_COLORS, SRCCOPY);
+    finally
+      mc.Free;
+    end;
+    result := RenderedEmf(mf);
+  finally
+    mf.Free;
+  end;
+end;
+
+// text in Arial of 20 device pixels at K logical units per pixel, rendered
+// with tcClipExplicit: clipped to the bounds of its record
+function TextBoundsEmf(K: integer): RawUtf8;
+var
+  mf: TMetaFile;
+  mc: TMetaFileCanvas;
+  lf: TLogFontW;
+  f: HFONT;
+begin
+  FillChar(lf, SizeOf(lf), 0);
+  lf.lfHeight := -20 * K;
+  Utf8ToWideChar(@lf.lfFaceName, 'Arial');
+  f := CreateFontIndirectW(lf);
+  mf := TMetaFile.Create;
+  try
+    mf.Width := 200;
+    mf.Height := 100;
+    mc := TMetaFileCanvas.Create(mf, 0);
+    try
+      if K > 1 then
+      begin
+        SetMapMode(mc.Handle, MM_ANISOTROPIC);
+        SetWindowExtEx(mc.Handle, 100 * K, 100 * K, nil);
+        SetViewportExtEx(mc.Handle, 100, 100, nil);
+      end;
+      SelectObject(mc.Handle, f);
+      SetBkMode(mc.Handle, TRANSPARENT);
+      TextOutW(mc.Handle, 10 * K, 10 * K, 'Bounds', 6);
+      SelectObject(mc.Handle, GetStockObject(SYSTEM_FONT));
+    finally
+      mc.Free;
+    end;
+    result := RenderedEmf(mf, 0, 0, tcClipExplicit);
+  finally
+    mf.Free;
+    DeleteObject(f);
+  end;
+end;
+
+// the content stream of the page: the first stream of Txt
+function FirstStream(const Txt: RawUtf8): RawUtf8;
+var
+  p: PtrInt;
+begin
+  p := PosEx('stream'#10, Txt);
+  result := copy(Txt, p, PosEx('endstream', Txt, p) - p);
+end;
+
+procedure TTestUiPdf.EmfBitmapBounds;
+var
+  px, mapped: RawUtf8;
+  clip, b: TPdfBox;
+  at: PtrInt;
+  k: integer;
+begin
+  { the bounds of EMR_HEADER clip a bitmap without a region: device pixels,
+    the right and bottom ones included, which BoxI took as exclusive
+    logical units less one - a bitmap at the edge lost two pixels }
+  for k := 0 to 1 do
+  begin
+    px := FirstStream(BitmapBoundsEmf(1 + 9 * k));
+    Check((PosEx(' Do'#10, px) > 0) and
+          (Abs(OperandAt(px, #10'W'#10, 0, 2) - OperandAt(px, ' cm'#10, 0, 0)) < 0.02) and
+          (Abs(OperandAt(px, #10'W'#10, 0, 3) - OperandAt(px, ' cm'#10, 0, 3)) < 0.02) and
+          (Abs(OperandAt(px, #10'W'#10, 0, 0) - OperandAt(px, ' cm'#10, 0, 4)) < 0.02) and
+          (Abs(OperandAt(px, #10'W'#10, 0, 1) - OperandAt(px, ' cm'#10, 0, 5)) < 0.02),
+      'the bitmap within its clip');
+  end;
+  { the bounds of an ExtTextOut, tcClipExplicit, are device pixels too, but
+    were mapped as logical units: ten times too small at 10 per pixel }
+  px := TextBoundsEmf(1);
+  mapped := TextBoundsEmf(10);
+  Check(LastClip(px, PosEx(#10'BT'#10, px), clip, at) and
+        (clip.Width > 20), 'the text clipped to its bounds');
+  Check(LastClip(mapped, PosEx(#10'BT'#10, mapped), b, at) and
+        SameBox(b, clip), 'the same bounds at 10 units per pixel');
+end;
+
+// a rectangle and text under the world transform M11, M12, M21, M22 moved
+// to 300,100; Prior: after a scale by 2 and a move by 50
+function WorldRotationEmf(M11, M12, M21, M22: single; Prior: boolean): RawUtf8;
+var
+  mf: TMetaFile;
+  mc: TMetaFileCanvas;
+  xf: TXForm;
+  lf: TLogFontW;
+  f: HFONT;
+  dc: HDC;
+begin
+  FillChar(lf, SizeOf(lf), 0);
+  lf.lfHeight := -20;
+  Utf8ToWideChar(@lf.lfFaceName, 'Arial');
+  f := CreateFontIndirectW(lf);
+  mf := TMetaFile.Create;
+  try
+    mf.Width := 400;
+    mf.Height := 400;
+    mc := TMetaFileCanvas.Create(mf, 0);
+    try
+      dc := mc.Handle;
+      SetGraphicsMode(dc, GM_ADVANCED);
+      SelectObject(dc, f);
+      SetBkMode(dc, TRANSPARENT);
+      FillChar(xf, SizeOf(xf), 0);
+      if Prior then
+      begin
+        xf.eM11 := 2;
+        xf.eM22 := 2;
+        xf.eDx := 50;
+        xf.eDy := 50;
+        SetWorldTransform(dc, xf);
+      end;
+      xf.eM11 := M11;
+      xf.eM12 := M12;
+      xf.eM21 := M21;
+      xf.eM22 := M22;
+      xf.eDx := 300;
+      xf.eDy := 100;
+      SetWorldTransform(dc, xf);
+      Rectangle(dc, 10, 10, 50, 50);
+      TextOutW(dc, 40, 40, 'Turned', 6);
+      SelectObject(dc, GetStockObject(SYSTEM_FONT));
+    finally
+      mc.Free;
+    end;
+    result := RenderedEmf(mf);
+  finally
+    mf.Free;
+    DeleteObject(f);
+  end;
+end;
+
+procedure TTestUiPdf.EmfWorldRotation;
+const
+  // a rotation by 90 and by 30 degrees, a shear
+  M: array[0..2, 0..3] of single = ((0, 1, -1, 0),
+    (0.866025, 0.5, -0.5, 0.866025), (1, 0, 0.5, 1));
+var
+  i: integer;
+  fresh, prior: RawUtf8;
+  a, b: TRawUtf8DynArray;
+  msg: string;
+begin
+  { a rotation or a shear kept the scale and the move of the transform
+    before it: what was drawn depended on it (the turned text of emf_world
+    twice its size); without the factor and offset, the same drawing.
+    The text matrix negated all four terms: right at 90 and 270 degrees
+    only, a text at 30 degrees was drawn at 150 }
+  for i := 0 to high(M) do
+  begin
+    msg := Utf8ToString(FormatUtf8('matrix %', [i]));
+    fresh := WorldRotationEmf(M[i, 0], M[i, 1], M[i, 2], M[i, 3], false);
+    prior := WorldRotationEmf(M[i, 0], M[i, 1], M[i, 2], M[i, 3], true);
+    a := PaintedPaths(fresh);
+    b := PaintedPaths(prior);
+    Check((length(a) = 1) and
+          (length(b) = 1) and
+          SameBox(PathBox(a[0]), PathBox(b[0])), msg);
+    CheckEqual(LastTextState(prior, '(Turned) Tj'),
+      LastTextState(fresh, '(Turned) Tj'), StringToUtf8(msg));
+    // the text matrix of a rotation: Y goes down in GDI, up in PDF
+    if i < 2 then
+      Check((Abs(OperandAt(fresh, ' Tm'#10, 0, 0) - M[i, 0]) < 0.01) and
+            (Abs(OperandAt(fresh, ' Tm'#10, 0, 1) + M[i, 1]) < 0.01) and
+            (Abs(OperandAt(fresh, ' Tm'#10, 0, 2) + M[i, 2]) < 0.01) and
+            (Abs(OperandAt(fresh, ' Tm'#10, 0, 3) - M[i, 3]) < 0.01),
+        msg + ': the text turned as GDI turns it');
+  end;
+end;
+
+// a rectangle 10..50 with a pen 3 wide and text at 40,40 under the world
+// scale M11, M22, moved back into the picture where negative, the viewport's
+// origin at 20,10; Reference: the same rectangle and pen at the page's
+// coordinates, no transform, and the text aligned where GDI's mirrored one is
+function WorldReflectionEmf(M11, M22: single; Reference: boolean): RawUtf8;
+var
+  mf: TMetaFile;
+  mc: TMetaFileCanvas;
+  xf: TXForm;
+  lf: TLogFontW;
+  f: HFONT;
+  pen: HPEN;
+  dc: HDC;
+  dx, dy: single;
+  x1, x2, y1, y2: integer;
+begin
+  FillChar(lf, SizeOf(lf), 0);
+  lf.lfHeight := -20;
+  lf.lfUnderline := 1;
+  Utf8ToWideChar(@lf.lfFaceName, 'Arial');
+  f := CreateFontIndirectW(lf);
+  dx := 100 * Abs(M11) * ord(M11 < 0);
+  dy := 100 * Abs(M22) * ord(M22 < 0);
+  if Reference then
+    pen := CreatePen(PS_SOLID, round(3 * Abs(M11)), 0)
+  else
+    pen := CreatePen(PS_SOLID, 3, 0);
+  mf := TMetaFile.Create;
+  try
+    mf.Width := 400;
+    mf.Height := 400;
+    mc := TMetaFileCanvas.Create(mf, 0);
+    try
+      dc := mc.Handle;
+      SetGraphicsMode(dc, GM_ADVANCED);
+      SetViewportOrgEx(dc, 20, 10, nil);
+      SelectObject(dc, f);
+      SelectObject(dc, pen);
+      SetBkMode(dc, TRANSPARENT);
+      x1 := round(M11 * 10 + dx);
+      x2 := round(M11 * 50 + dx);
+      y1 := round(M22 * 10 + dy);
+      y2 := round(M22 * 50 + dy);
+      if Reference then
+      begin
+        Rectangle(dc, MinPtrInt(x1, x2), MinPtrInt(y1, y2),
+          MaxPtrInt(x1, x2), MaxPtrInt(y1, y2));
+        // mirrored on X, the text ends at the reference point; on Y, it
+        // stands on it
+        if (M11 < 0) <> (M22 < 0) then
+        begin
+          SetTextAlign(dc, TA_RIGHT * ord(M11 < 0) + TA_BOTTOM * ord(M22 < 0));
+          TextOutW(dc, round(M11 * 40 + dx), round(M22 * 40 + dy), 'Mirror', 6);
+        end;
+      end
+      else
+      begin
+        FillChar(xf, SizeOf(xf), 0);
+        xf.eM11 := M11;
+        xf.eM22 := M22;
+        xf.eDx := dx;
+        xf.eDy := dy;
+        SetWorldTransform(dc, xf);
+        Rectangle(dc, 10, 10, 50, 50);
+        if (M11 < 0) and
+           (M22 < 0) then
+          SetTextAlign(dc, TA_BASELINE); // the glyphs' start: the point
+        TextOutW(dc, 40, 40, 'Mirror', 6);
+      end;
+      SelectObject(dc, GetStockObject(SYSTEM_FONT));
+      SelectObject(dc, GetStockObject(BLACK_PEN));
+    finally
+      mc.Free;
+    end;
+    result := RenderedEmf(mf);
+  finally
+    mf.Free;
+    DeleteObject(f);
+    DeleteObject(pen);
+  end;
+end;
+
+// underlined text turned by 90 degrees (lfEscapement) under the world scale
+// M11, M22, moved back into the picture; InPath: filled as a GDI path
+function MirroredTurnedEmf(M11, M22: single; InPath: boolean): RawUtf8;
+var
+  mf: TMetaFile;
+  mc: TMetaFileCanvas;
+  xf: TXForm;
+  lf: TLogFontW;
+  f: HFONT;
+  dc: HDC;
+begin
+  FillChar(lf, SizeOf(lf), 0);
+  lf.lfHeight := -20;
+  lf.lfEscapement := 900;
+  lf.lfUnderline := 1;
+  Utf8ToWideChar(@lf.lfFaceName, 'Arial');
+  f := CreateFontIndirectW(lf);
+  mf := TMetaFile.Create;
+  try
+    mf.Width := 400;
+    mf.Height := 400;
+    mc := TMetaFileCanvas.Create(mf, 0);
+    try
+      dc := mc.Handle;
+      SetGraphicsMode(dc, GM_ADVANCED);
+      SelectObject(dc, f);
+      SelectObject(dc, GetStockObject(WHITE_BRUSH)); // the path filled
+      SetBkMode(dc, TRANSPARENT);
+      FillChar(xf, SizeOf(xf), 0);
+      xf.eM11 := M11;
+      xf.eM22 := M22;
+      xf.eDx := 200 * ord(M11 < 0);
+      xf.eDy := 200 * ord(M22 < 0);
+      SetWorldTransform(dc, xf);
+      if InPath then
+        BeginPath(dc);
+      TextOutW(dc, 60, 120, 'Turned', 6);
+      if InPath then
+      begin
+        EndPath(dc);
+        FillPath(dc);
+      end;
+      SelectObject(dc, GetStockObject(SYSTEM_FONT));
+    finally
+      mc.Free;
+    end;
+    result := RenderedEmf(mf);
+  finally
+    mf.Free;
+    DeleteObject(f);
+  end;
+end;
+
+// the lowest and highest projection of the l points of Path on the line of
+// the glyphs (Tm of Txt): along it from where they start
+procedure GlyphProjections(const Txt, Path: RawUtf8; out Lo, Hi: double);
+var
+  lines: TRawUtf8DynArray;
+  i: PtrInt;
+  a, b, e, f, n, x, y, d: double;
+begin
+  a := OperandAt(Txt, ' Tm'#10, 0, 0);
+  b := OperandAt(Txt, ' Tm'#10, 0, 1);
+  e := OperandAt(Txt, ' Tm'#10, 0, 4);
+  f := OperandAt(Txt, ' Tm'#10, 0, 5);
+  n := Sqrt(a * a + b * b);
+  Lo := 1E9;
+  Hi := -1E9;
+  lines := nil;
+  CsvToRawUtf8DynArray(pointer(Path), lines, #10);
+  for i := 0 to high(lines) do
+    if (length(lines[i]) > 2) and
+       (copy(lines[i], length(lines[i]) - 1, 2) = ' l') then
+    begin
+      x := GetExtended(pointer(GetCsvItem(pointer(lines[i]), 0, ' ')));
+      y := GetExtended(pointer(GetCsvItem(pointer(lines[i]), 1, ' ')));
+      d := ((x - e) * a + (y - f) * b) / n;
+      if d < Lo then
+        Lo := d;
+      if d > Hi then
+        Hi := d;
+    end;
+end;
+
+procedure TTestUiPdf.EmfWorldReflection;
+const
+  M: array[0..4, 0..1] of single = ((-1, 1), (1, -1), (-1, -1), (-2, -2),
+    (-1, -2));
+var
+  i, k: integer;
+  lo, hi: double;
+  txt, ref: RawUtf8;
+  a, b: TRawUtf8DynArray;
+  msg: string;
+begin
+  { a reflection (a negative scale, no shear) was not applied at all: what
+    was drawn under it stayed where it was. A scale with negative factors
+    mirrors the shapes on the page, with a positive line width; a turn by
+    180 degrees (both negative) turns the text too, at the scale's size.
+    The world transform comes before the viewport's origin: it was applied
+    after it; and the upright glyphs stand where GDI's mirrored ones are }
+  for i := 0 to high(M) do
+  begin
+    msg := Utf8ToString(FormatUtf8('scale % %', [M[i, 0], M[i, 1]]));
+    txt := WorldReflectionEmf(M[i, 0], M[i, 1], false);
+    ref := WorldReflectionEmf(M[i, 0], M[i, 1], true);
+    a := PaintedPaths(txt);
+    b := PaintedPaths(ref);
+    Check((length(a) >= 1) and
+          (length(b) >= 1) and
+          SameBox(PathBox(a[0]), PathBox(b[0])), msg);
+    Check(Abs(OperandAt(txt, ' w'#10, 0, 0) - OperandAt(ref, ' w'#10, 0, 0)) < 0.01,
+      msg + ': the line width');
+    if (M[i, 0] < 0) and
+       (M[i, 1] < 0) then
+    begin
+      // the device point of 40,40 under the scale, at 0.75 pt per pixel
+      Check((OperandAt(txt, ' Tm'#10, 0, 0) < 0) and
+            (OperandAt(txt, ' Tm'#10, 0, 3) < 0) and
+            (Abs(OperandAt(txt, ' Tm'#10, 0, 4) -
+              (M[i, 0] * 40 + 100 * Abs(M[i, 0]) + 20) * 0.75) < 0.05) and
+            (Abs(OperandAt(txt, ' Tm'#10, 0, 5) - (842 -
+              (M[i, 1] * 40 + 100 * Abs(M[i, 1]) + 10) * 0.75)) < 0.05),
+        msg + ': the text turned by 180 degrees');
+      Check(Abs(LastFontSize(txt, '(Mirror) Tj') * Abs(OperandAt(txt, ' Tm'#10, 0, 0)) -
+        15 * Abs(M[i, 1])) < 0.05, msg + ': in the size of the scale');
+      // its underline turned with it: to the left, above the baseline
+      if length(a) = 2 then
+      begin
+        GlyphProjections(txt, a[1], lo, hi);
+        Check((lo > -0.5) and
+              (hi > 5) and
+              (PathBox(a[1]).Top > OperandAt(txt, ' Tm'#10, 0, 5)),
+          msg + ': its underline turned');
+      end
+      else
+        Check(false, msg + ': its underline turned');
+      // and under a font's angle, which turns the glyphs without the world
+      for k := 0 to 1 do
+      begin
+        txt := MirroredTurnedEmf(M[i, 0], M[i, 1], k = 1);
+        a := PaintedPaths(txt);
+        if length(a) = 0 then
+          Check(false, msg + ': the turned underline drawn')
+        else
+        begin
+          GlyphProjections(txt, a[0], lo, hi);
+          Check((lo > -0.5) and
+                (hi > 5), msg + ': the underline along the font''s glyphs');
+        end;
+      end;
+    end
+    else
+    begin
+      Check((Abs(OperandAt(txt, ' Td'#10, 0, 0) - OperandAt(ref, ' Td'#10, 0, 0)) < 0.05) and
+            (Abs(OperandAt(txt, ' Td'#10, 0, 1) - OperandAt(ref, ' Td'#10, 0, 1)) < 0.05),
+        msg + ': the text where GDI mirrors it');
+      Check((length(a) = 2) and
+            (length(b) = 2) and
+            SameBox(PathBox(a[1]), PathBox(b[1])), msg + ': its underline');
+      // turned by the font: the underline, alone or a figure of a path,
+      // goes the way the glyphs go from their start
+      for k := 0 to 1 do
+      begin
+        txt := MirroredTurnedEmf(M[i, 0], M[i, 1], k = 1);
+        a := PaintedPaths(txt);
+        if length(a) = 0 then
+          Check(false, msg + ': the turned underline drawn')
+        else
+        begin
+          GlyphProjections(txt, a[0], lo, hi);
+          Check((lo > -0.5) and
+                (hi > 5), msg + ': the turned underline along the glyphs');
+        end;
+      end;
+    end;
+  end;
+end;
+
+type
+  TPdfCanvasAccess = class(TPdfCanvas); // MoveToI, LineToI
+
+procedure TTestUiPdf.IntegerCoordinates;
+var
+  doc: TPdfDocument;
+  pdf: RawByteString;
+begin
+  { the window, viewport and world factors were 0 until a metafile set
+    them: MoveToI and LineToI of a descendant wrote NaN - see #712 }
+  doc := TPdfDocument.Create;
+  try
+    doc.CompressionMethod := cmNone;
+    doc.AddPage;
+    TPdfCanvasAccess(doc.Canvas).MoveToI(100, 100);
+    TPdfCanvasAccess(doc.Canvas).LineToI(200, 300);
+    doc.Canvas.Stroke;
+    pdf := SavedPdf(doc);
+  finally
+    doc.Free;
+  end;
+  Check(PosEx(#10'100 742 m'#10, pdf) > 0, 'MoveToI as MM_TEXT');
+  Check(PosEx(#10'200 542 l'#10, pdf) > 0, 'LineToI as MM_TEXT');
+  Check(PosEx('Nan', pdf) = 0, 'no NaN');
+end;
 
 procedure TTestUiPdf.EncryptionAes256;
 {$ifndef NO_USE_PDFSECURITY}
