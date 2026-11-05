@@ -172,6 +172,8 @@ type
     /// validate that hsoHeadersUnfiltered applies to kept-alive requests
     procedure DoHttpKeepAliveOptions(Sender: TObject);
     function DoKeepAliveOptionsRequest(Ctxt: THttpServerRequestAbstract): cardinal;
+    /// validate that THttpAsyncServer rejects an endless header or chunk line
+    procedure DoHttpLongLine(Sender: TObject);
   published
     {$ifdef USEWININET}
     /// validate lazy initialization of the http.sys WebSocket API
@@ -502,6 +504,7 @@ begin
   Run(DoTWebSocketAsyncServer, self, 'WSBroadcast', true, false);
   Run(DoHttpAsyncShutdown, self, 'HttpAsyncShutdown', true, false);
   Run(DoHttpKeepAliveOptions, self, 'HttpKeepAliveOptions', true, false);
+  Run(DoHttpLongLine, self, 'HttpLongLine', true, false);
   {$ifdef OSPOSIX}
   Run(DoUnixDomainSocket, self, 'UnixDomainSocket', true, false);
   {$endif OSPOSIX}
@@ -7027,6 +7030,61 @@ begin
     finally
       srv.Free;
     end;
+  end;
+end;
+
+procedure TNetworkProtocols.DoHttpLongLine(Sender: TObject);
+var
+  srv: THttpAsyncServer;
+  raw: TCrtSocket;
+  hosthead, cmd: RawUtf8;
+  chunked: boolean;
+begin
+  TSynLog.Family.ExceptionIgnore.Add(ENetSock);
+  srv := THttpAsyncServer.Create('8887', nil, nil, 'longline', 2);
+  try
+    srv.OnRequest := DoExpectRequest; // never reached
+    srv.WaitStarted(10);
+    Join(['Host: 127.0.0.1:', srv.SockPort], hosthead);
+    for chunked := false to true do
+    begin
+      // a line with no #13 yet should be rejected once over
+      // MaxHttpHeaderLineSize - not buffered until its #13 arrives, if ever:
+      // the server would wait with no response, until our 5 seconds timeout
+      raw := TCrtSocket.Open('127.0.0.1', srv.SockPort, nlTcp, 5000);
+      try
+        raw.CreateSockIn; // needed for proper SockRecvLn() below
+        raw.SockSend('POST /mem HTTP/1.1');
+        raw.SockSend(hosthead);
+        if chunked then
+        begin
+          // an endless chunk size line, e.g. with a chunk extension
+          raw.SockSend('Transfer-Encoding: chunked'#13#10);
+          raw.SockSendFlush;
+          raw.SndLow('1;x=');
+        end
+        else
+        begin
+          // an endless header line
+          raw.SockSendFlush;
+          raw.SndLow('X-Long: ');
+        end;
+        raw.SndLow(RawUtf8OfChar('a', MaxHttpHeaderLineSize * 2));
+        cmd := '';
+        try
+          raw.SockRecvLn(cmd);
+        except
+          on ENetSock do
+            cmd := ''; // timeout: no response at all
+        end;
+        CheckUtf8(PosEx(' 400 ', cmd) > 0, 'longline chunked=% %',
+          [ord(chunked), cmd]);
+      finally
+        raw.Free;
+      end;
+    end;
+  finally
+    srv.Free;
   end;
 end;
 
