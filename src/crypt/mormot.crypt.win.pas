@@ -694,8 +694,10 @@ begin
   store := TWinCertStore.Create(fCertStore, Location);
   try
     if store.Handle = nil then
+    begin
       if Assigned(log) then
         log.Log(sllLastError, 'LoadStore: CertOpenStore failed', self)
+    end
     else
       while store.Next do
       begin
