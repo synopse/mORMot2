@@ -7282,6 +7282,52 @@ begin
           if status <> 0 then
             WaitDeleted(bodyfile, 'chunked limit');
         end;
+        // the same limit should apply to a chunked body buffered in memory,
+        // i.e. when OnBodyDownload returns nil (/mem) or is not set at all:
+        // ContentMaxSize was only set for a stream, so the body grew up to
+        // MaxHttpInMemSize whatever MaximumAllowedContentLength said
+        bodytype := 'application/dummy';
+        for n := 0 to 3 do
+        begin
+          if n = 2 then
+            srv.OnBodyDownload := nil; // no event at all
+          status := n and 1; // 0 = 39999 = over the limit, 1 = 40000 = within
+          srv.MaximumAllowedContentLength := 39999 + status;
+          raw := TCrtSocket.Open('127.0.0.1', srv.SockPort);
+          try
+            raw.CreateSockIn; // needed for proper SockRecvLn() below
+            raw.SockSend('POST /mem HTTP/1.1');
+            raw.SockSend(hosthead);
+            raw.SockSend('Transfer-Encoding: chunked');
+            raw.SockSend('Content-Type: application/dummy'#13#10); // last header
+            raw.SockSend('4e20');
+            raw.SockSend(mptext);
+            raw.SockSend('4e20');
+            raw.SockSend(mptext);
+            raw.SockSend('0');
+            raw.SockSendCRLF; // final void line
+            cmd := '';
+            try
+              raw.SockSendFlush;
+              raw.SockRecvLn(cmd);
+            except
+              on ENetSock do
+                cmd := ''; // rejected and closed before we did send it all
+            end;
+            if status = 0 then
+            begin
+              // without the limit, the body was accepted and answered 200
+              CheckUtf8(PosEx(' 200 ', cmd) = 0, 'mem chunked limit % %', [n, cmd]);
+              if cmd <> '' then
+                CheckUtf8(PosEx(' 413 ', cmd) > 0, 'mem chunked 413 % %', [n, cmd]);
+            end
+            else
+              CheckUtf8(PosEx(' 200 ', cmd) > 0, 'mem chunked in limit % %', [n, cmd]);
+          finally
+            raw.Free;
+          end;
+        end;
+        srv.OnBodyDownload := DoBodyDownload;
         srv.MaximumAllowedContentLength := 100000;
         raw := TCrtSocket.Open('127.0.0.1', srv.SockPort);
         try
