@@ -6605,7 +6605,7 @@ begin
         exit;
       end
       else
-        inc(s);
+        inc(t);
   finally
     fThreads.Safe.UnLock;
   end;
