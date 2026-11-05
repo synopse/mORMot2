@@ -431,10 +431,8 @@ begin
       aDataSet.AfterScroll := prev.AfterScroll;
       if Assigned(prev.AfterScroll) then
         prev.AfterScroll(aDataSet);
-      aDataSet.EnableControls;
     end;
     if aMode <> cdsNew then
-    begin
       for f := 0 to high(col) do
         with col[f] do
           if Field <> nil then
@@ -442,7 +440,8 @@ begin
             Field.ReadOnly := WasReadOnly;
             Field.OnChange := OnChange;
           end;
-    end;
+    if prev.Active then
+      aDataSet.EnableControls; // eventually re-enable
   end;
 end;
 
