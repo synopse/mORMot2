@@ -169,6 +169,9 @@ type
     procedure DoTWebSocketAsyncServer(Sender: TObject);
     /// validate that THttpAsyncServer shutdown does close all its connections
     procedure DoHttpAsyncShutdown(Sender: TObject);
+    /// validate that hsoHeadersUnfiltered applies to kept-alive requests
+    procedure DoHttpKeepAliveOptions(Sender: TObject);
+    function DoKeepAliveOptionsRequest(Ctxt: THttpServerRequestAbstract): cardinal;
   published
     {$ifdef USEWININET}
     /// validate lazy initialization of the http.sys WebSocket API
@@ -498,6 +501,7 @@ begin
   Run(DoTFTPServer, self, 'TFTPServer', true, false);
   Run(DoTWebSocketAsyncServer, self, 'WSBroadcast', true, false);
   Run(DoHttpAsyncShutdown, self, 'HttpAsyncShutdown', true, false);
+  Run(DoHttpKeepAliveOptions, self, 'HttpKeepAliveOptions', true, false);
   {$ifdef OSPOSIX}
   Run(DoUnixDomainSocket, self, 'UnixDomainSocket', true, false);
   {$endif OSPOSIX}
@@ -6964,6 +6968,61 @@ begin
         Post('/mem', false, false);
       finally
         raw.Free;
+      end;
+    finally
+      srv.Free;
+    end;
+  end;
+end;
+
+function TNetworkProtocols.DoKeepAliveOptionsRequest(
+  Ctxt: THttpServerRequestAbstract): cardinal;
+begin
+  // Content-Length: is only kept in InHeaders with hsoHeadersUnfiltered
+  // - the connection ID tells whether the requests did share a connection
+  if FindNameValue(pointer(Ctxt.InHeaders), 'CONTENT-LENGTH:') <> nil then
+    Ctxt.OutContent := Make(['unfiltered ', Ctxt.ConnectionID])
+  else
+    Ctxt.OutContent := Make(['filtered ', Ctxt.ConnectionID]);
+  Ctxt.OutContentType := TEXT_CONTENT_TYPE;
+  result := HTTP_SUCCESS;
+end;
+
+procedure TNetworkProtocols.DoHttpKeepAliveOptions(Sender: TObject);
+var
+  srv: THttpServerSocketGeneric;
+  clt: THttpClientSocket;
+  fam, i: integer;
+  first: RawUtf8;
+begin
+  for fam := 0 to 1 do
+  begin
+    // the request options computed from the server options should apply to
+    // every request of a connection, not only to its first one
+    if fam = 0 then
+      srv := THttpServer.Create('8885', nil, nil, 'keepopt', 2, 30000,
+        [hsoHeadersUnfiltered])
+    else
+      srv := THttpAsyncServer.Create('8886', nil, nil, 'keepopt', 2, 30000,
+        [hsoHeadersUnfiltered]);
+    try
+      srv.OnRequest := DoKeepAliveOptionsRequest;
+      srv.WaitStarted(10);
+      clt := THttpClientSocket.Open('127.0.0.1', srv.SockPort);
+      try
+        for i := 1 to 3 do // three requests on the same kept-alive connection
+        begin
+          CheckEqual(clt.Post('/opt', 'body', TEXT_CONTENT_TYPE, 30000), HTTP_SUCCESS,
+            'keepopt status');
+          CheckUtf8(IdemPChar(pointer(clt.Content), 'UNFILTERED '),
+            'keepopt fam=% #%: %', [fam, i, clt.Content]);
+          if i = 1 then
+            first := clt.Content
+          else
+            CheckEqual(clt.Content, first, 'keepopt same connection');
+        end;
+      finally
+        clt.Free;
       end;
     finally
       srv.Free;
