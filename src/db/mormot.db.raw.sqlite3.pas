@@ -969,7 +969,7 @@ const
   // SQLITE_DBCONFIG_ENABLE_LOAD_EXTENSION
   // - By default, our TSqlDataBase.DBOpen disables the collection
   // - Collection costs two RDTSC per VDBE opcode, making read queries 2-5 times
-  // slower: TSqlDataBase.DBOpen disables it, so call the followin to prepare
+  // slower - TSqlDataBase.DBOpen disables it, so call the following to trigger
   // statements profiling:
   // ! db_config(DB, SQLITE_DBCONFIG_STMT_SCANSTATUS, 1, nil)
   SQLITE_DBCONFIG_STMT_SCANSTATUS = 1018;

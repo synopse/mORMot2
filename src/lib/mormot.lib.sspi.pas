@@ -2257,10 +2257,11 @@ begin
          (info.ProviderType <> 0) or
          (info.Container = '') or
          (info.Provider = '') then
-        exit;
+        continue;
       // a chain may contain several certificates referencing the same key
       Join([info.Provider, #0, Info.Container], id);
-      if FindNonVoidRawUtf8(pointer(ids), pointer(id), length(id), length(ids)) >= 0 then
+      if (ids <> nil) and
+         (FindNonVoidRawUtf8(pointer(ids), pointer(id), length(id), length(ids)) >= 0) then
         continue;
       _addutf8(ids, id);
       prov := nil;
