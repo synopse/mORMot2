@@ -578,6 +578,7 @@ type
     fCustomOptions: TTextWriterOptions; // 16-bit
     fFlags: TTextWriterFlags;     // 8-bit
     fShortStringMax: byte;        // 8-bit = high(Dest) for twfDestIsShortString
+    fDestReserved: PtrInt;        // AppendReserved() for twfDestIsRawUtf8
     function GetTextLength: Int64;
     function GetStream: TStream;
       {$ifdef HASINLINE} inline; {$endif}
@@ -4641,7 +4642,8 @@ begin
   if twfDestIsRawUtf8 in fFlags then // fDest is a RawUtf8 not a TStream
   begin
     inc(fWrittenBytes, len);
-    Append(RawUtf8(fDest), data, len); // fDest may be nil = ''
+    AppendReserved(RawByteString(fDest), fDestReserved,
+      length(RawUtf8(fDest)), data, len); // fDest may be nil = ''
   end
   else if Assigned(fDest) then
     if twfDestIsShortString in fFlags then

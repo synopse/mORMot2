@@ -1669,6 +1669,29 @@ begin
   finally
     s1.Free;
   end;
+  // validate TRawByteStringStream.Write growth and its reserved size reset
+  s1 := TRawByteStringStream.Create;
+  try
+    for i := 0 to 999 do
+      s1.WriteBuffer(PByteArray(S)[i * 100], 100); // many small appends
+    CheckEqual(RawUtf8(TRawByteStringStream(s1).DataString), S, 'append');
+    s1.Size := 10; // may shrink in-place: reserved size should be reset
+    CheckEqual(s1.Position, 10);
+    s1.WriteBuffer(PByteArray(S)[10], length(S) - 10);
+    CheckEqual(RawUtf8(TRawByteStringStream(s1).DataString), S, 'setsize');
+    TRawByteStringStream(s1).Clear;
+    s1.WriteBuffer(pointer(S)^, 50000);
+    s1.WriteBuffer(PByteArray(S)[50000], 50000);
+    CheckEqual(RawUtf8(TRawByteStringStream(s1).DataString), S, 'clear');
+    D := copy(S, 1, 1000);
+    TRawByteStringStream(s1).DataString := D; // shared: no in-place write
+    s1.Position := 1000;
+    s1.WriteBuffer(PByteArray(S)[1000], length(S) - 1000);
+    CheckEqual(RawUtf8(TRawByteStringStream(s1).DataString), S, 'datastring');
+    CheckEqual(length(D), 1000, 'shared');
+  finally
+    s1.Free;
+  end;
   // basic integrity from two threads
   P := TPipeStream.Create(512);
   R := TPipeThread.Create({suspended=}true, nil, nil, TSynLog, 'rd');

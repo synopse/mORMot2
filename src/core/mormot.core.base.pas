@@ -904,6 +904,21 @@ function FastFindBinarySorted(P, Value: PByteArray; Size, R: PtrInt): PtrInt;
 // 265, 331, 413, 516, 645, 806, 1007, 1258, 1572, ...
 function NextGrow(capacity: integer): integer;
 
+/// write Len bytes at Text[Pos] and set length(Text) = Pos + Len, growing the
+// heap block by NextGrow() steps
+// - Reserved tracks the allocated size of Text: caller should reset it to 0
+// each time Text is modified or replaced by other means (a void or shared
+// Text is detected anyway)
+// - appending to big content with a plain SetLength() moves the whole buffer
+// at each call with the FPC RTL heap, i.e. O(n^2) - this function is O(n)
+// - only the FPC RTL heap reserves memory: FastMM, FPC_X64MM and FPC_LIBCMM
+// already amortize ReallocMem, so a plain SetLength() is done
+// - the first call on a void Text allocates the exact size, so content
+// written in a single call has no overhead; with the FPC RTL heap, up to 25%
+// of reserved bytes (12.5% above 8MB) remain allocated by Text once returned
+procedure AppendReserved(var Text: RawByteString; var Reserved: PtrInt;
+  Pos: PtrInt; Data: pointer; Len: PtrInt);
+
 /// compute the next power-of-two of a 32-bit number (using branchless code)
 // - e.g. NextPowerOfTwo(3) = NextPowerOfTwo(4) = 4
 function NextPowerOfTwo(number: cardinal): cardinal;
@@ -4713,8 +4728,10 @@ type
   TRawByteStringStream = class(TStreamWithPosition)
   protected
     fDataString: RawByteString;
+    fReserved: PtrInt; // allocated fDataString size, as set by AppendReserved()
     function GetSize: Int64; override;
     procedure SetSize(NewSize: Longint); override;
+    procedure SetDataString(const Value: RawByteString);
   public
     /// initialize the storage, optionally with some RawByteString content
     // - to be used for Read() from this memory buffer
@@ -4741,7 +4758,7 @@ type
     /// direct low-level access to the internal RawByteString storage
     // - if no RawByteString was supplied in Create(), result will be CP_UTF8
     property DataString: RawByteString
-      read fDataString write fDataString;
+      read fDataString write SetDataString;
   end;
 
   /// TStream pointing to some existing in-memory data, for instance UTF-8 text
@@ -5247,6 +5264,41 @@ begin
       {$endif CPUX86}
     until L > R;
   result := -1
+end;
+
+procedure AppendReserved(var Text: RawByteString; var Reserved: PtrInt;
+  Pos: PtrInt; Data: pointer; Len: PtrInt);
+var
+  needed: PtrInt;
+begin
+  needed := Pos + Len;
+  if pointer(Text) = nil then
+  begin
+    // first call: allocate the exact size, as a plain Append() would
+    Reserved := needed;
+    FastSetString(RawUtf8(Text), needed); // CP_UTF8
+  end
+  else if (needed > Reserved) or
+          (PStrCnt(PAnsiChar(pointer(Text)) - _STRCNT)^ <> 1) then
+  begin
+    Reserved := needed; // FastMM, FPC_X64MM and glibc amortize ReallocMem
+    {$ifdef FPC}
+    {$ifndef FPC_X64MM}
+    {$ifndef FPC_LIBCMM}
+    // the FPC RTL heap moves the whole block at each ReallocMem: reserve
+    // some space for the next calls
+    if needed < 1 shl 30 then
+      Reserved := NextGrow(needed)
+    else
+      inc(Reserved, 16 shl 20); // NextGrow() is 32-bit only
+    {$endif FPC_LIBCMM}
+    {$endif FPC_X64MM}
+    {$endif FPC}
+    SetLength(Text, Reserved); // keep the existing code page
+  end;
+  PStrLen(PAnsiChar(pointer(Text)) - _STRLEN)^ := needed;
+  MoveFast(Data^, PByteArray(Text)[Pos], Len);
+  PByteArray(Text)[needed] := 0; // ending #0 as expected for RawUtf8
 end;
 
 function NextGrow(capacity: integer): integer;
@@ -14556,8 +14608,15 @@ end;
 procedure TRawByteStringStream.SetSize(NewSize: Longint);
 begin
   SetLength(fDataString, NewSize);
+  fReserved := 0; // the memory block may have been reallocated in-place
   if fPosition > NewSize then
     fPosition := NewSize; // truncated
+end;
+
+procedure TRawByteStringStream.SetDataString(const Value: RawByteString);
+begin
+  fDataString := Value;
+  fReserved := 0; // a new string may reuse the address of a released block
 end;
 
 function TRawByteStringStream.Write(const Buffer; Count: Longint): Longint;
@@ -14570,13 +14629,15 @@ begin
   if fDataString = '' then // we know that fPosition=0 in this case
   begin
     FastSetString(RawUtf8(fDataString), @Buffer, result); // force CP_UTF8
+    fReserved := result; // e.g. after Clear or GetAsText
     fPosition := result;
     exit;
   end;
   needed := fPosition + result;
-  if needed > PStrLen(PAnsiChar(pointer(fDataString)) - _STRLEN)^ then
-    SetLength(fDataString, needed); // resize - keeping existing codepage
-  MoveFast(Buffer, PByteArray(fDataString)[fPosition], result);
+  if needed <= PStrLen(PAnsiChar(pointer(fDataString)) - _STRLEN)^ then
+    MoveFast(Buffer, PByteArray(fDataString)[fPosition], result) // overwrite
+  else
+    AppendReserved(fDataString, fReserved, fPosition, @Buffer, result);
   fPosition := needed;
 end;
 
