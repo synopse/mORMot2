@@ -2392,9 +2392,11 @@ var
   threadflags: ^TSynLogThreadInfoFlags;
 {$endif NOEXCEPTIONINTERCEPT}
 begin
+  {$ifndef DELPHIPOSIX}
   if skip < 0 then
     skip := 0;
   inc(skip); // ignore this very function
+  {$endif DELPHIPOSIX}
   {$ifndef NOEXCEPTIONINTERCEPT}
   // the manual stack walk makes speculative reads: intercepted exceptions
   // should not reach the logs during the process

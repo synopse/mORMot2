@@ -1083,7 +1083,7 @@ var
 begin
   lo := v.L;
   v.L := not lo + 1;
-  v.H := not v.H + ord(lo = 0);
+  v.H := not v.H + byte(lo = 0);
 end;
 
 function DivU128By1B(var u: THash128Rec): cardinal;
