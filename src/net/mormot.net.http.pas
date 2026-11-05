@@ -4195,7 +4195,14 @@ begin
   if PtrUInt(Len) < PtrUInt(st.Len) then  // detect st.Len=0 and/or Len=-1
     result := DoProcessParseLine(st, Len) // enough input: sub-function
   else
+  begin
+    // no #13 yet: this line can only grow, so reject it as soon as it is too
+    // long, as DoProcessParseLine() would do - instead of buffering it until
+    // its #13 arrives, i.e. maybe never
+    if st.Len > MaxHttpHeaderLineSize then
+      State := hrsErrorRejected;
     result := false;
+  end;
 end;
 
 function THttpRequestContext.DoProcessReadBody(var st: TProcessParseLine): boolean;
@@ -4255,8 +4262,10 @@ begin
             FastSetString(CommandUri, st.Line, st.LineLen); // never interned
             State := hrsGetHeaders;
           end
+          else if State = hrsErrorRejected then
+            break // notify the rejection now, not on the next input
           else
-            exit // not enough input or hrsErrorRejected
+            exit // not enough input
         else
           State := hrsErrorRejected; // reject e.g. TLS handshake = #22
       hrsGetHeaders:
@@ -4280,8 +4289,10 @@ begin
             else
               // ContentLength<=0 and not chunked = no body
               State := hrsWaitProcessing
+        else if State = hrsErrorRejected then
+          break // notify the rejection now, not on the next input
         else
-          exit; // not enough input or hrsErrorRejected
+          exit; // not enough input
       hrsGetBodyChunkedHexFirst,
       hrsGetBodyChunkedHexNext:
         if ProcessParseLine(st) then
@@ -4317,8 +4328,10 @@ begin
           else
             State := hrsGetBodyChunkedDataLastLine; // ends with last void chunk
         end
+        else if State = hrsErrorRejected then
+          break // notify the rejection now, not on the next input
         else
-          exit; // not enough input or hrsErrorRejected
+          exit; // not enough input
       hrsGetBodyChunkedData:
         begin
           if not DoProcessReadBody(st) then
@@ -4331,11 +4344,15 @@ begin
       hrsGetBodyChunkedDataVoidLine:
         if ProcessParseLine(st) then // chunks end with a void line
           State := hrsGetBodyChunkedHexNext
+        else if State = hrsErrorRejected then
+          break // notify the rejection now, not on the next input
         else
           exit; // not enough input
       hrsGetBodyChunkedDataLastLine:
         if ProcessParseLine(st) then // last chunk void line
           State := hrsWaitProcessing // notice: st.Len<>0 if pipelining
+        else if State = hrsErrorRejected then
+          break // notify the rejection now, not on the next input
         else
           exit; // not enough input
       hrsGetBodyContentLengthFirst,
