@@ -700,9 +700,8 @@ begin
     if store.Handle <> nil then
       while store.Next do
       begin
-        if not WinCertCtxtKeyProvider(store.Context, info) or
-           (info.ProviderType <> 0) then
-          continue; // no private key or a legacy CryptoAPI CSP
+        if WinCertCtxtKeyProvider(store.Context, info) and
+           (info.ProviderType = 0) then // no private key or legacy CryptoAPI CSP
         try
           cert := TCryptCertCng.Create(self, fLog, store.Context,
             Location, [wckCompareKey], @info);
@@ -789,7 +788,7 @@ begin
   inherited Create;
   fKeyOptions := aKeyOptions;
   fLogClass := aLogClass;
-  if aOwner <> nil then
+  if aOwner <> nil then // nil from LoadPkcs12()
   begin
     fCryptAlgo := aOwner;
     fCertStore := aOwner.fCertStore;
@@ -882,11 +881,13 @@ begin
     until key.Init(ctxt, opt) = NO_ERROR;
     key.Done;
     if not WinCertCtxtKeyProvider(ctxt, info) then
-    begin
-      log.Log(sllLastError,
-        '%.LoadPkcs12: WinCertCtxtKeyProvider failed %', [self], nil);
-      exit; // Schannel cannot reopen this key in its own process
-    end;
+      if ForSChannel then // CNG signing/decryption succeed without any provider
+      begin
+        if Assigned(log) then
+          log.Log(sllLastError,
+            '%.LoadPkcs12: WinCertCtxtKeyProvider failed %', [self], nil);
+        exit; // Schannel cannot reopen this key in its own process
+      end;
     if ForSChannel then
       if (info.ProviderType <> 0) or
          (info.Provider = '') or
@@ -898,7 +899,7 @@ begin
             [self, info.ProviderType, info.Provider, info.Container], nil);
         exit; // Schannel cannot reopen this key in its own process
       end;
-    cert := TCryptCertCng.Create(nil, aLog, ctxt, wcslCurrentUser, opt);
+    cert := TCryptCertCng.Create({owner=}nil, aLog, ctxt, wcslCurrentUser, opt);
     result := cert; // interface must own the instance even if a later step raises
     if ForSChannel then
     begin
@@ -906,12 +907,13 @@ begin
       cert.fKeyProvider := info.Provider;
       cert.fKeyContainer := info.Container;
       cert.fImportedStore := store; // transfer key cleanup ownership
-      store := nil;
+      store := nil; // no WinCertStoreDeleteImportedCngKeys() release below
     end;
     if Assigned(log) then
-      log.Log(sllDebug, '%.LoadPkcs12: loaded prov=% cont=% sn=% cn=% skid=%',
-        [self, info.Provider, info.Container,
-         result.GetSerial, result.GetSubject, result.GetSubjectKey]);
+      log.Log(sllDebug,
+        '%.LoadPkcs12: loaded prov=% cont=% sn=% cn=% skid=% sha1=%',
+        [self, info.Provider, info.Container, result.GetSerial,
+         result.GetSubject, result.GetSubjectKey, info.Hash]);
   finally
     if ctxt <> nil then
       CertFreeCertificateContext(ctxt);
