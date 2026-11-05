@@ -52,6 +52,7 @@ uses
   mormot.lib.sspi,
   mormot.lib.openssl11,
   mormot.crypt.openssl,
+  mormot.crypt.win,
   {$endif SCHANNEL_VERIFY}
   mormot.net.client,
   mormot.net.server,
@@ -7613,7 +7614,8 @@ type
 
   TSChannelTestFlags = set of (
    stfExpected, stfCallbacks, stfRejectEach, stfDisableTls13, stfOneWayTls,
-   stfOpenSslServer, stfEachInvalid, stfHugeContent, stfKeyUpdate);
+   stfOpenSslServer, stfEachInvalid, stfHugeContent, stfKeyUpdate,
+   stfSchannelClient);
 
   TRunCase = class
   public
@@ -7630,6 +7632,7 @@ type
     fHugeHash: cardinal;
     fHugeLength: integer;
     fClientError: RawUtf8;
+    fClientKeyReady: boolean;
     Body: RawByteString;
     ExpectedHash: cardinal;
     class procedure DoRunCase(Sender: TObject);
@@ -7639,7 +7642,7 @@ type
     procedure OnAfterCertificate(Socket: TNetSocket;
       Context: PNetTlsContext; TLS, Peer: pointer);
     function DoHugeRequest(Ctxt: THttpServerRequestAbstract): cardinal;
-    function OpenSslClient(const Port: RawUtf8;
+    function TlsClient(const Port: RawUtf8;
       const Certificate: ICryptCert): boolean;
   end;
 
@@ -7690,12 +7693,17 @@ begin
   Ctxt.OutContent := Make(['ok ', fHugeLength, ' ', CardinalToHexShort(fHugeHash)]);
 end;
 
-function TRunCase.OpenSslClient(const Port: RawUtf8;
+function TRunCase.TlsClient(const Port: RawUtf8;
   const Certificate: ICryptCert): boolean;
 var
   socket: TNetSocket;
   secure: INetTls;
   tls: TNetTlsContext;
+  clientCng: ICryptCertCng;
+  provider: TWinCertKeyProviderInfo;
+  providerHandle: NCRYPT_PROV_HANDLE;
+  importedKey: NCRYPT_KEY_HANDLE;
+  providerName, keyName: SynUnicode;
   keyfile: TFileName;
   request, reply: RawByteString;
   len, pos: integer;
@@ -7704,9 +7712,10 @@ var
   net: TNetResult;
   log: ISynLog;
 begin
-  TSynLog.EnterLocal(log, 'OpenSslClient %', [Port], self);
+  TSynLog.EnterLocal(log, 'TlsClient %', [Port], self);
   result := false;
   fClientError := '';
+  fClientKeyReady := false;
   socket := nil;
   keyfile := '';
   try
@@ -7715,16 +7724,39 @@ begin
     InitNetTlsContext(tls);
     tls.IgnoreCertificateErrors := true; // the test server identity is private
     tls.DisableTls13 := stfDisableTls13 in Flags;
-    if Certificate <> nil then
+    if stfSchannelClient in Flags then
     begin
-      tls.CertificateBin := Certificate.Save(cccCertOnly, '', ccfPem);
-      keyfile := MakeString([Test.WorkDir, 'schannel-mtls-client-', Port, '.pem']);
-      if not FileFromString(
-          Certificate.Save(cccPrivateKeyOnly, '', ccfPem), keyfile) then
-        raise ESynException.Create('unable to save the focused mTLS client key');
-      tls.PrivateKeyFile := StringToUtf8(keyfile);
+      if Certificate <> nil then
+      begin
+        // Use the production ICryptCertCng factory, not a test-only KSP owner.
+        clientCng := TCryptCertCng.LoadPkcs12(
+          Certificate.Save(cccCertWithPrivateKey, '3des=mtls-test', ccfBinary),
+          'mtls-test', TSynLog, {ForSchannel=}true);
+        if clientCng = nil then
+          raise ESynException.Create('Schannel client CNG PFX import failed');
+        if not WinCertCtxtKeyProvider(clientCng.WinContext, provider) or
+           (provider.ProviderType <> 0) or
+           (provider.Provider = '') or
+           (provider.Container = '') then
+          raise ESynException.Create('Schannel client needs a persisted CNG key');
+        fClientKeyReady := true;
+        tls.CertificateRaw := clientCng.WinContext;
+      end;
+      secure := NewSChannelNetTls;
+    end
+    else
+    begin
+      if Certificate <> nil then
+      begin
+        tls.CertificateBin := Certificate.Save(cccCertOnly, '', ccfPem);
+        keyfile := MakeString([Test.WorkDir, 'schannel-mtls-client-', Port, '.pem']);
+        if not FileFromString(
+            Certificate.Save(cccPrivateKeyOnly, '', ccfPem), keyfile) then
+          raise ESynException.Create('unable to save the focused mTLS client key');
+        tls.PrivateKeyFile := StringToUtf8(keyfile);
+      end;
+      secure := NewOpenSslNetTls;
     end;
-    secure := NewOpenSslNetTls;
     secure.AfterConnection(socket, tls, 'localhost');
     if stfHugeContent in Flags then
       request := Make([
@@ -7736,7 +7768,7 @@ begin
     else
       request := 'GET / HTTP/1.0'#13#10'Host: localhost'#13#10#13#10;
     if Assigned(log) then
-      log.Log(sllDebug, 'OpenSslClient: Afterconnection cipher=% request=%',
+      log.Log(sllDebug, 'TlsClient: Afterconnection cipher=% request=%',
         [tls.CipherName, request], self);
     len := length(request);
     net := secure.Send(pointer(request), len);
@@ -7780,7 +7812,7 @@ begin
     result := (net = nrOK) and
               (PosEx('HTTP/', reply) = 1);
     if Assigned(log) then
-      log.Log(sllDebug, 'OpenSslClient Receive: reply=%', [reply], self);
+      log.Log(sllDebug, 'TlsClient Receive: reply=%', [reply], self);
     if not result then
       fClientError := FormatUtf8('mTLS server closed the connection (% %)',
         [ToText(net)^, tls.LastError])
@@ -7793,7 +7825,29 @@ begin
     on E: Exception do
       Make([E, ': ', E.Message], fClientError);
   end;
-  secure := nil;
+  secure := nil; // release Schannel credentials before deleting CNG keys
+  tls.CertificateRaw := nil;
+  clientCng := nil; // deletes test-owned persisted CNG keys
+  if fClientKeyReady then
+  begin
+    // Verify that releasing ICryptCertCng removed its temporary named key.
+    providerName := Utf8ToSynUnicode(provider.Provider);
+    keyName := Utf8ToSynUnicode(provider.Container);
+    providerHandle := nil;
+    if Test.Check(NCrypt.OpenStorageProvider(providerHandle,
+         pointer(providerName), 0) = NO_ERROR, 'open CNG cleanup provider') then
+    try
+      importedKey := nil;
+      if NCrypt.OpenKey(providerHandle, importedKey, pointer(keyName), 0,
+           provider.Flags and NCRYPT_MACHINE_KEY_FLAG) = NO_ERROR then
+      begin
+        NCrypt.FreeObject(NCRYPT_HANDLE(importedKey));
+        Test.Check(false, 'Schannel client PFX key was not deleted');
+      end;
+    finally
+      NCrypt.FreeObject(NCRYPT_HANDLE(providerHandle));
+    end;
+  end;
   if socket <> nil then
     socket.ShutdownAndClose(false);
   if keyfile <> '' then
@@ -7913,7 +7967,15 @@ begin
       DeleteFile(cafile);
     if keyfile <> '' then
       DeleteFile(keyfile);
-    connected := OpenSslClient(Port, Client);
+    connected := TlsClient(Port, Client);
+    // Reject a false-positive negative test caused by client setup failure.
+    if (stfSchannelClient in Flags) and
+       (Client <> nil) then
+    begin
+      Test.Check(fClientKeyReady, 'Schannel client PFX was not imported');
+      Test.CheckUtf8(PosEx('SEC_E_NO_CREDENTIALS', fClientError) = 0,
+        'Schannel rejected the imported CNG key: %', [fClientError]);
+    end;
     if Assigned(log) then
       log.Log(sllDebug, 'Execute: connected=% fEachCount=% fAfterCount=% ' +
         'fAfterUseful=% fEachCount=% fEachInvalid=%',
@@ -8049,6 +8111,15 @@ begin
     // validate many TLS records (huge POST) over TLS 1.2
     RunCase('19003', sttFile, server, ca, valid,
       [stfExpected, stfHugeContent, stfDisableTls13]);
+    // Schannel client using a persisted, automatically cleaned-up PFX key
+    RunCase('19006', sttFile, server, ca, valid,
+      [stfExpected, stfSchannelClient, stfDisableTls13]);
+    // no client certificate: server must reject the request
+    RunCase('19007', sttFile, server, ca, nil,
+      [stfSchannelClient, stfDisableTls13]);
+    // an unknown client CA must not be accepted
+    RunCase('19008', sttFile, server, ca, unknown,
+      [stfSchannelClient, stfDisableTls13]);
     // same with TLS 1.3 where supported
     if OSVersion >= wEleven then
     begin
@@ -8094,6 +8165,13 @@ begin
     // trigger TLS 1.3 renegotiation from client side
     RunCase('19017', sttFile, server, ca, valid,
       [stfExpected, stfHugeContent, stfKeyUpdate]);
+    // Schannel client interoperability with an OpenSSL mTLS server
+    RunCase('19018', sttFile, server, ca, valid,
+      [stfExpected, stfOpenSslServer, stfSchannelClient, stfDisableTls13]);
+    RunCase('19019', sttFile, server, ca, nil,
+      [stfOpenSslServer, stfSchannelClient, stfDisableTls13]);
+    RunCase('19020', sttFile, server, ca, unknown,
+      [stfOpenSslServer, stfSchannelClient, stfDisableTls13]);
     RunWait;
   finally
     NewNetTls := previous;

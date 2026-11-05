@@ -1069,6 +1069,9 @@ type
     // - Schannel duplicates the context reference during AfterConnection or
     // AfterBind; the caller retains ownership of this borrowed input and
     // must keep it valid until the respective call returns
+    // - if an ICryptCertCng owns a temporary persisted PFX key (created by
+    // LoadPkcs12(ForSchannel=true)), keep that interface alive for the entire
+    // TLS session: a duplicated certificate context does not own its key file
     CertificateRaw: pointer;
     /// input: PEM file name containing a private key to be loaded
     // - (Delphi) warning: encoded as UTF-8 not UnicodeString/TFileName

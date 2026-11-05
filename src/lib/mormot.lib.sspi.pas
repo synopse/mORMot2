@@ -601,6 +601,8 @@ const
   PKCS12_INCLUDE_EXTENDED_PROPERTIES = $10;
   PKCS12_NO_PERSIST_KEY = $00008000;
 
+  CRYPT_USER_KEYSET = $00001000; // force PFX-imported keys into CurrentUser
+
   CRYPT_ACQUIRE_COMPARE_KEY_FLAG     = $00000004;
   CRYPT_ACQUIRE_SILENT_FLAG          = $00000040;
   CRYPT_ACQUIRE_ONLY_NCRYPT_KEY_FLAG = $00040000;
@@ -833,7 +835,7 @@ type
     /// the certificate algorithm name, as converted by WinCertAlgoName()
     // - typical values are 'md5RSA','sha1RSA','sha256RSA','sha384RSA','sha1ECC'
     AlgorithmName: RawUtf8;
-    /// the certificate binary SHA1 fingerprint of 20 bytes
+    /// the certificate binary SHA1 fingerprint as 40 hexadecimal chars
     Hash: RawUtf8;
     /// the certificate public key algorithm, as OID text
     // - e.g. ' 1.2.840.113549.1.1.1' for 'RSA' PublicKeyAlgorithmName
@@ -871,6 +873,8 @@ type
     Container: RawUtf8;
     /// CSP or CNG Key Storage Provider name
     Provider: RawUtf8;
+    /// binary SHA1 fingerprint as 40 hexadecimal chars
+    Hash: RawUtf8;
     /// provider type
     // - 0 identifies a CNG Key Storage Provider
     // - high(cardinal) means no provider information was available
@@ -2012,7 +2016,6 @@ var
   ku: byte;
   len: cardinal;
   sub: RawUtf8;
-  h: THash160;
   e: PCERT_EXTENSION;
   c: PWinCertExtension;
   key: TWinCertKeyProviderInfo;
@@ -2083,10 +2086,8 @@ begin
     Cert.KeyProviderType  := key.ProviderType;
     Cert.KeyProviderFlags := key.Flags;
     Cert.KeySpec          := key.KeySpec;
+    Cert.Hash             := key.Hash;
   end;
-  len := SizeOf(h); // 20 bytes of a SHA-1 hash
-  if CertGetCertificateContextProperty(Ctxt, CERT_HASH_PROP_ID, @h, len) then
-    ToHumanHex(Cert.Hash, @h, len);
   SetLength(Cert.Extension, nfo^.cExtension);
   c := pointer(Cert.Extension);
   e := nfo^.rgExtension;
@@ -2161,6 +2162,7 @@ var
   len: cardinal;
   p: PCRYPT_KEY_PROV_INFO;
   tmp: TSynTempBuffer;
+  h: THash160 absolute tmp;
 begin
   result := false;
   Finalize(Info);
@@ -2188,6 +2190,9 @@ begin
   finally
     tmp.Done;
   end;
+  len := SizeOf(h); // 20 bytes of a SHA-1 hash
+  if CertGetCertificateContextProperty(Ctxt, CERT_HASH_PROP_ID, @h, len) then
+    ToHumanHex(Info.Hash, @h, len);
 end;
 
 function WinCertStoreImportPfx(const Pfx: RawByteString; const Password: SpiUtf8;
