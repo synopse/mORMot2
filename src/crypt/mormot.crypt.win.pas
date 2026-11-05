@@ -608,10 +608,12 @@ begin
     try
       result := NCrypt.KeyDecryptPkcs1(key.Handle, Input, modlen,
         wckSilent in fCert.fKeyOptions);
-      log.Log(sllTrace, 'DecryptPkcs1: returns len=%', [length(result)], self);
+      if Assigned(log) then
+        log.Log(sllTrace, 'DecryptPkcs1: returns len=%', [length(result)], self);
     except
       on E: Exception do
-        log.Log(sllTrace, 'DecryptPkcs1 failed due to %', [E], self);
+        if Assigned(log) then
+          log.Log(sllTrace, 'DecryptPkcs1 failed due to %', [E], self);
     end;
   finally
     key.Done;
@@ -686,7 +688,8 @@ begin
   store := TWinCertStore.Create(fCertStore, Location);
   try
     if store.Handle = nil then
-      log.Log(sllLastError, 'LoadStore: CertOpenStore failed', self)
+      if Assigned(log) then
+        log.Log(sllLastError, 'LoadStore: CertOpenStore failed', self)
     else
       while store.Next do
       begin
@@ -701,8 +704,9 @@ begin
           fCert[n] := cert;
         except
           on E: Exception do
-            log.Log(sllTrace,
-              'LoadStore: ignored certificate due to %', [E], self);
+            if Assigned(log) then
+              log.Log(sllTrace,
+                'LoadStore: ignored certificate due to %', [E], self);
         end;
       end;
   finally
@@ -823,32 +827,37 @@ var
   log: ISynLog;
 begin
   result := nil;
-  if (Pfx = '') or
-     not NCrypt.Exists then
-    exit;
   if aLog = nil then
     aLog := TSynLog;
   aLog.EnterLocal(log, '%.LoadPkcs12 len=%', [self, length(Pfx)], nil);
+  if (Pfx = '') or
+     not NCrypt.Exists then
+  begin
+    if Assigned(log) then
+      log.Log(sllTrace, '%.LoadPkcs12: aborted', [self]);
+    exit;
+  end;
   ctxt := nil;
   err := WinCertStoreImportPfx(Pfx, Password, store, PKCS12_FLAGS);
-  if err <> NO_ERROR then
+  if err = NO_ERROR then
+    try
+      repeat
+        ctxt := CertEnumCertificatesInStore(store, {prevcert=}ctxt);
+        if ctxt = nil then
+          exit;
+      until key.Init(ctxt, PKCS12_WCK) = NO_ERROR; // valid private key
+      key.Done;
+      result := TCryptCertCng.Create(nil, aLog, ctxt, wcslCurrentUser, PKCS12_WCK);
+      if Assigned(log) then
+        log.Log(sllDebug, '%.LoadPkcs12: loaded %', [self, result.Instance]);
+    finally
+      if ctxt <> nil then
+        CertFreeCertificateContext(ctxt); // decrement refcount is needed
+      CertCloseStore(store, CERT_CLOSE_STORE_DEFAULT);
+    end
+  else if Assigned(log) then
     log.Log(sllTrace, '%.LoadPkcs12: PFXImportCertStore failed %',
       [self, OsErrorShort(err)], nil)
-  else
-  try
-    repeat
-      ctxt := CertEnumCertificatesInStore(store, {prevcert=}ctxt);
-      if ctxt = nil then
-        exit;
-    until key.Init(ctxt, PKCS12_WCK) = NO_ERROR; // valid private key
-    key.Done;
-    result := TCryptCertCng.Create(nil, aLog, ctxt, wcslCurrentUser, PKCS12_WCK);
-    log.Log(sllDebug, '%.LoadPkcs12: loaded %', [self, result.Instance]);
-  finally
-    if ctxt <> nil then
-      CertFreeCertificateContext(ctxt); // decrement refcount is needed
-    CertCloseStore(store, CERT_CLOSE_STORE_DEFAULT);
-  end;
 end;
 
 procedure TCryptCertCng.Clear;
