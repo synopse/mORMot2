@@ -5314,8 +5314,6 @@ begin
     include(fHttp.ResponseFlags, rfContentStreamNeedFree);
     if strm.InheritsFrom(TFileStreamEx) then
       fHttp.SetContentInputName(TFileStreamEx(strm));
-    // needed to track and limit the cumulated chunked body size
-    fHttp.ContentMaxSize := fServer.MaximumAllowedContentLength;
   end;
 end;
 
@@ -5372,6 +5370,10 @@ begin
       exit;
     end;
   end;
+  // track and limit the cumulated size of a chunked body - whatever the method
+  // and whether OnBodyDownload supplies a stream for it or not: the header
+  // check above only applies to an explicit Content-Length
+  fHttp.ContentMaxSize := fServer.MaximumAllowedContentLength;
   // OnBodyDownload callback can supply a stream for the body - even for HEAD
   if not (hfConnectionUpgrade in fHttp.HeaderFlags) and
      Assigned(fServer.fOnBodyDownload) then
