@@ -78,9 +78,9 @@ type
     /// the vectors decoding, including the compressed ones
     procedure Vectors;
     /// the TSqlDB* classes using a mock Quack server of the protocol version 1
-    procedure ClientV1;
+    procedure ClientVersion1;
     /// the TSqlDB* classes using a mock Quack server of the protocol version 3
-    procedure ClientV3;
+    procedure ClientVersion3;
     {$ifdef CPU64}
     /// the TSqlDB* classes using a real DuckDB Quack server
     procedure DuckDBServer;
@@ -1376,41 +1376,36 @@ begin
   end;
 end;
 
-procedure TTestQuack.ClientV1;
+procedure TTestQuack.ClientVersion1;
 begin
   ClientTest(1);
 end;
 
-procedure TTestQuack.ClientV3;
+procedure TTestQuack.ClientVersion3;
 begin
   ClientTest(3);
 end;
 
 procedure TTestQuack.ClientTest(MockVersion: cardinal);
 var
+  port: integer;
   props: TSqlDBQuackConnectionProperties;
-  conn: TSqlDBConnection;
-  rows: ISqlDBRows;
-  u: RawUtf8;
-  st: ISqlDBStatement;
-  i: integer;
-  bad: TSqlDBQuackConnectionProperties;
-begin
-  fMockVersion := MockVersion;
-  FreeAndNil(fMock);
-  fMock := THttpServer.Create(UInt32ToUtf8(8890 + MockVersion), nil, nil,
-    'quack', 2);
-  fMock.OnRequest := OnMockRequest;
-  fMock.WaitStarted;
-  props := TSqlDBQuackConnectionProperties.Create(
-    FormatUtf8('quack:127.0.0.1:%', [8890 + MockVersion]), '', '', 'secret');
-  try
+
+  procedure DoTests;
+  var
+    conn: TSqlDBConnection;
+    rows: ISqlDBRows;
+    st: ISqlDBStatement;
+    u: RawUtf8;
+    i: integer;
+    bad: TSqlDBQuackConnectionProperties;
+  begin
     CheckEqual(props.Host, '127.0.0.1');
     CheckEqual(props.Port, 8890 + integer(MockVersion));
     Check(not props.UseTls);
     // wrong token
     bad := TSqlDBQuackConnectionProperties.Create(
-      FormatUtf8('quack:127.0.0.1:%', [8890 + MockVersion]), '', '', 'wrong');
+      FormatUtf8('quack:127.0.0.1:%', [port]), '', '', 'wrong');
     try
       try
         bad.ThreadSafeConnection.Connect;
@@ -1553,9 +1548,24 @@ begin
     conn.StartTransaction;
     conn.Rollback;
     CheckEqual(fQueries[high(fQueries)], 'ROLLBACK');
-    // the server is notified when disconnecting
+  end;
+
+begin
+  fMockVersion := MockVersion;
+  FreeAndNil(fMock);
+  port := 8890 + MockVersion;
+  fMock := THttpServer.Create(UInt32ToUtf8(port), nil, nil,
+    'quack', 2);
+  fMock.OnRequest := OnMockRequest;
+  fMock.WaitStarted;
+  props := TSqlDBQuackConnectionProperties.Create(
+    FormatUtf8('quack:127.0.0.1:%', [port]), '', '', 'secret');
+  try
+    // local sub-procedure to ensure all interfaces are cleared
+    DoTests;
+    // validates that the server is notified when disconnecting
     fDisconnects := 0;
-    props.ClearConnectionPool;
+    props.ClearConnectionPool; // no dandling interface should remain now
     CheckEqual(fDisconnects, 1, 'disconnect');
   finally
     props.Free;
