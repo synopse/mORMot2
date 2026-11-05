@@ -1220,7 +1220,7 @@ type
   protected
     fX509: TX509;
     // may be nil or a TCryptPrivateKeyRsa, TCryptPrivateKeyEcc,
-    // TCryptPrivateKeyOpenSsl or a TCryptPrivateKeyPkcs11
+    // TCryptPrivateKeyOpenSsl, TCryptPrivateKeyPkcs11 or TCryptPrivateKeyCng
     fPrivateKey: ICryptPrivateKey;
     // overriden to use a faster search with no temporary memory allocation
     class procedure InternalFind(Cert: PICryptCert; const Value: RawByteString;

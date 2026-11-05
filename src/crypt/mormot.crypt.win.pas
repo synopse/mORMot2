@@ -711,8 +711,8 @@ begin
         except
           on E: Exception do
             if Assigned(log) then
-              log.Log(sllTrace,
-                'LoadStore: ignored certificate due to %', [E], self);
+              log.Log(sllTrace, 'LoadStore: ignored % at % certificate due to %',
+                [info.Container, info.Provider, E], self);
         end;
       end
     else if Assigned(log) then
@@ -854,11 +854,12 @@ begin
     aLog := TSynLog;
   aLog.EnterLocal(log, '%.LoadPkcs12 len=% SChannel=%',
     [self, length(Pfx), ord(ForSChannel)], nil);
-  if (Pfx = '') or
-     not NCrypt.Exists then
+  if Pfx = '' then
+    exit;
+  if not NCrypt.Exists then
   begin
-    if Assigned(log) then
-      log.Log(sllTrace, '%.LoadPkcs12: aborted', [self]);
+    aLog.Add.Log(sllWarning, '%.LoadPkcs12: Windows CNG is not available on %',
+      [OSVersionShort]);
     exit;
   end;
   store := nil;
@@ -872,7 +873,7 @@ begin
     exit;
   end;
   try
-    // search for the first key in store
+    // search for the first key in this PFX
     opt := PKCS12_WCK[ForSChannel];
     repeat
       ctxt := CertEnumCertificatesInStore(store, {prevcert=}ctxt);
@@ -885,7 +886,7 @@ begin
       begin
         if Assigned(log) then
           log.Log(sllLastError,
-            '%.LoadPkcs12: WinCertCtxtKeyProvider failed %', [self], nil);
+            '%.LoadPkcs12: WinCertCtxtKeyProvider failed', [self], nil);
         exit; // Schannel cannot reopen this key in its own process
       end;
     if ForSChannel then
