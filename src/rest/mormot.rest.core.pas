@@ -2491,7 +2491,7 @@ end;
 function TRest.OneFieldValue(Table: TOrmClass; const FieldName: RawUtf8;
   const WhereClauseFmt: RawUtf8; const Args, Bounds: array of const): RawUtf8;
 begin
-  result := fOrm.OneFieldValue(Table, FieldName, WhereClauseFmt);
+  result := fOrm.OneFieldValue(Table, FieldName, WhereClauseFmt, Args, Bounds);
 end;
 
 function TRest.OneFieldValue(Table: TOrmClass; const FieldName: RawUtf8;
