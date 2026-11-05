@@ -2256,7 +2256,7 @@ type
     fAccept: boolean;
     fAcceptFirst: boolean;
     fCredAcquired: boolean; // an outbound SSPI credential is owned by this client
-    fClientCertificate: PCCERT_CONTEXT; // owned duplicate for outbound mTLS
+    fClientCertificate: mormot.core.os.security.PCCERT_CONTEXT; // owned duplicate for outbound mTLS
     fServerContext: TSChannelServerContext;
     fServerContextRef: IInterface; // thread-safe shared sever-side credentials
     fAcceptContext: TNetTlsContext; // private mTLS policy for SEC_I_RENEGOTIATE
