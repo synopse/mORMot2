@@ -5201,7 +5201,7 @@ begin
   if Http.ContentStream = nil then
     GetBodyInMemory // default in-memory download into Http.Content
   else
-    GetBodyStream; // use Http.ContentStream from OnBodyDownload event
+    GetBodyStream;  // use Http.ContentStream from OnBodyDownload event
 end;
 
 procedure THttpServerSocket.TaskProcess(aCaller: TSynThreadPoolWorkThread);

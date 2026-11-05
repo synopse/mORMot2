@@ -10132,7 +10132,7 @@ procedure TOrmModel.SqlFromSelectWhere(const Tables: array of TOrmClass;
           Append(Sql, ',', p[i].Sql.TableSimpleFields[true, true]);
       end
     else
-      Join(['SELECT ', SqlSelect]);
+      Join(['SELECT ', SqlSelect], Sql);
     Append(Sql, ' FROM ', p[0].Props.SqlTableName);
     for i := 1 to high(Tables) do
       Append(Sql, ',', p[i].Props.SqlTableName);
