@@ -3761,10 +3761,11 @@ begin
     for i := 0 to n do
       r[i] := PoolRules[ndx[i]];
     for i := 0 to n - 1 do
-      if p[i].IpMaxLE <= p[i + 1].IpMinLE then
+      if p[i].IpMaxLE >= p[i + 1].IpMinLE then
         InvalidRange('overlap in max', p[i].IpMax);
     Pools := p;
     PoolRules := r;
+    Main.SubPools := pointer(p);
   end;
   // log the scope settings and the computed sub-network context
   if Assigned(log) then
@@ -6783,14 +6784,14 @@ begin
     begin
       // bind to all interfaces matching scopes by default
       mac := pointer(all);
-      n := length(all);
-      repeat
+      for n := 1 to length(all) do
+      begin
         ds := GetScope(mac^.IP);
         if ds <> nil then
           EnsureBound(ds, mac);
         inc(mac);
-        dec(n);
-      until n = 0;
+      end;
+      // no interface yet is just ignored for Bind('') - should retry later
     end
     else
     begin

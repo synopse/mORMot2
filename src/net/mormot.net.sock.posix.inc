@@ -852,11 +852,11 @@ begin
   iov.iov_base := Buf;
   iov.iov_len := len;
   repeat
-    msg.msg_name := @addr;
-    msg.msg_namelen := SizeOf(addr);
-    msg.msg_iov := @iov;
-    msg.msg_iovlen := 1;
-    msg.msg_control := @info;
+    msg.msg_name       := @addr;
+    msg.msg_namelen    := SizeOf(addr);
+    msg.msg_iov        := @iov;
+    msg.msg_iovlen     := 1;
+    msg.msg_control    := @info;
     msg.msg_controllen := SizeOf(info);
     msg.msg_flags := 0;
     result := recvmsg(TSocket(@self), msg, 0);
@@ -889,17 +889,17 @@ begin
     iov.iov_base := Buf;
     iov.iov_len := len;
     FillCharFast(info, SizeOf(info), 0); // ipi_spec_dst=0 for the interface IP
-    info.cmsg_len := PKTINFO_LEN;
-    info.cmsg_level := IPPROTO_IP;
-    info.cmsg_type := IP_PKTINFO;
-    info.ipi_ifindex := ifindex;
-    msg.msg_name := @addr;
-    msg.msg_namelen := addr.Size;
-    msg.msg_iov := @iov;
-    msg.msg_iovlen := 1;
-    msg.msg_control := @info;
+    info.cmsg_len      := PKTINFO_LEN;
+    info.cmsg_level    := IPPROTO_IP;
+    info.cmsg_type     := IP_PKTINFO;
+    info.ipi_ifindex   := ifindex;
+    msg.msg_name       := @addr;
+    msg.msg_namelen    := addr.Size;
+    msg.msg_iov        := @iov;
+    msg.msg_iovlen     := 1;
+    msg.msg_control    := @info;
     msg.msg_controllen := SizeOf(info);
-    msg.msg_flags := 0;
+    msg.msg_flags      := 0;
     repeat
       sent := sendmsg(TSocket(@self), msg, 0);
     until (sent >= 0) or
