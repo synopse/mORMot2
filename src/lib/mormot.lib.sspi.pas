@@ -1104,7 +1104,7 @@ function NetUserAdd(servername: PWideChar; level: cardinal;
 function NetUserEnum(servername: PWideChar; level, filter: cardinal;
   var bufptr: pointer; prefmaxlen: cardinal;
   entriesread, totalentries: PCardinal;
-  resumehandle: PPCardinal = nil): TNetApiStatus; stdcall;
+  resumehandle: PCardinal = nil): TNetApiStatus; stdcall;
 
 function NetUserGetInfo(servername, username: PWideChar; level: cardinal;
   var bufptr: pointer): TNetApiStatus; stdcall;
@@ -1137,7 +1137,7 @@ function NetUserChangePassword(domainname, username,
 
 function NetGroupEnum(servername: PWideChar; level: cardinal;
   var bufptr: pointer; prefmaxlen: cardinal; entriesread, totalentries: PCardinal;
-  resume_handle: PPCardinal = nil): TNetApiStatus; stdcall;
+  resume_handle: PPtrUInt = nil): TNetApiStatus; stdcall;
 
 
 function NetLocalGroupAdd(servername: PWideChar; level: cardinal;
@@ -1148,7 +1148,7 @@ function NetLocalGroupAddMember(servername, groupname: PWideChar;
 
 function NetLocalGroupEnum(servername: PWideChar; level: cardinal;
   var bufptr: pointer; prefmaxlen: cardinal; entriesread, totalentries: PCardinal;
-  resumehandle: PPCardinal = nil): TNetApiStatus; stdcall;
+  resumehandle: PPtrUInt = nil): TNetApiStatus; stdcall;
 
 function NetLocalGroupGetInfo(servername, groupname: PWideChar;
   level: cardinal; var bufptr: pointer): TNetApiStatus; stdcall;
@@ -1164,7 +1164,7 @@ function NetLocalGroupDelMember(servername: PWideChar;
 
 function NetLocalGroupGetMembers(servername, localgroupname: PWideChar;
   level: cardinal; var bufptr: pointer; prefmaxlen: cardinal;
-  entriesread, totalentries: PCardinal; resumehandle: PPCardinal): TNetApiStatus; stdcall;
+  entriesread, totalentries: PCardinal; resumehandle: PPtrUInt): TNetApiStatus; stdcall;
 
 function NetLocalGroupSetMembers(servername, groupname: PWideChar;
   level: cardinal; buf: pointer; totalentries: cardinal): TNetApiStatus; stdcall;
