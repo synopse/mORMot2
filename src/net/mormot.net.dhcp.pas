@@ -5891,16 +5891,14 @@ begin
     fLog.Add.RawLog(sllClient, OnLogFrame, @State);
 end;
 
-function TDhcpProcess.RetrieveFrameIP(
-  var State: TDhcpState; Lease: PDhcpLease): boolean;
+function TDhcpProcess.RetrieveFrameIP(var State: TDhcpState;
+  Lease: PDhcpLease): boolean;
 var
   ip4: TNetIP4;
 begin
   // from DISCOVER or REQUEST to validate option 50 hint (not authoritative)
   result := false;
-  ip4 := DhcpIP4(@State.Recv, State.RecvLens[doRequestedAddress]); // opt 50
-  if ip4 = 0 then
-    exit;
+  // caller set State.Ip4 from doRequestedAddress value and ensured it is <> 0
   if (Lease = nil) or
      (Lease^.IP4 <> ip4) then
     if (not State.Scope^.SubNet.Match(ip4)) or
@@ -6238,7 +6236,9 @@ begin
            (p^.State = lsReserved) then // reserved = client refused this IP
         begin
           // first time seen (most common case), or renewal
-          if not RetrieveFrameIP(State, p) then // IP from option 50
+          State.Ip4 := DhcpIP4(@State.Recv, State.RecvLens[doRequestedAddress]);
+          if (State.Ip4 = 0) or
+             not RetrieveFrameIP(State, p) then // IP from option 50
           begin
             State.Ip4 := State.Pool^.NextIp4; // guess a free IP from pool
             if State.Ip4 = 0 then
@@ -6279,6 +6279,7 @@ begin
     dmtRequest:
       begin
         inc(State.Scope^.Metrics.Current[dsmRequest]);
+        State.Ip4 := DhcpIP4(@State.Recv, State.RecvLens[doRequestedAddress]);
         ip := DhcpIP4(@State.Recv, State.RecvLens[doServerIdentifier]);
         if (ip <> 0) and
            (ip <> State.Scope^.ServerIdentifier) then
@@ -6301,7 +6302,6 @@ begin
           if p^.State = lsStatic then
           begin
             // check option 50 requested IP on SELECTING or INIT-REBOOT
-            State.Ip4 := DhcpIP4(@State.Recv, State.RecvLens[doRequestedAddress]);
             if (State.Ip4 <> 0) and
                (State.Ip4 <> p^.IP4) then
             begin
@@ -6312,7 +6312,8 @@ begin
           end;
           inc(State.Scope^.Metrics.Current[dsmLeaseRenewed]);
         end
-        else if RetrieveFrameIP(State, p) then // IP from option 50
+        else if (State.Ip4 <> 0) and
+                RetrieveFrameIP(State, p) then // IP from option 50
         begin
           // no lease, but Option 50 = INIT-REBOOT
           if p = nil then

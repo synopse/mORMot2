@@ -1125,7 +1125,6 @@ begin
     finally
       fReconnectThreads.Safe.UnLock;
     end;
-
   except
     on E: Exception do
       result := E.Message;

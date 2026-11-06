@@ -8021,7 +8021,7 @@ begin
         if clientCng = nil then
           raise ESynException.Create('Schannel client CNG PFX import failed');
         if not WinCertCtxtKeyProvider(clientCng.WinContext, provider) or
-           (provider.ProviderType <> 0) or
+           (provider.ProviderType <> 0) or // LoadPKCS12() is CNG-only
            (provider.Provider = '') or
            (provider.Container = '') then
           raise ESynException.Create('Schannel client needs a persisted CNG key');

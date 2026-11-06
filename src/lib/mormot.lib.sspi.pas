@@ -875,9 +875,10 @@ type
     Provider: RawUtf8;
     /// binary SHA1 fingerprint as 40 hexadecimal chars
     Hash: RawUtf8;
-    /// provider type
-    // - 0 identifies a CNG Key Storage Provider
+    /// provider type as legacy CryptoAPI CSP identifier
+    // - equals 0 for CNG Key Storage as identified by Provider/Container fields
     // - high(cardinal) means no provider information was available
+    // - any other value (e.g. 1 or 24) identifies a legacy CryptoAPI provider
     ProviderType: cardinal;
     /// CRYPT_KEY_PROV_INFO.dwFlags
     Flags: cardinal;
@@ -2254,7 +2255,7 @@ begin
       if ctxt = nil then
         break;
       if not WinCertCtxtKeyProvider(ctxt, info) or
-         (info.ProviderType <> 0) or
+         (info.ProviderType <> 0) or // LoadPKCS12() is CNG-only
          (info.Container = '') or
          (info.Provider = '') then
         continue;
