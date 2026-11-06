@@ -1243,7 +1243,7 @@ function MsiOpenProductW(szProduct: PWideChar; out hProduct: TMsiHandle): cardin
 function MsiGetProductPropertyW(hProduct: TMsiHandle; szProperty, lpValueBuf: PWideChar;
   pcchValueBuf: PCardinal): cardinal; stdcall;
 function MsiSetInternalUI(dwUILevel: cardinal; var phWnd: HWND): cardinal; stdcall;
-function MsiEnumProductA(iProductIndex: cardinal; lpProductBuf: PAnsiChar): cardinal; stdcall;
+function MsiEnumProductsA(iProductIndex: cardinal; lpProductBuf: PAnsiChar): cardinal; stdcall;
 function MsiOpenDatabaseW(DatabasePath, Persist: PWideChar;
   out hDb: TMsiHandle): cardinal; stdcall;
 function MsiDatabaseOpenViewW(hdb: TMsiHandle; query: PWideChar;
@@ -2786,7 +2786,7 @@ const
 function MsiOpenProductW;        external msidll;
 function MsiGetProductPropertyW; external msidll;
 function MsiSetInternalUI;       external msidll;
-function MsiEnumProductA;        external msidll;
+function MsiEnumProductsA;       external msidll;
 function MsiOpenDatabaseW;       external msidll;
 function MsiDatabaseOpenViewW;   external msidll;
 function MsiViewExecute;         external msidll;
