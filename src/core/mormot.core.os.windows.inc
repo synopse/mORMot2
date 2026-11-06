@@ -5075,46 +5075,454 @@ end;
 
 { TExternalProcess }
 
-// NOT IMPLEMENTED YET on Windows - see https://github.com/synopse/mORMot2/issues/648
+const
+  PROC_THREAD_ATTRIBUTE_HANDLE_LIST = $00020002;
+  EXTENDED_STARTUPINFO_PRESENT      = $00080000;
+
+type
+  TStartupInfoEx = record
+    StartupInfo: TStartupInfo;
+    lpAttributeList: pointer;
+  end;
+
+function TerminateJobObject(hJob: THandle; uExitCode: cardinal): BOOL;
+  stdcall; external kernel32;
+
+var
+  // Vista+ API to restrict the handles inherited by a new process
+  InitializeProcThreadAttributeList: function(lpAttributeList: pointer;
+    dwAttributeCount, dwFlags: DWord; var lpSize: PtrUInt): BOOL; stdcall;
+  UpdateProcThreadAttribute: function(lpAttributeList: pointer; dwFlags: DWord;
+    Attribute: PtrUInt; lpValue: pointer; cbSize: PtrUInt;
+    lpPreviousValue, lpReturnSize: pointer): BOOL; stdcall;
+  DeleteProcThreadAttributeList: procedure(lpAttributeList: pointer); stdcall;
+  ProcThreadAttributeChecked: boolean;
+  // serialize the inheritable handles window if there is no such API
+  ExternalProcessSafe: TLightLock;
+
+function HasProcThreadAttribute: boolean;
+var
+  k: THandle;
+begin
+  if not ProcThreadAttributeChecked then
+  begin
+    k := GetModuleHandle(kernel32);
+    @InitializeProcThreadAttributeList :=
+      GetProcAddress(k, 'InitializeProcThreadAttributeList');
+    @UpdateProcThreadAttribute := GetProcAddress(k, 'UpdateProcThreadAttribute');
+    @DeleteProcThreadAttributeList :=
+      GetProcAddress(k, 'DeleteProcThreadAttributeList');
+    ProcThreadAttributeChecked := true;
+  end;
+  result := Assigned(InitializeProcThreadAttributeList) and
+            Assigned(UpdateProcThreadAttribute) and
+            Assigned(DeleteProcThreadAttributeList);
+end;
+
+procedure CloseValid(var h: THandle);
+begin
+  if h = 0 then
+    exit;
+  CloseHandle(h);
+  h := 0;
+end;
+
+// a duplicated inheritable handle of the current stdin/stdout/stderr, or 0
+function DuplicateStdHandle(std: cardinal): THandle;
+var
+  h: THandle;
+begin
+  result := 0;
+  h := GetStdHandle(std);
+  if (h = 0) or
+     (h = INVALID_HANDLE_VALUE) or
+     not DuplicateHandle(GetCurrentProcess, h, GetCurrentProcess, @result,
+       0, {inherit=}true, DUPLICATE_SAME_ACCESS) then
+    result := 0;
+end;
+
+// append an argument to a command line, quoted as CommandLineToArgvW() expects
+procedure AppendArg(var line: TFileName; const arg: TFileName);
+var
+  i, bs: PtrInt;
+  c: char;
+begin
+  if line <> '' then
+    line := line + ' ';
+  if (arg <> '') and
+     (Pos(' ', arg) = 0) and
+     (Pos(#9, arg) = 0) and
+     (Pos('"', arg) = 0) then
+  begin
+    line := line + arg;
+    exit;
+  end;
+  line := line + '"';
+  bs := 0;
+  for i := 1 to length(arg) do
+  begin
+    c := arg[i];
+    if c = '\' then
+    begin
+      inc(bs); // backslashes are only escaped before a double quote
+      continue;
+    end;
+    if c = '"' then
+      bs := bs * 2 + 1; // escape the backslashes and the double quote
+    line := line + StringOfChar('\', bs) + c;
+    bs := 0;
+  end;
+  line := line + StringOfChar('\', bs * 2) + '"'; // before the final quote
+end;
 
 function TExternalProcess.DoStart(const cmd: TRunArg; const args: array of TRunArg;
   const env: TRunArg; const wrkdir: TFileName; options: TRunOptions;
   withthread: boolean): boolean;
+var
+  si: TStartupInfoEx;
+  pi: TProcessInformation;
+  inr, inw, outr, outw, errr, errw: THandle;
+  list: array[0..2] of THandle;
+  n, i: PtrInt;
+  attrsize: PtrUInt;
+  flags: cardinal;
+  line: TFileName;
+  wcmd, wenv, wpath: SynUnicode;
+  created, locked: boolean;
+
+  procedure AddToList(h: THandle);
+  var
+    j: PtrInt;
+  begin
+    if h = 0 then
+      exit;
+    for j := 0 to n - 1 do
+      if list[j] = h then
+        exit; // e.g. stderr merged into stdout
+    SetHandleInformation(h, HANDLE_FLAG_INHERIT, HANDLE_FLAG_INHERIT);
+    list[n] := h;
+    inc(n);
+  end;
+
+  procedure CloseChildHandles;
+  begin
+    CloseValid(inr);
+    if errw = outw then
+      errw := 0; // stderr merged into stdout
+    CloseValid(outw);
+    CloseValid(errw);
+  end;
+
 begin
-  fState := epsFailed;
   result := false;
+  fState := epsFailed; // until proven otherwise
+  fOptions := options;
+  // prepare the CreateProcessW() parameters
+  if cmd <> '' then
+    line := cmd
+  else
+    for i := 0 to high(args) do
+      AppendArg(line, args[i]);
+  wcmd := SynUnicode(line);
+  UniqueString(wcmd); // CreateProcessW() modifies wcmd buffer in-place
+  wpath := SynUnicode(wrkdir); // '' = inherit the current folder, as on POSIX
+  if env <> '' then
+  begin
+    wenv := SynUnicode(env);
+    if roEnvAddExisting in options then
+    begin
+      if _SystemEnvUnicode = '' then
+        _GetSystemEnv;
+      wenv := _SystemEnvUnicode + wenv;
+    end
+    else
+      UniqueString(wenv);
+  end;
+  // create all the handles as not inheritable
+  inr := 0;
+  inw := 0;
+  outr := 0;
+  outw := 0;
+  errr := 0;
+  errw := 0;
+  if not CreatePipe(outr, outw, nil, 0) then
+    exit;
+  if roStdinPipe in options then
+    CreatePipe(inr, inw, nil, 0)
+  else if roStdinNull in options then
+    inr := CreateFileW('NUL', GENERIC_READ, FILE_SHARE_READ or FILE_SHARE_WRITE,
+      nil, OPEN_EXISTING, 0, 0)
+  else
+    inr := DuplicateStdHandle(STD_INPUT_HANDLE);
+  if inr = INVALID_HANDLE_VALUE then
+    inr := 0;
+  if roStderrPipe in options then
+    CreatePipe(errr, errw, nil, 0)
+  else if roStderrMerge in options then
+    errw := outw
+  else
+    errw := DuplicateStdHandle(STD_ERROR_HANDLE);
+  if ((roStdinPipe in options) and
+      (inw = 0)) or
+     ((roStderrPipe in options) and
+      (errr = 0)) then
+  begin
+    CloseChildHandles;
+    CloseValid(inw);
+    CloseValid(outr);
+    CloseValid(errr);
+    exit;
+  end;
+  if withthread then
+    fWakeUpRead := CreateEvent(nil, false, false, nil);
+  // https://docs.microsoft.com/en-en/windows/desktop/ProcThread/process-creation-flags
+  // - own process group to send CTRL_BREAK, suspended until assigned to its job
+  flags := CREATE_UNICODE_ENVIRONMENT or CREATE_DEFAULT_ERROR_MODE or
+           CREATE_NEW_PROCESS_GROUP or CREATE_SUSPENDED;
+  if not (roWinNoProcessDetach in options) then
+    flags := flags or DETACHED_PROCESS;
+  if roWinNewConsole in options then
+    flags := (flags or CREATE_NEW_CONSOLE) and not DETACHED_PROCESS;
+  if roWinJobCloseChildren in options then
+    flags := flags or CREATE_BREAKAWAY_FROM_JOB;
+  FillCharFast(si, SizeOf(si), 0);
+  si.StartupInfo.cb := SizeOf(si.StartupInfo);
+  si.StartupInfo.dwFlags := STARTF_USESTDHANDLES or STARTF_USESHOWWINDOW;
+  si.StartupInfo.wShowWindow := SW_HIDE;
+  si.StartupInfo.hStdInput := inr;
+  si.StartupInfo.hStdOutput := outw;
+  si.StartupInfo.hStdError := errw;
+  // the child should inherit its own handles, and nothing else
+  n := 0;
+  AddToList(inr);
+  AddToList(outw);
+  AddToList(errw);
+  locked := not HasProcThreadAttribute;
+  if not locked then
+  begin
+    attrsize := 0;
+    InitializeProcThreadAttributeList(nil, 1, 0, attrsize);
+    GetMem(si.lpAttributeList, attrsize);
+    if InitializeProcThreadAttributeList(si.lpAttributeList, 1, 0, attrsize) then
+      if UpdateProcThreadAttribute(si.lpAttributeList, 0,
+           PROC_THREAD_ATTRIBUTE_HANDLE_LIST, @list, n * SizeOf(THandle),
+           nil, nil) then
+      begin
+        si.StartupInfo.cb := SizeOf(si);
+        flags := flags or EXTENDED_STARTUPINFO_PRESENT;
+      end
+      else
+        DeleteProcThreadAttributeList(si.lpAttributeList);
+    if flags and EXTENDED_STARTUPINFO_PRESENT = 0 then
+    begin
+      FreeMem(si.lpAttributeList);
+      si.lpAttributeList := nil;
+      locked := true;
+    end;
+  end;
+  if locked then
+    ExternalProcessSafe.Lock; // no concurrent CreateProcessW() from this class
+  try
+    created := CreateProcessW(nil, pointer(wcmd), nil, nil, {inherit=}true,
+      flags, pointer({%H-}wenv), pointer(wpath), si.StartupInfo, pi);
+    if (not created) and
+       (flags and CREATE_BREAKAWAY_FROM_JOB <> 0) and
+       (GetLastError = ERROR_ACCESS_DENIED) then
+    begin
+      // our own job forbids breakaway: keep the child in it - since Windows 8,
+      // jobs nest, so the job created below still applies
+      flags := flags and not CREATE_BREAKAWAY_FROM_JOB;
+      wcmd := SynUnicode(line);
+      UniqueString(wcmd);
+      created := CreateProcessW(nil, pointer(wcmd), nil, nil, true,
+        flags, pointer(wenv), pointer(wpath), si.StartupInfo, pi);
+    end;
+    CloseChildHandles;
+  finally
+    if locked then
+      ExternalProcessSafe.UnLock;
+    if si.lpAttributeList <> nil then
+    begin
+      DeleteProcThreadAttributeList(si.lpAttributeList);
+      FreeMem(si.lpAttributeList);
+    end;
+  end;
+  if not created then
+  begin
+    CloseValid(inw);
+    CloseValid(outr);
+    CloseValid(errr);
+    CloseValid(fWakeUpRead);
+    exit;
+  end;
+  // put the process in its own job, to terminate it with its children
+  if roWinJobCloseChildren in options then
+    fJob := CreateJobToClose(pi.dwProcessId, 'ExternalProcess',
+      {allowSilentBreakaway=}true)
+  else
+    fJob := CreateJobObjectA(nil, nil);
+  if (fJob <> 0) and
+     not AssignProcessToJobObject(fJob, pi.hProcess) then
+    CloseValid(fJob); // e.g. before Windows 8 in a job with no breakaway
+  ResumeThread(pi.hThread);
+  CloseHandle(pi.hThread);
+  fProcess := pi.hProcess;
+  fPid := pi.dwProcessId;
+  fStdin := inw;
+  fStdout := outr;
+  fStderr := errr;
+  fState := epsRunning;
+  result := true;
 end;
 
 function TExternalProcess.DoReap: boolean;
+var
+  code: cardinal;
 begin
-  result := true;
+  fSafe.Lock;
+  try
+    // WaitForSingleObject() is reliable, whereas STILL_ACTIVE = 259 is not
+    if (fState = epsRunning) and
+       (WaitForSingleObject(fProcess, 0) <> WAIT_TIMEOUT) then
+    begin
+      if GetExitCodeProcess(fProcess, code) then
+        fExitCode := integer(code);
+      fState := epsExited;
+    end;
+    result := fState <> epsRunning;
+  finally
+    fSafe.UnLock;
+  end;
 end;
 
 procedure TExternalProcess.DoSignal(hard: boolean);
 begin
+  fSafe.Lock;
+  try
+    if fState <> epsRunning then
+      exit;
+    if hard then
+    begin
+      // stop the process and all its children, as on POSIX
+      if (fJob = 0) or
+         not TerminateJobObject(fJob, 255) then
+        TerminateProcess(fProcess, 255);
+    end
+    else
+    begin
+      // the process has its own group: CTRL_BREAK if it shares our console
+      if (roWinNoProcessDetach in fOptions) and
+         not (roWinNewConsole in fOptions) then
+        GenerateConsoleCtrlEvent(CTRL_BREAK_EVENT, fPid);
+      QuitProcess(fPid, 0); // WM_QUIT for GUI processes
+    end;
+  finally
+    fSafe.UnLock;
+  end;
 end;
 
 function TExternalProcess.DoPump(timeoutms: integer): integer;
+var
+  endtix: Int64;
+  ms: cardinal;
+  buf: TBuffer64K;
+
+  // anonymous pipes can't be waited for: peek, and read what is available
+  function ReadPipe(var h: THandle; iserror: boolean): integer;
+  var
+    avail, n: cardinal;
+  begin
+    result := 0;
+    if h = 0 then
+      exit;
+    avail := 0;
+    if not PeekNamedPipe(h, nil, 0, nil, @avail, nil) then
+    begin
+      CloseValid(h); // ERROR_BROKEN_PIPE = closed by the child = EOF
+      exit;
+    end;
+    if avail = 0 then
+      exit;
+    if avail > SizeOf(buf) then
+      avail := SizeOf(buf);
+    n := 0;
+    if ReadFile(h, buf, avail, n, nil) and
+       (n > 0) then
+    begin
+      DoOutput(@buf, n, iserror);
+      result := n;
+    end
+    else
+      CloseValid(h);
+  end;
+
 begin
-  fOutputEof := true;
-  result := -1;
+  endtix := 0;
+  if timeoutms > 0 then
+    endtix := GetTickCount64 + timeoutms;
+  ms := 1;
+  repeat
+    result := ReadPipe(fStdout, false) + ReadPipe(fStderr, true);
+    if (fStdout = 0) and
+       (fStderr = 0) then
+    begin
+      fOutputEof := true;
+      if result = 0 then
+        result := -1;
+      exit;
+    end;
+    if (result > 0) or
+       fTerminated or
+       (timeoutms = 0) or
+       ((endtix <> 0) and
+        (GetTickCount64 >= endtix)) then
+      exit;
+    if fWakeUpRead <> 0 then
+      WaitForSingleObject(fWakeUpRead, ms) // DoWakeUp
+    else
+      SleepHiRes(ms);
+    if ms < 16 then
+      ms := ms shl 1; // poll up to every 16 ms when idle
+  until false;
 end;
 
 function TExternalProcess.DoWrite(p: pointer; len: PtrInt): boolean;
+var
+  n: cardinal;
 begin
   result := false;
+  if fStdin = 0 then
+    exit;
+  while len > 0 do
+  begin
+    n := 0;
+    if not WriteFile(fStdin, p^, len, n, nil) then
+      exit; // e.g. ERROR_NO_DATA if the process ended
+    inc(PByte(p), n);
+    dec(len, n);
+  end;
+  result := true;
 end;
 
 procedure TExternalProcess.DoCloseStdin;
 begin
+  CloseValid(fStdin);
 end;
 
 procedure TExternalProcess.DoClose;
 begin
+  CloseValid(fStdin);
+  CloseValid(fStdout);
+  CloseValid(fStderr);
+  CloseValid(fWakeUpRead);
+  CloseValid(fProcess);
+  CloseValid(fJob); // with roWinJobCloseChildren, kill any remaining child
 end;
 
 procedure TExternalProcess.DoWakeUp;
 begin
+  if fWakeUpRead <> 0 then
+    SetEvent(fWakeUpRead);
 end;
 
 

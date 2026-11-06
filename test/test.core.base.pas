@@ -3674,8 +3674,6 @@ begin
   Test('"one one" two', ['one one', 'two'], [], false);
 end;
 
-{$ifdef FPCPOSIX}
-
 type
   // TOnRedirect is a method, so needs a class instance
   TRunRedirectTest = class
@@ -3685,16 +3683,6 @@ type
     FirstCallEmpty, AbortOnText: boolean;
     SeenPid: cardinal;
     function OnOutput(const text: RawByteString; pid: cardinal): boolean;
-  end;
-
-  // send SIGUSR1 to a given thread every 20 ms
-  TSignalSender = class(TThread)
-  protected
-    fTarget: TThreadID;
-    procedure Execute; override;
-  public
-    Sent: integer;
-    constructor Create(target: TThreadID); reintroduce;
   end;
 
 function TRunRedirectTest.OnOutput(const text: RawByteString; pid: cardinal): boolean;
@@ -3707,6 +3695,19 @@ begin
   result := AbortOnText and
             (text <> '');
 end;
+
+{$ifdef FPCPOSIX}
+
+type
+  // send SIGUSR1 to a given thread every 20 ms
+  TSignalSender = class(TThread)
+  protected
+    fTarget: TThreadID;
+    procedure Execute; override;
+  public
+    Sent: integer;
+    constructor Create(target: TThreadID); reintroduce;
+  end;
 
 function pthread_kill(thread: TThreadID; sig: cint): cint;
   cdecl; external {$ifdef OSLINUX} 'pthread' {$endif} name 'pthread_kill';
@@ -4133,17 +4134,298 @@ begin
 end;
 
 {$else}
+{$ifdef OSWINDOWS}
+
+const
+  SYNCHRONIZE  = $00100000;
+  WAIT_TIMEOUT = $00000102;
+
+function GetProcessHandleCount(hProcess: THandle; var count: cardinal): BOOL;
+  stdcall; external 'kernel32.dll';
+function OpenProcess(dwDesiredAccess: cardinal; bInheritHandle: BOOL;
+  dwProcessId: cardinal): THandle;
+  stdcall; external 'kernel32.dll';
+function CreatePipe(var hReadPipe, hWritePipe: THandle; lpPipeAttributes: pointer;
+  nSize: cardinal): BOOL;
+  stdcall; external 'kernel32.dll';
+function PeekNamedPipe(hNamedPipe: THandle; lpBuffer: pointer; nBufferSize: cardinal;
+  lpBytesRead, lpTotalBytesAvail, lpBytesLeftThisMessage: pointer): BOOL;
+  stdcall; external 'kernel32.dll';
+
+type
+  TPipeSecurity = record
+    nLength: cardinal;
+    lpSecurityDescriptor: pointer;
+    bInheritHandle: BOOL;
+  end;
+
+// true if the pipe returns ERROR_BROKEN_PIPE within 1 second
+function PipeBrokenSoon(rd: THandle): boolean;
+var
+  i: integer;
+begin
+  result := true;
+  for i := 1 to 100 do
+    if PeekNamedPipe(rd, nil, 0, nil, nil, nil) then
+      SleepHiRes(10)
+    else
+      exit;
+  result := false;
+end;
+
+function OpenedHandles: integer;
+var
+  n: cardinal;
+begin
+  n := 0;
+  GetProcessHandleCount(GetCurrentProcess, n);
+  result := n;
+end;
+
+function ProcessRunning(pid: cardinal): boolean;
+var
+  h: THandle;
+begin
+  h := OpenProcess(SYNCHRONIZE, false, pid);
+  result := (h <> 0) and
+            (WaitForSingleObject(h, 0) = WAIT_TIMEOUT);
+  if h <> 0 then
+    CloseHandle(h);
+end;
+
+procedure TTestCoreBase._RunRedirect;
+var
+  exitcode: integer;
+begin
+  // RunRedirect() still uses RunCommandWin() on Windows
+  CheckEqual(RunRedirect('cmd /c "echo hello& exit 3"', @exitcode),
+    'hello'#13#10, 'output');
+  CheckEqual(exitcode, 3, 'exitcode');
+end;
+
+procedure TTestCoreBase._TExternalProcess;
+var
+  p, b: TExternalProcess;
+  r: TRunRedirectTest;
+  data, s: RawUtf8;
+  dir: TFileName;
+  start: Int64;
+  pid: cardinal;
+  files, i, timeout: integer;
+  sec: TPipeSecurity;
+  rd, wr: THandle;
+begin
+  // basic execution with stdout and exit code - no shell on Windows
+  p := TExternalProcess.Create;
+  try
+    Check(p.State = epsNotStarted, 'state0');
+    CheckEqual(p.ExitCode, -1, 'exitcode0');
+    Check(p.Start('cmd /c "echo hello& exit 3"'), 'start');
+    Check(p.State = epsRunning, 'state1');
+    Check(p.Pid <> 0, 'pid');
+    CheckEqual(p.WaitFor(10000), 3, 'waitfor');
+    CheckEqual(p.ExitCode, 3, 'exitcode');
+    Check(p.State = epsExited, 'state2');
+    Check(not p.Running, 'running');
+    CheckEqual(p.ReadAvailable, 'hello'#13#10, 'output');
+    CheckEqual(p.ReadAvailable, '', 'output2');
+    Check(not p.Start('cmd /c exit'), 'restart');
+  finally
+    p.Free;
+  end;
+  // stderr is merged into stdout by default, or in its own pipe
+  p := TExternalProcess.Create;
+  try
+    Check(p.Start('cmd /c "echo out& >&2 echo err"'), 'merge');
+    CheckEqual(p.WaitFor(10000), 0, 'merge');
+    CheckEqual(p.ReadAvailable, 'out'#13#10'err'#13#10, 'merge');
+  finally
+    p.Free;
+  end;
+  p := TExternalProcess.Create;
+  try
+    Check(p.Start('cmd /c "echo out& >&2 echo err"', '', '',
+      RUN_PROCESS - [roStderrMerge] + [roStderrPipe]), 'stderr');
+    CheckEqual(p.WaitFor(10000), 0, 'stderr');
+    CheckEqual(p.ReadAvailable, 'out'#13#10, 'stdout');
+    CheckEqual(p.ReadErrorAvailable, 'err'#13#10, 'stderr');
+  finally
+    p.Free;
+  end;
+  // stdin is the null device by default
+  p := TExternalProcess.Create;
+  try
+    Check(p.Start('sort'), 'null');
+    CheckEqual(p.WaitFor(10000), 0, 'null');
+    CheckEqual(p.ReadAvailable, '', 'null');
+    Check(not p.Write('x'), 'nowrite');
+  finally
+    p.Free;
+  end;
+  // full duplex: Write() blocks until findstr output is read by the thread
+  for i := 1 to 300000 do
+    Append(data, ['line ', i, #13#10]);
+  p := TExternalProcess.Create;
+  try
+    Check(p.Start('findstr "^"', '', '', RUN_PROCESS + [roStdinPipe]), 'findstr');
+    Check(p.WriteAndCloseStdin(data), 'write');
+    CheckEqual(p.WaitFor(30000), 0, 'findstr');
+    s := p.ReadAvailable;
+    CheckEqual(length(s), length(data), 'duplex');
+    Check(s = data, 'duplex');
+  finally
+    p.Free;
+  end;
+  // OnOutput is called instead of filling the ReadAvailable buffer
+  r := TRunRedirectTest.Create;
+  p := TExternalProcess.Create;
+  try
+    p.OnOutput := r.OnOutput;
+    Check(p.Start('cmd /c echo hi'), 'onoutput');
+    CheckEqual(p.WaitFor(10000), 0, 'onoutput');
+    CheckEqual(r.Output, 'hi'#13#10, 'onoutput');
+    CheckEqual(p.ReadAvailable, '', 'onoutput');
+    Check(r.SeenPid = p.Pid, 'onoutput pid');
+  finally
+    p.Free;
+    r.Free;
+  end;
+  // explicit arguments are quoted as CommandLineToArgvW() expects: cmd
+  // "echo" shows the command line as it was received
+  p := TExternalProcess.Create;
+  try
+    Check(p.Start(['cmd', '/c', 'echo', 'a b', 'q"x', 'c:\d\', 'e f\']), 'args');
+    CheckEqual(p.WaitFor(10000), 0, 'args');
+    CheckEqual(p.ReadAvailable, '"a b" "q\"x" c:\d\ "e f\\"'#13#10, 'args');
+  finally
+    p.Free;
+  end;
+  p := TExternalProcess.Create;
+  try
+    Check(p.Start(['cmd', '/c', 'exit 7']), 'args exit');
+    CheckEqual(p.WaitFor(10000), 7, 'args exit');
+  finally
+    p.Free;
+  end;
+  // wrkdir is applied to the child process only
+  dir := GetEnvironmentVariable('SystemRoot');
+  p := TExternalProcess.Create;
+  try
+    Check(p.Start('cmd /c cd', '', dir), 'wrkdir');
+    CheckEqual(p.WaitFor(10000), 0, 'wrkdir');
+    s := p.ReadAvailable;
+    CheckUtf8(IdemPropNameU(s, StringToUtf8(dir) + #13#10), s); // ignore case
+    Check(not SameText(GetCurrentDir, dir), 'wrkdir');
+  finally
+    p.Free;
+  end;
+  // Start() returns false if the executable can't be executed
+  p := TExternalProcess.Create;
+  try
+    Check(not p.Start(['c:\nonexistent\zvb648.exe']), 'failed1');
+    Check(p.State = epsFailed, 'failed1');
+  finally
+    p.Free;
+  end;
+  // Terminate() stops the process and its children, so that the output ends
+  p := TExternalProcess.Create;
+  try
+    Check(p.Start('cmd /c ping -n 30 127.0.0.1'), 'terminate');
+    for i := 1 to 500 do
+      if p.HasDataAvailable then
+        break
+      else
+        SleepHiRes(10);
+    Check(p.ReadAvailable <> '', 'terminate ping'); // ping is running
+    p.Terminate(500); // CTRL_BREAK only shows ping statistics: hard kill
+    Check(not p.Running, 'terminate');
+    Check(p.WaitFor(5000) <> -1, 'terminate children'); // ping closed stdout
+  finally
+    p.Free;
+  end;
+  // WaitFor() timeout, then Kill()
+  p := TExternalProcess.Create;
+  try
+    Check(p.Start('ping -n 30 127.0.0.1'), 'kill');
+    CheckEqual(p.WaitFor(100), -1, 'waitfor timeout');
+    Check(p.Running, 'kill');
+    p.Kill;
+    CheckEqual(p.WaitFor(5000), 255, 'kill');
+  finally
+    p.Free;
+  end;
+  // Destroy terminates a running process
+  timeout := RunAbortTimeoutSecs;
+  RunAbortTimeoutSecs := 0; // no graceful termination: ping ignores CTRL_BREAK
+  p := TExternalProcess.Create;
+  try
+    Check(p.Start('ping -n 30 127.0.0.1'), 'destroy');
+    pid := p.Pid;
+  finally
+    start := GetTickCount64;
+    p.Free;
+    RunAbortTimeoutSecs := timeout;
+  end;
+  CheckUtf8(GetTickCount64 - start < 3000, 'destroy delay');
+  Check(not ProcessRunning(pid), 'destroy');
+  // the pipes of a process are not inherited by another process
+  p := TExternalProcess.Create;
+  b := TExternalProcess.Create;
+  try
+    Check(p.Start('sort', '', '', RUN_PROCESS + [roStdinPipe]), 'inherit');
+    Check(b.Start('ping -n 30 127.0.0.1'), 'inherit');
+    p.CloseStdin;
+    start := GetTickCount64;
+    CheckEqual(p.WaitFor(5000), 0, 'inherit');
+    CheckUtf8(GetTickCount64 - start < 1000, 'inherit delay');
+    b.Kill;
+  finally
+    b.Free;
+    p.Free;
+  end;
+  // other inheritable handles, e.g. from another library, are not inherited
+  sec.nLength := SizeOf(sec);
+  sec.lpSecurityDescriptor := nil;
+  sec.bInheritHandle := true;
+  Check(CreatePipe(rd, wr, @sec, 0), 'CreatePipe');
+  p := TExternalProcess.Create;
+  try
+    Check(p.Start('ping -n 3 127.0.0.1'), 'handles');
+    CloseHandle(wr); // the child should not have its own copy of wr
+    Check(PipeBrokenSoon(rd), 'handles not inherited');
+    CloseHandle(rd);
+    p.Kill;
+  finally
+    p.Free;
+  end;
+  // no handle leak
+  files := OpenedHandles;
+  for i := 1 to 100 do
+  begin
+    p := TExternalProcess.Create;
+    try
+      Check(p.Start('cmd /c exit'), 'leak');
+      p.WaitFor(10000);
+    finally
+      p.Free;
+    end;
+  end;
+  CheckUtf8(OpenedHandles - files < 20, 'handles=% %', [files, OpenedHandles]);
+end;
+
+{$else}
 
 procedure TTestCoreBase._RunRedirect;
 begin
-  // POSIX specific by now
+  // not implemented on Delphi POSIX
 end;
 
 procedure TTestCoreBase._TExternalProcess;
 begin
-  // TExternalProcess is POSIX only by now
+  // not implemented on Delphi POSIX
 end;
 
+{$endif OSWINDOWS}
 {$endif FPCPOSIX}
 
 procedure TTestCoreBase._TExecutableCommandLine;

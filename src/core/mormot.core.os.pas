@@ -6541,8 +6541,11 @@ type
   // - Write/WriteAndCloseStdin/CloseStdin need the roStdinPipe option
   // - on POSIX, a simple command line is executed with no shell, and the process
   // is created in its own session, so that Terminate/Kill also stop its children
-  // - RunRedirect() is implemented over this class, from the calling thread
-  // - Windows implementation is not available yet: Start() returns false
+  // - on Windows, the command line is given to CreateProcessW() as such - so use
+  // e.g. 'cmd /c ...' for a shell built-in - and the process is created in its
+  // own process group and job, so that Terminate/Kill also stop its children
+  // - RunRedirect() is implemented over this class on POSIX, from the calling
+  // thread, but still uses RunCommandWin() on Windows
   TExternalProcess = class(TSynPersistent)
   protected
     fSafe: TLightLock; // protect fState/fExitCode against concurrent reaping
@@ -6558,6 +6561,9 @@ type
     fOutput, fError: RawUtf8;
     fStdinSafe: TOSLightLock; // Write() may block: use an OS lock
     fStdin, fStdout, fStderr, fWakeUpRead, fWakeUpWrite: THandle;
+    {$ifdef OSWINDOWS}
+    fProcess, fJob: THandle;
+    {$endif OSWINDOWS}
     // OS-specific methods
     function DoStart(const cmd: TRunArg; const args: array of TRunArg;
       const env: TRunArg; const wrkdir: TFileName; options: TRunOptions;
@@ -6587,6 +6593,8 @@ type
     /// start the execution of a command line
     // - on POSIX, a simple command is executed directly after a lookup in the
     // PATH of env, and the shell is called only for complex commands
+    // - on Windows, cmd is given to CreateProcessW() as such, which searches
+    // the executable in the PATH of the current process
     // - env is encoded as 'n1=v1'#0'n2=v2'#0#0 pairs, possibly with
     // roEnvAddExisting to complete the current environment
     // - returns false if the process could not be executed
@@ -6595,6 +6603,7 @@ type
     /// start the execution of an executable with some explicit arguments
     // - args[0] is the executable, args[1..] its arguments, with no parsing
     // nor shell call, e.g. if any argument comes from an untrusted source
+    // - on Windows, the arguments are quoted as CommandLineToArgvW() expects
     function Start(const args: array of TRunArg; const env: TRunArg = '';
       const wrkdir: TFileName = ''; options: TRunOptions = RUN_PROCESS): boolean; overload;
     /// send some data to the process stdin, with the roStdinPipe option
@@ -6631,6 +6640,7 @@ type
     /// the exit code of the process, once ended
     // - is -1 before, and negative if the process was terminated by a signal
     // on POSIX, following the RTL WaitProcess() function convention
+    // - on Windows, is 255 after a hard Terminate() or Kill()
     property ExitCode: integer
       read fExitCode;
     /// the OS process ID
@@ -13945,8 +13955,8 @@ begin
       break;
     end;
   until false;
-  DoClose;
   WaitExit(0); // reap the zombie (immediate after SIGKILL)
+  DoClose;
   if (exitcode <> nil) and
      not fAborted then
     exitcode^ := fExitCode;
