@@ -5073,6 +5073,51 @@ begin
 end;
 
 
+{ TExternalProcess }
+
+// NOT IMPLEMENTED YET on Windows - see https://github.com/synopse/mORMot2/issues/648
+
+function TExternalProcess.DoStart(const cmd: TRunArg; const args: array of TRunArg;
+  const env: TRunArg; const wrkdir: TFileName; options: TRunOptions;
+  withthread: boolean): boolean;
+begin
+  fState := epsFailed;
+  result := false;
+end;
+
+function TExternalProcess.DoReap: boolean;
+begin
+  result := true;
+end;
+
+procedure TExternalProcess.DoSignal(hard: boolean);
+begin
+end;
+
+function TExternalProcess.DoPump(timeoutms: integer): integer;
+begin
+  fOutputEof := true;
+  result := -1;
+end;
+
+function TExternalProcess.DoWrite(p: pointer; len: PtrInt): boolean;
+begin
+  result := false;
+end;
+
+procedure TExternalProcess.DoCloseStdin;
+begin
+end;
+
+procedure TExternalProcess.DoClose;
+begin
+end;
+
+procedure TExternalProcess.DoWakeUp;
+begin
+end;
+
+
 { ****************** Gather Operating System Information }
 
 const

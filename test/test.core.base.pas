@@ -238,6 +238,10 @@ type
     procedure _GUID;
     /// test ParseCommandArgs() functions
     procedure _ParseCommandArgs;
+    /// test RunRedirect() function
+    procedure _RunRedirect;
+    /// test TExternalProcess class
+    procedure _TExternalProcess;
     /// test TExecutableCommandLine class
     procedure _TExecutableCommandLine;
     /// test IsMatch() function
@@ -306,6 +310,11 @@ type
 
 
 implementation
+
+{$ifdef FPCPOSIX}
+uses
+  baseunix;
+{$endif FPCPOSIX}
 
 
 { TOrmPeople }
@@ -3664,6 +3673,478 @@ begin
   Test('" one" two', [' one', 'two'], [], false);
   Test('"one one" two', ['one one', 'two'], [], false);
 end;
+
+{$ifdef FPCPOSIX}
+
+type
+  // TOnRedirect is a method, so needs a class instance
+  TRunRedirectTest = class
+  public
+    Output: RawUtf8;
+    Calls: integer;
+    FirstCallEmpty, AbortOnText: boolean;
+    SeenPid: cardinal;
+    function OnOutput(const text: RawByteString; pid: cardinal): boolean;
+  end;
+
+  // send SIGUSR1 to a given thread every 20 ms
+  TSignalSender = class(TThread)
+  protected
+    fTarget: TThreadID;
+    procedure Execute; override;
+  public
+    Sent: integer;
+    constructor Create(target: TThreadID); reintroduce;
+  end;
+
+function TRunRedirectTest.OnOutput(const text: RawByteString; pid: cardinal): boolean;
+begin
+  if Calls = 0 then
+    FirstCallEmpty := text = '';
+  inc(Calls);
+  SeenPid := pid;
+  Output := Output + text;
+  result := AbortOnText and
+            (text <> '');
+end;
+
+function pthread_kill(thread: TThreadID; sig: cint): cint;
+  cdecl; external {$ifdef OSLINUX} 'pthread' {$endif} name 'pthread_kill';
+
+constructor TSignalSender.Create(target: TThreadID);
+begin
+  fTarget := target;
+  inherited Create({suspended=}false);
+end;
+
+procedure TSignalSender.Execute;
+begin
+  while not Terminated do
+  begin
+    if pthread_kill(fTarget, SIGUSR1) = 0 then
+      inc(Sent);
+    SleepHiRes(20);
+  end;
+end;
+
+procedure NoopSignalHandler(sig: cint); cdecl;
+begin
+end;
+
+function ProcessExists(pid: cint): boolean; // also true for a zombie
+begin
+  result := (pid > 0) and
+            ((fpkill(pid, 0) = 0) or
+             (fpgeterrno = ESysEPERM));
+end;
+
+function ProcessEnded(pid: cint): boolean;
+var
+  i: integer;
+begin
+  for i := 1 to 200 do // an orphan may take some time to be reaped by init
+  begin
+    result := not ProcessExists(pid);
+    if result then
+      exit;
+    SleepHiRes(10);
+  end;
+end;
+
+function OpenedHandles: integer;
+var
+  fd: cint;
+begin
+  result := 0;
+  for fd := 0 to 1023 do
+    if fpfcntl(fd, F_GETFD) >= 0 then
+      inc(result);
+end;
+
+// wait for the first line of output, i.e. the PID of a background process
+function ReadFirstLinePid(p: TExternalProcess): cint;
+var
+  s: RawUtf8;
+  i: integer;
+begin
+  s := '';
+  for i := 1 to 500 do
+  begin
+    s := s + p.ReadAvailable;
+    if PosExChar(#10, s) > 0 then
+      break;
+    SleepHiRes(10);
+  end;
+  result := GetInteger(pointer(s));
+end;
+
+procedure TTestCoreBase._RunRedirect;
+var
+  r: TRunRedirectTest;
+  sender: TSignalSender;
+  sa, old: SigactionRec;
+  exitcode: integer;
+  bg: cint;
+  output: RawByteString;
+  start: Int64;
+  cwd: TFileName;
+  dir: RawUtf8;
+
+  procedure Run(const cmd, expected: RawUtf8; expectedexitcode: integer;
+    options: TRunOptions = RUN_CMD; const env: TRunArg = '';
+    const wrkdir: TFileName = '');
+  begin
+    start := GetTickCount64;
+    output := RunRedirect(cmd, @exitcode, nil, 10000, true, env, wrkdir, options);
+    CheckEqual(exitcode, expectedexitcode, cmd);
+    CheckEqual(output, expected, cmd);
+    // should return as soon as the child exited, not after waitfordelayms
+    CheckUtf8(GetTickCount64 - start < 5000, cmd);
+  end;
+
+begin
+  Run('true', '', 0);                                // no output, no shell
+  Run('echo hello', 'hello'#10, 0);                  // some output, no shell
+  Run('sh -c "exit 3"', '', 3);                      // exit code, no shell
+  Run('echo one && echo two', 'one'#10'two'#10, 0);  // via the shell
+  Run('exit 5', '', 5);                              // shell built-in
+  CheckEqual(RunRedirect('echo hi', @exitcode, nil, 10000, {setresult=}false),
+    '', 'setresult');
+  CheckEqual(exitcode, 0, 'setresult');
+  // a process terminated by a signal returns a negative exit code
+  Run('kill -9 $$', '', -SIGKILL);
+  // stdin and stderr are inherited by default, unless specified
+  Run('cat', '', 0, RUN_CMD + [roStdinNull]);
+  Run('echo out; echo err >&2', 'out'#10'err'#10, 0, RUN_CMD + [roStderrMerge]);
+  // env is supplied to the child process
+  Run('echo [$ZVB648]', '[bar]'#10, 0, RUN_CMD, 'ZVB648=bar'#0#0);
+  // wrkdir is applied to the child process only
+  cwd := GetCurrentDir;
+  dir := '/';
+  if cwd = '/' then
+    dir := '/usr';
+  Run('pwd', dir + #10, 0, RUN_CMD, '', TFileName(dir));
+  CheckEqual(StringToUtf8(GetCurrentDir), StringToUtf8(cwd), 'wrkdir');
+  // the child should not inherit an ignored SIGPIPE, e.g. from a server
+  SigPipeIntercept;
+  Run('kill -PIPE $$; echo alive', '', -SIGPIPE);
+  // a signal received by the calling thread should not abort the redirection
+  FillCharFast(sa, SizeOf(sa), 0);
+  sa.sa_handler := SigActionHandler(@NoopSignalHandler);
+  fpsigaction(SIGUSR1, @sa, @old);
+  sender := TSignalSender.Create(GetCurrentThreadId);
+  try
+    Run('sh -c "sleep 1; echo done; exit 7"', 'done'#10, 7);
+  finally
+    sender.Terminate;
+    sender.WaitFor;
+    CheckUtf8(sender.Sent > 10, 'signals=%', [sender.Sent]);
+    sender.Free;
+    fpsigaction(SIGUSR1, @old, nil);
+  end;
+  r := TRunRedirectTest.Create;
+  try
+    // the callback is called at startup with '', then with the output
+    output := RunRedirect('echo hi', @exitcode, r.OnOutput);
+    CheckEqual(output, 'hi'#10, 'onoutput result');
+    CheckEqual(r.Output, 'hi'#10, 'onoutput');
+    Check(r.FirstCallEmpty, 'onoutput startup');
+    Check(r.Calls >= 2, 'onoutput calls');
+    Check(r.SeenPid <> 0, 'onoutput pid');
+    // returning true from the callback aborts the whole process group
+    r.AbortOnText := true;
+    r.Output := '';
+    start := GetTickCount64;
+    RunRedirect('sleep 30 & echo $!; wait', @exitcode, r.OnOutput);
+    CheckEqual(exitcode, -1, 'abort');
+    CheckUtf8(GetTickCount64 - start < 5000, 'abort delay');
+    bg := GetInteger(pointer(r.Output));
+    Check(bg > 0, 'abort pid');
+    Check(ProcessEnded(bg), 'abort group');
+  finally
+    r.Free;
+  end;
+  // abort after waitfordelayms
+  start := GetTickCount64;
+  RunRedirect('sleep 30', @exitcode, nil, 200);
+  CheckEqual(exitcode, -1, 'timeout');
+  CheckUtf8(GetTickCount64 - start < 5000, 'timeout delay');
+end;
+
+procedure TTestCoreBase._TExternalProcess;
+var
+  p, b: TExternalProcess;
+  r: TRunRedirectTest;
+  data, s, dir, tool: RawUtf8;
+  cwd: TFileName;
+  start: Int64;
+  bg, pid: cint;
+  fds: TFilDes;
+  files, i: integer;
+begin
+  // basic execution with stdout and exit code
+  p := TExternalProcess.Create;
+  try
+    Check(p.State = epsNotStarted, 'state0');
+    CheckEqual(p.ExitCode, -1, 'exitcode0');
+    Check(p.Start('sh -c "echo hello; exit 3"'), 'start');
+    Check(p.State = epsRunning, 'state1');
+    Check(p.Pid <> 0, 'pid');
+    CheckEqual(p.WaitFor(10000), 3, 'waitfor');
+    CheckEqual(p.ExitCode, 3, 'exitcode');
+    Check(p.State = epsExited, 'state2');
+    Check(not p.Running, 'running');
+    CheckEqual(p.ReadAvailable, 'hello'#10, 'output');
+    CheckEqual(p.ReadAvailable, '', 'output2');
+    Check(not p.Start('true'), 'restart');
+  finally
+    p.Free;
+  end;
+  // a process terminated by a signal returns a negative exit code
+  p := TExternalProcess.Create;
+  try
+    Check(p.Start('kill -9 $$'), 'start9');
+    CheckEqual(p.WaitFor(10000), -SIGKILL, 'signal');
+  finally
+    p.Free;
+  end;
+  // stderr is merged into stdout by default, or in its own pipe
+  p := TExternalProcess.Create;
+  try
+    Check(p.Start('echo out; echo err >&2'), 'merge');
+    CheckEqual(p.WaitFor(10000), 0, 'merge');
+    CheckEqual(p.ReadAvailable, 'out'#10'err'#10, 'merge');
+  finally
+    p.Free;
+  end;
+  p := TExternalProcess.Create;
+  try
+    Check(p.Start('echo out; echo err >&2', '', '',
+      RUN_PROCESS - [roStderrMerge] + [roStderrPipe]), 'stderr');
+    CheckEqual(p.WaitFor(10000), 0, 'stderr');
+    CheckEqual(p.ReadAvailable, 'out'#10, 'stdout');
+    CheckEqual(p.ReadErrorAvailable, 'err'#10, 'stderr');
+  finally
+    p.Free;
+  end;
+  // stdin is the null device by default
+  p := TExternalProcess.Create;
+  try
+    Check(p.Start('cat'), 'null');
+    CheckEqual(p.WaitFor(10000), 0, 'null');
+    Check(not p.Write('x'), 'nowrite');
+  finally
+    p.Free;
+  end;
+  // full duplex: Write() blocks until cat output is read by the thread
+  SetLength(data, 4 shl 20);
+  for i := 1 to length(data) do
+    data[i] := AnsiChar(i * 7);
+  p := TExternalProcess.Create;
+  try
+    Check(p.Start('cat', '', '', RUN_PROCESS + [roStdinPipe]), 'cat');
+    Check(p.WriteAndCloseStdin(data), 'write');
+    CheckEqual(p.WaitFor(30000), 0, 'cat');
+    s := p.ReadAvailable;
+    CheckEqual(length(s), length(data), 'duplex');
+    Check(s = data, 'duplex');
+  finally
+    p.Free;
+  end;
+  // OnOutput is called instead of filling the ReadAvailable buffer
+  r := TRunRedirectTest.Create;
+  p := TExternalProcess.Create;
+  try
+    p.OnOutput := r.OnOutput;
+    Check(p.Start('echo hi'), 'onoutput');
+    CheckEqual(p.WaitFor(10000), 0, 'onoutput');
+    CheckEqual(r.Output, 'hi'#10, 'onoutput');
+    CheckEqual(p.ReadAvailable, '', 'onoutput');
+    Check(r.SeenPid = p.Pid, 'onoutput pid');
+  finally
+    p.Free;
+    r.Free;
+  end;
+  // explicit arguments are neither parsed nor given to the shell
+  p := TExternalProcess.Create;
+  try
+    Check(p.Start(['echo', 'a  b', '$HOME', '"q"', '*']), 'args');
+    CheckEqual(p.WaitFor(10000), 0, 'args');
+    CheckEqual(p.ReadAvailable, 'a  b $HOME "q" *'#10, 'args');
+  finally
+    p.Free;
+  end;
+  // the executable is searched in the PATH of the child environment
+  dir := StringToUtf8(TemporaryFileName);
+  Check(CreateDir(Utf8ToString(dir)), 'dir');
+  tool := dir + '/zvb648tool';
+  FileFromString('#!/bin/sh'#10'echo found $ZVB648'#10, Utf8ToString(tool));
+  fpchmod(pointer(tool), &755);
+  p := TExternalProcess.Create;
+  try
+    Check(p.Start(['zvb648tool'], 'PATH=' + dir + #0'ZVB648=bar'#0#0), 'path');
+    CheckEqual(p.WaitFor(10000), 0, 'path');
+    CheckEqual(p.ReadAvailable, 'found bar'#10, 'path');
+  finally
+    p.Free;
+  end;
+  DeleteFile(Utf8ToString(tool));
+  RemoveDir(Utf8ToString(dir));
+  // wrkdir is applied to the child process only
+  cwd := GetCurrentDir;
+  dir := '/';
+  if cwd = '/' then
+    dir := '/usr';
+  p := TExternalProcess.Create;
+  try
+    Check(p.Start('pwd', '', TFileName(dir)), 'wrkdir');
+    CheckEqual(p.WaitFor(10000), 0, 'wrkdir');
+    CheckEqual(p.ReadAvailable, dir + #10, 'wrkdir');
+    CheckEqual(StringToUtf8(GetCurrentDir), StringToUtf8(cwd), 'wrkdir');
+  finally
+    p.Free;
+  end;
+  // Start() returns false if the executable can't be executed
+  p := TExternalProcess.Create;
+  try
+    Check(not p.Start(['/nonexistent/zvb648']), 'failed1');
+    Check(p.State = epsFailed, 'failed1');
+  finally
+    p.Free;
+  end;
+  p := TExternalProcess.Create;
+  try
+    Check(not p.Start('/nonexistent/zvb648'), 'failed2');
+  finally
+    p.Free;
+  end;
+  p := TExternalProcess.Create;
+  try
+    Check(not p.Start(['zvb648-not-in-path']), 'failed3');
+  finally
+    p.Free;
+  end;
+  // Terminate() stops the whole process group
+  p := TExternalProcess.Create;
+  try
+    Check(p.Start('sleep 30 & echo $!; sleep 30'), 'terminate');
+    bg := ReadFirstLinePid(p);
+    Check(ProcessExists(bg), 'terminate probe'); // validate ProcessExists()
+    start := GetTickCount64;
+    Check(p.Terminate(5000), 'terminate');
+    CheckUtf8(GetTickCount64 - start < 3000, 'terminate delay');
+    CheckEqual(p.ExitCode, -SIGTERM, 'sigterm');
+    Check(ProcessEnded(bg), 'terminate group');
+  finally
+    p.Free;
+  end;
+  // WaitFor() timeout, then Kill()
+  p := TExternalProcess.Create;
+  try
+    Check(p.Start('sleep 30'), 'kill');
+    CheckEqual(p.WaitFor(100), -1, 'waitfor timeout');
+    Check(p.Running, 'kill');
+    p.Kill;
+    CheckEqual(p.WaitFor(5000), -SIGKILL, 'kill');
+  finally
+    p.Free;
+  end;
+  // Destroy terminates and reaps a running process
+  p := TExternalProcess.Create;
+  try
+    Check(p.Start('sleep 30'), 'destroy');
+    pid := p.Pid;
+  finally
+    start := GetTickCount64;
+    p.Free;
+  end;
+  CheckUtf8(GetTickCount64 - start < 3000, 'destroy delay');
+  Check(not ProcessExists(pid), 'destroy');
+  // a background child keeping stdout delays WaitFor() but not Destroy
+  p := TExternalProcess.Create;
+  try
+    Check(p.Start('sleep 30 & echo $!'), 'background');
+    bg := ReadFirstLinePid(p);
+    CheckEqual(p.WaitFor(300), -1, 'background');
+    Check(not p.Running, 'background');
+  finally
+    start := GetTickCount64;
+    p.Free;
+  end;
+  CheckUtf8(GetTickCount64 - start < 2000, 'background delay');
+  if CheckFailed(ProcessExists(bg), 'background') then
+    exit; // never fpkill(0) = our own process group
+  fpkill(bg, SIGKILL);
+  Check(ProcessEnded(bg), 'background');
+  // the pipes of a process are not inherited by another process
+  p := TExternalProcess.Create;
+  b := TExternalProcess.Create;
+  try
+    Check(p.Start('cat', '', '', RUN_PROCESS + [roStdinPipe]), 'inherit');
+    Check(b.Start('sleep 30'), 'inherit');
+    // RunCommand() does not close the inherited descriptors in the child
+    CheckEqual(RunCommand('sleep 2 &'), 0, 'inherit');
+    p.CloseStdin;
+    start := GetTickCount64;
+    CheckEqual(p.WaitFor(5000), 0, 'inherit');
+    CheckUtf8(GetTickCount64 - start < 1000, 'inherit delay');
+  finally
+    b.Free;
+    p.Free;
+  end;
+  // other descriptors with no close-on-exec, e.g. sockets, are not inherited
+  Check(fppipe(fds) = 0, 'fppipe');
+  p := TExternalProcess.Create;
+  try
+    Check(p.Start('sleep 2'), 'descriptors');
+    fpclose(fds[1]); // the child should not have its own copy of fds[1]
+    start := GetTickCount64;
+    CheckEqual(fpread(fds[0], @i, SizeOf(i)), 0, 'descriptors eof');
+    CheckUtf8(GetTickCount64 - start < 1000, 'descriptors delay');
+    fpclose(fds[0]);
+  finally
+    p.Free;
+  end;
+  // the child should not inherit an ignored SIGPIPE, e.g. from a server
+  SigPipeIntercept;
+  p := TExternalProcess.Create;
+  try
+    Check(p.Start('kill -PIPE $$; echo alive'), 'sigpipe');
+    CheckEqual(p.WaitFor(10000), -SIGPIPE, 'sigpipe');
+    CheckEqual(p.ReadAvailable, '', 'sigpipe');
+  finally
+    p.Free;
+  end;
+  // no handle nor zombie leak
+  files := OpenedHandles;
+  pid := 0;
+  for i := 1 to 200 do
+  begin
+    p := TExternalProcess.Create;
+    try
+      Check(p.Start('true'), 'leak');
+      pid := p.Pid;
+    finally
+      p.Free;
+    end;
+  end;
+  CheckEqual(OpenedHandles, files, 'handles');
+  Check(not ProcessExists(pid), 'zombie');
+end;
+
+{$else}
+
+procedure TTestCoreBase._RunRedirect;
+begin
+  // POSIX specific by now
+end;
+
+procedure TTestCoreBase._TExternalProcess;
+begin
+  // TExternalProcess is POSIX only by now
+end;
+
+{$endif FPCPOSIX}
 
 procedure TTestCoreBase._TExecutableCommandLine;
 var
