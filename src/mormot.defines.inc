@@ -1000,17 +1000,18 @@
   {$ifdef ABIARM}
     {$define OSWINARM}
   {$endif ABIARM}
-  {$define THREADID32}    // TThreadID always 32-bit DWORD on all Windows archs
-  {$define OSFUTEX}       // WaitForValue() futex-like API appeared with Win8
+  {$define THREADID32}        // TThreadID always 32-bit DWORD on all Windows archs
+  {$define OSFUTEX}           // WaitForValue() futex-like API appeared with Win8
 {$else}
   {$ifdef CPU32}
-    {$define THREADID32}  // TThreadID is 32-bit on 32-bit POSIX systems
+    {$define THREADID32}      // TThreadID is 32-bit on 32-bit POSIX systems
   {$endif CPU32}
   {$ifdef OSLINUX}
     {$define OSLINUXANDROID}
+    {$define HAS_IP_PKTINFO}  // SetPacketInfo/RecvFromIf/SendToIf support
     {$define OSELF}
     {$ifdef FPC}
-      {$define OSFUTEX}   // direct futex syscall on FPC Linux
+      {$define OSFUTEX}       // direct futex syscall on FPC Linux
     {$endif FPC}
     {$ifdef ABIX86}
       {$define OSLINUXINTEL}

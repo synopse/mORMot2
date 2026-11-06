@@ -1679,9 +1679,11 @@ type
 // - on Linux, a socket bound to an interface IP does not receive the
 // 255.255.255.255 broadcasts: so a single thread is bound to 0.0.0.0 for
 // each server port, and identifies the receiving interface via IP_PKTINFO
-{$ifdef OSLINUX}
+// - macOS and NetBSD can easily follow the IP_PKTINFO socket option
+// - FreeBSD has a specific IP_ONESBCAST option and OpenBSD seems out of reach
+{$ifdef HAS_IP_PKTINFO}
   {$define DHCP_IFINDEX}
-{$endif OSLINUX}
+{$endif HAS_IP_PKTINFO}
 
 type
   /// exception class raised during TDhcpServer process at UDP/Network level
@@ -6687,7 +6689,7 @@ begin
   if (nr <> nrOk) and
      (fOwner <> nil) and
      (fOwner.fLog <> nil) then
-    fOwner.fLog.Add.Log(sllWarning, 'SendTo(%)=%',
+    fOwner.fLog.Add.Log(sllWarning, 'SendToIf(%)=%',
       [remote.IPShort({withport=}true), ToText(nr)], self);
 end;
 

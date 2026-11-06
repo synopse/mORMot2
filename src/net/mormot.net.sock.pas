@@ -3798,7 +3798,11 @@ begin
   FastSetRawByteString(result, @tmp, len);
 end;
 
-{$ifndef OSLINUX} // see mormot.net.sock.posix.inc for the Linux version
+{$ifndef HAS_IP_PKTINFO}
+// - Windows UDP socket bound to a particular local IPv4 receives broadcasts
+// - see mormot.net.sock.posix.inc for the Linux version
+// - macOS and NetBSD can easily follow the IP_PKTINFO socket option
+// - FreeBSD has a specific IP_ONESBCAST option and OpenBSD seems out of reach
 
 function TNetSocketWrap.SetPacketInfo(enable: boolean): TNetResult;
 begin
@@ -3821,7 +3825,7 @@ begin
     result := nrNotImplemented;
 end;
 
-{$endif OSLINUX}
+{$endif HAS_IP_PKTINFO}
 
 function TNetSocketWrap.RecvPending(out pending: integer): TNetResult;
 begin

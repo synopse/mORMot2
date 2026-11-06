@@ -781,7 +781,7 @@ begin
           (cerrno <> ESysEINTR); // retry on SIG received
 end;
 
-{$ifdef OSLINUX}
+{$ifdef HAS_IP_PKTINFO}
 
 function TNetSocketWrap.SetPacketInfo(enable: boolean): TNetResult;
 var
@@ -867,7 +867,7 @@ begin
   end;
 end;
 
-{$endif OSLINUX}
+{$endif HAS_IP_PKTINFO}
 
 procedure SetTimeVal(ms: PtrUInt; out tv: TTimeVal);
 var
