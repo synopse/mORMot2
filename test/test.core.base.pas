@@ -3879,7 +3879,7 @@ var
   data, s, dir, tool: RawUtf8;
   cwd: TFileName;
   start: Int64;
-  bg, pid: cint;
+  bg, pid, hfd: cint;
   fds: TFilDes;
   files, i: integer;
 begin
@@ -4105,6 +4105,27 @@ begin
     fpclose(fds[0]);
   finally
     p.Free;
+  end;
+  // nor a descriptor far above all the others - e.g. 255 on MacOS by default
+  hfd := GetFileOpenLimit - 1;
+  if hfd > 1000 then
+    hfd := 1000;
+  if hfd > 200 then
+  begin
+    Check(fppipe(fds) = 0, 'fppipe');
+    CheckEqual(fpdup2(fds[1], hfd), hfd, 'dup2'); // without close-on-exec
+    fpclose(fds[1]);
+    p := TExternalProcess.Create;
+    try
+      Check(p.Start('sleep 2'), 'high');
+      fpclose(hfd);
+      start := GetTickCount64;
+      CheckEqual(fpread(fds[0], @i, SizeOf(i)), 0, 'high eof');
+      CheckUtf8(GetTickCount64 - start < 1000, 'high delay');
+      fpclose(fds[0]);
+    finally
+      p.Free;
+    end;
   end;
   // the child should not inherit an ignored SIGPIPE, e.g. from a server
   SigPipeIntercept;

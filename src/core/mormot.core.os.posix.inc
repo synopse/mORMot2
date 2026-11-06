@@ -5638,6 +5638,67 @@ begin
     result := rl.rlim_cur;
 end;
 
+{$ifdef HASCLOSERANGE}
+var
+  CloseRangeState: integer; // 0 = not tested yet, 1 = available, 2 = missing
+
+function CloseRangeAvailable: boolean;
+begin
+  if CloseRangeState = 0 then
+    // nothing to close so far in the table, but ENOSYS before Linux 5.9
+    if Do_SysCall(syscall_nr_close_range, TSysParam($fffffffe),
+         TSysParam($fffffffe), 0) = 0 then
+      CloseRangeState := 1
+    else
+      CloseRangeState := 2;
+  result := CloseRangeState = 1;
+end;
+{$endif HASCLOSERANGE}
+
+// upper bound of the opened descriptors, for the closing loop of the child
+// - without closefrom() nor close_range(), e.g. on MacOS or Linux < 5.9, a loop
+// up to RLIMIT_NOFILE costs 118ms per execution with 524288 descriptors, as set
+// by TPollSockets from the hard limit
+// - descriptors opened by other threads until fork() take the lowest free
+// numbers, so should be within the margin
+function ChildMaxDescriptor: cint;
+{$ifdef OSBSD}
+begin
+  result := 0; // not used with closefrom()
+end;
+{$else}
+var
+  d: pDir;
+  e: pDirent;
+  fd, n: integer;
+begin
+  result := MaxDescriptors;
+  {$ifdef HASCLOSERANGE}
+  if CloseRangeAvailable then
+    exit;
+  {$endif HASCLOSERANGE}
+  d := fpOpendir(PAnsiChar({$ifdef OSLINUX}'/proc/self/fd'{$else}'/dev/fd'{$endif}));
+  if d = nil then
+    exit; // e.g. no /proc mounted
+  fd := -1;
+  repeat
+    e := FpReaddir(d^);
+    if e = nil then
+      break;
+    if AnsiChar(e.d_name[0]) in ['0'..'9'] then
+    begin
+      n := GetCardinal(@e.d_name[0]);
+      if n > fd then
+        fd := n;
+    end;
+  until false;
+  FpClosedir(d^);
+  if (fd >= 0) and
+     (fd + 65 < result) then
+    result := fd + 65; // margin of 64 descriptors
+end;
+{$endif OSBSD}
+
 function TExternalProcess.DoStart(const cmd: TRunArg; const args: array of TRunArg;
   const env: TRunArg; const wrkdir: TFileName; options: TRunOptions;
   withthread: boolean): boolean;
@@ -5778,7 +5839,7 @@ begin
   end;
   if roStdinPipe in options then
     SigPipeIntercept; // Write() should return false, not raise SIGPIPE
-  maxfd := MaxDescriptors;
+  maxfd := ChildMaxDescriptor; // after all our own descriptors were opened
   fpsigemptyset(nomask);
   FillCharFast(dfl, SizeOf(dfl), 0);
   dfl.sa_handler := SigActionHandler(SIG_DFL);
