@@ -11867,6 +11867,46 @@ procedure TTestCoreBase.Debugging;
     end;
   end;
 
+  procedure TestSaveToExeSigned;
+  var
+    deb: TDebugFile;
+    exe: RawByteString;
+    fn: TFileName;
+    raised: boolean;
+  begin
+    // minimal PE32 header, enough for SaveToExe() and its signature detection
+    SetLength(exe, 1024);
+    FillCharFast(pointer(exe)^, 1024, 0);
+    PWord(exe)^ := $5a4d;
+    PCardinal(@PByteArray(exe)[$3c])^ := $80;
+    PCardinal(@PByteArray(exe)[$80])^ := $00004550;
+    PWord(@PByteArray(exe)[$80 + 24])^ := $010b;
+    fn := WorkDir + 'mabsigned.exe';
+    FileFromString(exe, fn);
+    deb := TDebugFile.Create(fn, [dfsNoMabSaveAtCreate,
+      dfsNoMabExternalCheck, dfsNoMabInternalCheck]);
+    try
+      deb.SaveToExe(fn);
+      Check(FileSize(fn) > 1024, 'unsigned exe');
+      // set IMAGE_DIRECTORY_ENTRY_SECURITY: appending would break the signature
+      PCardinal(@PByteArray(exe)[$80 + $98])^ := 1000;
+      PCardinal(@PByteArray(exe)[$80 + $9c])^ := 24;
+      FileFromString(exe, fn);
+      raised := false;
+      try
+        deb.SaveToExe(fn);
+      except
+        on ESynLogException do
+          raised := true;
+      end;
+      Check(raised, 'signed exe');
+      CheckEqual(FileSize(fn), 1024, 'signed exe untouched');
+    finally
+      deb.Free;
+      DeleteFile(fn);
+    end;
+  end;
+
 var
   tmp: TBuffer2K;
   dst, up: PUtf8Char;
@@ -12019,6 +12059,7 @@ begin
   TestPlainText;
   TestNoProcNoEvent;
   TestZonedLayout;
+  TestSaveToExeSigned;
   Test('D:\Dev\lib\SQLite3\exe\TestSQL3.exe 1.2.3.4 (2011-04-07 11:09:06)'#13#10 +
     'Host=MyPC User=MySelf CPU=2*0-15-1027 OS=2.3=5.1.2600 Wow64=0 Freq=3579545 ' +
     'Instance=D:\Dev\MyLibrary.dll'#13#10 +
