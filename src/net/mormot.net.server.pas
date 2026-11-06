@@ -1786,7 +1786,7 @@ type
     fClient: THttpClientSocket;
     fInstable: THttpAcceptBan; // from Settings.RejectInstablePeersMin
     fMac: TMacAddress;
-    fSettingsOwned, fVerboseLog: boolean;
+    fSettingsOwned, fVerboseLog, fShutdown: boolean;
     fUuid: TGuid;
     fServerTls, fClientTls: TNetTlsContext;
     procedure AfterSettings; virtual;
@@ -6466,7 +6466,7 @@ var
 begin
   // quick return if this frame is not worth decoding
   if (fOwner = nil) or
-     (fOwner.fSettings = nil) or     // avoid random GPF at shutdown
+     fOwner.fShutdown or             // avoid random GPF at shutdown
      (remote.IP4 = 0) or
      (remote.IP4 = fOwner.fIP4) then // Windows broadcasts to self :)
     exit;
@@ -6834,12 +6834,12 @@ var
   ilog: ISynLog;
 begin
   fLog.EnterLocal(ilog, 'Destroy % %', [fUdpServer, fHttpServer], self);
+  fShutdown := true;          // set internal flag for background process
+  FreeAndNilSafe(fUdpServer); // stop servers first
+  FreeAndNilSafe(fHttpServer);
+  FreeAndNilSafe(fPartials);
   if fSettingsOwned then
     fSettings.Free;
-  fSettings := nil; // notify OnDownload/OnIdle/OnFrameReceived calls
-  FreeAndNil(fUdpServer);
-  FreeAndNil(fHttpServer);
-  FreeAndNil(fPartials);
   fFilesSafe.Done;
   inherited Destroy;
 end;
@@ -7032,7 +7032,7 @@ var
   minsize: Int64;
 begin
   result := false; // continue
-  if (fSettings = nil) or
+  if fShutdown or
      (waoNoMinimalSize in aParams.AlternateOptions) then
     exit;
   if (waoPermanentCache in aParams.AlternateOptions) and
@@ -7066,8 +7066,8 @@ var
   function ResetOutStreamPosition: boolean;
   begin
     // not moved (e.g. first request, or connection issue) returns true
-    result := (fSettings <> nil) and // nil at shutdown
-              (OutStream.Position = outStreamInitialPos);
+    result := (OutStream.Position = outStreamInitialPos) and
+              not fShutdown;
     if not result then
       // TStreamRedirect requires full rewind for full content re-hash
       if outStreamInitialPos = 0 then
@@ -7079,7 +7079,7 @@ begin
   result := 0;
   // validate WGet caller context
   if (self = nil) or
-     (fSettings = nil) or // nil at shutdown
+     fShutdown or
      (Sender = nil) or
      (Params.Hash = '') or
      (Url = '') or
@@ -7239,7 +7239,7 @@ begin
   // socket and ban this IP for a few seconds at accept() level
   PByte(@msg.Kind)^ := 255; // ToText(msg.Kind)^ = ''
   err := [];
-  if fSettings = nil then
+  if fShutdown then
     include(err, eShutdown); // avoid GPF at shutdown
   if length(aBearerToken) < PEER_CACHE_BEARERLEN then // base64uri length
     include(err, eBearer);
@@ -7305,7 +7305,7 @@ var
   size: Int64;
 begin
   // avoid GPF at shutdown
-  if fSettings = nil then
+  if fShutdown then
     exit;
   // check state every minute (65,536 seconds)
   if tix64 = 0 then
@@ -7379,7 +7379,7 @@ var
 
 begin
   // avoid GPF at shutdown or in case of unexpected method call
-  if (fSettings = nil) or
+  if fShutdown or
      (pcoNoServer in fSettings.Options) then
     exit;
   sourcesize := FileSize(Partial);
@@ -7649,7 +7649,7 @@ begin
       aSize := cs.Http.ContentLength;
       Int32ToUtf8(aSize, err);
       if (aSize <= 0) or  // progressive request requires a final size
-         (fSettings = nil) then // shutdown in progress
+         fShutdown then // shutdown in progress
         exit;
       // try from cached files
       err := 'from partial';
@@ -7699,7 +7699,7 @@ begin
         err := 'file';
         result := HTTP_CONFLICT;
         if (FileSize(aFileName) > 0) or
-           (fSettings = nil) then // shutdown in progress
+           fShutdown then
           exit; // paranoid: existing cached files should have been checked
         cs.DestStream := HASH_STREAMREDIRECT[aMessage.Hash.Algo].Create(
           TFileStreamEx.Create(aFileName, fmCreate or fmShareRead));
@@ -7728,8 +7728,8 @@ begin
           peers[0] := req;
           FillZero(peers[0].Uuid); // "fake" HEAD request to check this peer
           result := LocalPeerRequest(req, peers[0], Ctxt.Url, nil, {Ban=}false);
-          if fSettings = nil then
-            exit; // shutdown in progress
+          if fShutdown then
+            exit;
           if result <> HTTP_SUCCESS then // returns HTTP_NOCONTENT if not found
             peers := nil; // make full GET in background thread
         finally
@@ -7754,8 +7754,8 @@ begin
               FormatUtf8('?%', [Ctxt.Url], cs.RemoteUri); // <> DIRECTURI_32
               // make a quick HEAD on this new socket to verify the peer
               result := cs.Request(cs.RemoteUri, 'HEAD', 30000, cs.RemoteHeaders);
-              if fSettings = nil then
-                exit; // shutdown in progress
+              if fShutdown then
+                exit;
               if result in HTTP_GET_OK then
                 break; // this peer seems just fine: background GET
             end;
@@ -7799,8 +7799,8 @@ begin
       // make the actual blocking GET request in this background thread
       status := cs.Request(cs.RemoteUri, 'GET', 30000, cs.RemoteHeaders, '', '',
         {AsRetry=}false, {instream=}nil, {outstream=}cs.DestStream);
-      if fSettings = nil then
-        exit; // shutdown
+      if fShutdown then
+        exit;
       if not (status in HTTP_GET_OK) then
         EHttpPeerCache.RaiseUtf8('GET % failed as %', [cs.RemoteUri, status]);
       endsize := cs.ExpectedHashOrRaiseEHttpPeerCache;
@@ -7857,7 +7857,7 @@ var
 begin
   // avoid GPF at shutdown
   result := HTTP_BADREQUEST;
-  if fSettings = nil then
+  if fShutdown then
     exit;
   // retrieve context - already checked by OnBeforeBody
   err := oreOK;
@@ -7895,7 +7895,7 @@ begin
           result := LocalFileName(msg, [lfnSetDate], @fn, nil);
       end;
     end;
-    if fSettings = nil then
+    if fShutdown then
     begin
       err := oreShutdown;
       result := HTTP_BADGATEWAY; // 502
