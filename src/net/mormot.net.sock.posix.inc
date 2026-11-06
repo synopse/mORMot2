@@ -436,8 +436,6 @@ function getpeername(s: integer; name: PSockAddr; var namelen: TSockLen): intege
 {$ifdef HAS_IP_PKTINFO}
 
 const
-  IPPROTO_IP = 0; // not defined on Delphi POSIX
-
   {$ifdef OSLINUX}
   IP_PKTINFO = 8;
   PKTINFO_RECV_OPT = IP_PKTINFO;

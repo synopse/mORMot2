@@ -382,8 +382,8 @@ type
     function RecvFrom(Buf: pointer; len: integer; out addr: TNetAddr): integer; overload;
     /// low-level UDP receiving from an address of some data into a RawByteString
     function RecvFrom(out addr: TNetAddr): RawByteString; overload;
-    /// set the IP_PKTINFO option for UDP, as needed by RecvFromIf()
-    // - only implemented on Linux by now: returns nrNotImplemented otherwise
+    /// enable UDP packet information for RecvFromIf()
+    // - supported on Linux, macOS and NetBSD; nrNotImplemented elsewhere
     function SetPacketInfo(enable: boolean): TNetResult;
     /// low-level UDP receiving of some data, with its receiving interface
     // - ifindex is the TMacAddress.IfIndex of the network interface which
