@@ -3730,6 +3730,21 @@ begin
     d.ClientFlush(f);
     Check(server.ComputeResponse(d) > 0, 'bad opt54');
     Check(d.SendType = dmtAck, 'bad opt54 type');
+    // no relay: FindScope uses ciaddr of a configured client, then RecvIp4 as
+    // the bound server IP which received the frame - not the client source IP
+    settings.AddScope(TDhcpScopeSettings.Create).SubnetMask := '10.0.0.1/24';
+    server.Setup(settings);
+    d.ClientFlush(d.ClientNew(dmtDiscover, macs[1520]));
+    d.RecvIp4 := ToIP4('10.0.0.1'); // received on the 2nd server interface
+    Check(server.ComputeResponse(d) > 0, 'scope recvip4');
+    ip4 := d.Send.yiaddr;
+    Check(server.Scope[1].Subnet.Match(ip4), 'scope recvip4 subnet');
+    d.ClientFlush(d.ClientNew(dmtRequest, macs[1520])); // RENEWING unicast
+    d.Recv.ciaddr := ip4;
+    d.RecvIp4 := ToIP4('192.168.0.1'); // routed to the 1st server interface
+    Check(server.ComputeResponse(d) > 0, 'scope ciaddr');
+    Check(d.SendType = dmtAck, 'scope ciaddr type');
+    CheckEqual(d.Send.yiaddr, ip4, 'scope ciaddr ip');
   finally
     server.Free;
     settings.Free;

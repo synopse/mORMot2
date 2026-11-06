@@ -5943,11 +5943,14 @@ begin
     // e.g. VLAN 10 relay set giaddr=192.168.10.1 Gateway IP field
     // - giaddr from RFC 2131 is authoritative so we should not fallback
     State.Scope := GetScope(State.Recv.giaddr)
+  else if State.Recv.ciaddr <> 0 then
+    // no giaddr: RENEWING/REBINDING/INFORM unicast from a configured client
+    State.Scope := GetScope(State.Recv.ciaddr)
   else if State.RecvIp4 <> 0 then
-    // no giaddr: check RecvIp4 bound local server IP as set by the UDP server
+    // no ciaddr: check RecvIp4 bound local server IP as set by the UDP server
     State.Scope := GetScope(State.RecvIp4)
   else
-    // no option 118 no giaddr nor RecvIp4: default to Scope[0]
+    // no option 118 no giaddr no ciaddr nor RecvIp4: default to Scope[0]
     State.Scope := pointer(fScope);
   result := State.Scope <> nil;
 end;
@@ -6643,7 +6646,7 @@ begin
   {$endif DHCP_IFINDEX}
   // parse the request, and compute the response
   fState.RecvLen := len;
-  fState.RecvIp4 := remote.IP4;
+  fState.RecvIp4 := fSockAddr.IP4; // bound server IP - not remote.IP4
   fState.BootTix32 := GetUptimeSec; // not GetTickSec to include sleep time
   len := fOwner.ComputeResponse(fState);
   if len <= 0 then
