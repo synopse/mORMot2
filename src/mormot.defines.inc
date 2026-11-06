@@ -1000,11 +1000,11 @@
   {$ifdef ABIARM}
     {$define OSWINARM}
   {$endif ABIARM}
-  {$define THREADID32}        // TThreadID always 32-bit DWORD on all Windows archs
-  {$define OSFUTEX}           // WaitForValue() futex-like API appeared with Win8
+  {$define THREADID32}    // TThreadID always 32-bit DWORD on all Windows archs
+  {$define OSFUTEX}       // WaitForValue() futex-like API appeared with Win8
 {$else}
   {$ifdef CPU32}
-    {$define THREADID32}      // TThreadID is 32-bit on 32-bit POSIX systems
+    {$define THREADID32}  // TThreadID is 32-bit on 32-bit POSIX systems
   {$endif CPU32}
   {$ifdef OSLINUX}
     {$define OSLINUXANDROID}
@@ -1038,10 +1038,14 @@
   {$endif OSANDROID}
   {$ifdef OSDARWIN}
     {$define OSBSDDARWIN}     // OSBSDDARWIN = OSBSD or OSDARWIN
+    {$define HAS_IP_PKTINFO}  // SetPacketInfo/RecvFromIf/SendToIf support
   {$endif OSDARWIN}
   {$ifdef OSBSD}
     {$define OSBSDDARWIN}     // OSBSDDARWIN = OSBSD or OSDARWIN
     {$define OSELF}           // OSX has its own macho executable format
+    {$ifdef OSNETBSD}         // other BSD (especially OpenBSD) are too diverse
+      {$define HAS_IP_PKTINFO}
+    {$endif OSNETBSD}
   {$endif OSBSD}
 {$endif OSWINDOW}
 

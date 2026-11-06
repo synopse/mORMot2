@@ -25,7 +25,7 @@ unit mormot.net.dhcp;
    Scale up to 100k leases per subnet with minimal RAM/CPU consumption.
    No memory allocation is performed during the response computation.
    Prevent most client abuse with configurable rate limiting.
-   Cross-Platform on Windows, Linux and MacOS, running in a single thread/core.
+   Cross-Platform Windows, Linux and MacOS/BSD, running in a single thread/core.
    Meaningful and customizable logging of the actual process (as text or syslog).
    Optional verbose debug of all input/output frames as usable JSON objects.
    Generate detailed JSON and CSV metrics as local files, global and per scope.
@@ -1673,26 +1673,20 @@ type
 
 { **************** High-Level DHCP Server over UDP }
 
-// define the needed interface tracking logic for proper broadcasting
-// - on Windows, a UDP socket bound to a particular local IPv4 address still
-// receives broadcasts for that interface so no IfIndex tracking is needed
-// - on Linux, a socket bound to an interface IP does not receive the
-// 255.255.255.255 broadcasts: so a single thread is bound to 0.0.0.0 for
-// each server port, and identifies the receiving interface via IP_PKTINFO
-// - macOS and NetBSD can easily follow the IP_PKTINFO socket option
-// - FreeBSD has a specific IP_ONESBCAST option and OpenBSD seems out of reach
-{$ifdef HAS_IP_PKTINFO}
-  {$define DHCP_IFINDEX}
-{$endif HAS_IP_PKTINFO}
-
 type
   /// exception class raised during TDhcpServer process at UDP/Network level
   EDhcpServer = class(EDhcp);
 
   TDhcpServer = class;
 
-  {$ifdef DHCP_IFINDEX}
-  /// define a network interface served by a TDhcpServerThread
+  {$ifdef HAS_IP_PKTINFO}
+  /// if HAS_IP_PKTINFO is enabled, define a TDhcpServerThread network interface
+  // - on Windows, a UDP socket bound to a particular local IPv4 address still
+  // receives broadcasts for that interface so no IfIndex tracking is needed
+  // - on Linux/MacOS/NetBSD, a socket bound to an interface IP does not receive
+  // the 255.255.255.255 broadcasts: so a single thread is bound to 0.0.0.0 for
+  // each server port, and identifies the receiving interface via IP_PKTINFO
+  // - FreeBSD has a specific IP_ONESBCAST option and OpenBSD seems out of reach
   TDhcpServerInterface = record
     /// the TMacAddress.IfIndex of this interface
     IfIndex: integer;
@@ -1703,24 +1697,24 @@ type
   end;
   PDhcpServerInterface = ^TDhcpServerInterface;
   TDhcpServerInterfaceDynArray = array of TDhcpServerInterface;
-  {$endif DHCP_IFINDEX}
+  {$endif HAS_IP_PKTINFO}
 
   /// listen for DHCP messages on one local UDP IPv4 and port
-  // - on Linux, a socket bound to an interface IP does not receive the
-  // 255.255.255.255 broadcasts: so a single thread is bound to 0.0.0.0 for
-  // each server port, and identifies the receiving interface via IP_PKTINFO
+  // - on Windows, broadcast replies may reach other interfaces on multihomed hosts
+  // - on Linux/MacOS/NetBSD, use IP_PKTINFO with a single 0.0.0.0:port per server
+  // - on other BSD flavors (or OS), multiple interfaces lookup is not guaranteed
   TDhcpServerThread = class(TUdpServerThread)
   protected
     fOwner: TDhcpServer;
     fState: TDhcpState;
     fClientPort, fServerPort: TNetPort;
-    {$ifdef DHCP_IFINDEX}
+    {$ifdef HAS_IP_PKTINFO}
     fInterface: TDhcpServerInterfaceDynArray; // via fOwner.fScopeSafe
     procedure AddInterface(const aScope: TDhcpScope;
       const aInterface: TMacAddress);
     function GetFramePort(ip: PNetIP4 = nil): TNetPort;
     function GetInterfacePtr(ifindex: integer): PDhcpServerInterface;
-    {$endif DHCP_IFINDEX}
+    {$endif HAS_IP_PKTINFO}
     function DoBind: TNetResult; override;
     procedure OnFrameReceived(len: integer; var remote: TNetAddr); override;
     procedure OnShutdown; override; // to call TDhcpServer.ThreadShutdownNotify
@@ -1745,9 +1739,11 @@ type
     /// bind and start listening to incoming UDP frames
     // - will bind all network interfaces matching a Scope[] by default; you
     // can limit to bind a single interface by providing its IPv4
-    // - on Linux, a single 0.0.0.0 socket is bound for each server port, and
-    // serves the requests received on those interfaces: so no other socket of
-    // this computer could be bound to this port
+    // - on Linux/MacOS/NetBSD, a single 0.0.0.0 socket is bound for each server
+    // port, and serves the requests received on those interfaces: so no other
+    // socket of this computer could be bound to this port; Windows may send
+    // broadcasts on all interfaces, and other OS may not properly implement
+    // multiple network interfaces
     procedure Bind(const InterfaceIP4: RawUtf8 = ''); virtual;
     /// relase all bound interfaces and their threads, and wait for finalization
     procedure Shutdown; virtual;
@@ -6551,7 +6547,7 @@ begin
   fFrame := @fState.Recv;
   fClientPort := aScope.ClientPort;
   fServerPort := aScope.ServerPort;
-  {$ifdef DHCP_IFINDEX}
+  {$ifdef HAS_IP_PKTINFO}
   // register main network interface
   AddInterface(aScope, aInterface);
   // binding aInterface.IP would not receive the 255.255.255.255 broadcasts
@@ -6560,10 +6556,10 @@ begin
   {$else}
   inherited Create(aOwner.Log, aInterface.IP, UInt32ToUtf8(fServerPort),
     aScope.Main.Name, 1000);
-  {$endif DHCP_IFINDEX}
+  {$endif HAS_IP_PKTINFO}
 end;
 
-{$ifdef DHCP_IFINDEX}
+{$ifdef HAS_IP_PKTINFO}
 procedure TDhcpServerThread.AddInterface(const aScope: TDhcpScope;
   const aInterface: TMacAddress);
 var
@@ -6616,7 +6612,7 @@ begin
     result := 0;
   fOwner.fScopeSafe.ReadUnLock;
 end;
-{$endif DHCP_IFINDEX}
+{$endif HAS_IP_PKTINFO}
 
 function TDhcpServerThread.DoBind: TNetResult;
 begin
@@ -6647,14 +6643,14 @@ begin
   if fOwner = nil then
     exit;
   // locate the interface and bound IP4 as set by Bind()
-  {$ifdef DHCP_IFINDEX}
+  {$ifdef HAS_IP_PKTINFO}
   port := GetFramePort(@fState.RecvIp4); // fFrameIfIndex lookup
   if port = 0 then
     exit; // not found in fInterface[]
   {$else}
   port := fClientPort;
   fState.RecvIp4 := fSockAddr.IP4; // bound server IP - not remote.IP4
-  {$endif DHCP_IFINDEX}
+  {$endif HAS_IP_PKTINFO}
   // parse the request, and compute the response
   fState.RecvLen := len;
   fState.BootTix32 := GetUptimeSec; // not GetTickSec to include sleep time
@@ -6708,7 +6704,7 @@ end;
 function TDhcpServer.GetThread(s: PDhcpScope): TDhcpServerThread;
 var
   t: ^TDhcpServerThread;
-  n {$ifdef DHCP_IFINDEX} , i {$endif}: integer;
+  n {$ifdef HAS_IP_PKTINFO} , i {$endif}: integer;
 begin
   result := nil;
   if s = nil then
@@ -6718,12 +6714,12 @@ begin
     t := pointer(fThreads.List);
     for n := 1 to length(fThreads.List) do
     begin
-      {$ifdef DHCP_IFINDEX}
+      {$ifdef HAS_IP_PKTINFO}
       for i := 0 to high(t^.fInterface) do
         if s^.Subnet.Match(t^.fInterface[i].IP4) then
       {$else}
       if s^.Subnet.Match(t^.BindAddress) then
-      {$endif DHCP_IFINDEX}
+      {$endif HAS_IP_PKTINFO}
         begin
           result := t^;
           exit;
@@ -6736,14 +6732,14 @@ begin
 end;
 
 function TDhcpServer.EnsureBound(s: PDhcpScope; mac: PMacAddress): TDhcpServerThread;
-{$ifdef DHCP_IFINDEX}
+{$ifdef HAS_IP_PKTINFO}
 var
   i: PtrInt;
-{$endif DHCP_IFINDEX}
+{$endif HAS_IP_PKTINFO}
 begin
   // validate the scope by subnet
   result := GetThread(s);
-  {$ifdef DHCP_IFINDEX}
+  {$ifdef HAS_IP_PKTINFO}
   if result <> nil then
   begin
     if result.GetInterfacePtr(mac^.IfIndex) = nil then
@@ -6768,7 +6764,7 @@ begin
   {$else}
   if result <> nil then
     exit; // already registered on this interface
-  {$endif DHCP_IFINDEX}
+  {$endif HAS_IP_PKTINFO}
   result := TDhcpServerThread.Create(self, s^, mac^); // may raise exception
   fThreads.Add(result);
 end;

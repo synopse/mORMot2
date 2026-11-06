@@ -433,51 +433,94 @@ function getpeername(s: integer; name: PSockAddr; var namelen: TSockLen): intege
 
 {$endif SOCKDIRECTSYSCALL}
 
-{$ifdef OSLINUX}
+{$ifdef HAS_IP_PKTINFO}
 
 const
-  IP_PKTINFO = 8; // not defined by FPC
+  IPPROTO_IP = 0; // not defined on Delphi POSIX
+
+  {$ifdef OSLINUX}
+  IP_PKTINFO = 8;
+  PKTINFO_RECV_OPT = IP_PKTINFO;
+  PKTINFO_MSG_CTRUNC = $08;
+  {$endif OSLINUX}
+
+  {$ifdef OSDARWIN}
+  IP_PKTINFO = 26;
+  PKTINFO_RECV_OPT = IP_PKTINFO;
+  PKTINFO_MSG_CTRUNC = $20;
+  {$endif OSDARWIN}
+
+  {$ifdef OSNETBSD}
+  IP_PKTINFO = 25;
+  PKTINFO_RECV_OPT = 26; // IP_RECVPKTINFO
+  PKTINFO_MSG_CTRUNC = $20;
+  {$endif OSNETBSD}
 
 type
-  // recvmsg/sendmsg structures, with a single IP_PKTINFO control message
   TSockIoVec = record
     iov_base: pointer;
     iov_len: size_t;
   end;
 
+  // Native POSIX msghdr ABI
   TSockMsgHdr = record
     msg_name: pointer;
-    msg_namelen: cint;
+    msg_namelen: cint; // 32-bit socklen_t
     msg_iov: ^TSockIoVec;
+    {$ifdef OSLINUX}
     msg_iovlen: size_t;
+    {$else}
+    msg_iovlen: cint;
+    {$endif OSLINUX}
     msg_control: pointer;
+    {$ifdef OSLINUX}
     msg_controllen: size_t;
+    {$else}
+    msg_controllen: cuint; // 32-bit socklen_t
+    {$endif OSLINUX}
     msg_flags: cint;
   end;
 
-  // cmsghdr followed by its in_pktinfo: no padding on 32-bit nor 64-bit
+  // cmsghdr followed by native in_pktinfo
   TSockPktInfo = record
+    {$ifdef OSLINUX}
     cmsg_len: size_t;
+    {$else}
+    cmsg_len: cuint; // 32-bit socklen_t
+    {$endif OSLINUX}
     cmsg_level: cint;
     cmsg_type: cint;
+    {$ifdef OSNETBSD}
+    // NetBSD aligns CMSG_DATA to the machine word size
+    {$ifdef CPU64}
+    cmsg_pad: cuint;
+    {$endif CPU64}
+    ipi_addr: TNetIP4;
+    ipi_ifindex: cuint;
+    {$else}
+    // Linux and Darwin share the same in_pktinfo layout
     ipi_ifindex: cint;
     ipi_spec_dst: TNetIP4;
     ipi_addr: TNetIP4;
+    {$endif OSNETBSD}
   end;
 
 const
-  // CMSG_LEN(SizeOf(in_pktinfo)) - CMSG_SPACE() being SizeOf(TSockPktInfo)
+  {$ifdef OSLINUX}
+  // Linux 64-bit: cmsg_len=28, CMSG_SPACE=32
   PKTINFO_LEN = SizeOf(size_t) + 5 * SizeOf(cint);
+  {$else}
+  // Darwin: 24; NetBSD: 20 (32-bit) or 24 (64-bit)
+  PKTINFO_LEN = SizeOf(TSockPktInfo);
+  {$endif OSLINUX}
 
-// no syscall available from FPC -> use the libc wrapper
+function recvmsg(s: integer; var msg: TSockMsgHdr; flags: integer): ssize_t; cdecl;
+  external clib name 'recvmsg' + LIBC_SUFFIX;
 
-function recvmsg(s: integer; var msg: TSockMsgHdr; flags: integer): ssize_t;
-  cdecl; external clib name 'recvmsg' + LIBC_SUFFIX;
+function sendmsg(s: integer; var msg: TSockMsgHdr; flags: integer): ssize_t; cdecl;
+  external clib name 'sendmsg' + LIBC_SUFFIX;
 
-function sendmsg(s: integer; var msg: TSockMsgHdr; flags: integer): ssize_t;
-  cdecl; external clib name 'sendmsg' + LIBC_SUFFIX;
-
-{$endif OSLINUX}
+{$endif HAS_IP_PKTINFO}
 
 {$ifdef OSDARWIN2}
 // circumvent linking issue on Mac OSX
@@ -790,7 +833,7 @@ begin
   v := ord(enable);
   if @self = nil then
     result := nrNoSocket
-  else if setsockopt(TSocket(@self), IPPROTO_IP, IP_PKTINFO,
+  else if setsockopt(TSocket(@self), IPPROTO_IP, PKTINFO_RECV_OPT,
             @v, SizeOf(v)) = NO_ERROR then
     result := nrOk
   else
@@ -822,10 +865,13 @@ begin
   until (result >= 0) or
         (cerrno <> ESysEINTR); // retry on SIG received
   if (result >= 0) and
+     ((msg.msg_flags and PKTINFO_MSG_CTRUNC) = 0) and
      (msg.msg_controllen >= PKTINFO_LEN) and
+     (info.cmsg_len >= PKTINFO_LEN) and
+     (info.cmsg_len <= msg.msg_controllen) and
      (info.cmsg_level = IPPROTO_IP) and
      (info.cmsg_type = IP_PKTINFO) then
-    ifindex := info.ipi_ifindex; // ipi_spec_dst may be from another interface
+    ifindex := info.ipi_ifindex;
 end;
 
 function TNetSocketWrap.SendToIf(Buf: pointer; len: integer;
