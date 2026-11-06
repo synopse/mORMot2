@@ -382,6 +382,19 @@ type
     function RecvFrom(Buf: pointer; len: integer; out addr: TNetAddr): integer; overload;
     /// low-level UDP receiving from an address of some data into a RawByteString
     function RecvFrom(out addr: TNetAddr): RawByteString; overload;
+    /// set the IP_PKTINFO option for UDP, as needed by RecvFromIf()
+    // - only implemented on Linux by now: returns nrNotImplemented otherwise
+    function SetPacketInfo(enable: boolean): TNetResult;
+    /// low-level UDP receiving of some data, with its receiving interface
+    // - ifindex is the TMacAddress.IfIndex of the network interface which
+    // received this frame, or 0 if unknown, e.g. with no SetPacketInfo(true)
+    function RecvFromIf(Buf: pointer; len: integer; out addr: TNetAddr;
+      out ifindex: integer): integer;
+    /// low-level UDP sending of some data through a given network interface
+    // - e.g. a 255.255.255.255 broadcast follows the default route otherwise
+    // - ifindex = 0 just calls SendTo(), i.e. let the routing table decide
+    function SendToIf(Buf: pointer; len: integer; const addr: TNetAddr;
+      ifindex: integer): TNetResult;
     /// wait for the socket to a given set of receiving/sending state
     // - using poll() on POSIX (as required), and select() on Windows
     // - ms < 0 means an infinite timeout (blocking until events happen)
@@ -3784,6 +3797,31 @@ begin
     len := 0; // return '' on error
   FastSetRawByteString(result, @tmp, len);
 end;
+
+{$ifndef OSLINUX} // see mormot.net.sock.posix.inc for the Linux version
+
+function TNetSocketWrap.SetPacketInfo(enable: boolean): TNetResult;
+begin
+  result := nrNotImplemented;
+end;
+
+function TNetSocketWrap.RecvFromIf(Buf: pointer; len: integer;
+  out addr: TNetAddr; out ifindex: integer): integer;
+begin
+  ifindex := 0; // unknown
+  result := RecvFrom(Buf, len, addr);
+end;
+
+function TNetSocketWrap.SendToIf(Buf: pointer; len: integer;
+  const addr: TNetAddr; ifindex: integer): TNetResult;
+begin
+  if ifindex = 0 then
+    result := SendTo(Buf, len, addr)
+  else
+    result := nrNotImplemented;
+end;
+
+{$endif OSLINUX}
 
 function TNetSocketWrap.RecvPending(out pending: integer): TNetResult;
 begin

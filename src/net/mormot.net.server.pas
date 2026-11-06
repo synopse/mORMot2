@@ -72,7 +72,8 @@ type
     fSockAddr: TNetAddr;
     fFrame: PUdpFrame;
     fReceived, fTimeout, fRebindRetry, fRebindCount, fFrameLen: integer;
-    fInitialBound, fAutoRebind, fFrameOwned: boolean;
+    fFrameIfIndex: integer; // the receiving interface, if fPacketInfo is set
+    fInitialBound, fAutoRebind, fFrameOwned, fPacketInfo: boolean;
     fBindAddress, fBindPort: RawUtf8;
     function DoBind: TNetResult; virtual;
     function GetIPWithPort: RawUtf8;
@@ -2612,6 +2613,9 @@ begin
   fLogClass.Add.Log(sllDebug, 'DoBind %:%', [fBindAddress, fBindPort], self);
   result := NewSocket(fBindAddress, fBindPort, nlUdp, {bind=}true,
     fTimeout, fTimeout, fTimeout, 10, fSock, @fSockAddr);
+  if (result = nrOK) and
+     fPacketInfo then
+    result := fSock.SetPacketInfo(true); // for RecvFromIf() in DoExecute
   if result <> nrOK then
     fLogClass.Add.Log(sllWarning, 'DoBind=%', [NetLastErrorMsg], self);
   fInitialBound := true; // notify DoExecute() ASAP that fSock was set (or not)
@@ -2739,7 +2743,10 @@ begin
           begin
             // some UDP packet received
             PInteger(fFrame)^ := 0;
-            len := fSock.RecvFrom(fFrame, fFrameLen, remote);
+            if fPacketInfo then // also retrieve the receiving interface
+              len := fSock.RecvFromIf(fFrame, fFrameLen, remote, fFrameIfIndex)
+            else
+              len := fSock.RecvFrom(fFrame, fFrameLen, remote);
             if Terminated then
               break;
             if len < 0 then // paranoid

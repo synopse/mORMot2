@@ -4455,6 +4455,9 @@ end;
 procedure TNetworkProtocols.IPAddresses;
 var
   i, n, n2: PtrInt;
+  srv, cli: TNetSocket;
+  addr, frame, remote: TNetAddr;
+  ifindex, sendindex: integer;
   s: ShortString;
   txt, uri: RawUtf8;
   ip: TNetIP6;
@@ -4504,6 +4507,33 @@ begin
   CheckEqual(SizeOf(TNetIP4), 4);
   CheckEqual(SizeOf(TNetIP6), 16);
   CheckEqual(SizeOf(TNetAddr), SOCKADDR_SIZE);
+  // validate the receiving interface of UDP frames
+  Check(NewSocket(cLocalhost, '0', nlUdp, {bind=}true,
+    100, 100, 100, 0, srv, @addr) = nrOk, 'udp bind');
+  Check(srv.GetName(addr) = nrOk, 'udp port');
+  {$ifdef OSLINUX}
+  Check(srv.SetPacketInfo(true) = nrOk, 'pktinfo');
+  {$else}
+  Check(srv.SetPacketInfo(true) = nrNotImplemented, 'pktinfo');
+  {$endif OSLINUX}
+  cli := addr.NewSocket(nlUdp);
+  sendindex := 0; // first with no interface, then through the loopback
+  for i := 1 to 2 do
+  begin
+    Check(cli.SendToIf(@addr, SizeOf(addr), addr, sendindex) = nrOk, 'sendto');
+    FillCharFast(frame, SizeOf(frame), 0);
+    CheckEqual(srv.RecvFromIf(@frame, SizeOf(frame), remote, ifindex),
+      SizeOf(addr), 'recvfrom');
+    Check(CompareMem(@frame, @addr, SizeOf(addr)), 'udp frame');
+    {$ifdef OSLINUX}
+    Check(ifindex > 0, 'ifindex');
+    {$else}
+    CheckEqual(ifindex, 0, 'ifindex');
+    {$endif OSLINUX}
+    sendindex := ifindex;
+  end;
+  cli.ShutdownAndClose({rdwr=}false);
+  srv.ShutdownAndClose({rdwr=}true);
   FillZero(ip.b);
   Check(IsZero(ip.b));
   IP4Short(@ip, s);
