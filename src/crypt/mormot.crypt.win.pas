@@ -203,12 +203,13 @@ type
     fCertStore: TSystemCertificateStore;
     fLocations: TWinCertStoreLocations;
     fCert: ICryptCertCngs;
+    fAllowLegacyProviderType: Boolean;
     procedure LoadStore(Location: TWinCertStoreLocation);
   public
     /// enumerate CNG-backed identities from the supplied Windows system store
     constructor Create(aCertStore: TSystemCertificateStore = scsMY;
       aLocations: TWinCertStoreLocations = [wcslCurrentUser, wcslLocalMachine];
-      aLog: TSynLogClass = nil); reintroduce;
+      aLog: TSynLogClass = nil; aAllowLegacyProviderType: Boolean = False); reintroduce;
     /// refresh the list of available CNG-backed certificates
     // - existing ICryptCertCng references remain valid because each instance
     // owns a duplicated PCCERT_CONTEXT
@@ -261,7 +262,7 @@ type
     constructor Create(aOwner: TCryptCertAlgoCng; aLogClass: TSynLogClass;
       aContext: PCCERT_CONTEXT; aLocation: TWinCertStoreLocation;
       aKeyOptions: TWinCertCngKeyOptions;
-      aInfo: PWinCertKeyProviderInfo = nil); reintroduce;
+      aInfo: PWinCertKeyProviderInfo = nil; aAllowLegacyProviderType: Boolean = False); reintroduce;
     /// clear both the TX509 representation and retained Windows context
     procedure Clear; override;
     // ICryptCert methods
@@ -676,13 +677,14 @@ end;
 { TCryptCertAlgoCng }
 
 constructor TCryptCertAlgoCng.Create(aCertStore: TSystemCertificateStore;
-  aLocations: TWinCertStoreLocations; aLog: TSynLogClass);
+  aLocations: TWinCertStoreLocations; aLog: TSynLogClass; aAllowLegacyProviderType: Boolean);
 begin
   if aLog = nil then
     aLog := TSynLog;
   fLog := aLog;
   fCertStore := aCertStore;
   fLocations := aLocations;
+  fAllowLegacyProviderType := aAllowLegacyProviderType;
   Refresh;
 end;
 
@@ -701,10 +703,10 @@ begin
       while store.Next do
       begin
         if WinCertCtxtKeyProvider(store.Context, info) and
-           (info.ProviderType = 0) then // no private key or legacy CryptoAPI CSP
+           (fAllowLegacyProviderType or (info.ProviderType = 0)) then // no private key or legacy CryptoAPI CSP
         try
           cert := TCryptCertCng.Create(self, fLog, store.Context,
-            Location, [wckCompareKey], @info);
+            Location, [wckCompareKey], @info, fAllowLegacyProviderType);
           n := length(fCert);
           SetLength(fCert, n + 1);
           fCert[n] := cert;
@@ -778,7 +780,7 @@ end;
 
 constructor TCryptCertCng.Create(aOwner: TCryptCertAlgoCng;
   aLogClass: TSynLogClass; aContext: PCCERT_CONTEXT; aLocation: TWinCertStoreLocation;
-  aKeyOptions: TWinCertCngKeyOptions; aInfo: PWinCertKeyProviderInfo);
+  aKeyOptions: TWinCertCngKeyOptions; aInfo: PWinCertKeyProviderInfo; aAllowLegacyProviderType: Boolean);
 var
   der: RawByteString;
   xka: TXPublicKeyAlgorithm;
@@ -795,10 +797,10 @@ begin
     fStoreLocation := aLocation;
     if aInfo = nil then
       ECryptCertCng.RaiseU('TCryptCertCng.Create: missing provider info');
-    if aInfo^.ProviderType <> 0 then
-      RaiseError('Create: certificate is not backed by a CNG KSP');
     fKeyProvider := aInfo^.Provider;
     fKeyContainer := aInfo^.Container;
+    if not aAllowLegacyProviderType and (aInfo^.ProviderType <> 0) then
+      RaiseError('Create: certificate is not backed by a CNG KSP');
   end;
   fContext := CertDuplicateCertificateContext(aContext); // increment refcount
   if fContext = nil then
