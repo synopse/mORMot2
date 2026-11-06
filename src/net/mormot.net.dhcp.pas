@@ -6597,7 +6597,7 @@ var
 begin
   fOwner.fScopeSafe.ReadLock;
   p := GetInterfacePtr(fFrameIfIndex); // fFrameIfIndex set for current frame
-  if p = nil then
+  if p <> nil then
     result := p^.ClientPort
   else
     result := 0;
