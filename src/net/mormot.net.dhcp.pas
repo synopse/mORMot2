@@ -1724,15 +1724,15 @@ type
     constructor Create(aOwner: TDhcpServer; const aScope: TDhcpScope;
       const aInterface: TMacAddress); reintroduce;
   end;
+  TDhcpServerThreadDynArray = array of TDhcpServerThread;
 
   /// implements a full DHCP IPv4 server over UDP
   // - several interfaces and ports could be bound to this single instance
   TDhcpServer = class(TDhcpProcess)
   protected
-    fThreads: TThreads; // fThreads.List[] are TDhcpServerThread
+    fThreads: TThreads; // fThreads.List[] are owned TDhcpServerThread instances
     function GetThread(s: PDhcpScope): TDhcpServerThread;
     function EnsureBound(s: PDhcpScope; mac: PMacAddress): TDhcpServerThread;
-    procedure ThreadShutdownNotify(Sender: TDhcpServerThread);
   public
     /// finalize this DHCP server instance and any per-interface UDP threads
     destructor Destroy; override;
@@ -6624,8 +6624,7 @@ end;
 
 procedure TDhcpServerThread.OnShutdown;
 begin
-  fOwner.ThreadShutdownNotify(self);
-  fOwner := nil;
+  fOwner := nil; // TDhcpServer.Shutdown own and manage each TDhcpServerThread
 end;
 
 procedure TDhcpServerThread.OnIdle(tix64: Int64);
@@ -6695,11 +6694,8 @@ end;
 
 destructor TDhcpServer.Destroy;
 begin
-  if fThreads.List <> nil then
-    Shutdown;
+  Shutdown;
   inherited Destroy;
-  if fThreads.List <> nil then
-    ObjArrayClear(fThreads.List);
 end;
 
 function TDhcpServer.GetThread(s: PDhcpScope): TDhcpServerThread;
@@ -6809,15 +6805,32 @@ begin
   end;
 end;
 
-procedure TDhcpServer.ThreadShutdownNotify(Sender: TDhcpServerThread);
-begin
-  if self <> nil then
-    fThreads.Terminated(Sender);
-end;
-
 procedure TDhcpServer.Shutdown;
+var
+  threads: TDhcpServerThreadDynArray;
+  i: PtrInt;
 begin
-  fThreads.TerminateAndWait({secs=}30, self, fLog);
+  // detach the owned threads from the internal list
+  fThreads.Safe.Lock;
+  try
+    threads := TDhcpServerThreadDynArray(fThreads.List);
+    fThreads.List := nil;
+  finally
+    fThreads.Safe.UnLock;
+  end;
+  // phase 1: signal all threads before waiting for any
+  for i := 0 to high(threads) do
+    threads[i].Terminate;
+  try
+    // phase 2: wake blocked UDP receivers and wait
+    for i := 0 to high(threads) do
+      threads[i].TerminateAndWaitFinished(5000); // check for the state
+    for i := 0 to high(threads) do
+      threads[i].WaitFor; // ensures the OS thread actually exited
+  finally
+    // TUdpServerThread.Destroy will eventually closes each fSock handle
+    ObjArrayClear(threads);
+  end;
 end;
 
 

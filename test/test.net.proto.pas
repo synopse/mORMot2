@@ -174,6 +174,8 @@ type
     function DoKeepAliveOptionsRequest(Ctxt: THttpServerRequestAbstract): cardinal;
     /// validate that THttpAsyncServer rejects an endless header or chunk line
     procedure DoHttpLongLine(Sender: TObject);
+    /// validate clean start/shutdown of several DHCP servers
+    procedure DoDhcpServerShutdown(Sender: TObject);
   published
     {$ifdef USEWININET}
     /// validate lazy initialization of the http.sys WebSocket API
@@ -2487,6 +2489,81 @@ begin
     end;
 end;
 
+
+procedure TNetworkProtocols.DoDhcpServerShutdown;
+var
+  mac: TMacAddress;
+  settings: TDhcpServerSettings;
+  scope: TDhcpScopeSettings;
+  server: TDhcpServer;
+  probe: TNetSocket;
+  addr: TNetAddr;
+  port: RawUtf8;
+  i, n: integer;
+
+  function PortCanBind: boolean;
+  var
+    s: TNetSocket;
+  begin
+    result := NewSocket(mac.IP, port, nlUdp,
+                {bind=}true, 100, 100, 100, 0, s) = nrOk;
+    if s <> nil then
+      s.ShutdownAndClose(false);
+  end;
+
+begin
+  if not GetMainMacAddress(mac, [mafRequireBroadcast]) then
+  begin
+    AddConsole('DHCP socket test skipped: no suitable interface');
+    exit;
+  end;
+  // Ask the OS to select an available port.
+  probe := nil;
+  Check(NewSocket(cAnyHost, '0', nlUdp, {bind=}true, 100, 100, 100, 0,
+    probe, @addr) = nrOk, 'ephemeral UDP bind');
+  if probe = nil then
+    exit;
+  port := UInt32ToUtf8(addr.Port);
+  probe.ShutdownAndClose(false);
+  settings := TDhcpServerSettings.Create;
+  try
+    scope := settings.AddScope;
+    if not scope.From(mac) then
+    begin
+      Check(false, 'DHCP scope from interface');
+      exit;
+    end;
+    scope.ServerPort := addr.Port;
+    if fOwner.MultiThread then
+      n := 4   // quick test
+    else
+      n := 16; // default full pressure
+    for i := 1 to n do
+    begin
+      server := TDhcpServer.Create;
+      try
+        server.Setup(settings);
+        server.Bind(mac.IP);
+        // Ensure the server actually owns the port.
+        Check(not PortCanBind, 'UDP port must be occupied');
+        // Exercise explicit and implicit shutdown.
+        if i and 1 = 0 then
+        begin
+          server.Shutdown;
+          Check(PortCanBind, 'UDP port reusable after Shutdown');
+          // Shutdown must also be idempotent.
+          server.Shutdown;
+        end;
+      finally
+        server.Free;
+      end;
+      Check(PortCanBind, 'UDP port reusable after Free');
+    end;
+  finally
+    settings.Free;
+  end;
+end;
+
 const
   FND_RESP = [doSubnetMask, doLeaseTime, doMessageType,
     doServerIdentifier, doRenewalTime, doRebindingTime];
@@ -2619,6 +2696,7 @@ var
   end;
 
 begin
+  Run(DoDhcpServerShutdown, self, 'DHCPShutdown', true, false);
   rnd := ThreadRandom; // use the TLecuyer of this thread
   // validate some DHCP protocol definitions
   CheckEqual(ord(dmtTls), 18, 'dmt');
