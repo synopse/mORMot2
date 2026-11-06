@@ -4526,11 +4526,11 @@ begin
   Check(NewSocket(cLocalhost, '0', nlUdp, {bind=}true,
     100, 100, 100, 0, srv, @addr) = nrOk, 'udp bind');
   Check(srv.GetName(addr) = nrOk, 'udp port');
-  {$ifdef OSLINUX}
+  {$ifdef HAS_IP_PKTINFO}
   Check(srv.SetPacketInfo(true) = nrOk, 'pktinfo');
   {$else}
   Check(srv.SetPacketInfo(true) = nrNotImplemented, 'pktinfo');
-  {$endif OSLINUX}
+  {$endif HAS_IP_PKTINFO}
   cli := addr.NewSocket(nlUdp);
   sendindex := 0; // first with no interface, then through the loopback
   for i := 1 to 2 do
@@ -4540,11 +4540,11 @@ begin
     CheckEqual(srv.RecvFromIf(@frame, SizeOf(frame), remote, ifindex),
       SizeOf(addr), 'recvfrom');
     Check(CompareMem(@frame, @addr, SizeOf(addr)), 'udp frame');
-    {$ifdef OSLINUX}
+    {$ifdef HAS_IP_PKTINFO}
     Check(ifindex > 0, 'ifindex');
     {$else}
     CheckEqual(ifindex, 0, 'ifindex');
-    {$endif OSLINUX}
+    {$endif HAS_IP_PKTINFO}
     sendindex := ifindex;
   end;
   cli.ShutdownAndClose({rdwr=}false);
