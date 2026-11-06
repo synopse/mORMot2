@@ -88,7 +88,7 @@ type
       CustomKey: cardinal = 0): SpiUtf8; overload;
     /// this class method could be used to decrypt a password, stored as JSON,
     // according to a given private key
-    // - may trigger a ECrypt if the password was stored using hardened
+    // - may trigger a ESynCrypto if the password was stored using hardened
     // CryptDataForCurrentUser, and the current user doesn't match the
     // expected user stored in the field
     class function ComputePlainPassword(const CypheredPassword: SpiUtf8;
@@ -110,7 +110,7 @@ type
     property Key: cardinal
       read fKey write fKey;
     /// access to the associated unencrypted Password value
-    // - may trigger a ECrypt if the password was stored using hardened
+    // - may trigger a ESynCrypto if the password was stored using hardened
     // CryptDataForCurrentUser, and the current user doesn't match the
     // expected user stored in the field
     // - equals fPassword field if Key is set to OBJECTPASSWORD_PLAIN
@@ -220,11 +220,11 @@ type
     /// finalize the authentation
     destructor Destroy; override;
     /// register one credential for a given user
-    // - this abstract method will raise an exception: inherited classes should
+    // - this abstract method will raise ESynCrypto: inherited classes should
     // implement them as expected
     procedure AuthenticateUser(const aName, aPassword: RawUtf8); virtual;
     /// unregister one credential for a given user
-    // - this abstract method will raise an exception: inherited classes should
+    // - this abstract method will raise ESynCrypto: inherited classes should
     // implement them as expected
     procedure DisauthenticateUser(const aName: RawUtf8); virtual;
     /// create a new session
@@ -7171,7 +7171,7 @@ begin
   begin
     i := PosExChar(':', fPassword);
     if i > 0 then
-      ECrypt.RaiseUtf8('%.GetPasswordSafe unable to retrieve the stored ' +
+      ESynCrypto.RaiseUtf8('%.GetPasswordSafe unable to retrieve the stored ' +
         'v: current user is [%], but password in % was encoded for [%]',
         [self, Executable.User, app, copy(fPassword, 1, i - 1)]);
   end;
@@ -7303,12 +7303,12 @@ end;
 
 procedure TSynAuthenticationAbstract.AuthenticateUser(const aName, aPassword: RawUtf8);
 begin
-  ECrypt.RaiseUtf8('%.AuthenticateUser() is not implemented', [self]);
+  ESynCrypto.RaiseUtf8('%.AuthenticateUser() is not implemented', [self]);
 end;
 
 procedure TSynAuthenticationAbstract.DisauthenticateUser(const aName: RawUtf8);
 begin
-  ECrypt.RaiseUtf8('%.DisauthenticateUser() is not implemented', [self]);
+  ESynCrypto.RaiseUtf8('%.DisauthenticateUser() is not implemented', [self]);
 end;
 
 function TSynAuthenticationAbstract.CheckCredentials(const UserName: RawUtf8;
@@ -7998,7 +7998,7 @@ begin
         inc(tmp.len, 16 - pad);
       if tmp.len > SizeOf(cc.data) then
         // all cookies storage should be < 4K so a single 2K cookie seems huge
-        ECrypt.RaiseU('TBinaryCookieGenerator: Too Big Too Fat');
+        ESynCrypto.RaiseU('TBinaryCookieGenerator: Too Big Too Fat');
       MoveFast(tmp.buf^, cc.data, tmp.len);
     end;
     cc.head.issued := UnixTimeMinimalUtc; // valid until year 2152
@@ -11970,7 +11970,7 @@ var
         UInt2DigitsToShortFast(t.Second),
         'Z'])])
   else
-    ECrypt.RaiseUtf8('Invalid AsnTime(%)', [dt]);
+    ESynCrypto.RaiseUtf8('Invalid AsnTime(%)', [dt]);
 end;
 
 function AsnNextTime(var Pos: integer; const Buffer: TAsnObject;
