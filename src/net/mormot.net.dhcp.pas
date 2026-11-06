@@ -1673,12 +1673,20 @@ type
 
 { **************** High-Level DHCP Server over UDP }
 
+{$ifdef OSLINUX}
+  // on Linux, a socket bound to an interface IP does not receive the
+  // 255.255.255.255 broadcasts: so a single thread is bound to 0.0.0.0 for
+  // each server port, and identifies the receiving interface via IP_PKTINFO
+  {$define DHCP_IFINDEX}
+{$endif OSLINUX}
+
 type
   /// exception class raised during TDhcpServer process at UDP/Network level
   EDhcpServer = class(EDhcp);
 
   TDhcpServer = class;
 
+  {$ifdef DHCP_IFINDEX}
   /// a network interface served by a TDhcpServerThread
   TDhcpServerInterface = record
     /// the TMacAddress.IfIndex of this interface
@@ -1688,7 +1696,9 @@ type
     /// the UDP client port of this Scope[]
     ClientPort: TNetPort;
   end;
+  PDhcpServerInterface = ^TDhcpServerInterface;
   TDhcpServerInterfaceDynArray = array of TDhcpServerInterface;
+  {$endif DHCP_IFINDEX}
 
   /// listen for DHCP messages on one local UDP IPv4 and port
   // - on Linux, a socket bound to an interface IP does not receive the
@@ -1698,11 +1708,14 @@ type
   protected
     fOwner: TDhcpServer;
     fState: TDhcpState;
-    fServerPort: TNetPort;
+    fClientPort, fServerPort: TNetPort;
+    {$ifdef DHCP_IFINDEX}
     fInterface: TDhcpServerInterfaceDynArray; // via fOwner.fScopeSafe
     procedure AddInterface(const aScope: TDhcpScope;
       const aInterface: TMacAddress);
-    function GetInterface(out itf: TDhcpServerInterface): boolean;
+    function GetFramePort: TNetPort;
+    function GetInterfacePtr(ifindex: integer): PDhcpServerInterface;
+    {$endif DHCP_IFINDEX}
     function DoBind: TNetResult; override;
     procedure OnFrameReceived(len: integer; var remote: TNetAddr); override;
     procedure OnShutdown; override; // to call TDhcpServer.ThreadShutdownNotify
@@ -6527,18 +6540,21 @@ begin
   fOwner := aOwner;
   fFrameLen := SizeOf(fState); // directly fill our DHCP state machine buffer
   fFrame := @fState.Recv;
+  fClientPort := aScope.ClientPort;
   fServerPort := aScope.ServerPort;
+  {$ifdef DHCP_IFINDEX}
+  // register main network interface
   AddInterface(aScope, aInterface);
-  {$ifdef OSLINUX}
   // binding aInterface.IP would not receive the 255.255.255.255 broadcasts
-  fPacketInfo := true;
+  fPacketInfo := true; // let TUdpServerThread retrieve the interface number
   inherited Create(aOwner.Log, cAnyHost, UInt32ToUtf8(fServerPort), '', 1000);
   {$else}
   inherited Create(aOwner.Log, aInterface.IP, UInt32ToUtf8(fServerPort),
     aScope.Main.Name, 1000);
-  {$endif OSLINUX}
+  {$endif DHCP_IFINDEX}
 end;
 
+{$ifdef DHCP_IFINDEX}
 procedure TDhcpServerThread.AddInterface(const aScope: TDhcpScope;
   const aInterface: TMacAddress);
 var
@@ -6554,25 +6570,40 @@ begin
   end;
 end;
 
-function TDhcpServerThread.GetInterface(out itf: TDhcpServerInterface): boolean;
+function TDhcpServerThread.GetInterfacePtr(ifindex: integer): PDhcpServerInterface;
 var
-  i: PtrInt;
+  n: TDALen;
 begin
-  result := false;
-  fOwner.fScopeSafe.ReadLock; // fInterface[] is set by TDhcpServer.Bind
-  try
-    for i := 0 to high(fInterface) do
-      if (not fPacketInfo) or // socket bound to a single interface
-         (fInterface[i].IfIndex = fFrameIfIndex) then
-      begin
-        itf := fInterface[i];
-        result := true;
-        break;
-      end;
-  finally
-    fOwner.fScopeSafe.ReadUnLock;
-  end;
+  // caller made at least fOwner.fScopeSafe.ReadLock
+  result := pointer(fInterface); // fInterface[] as set by TDhcpServer.Bind
+  if (result = nil) or
+     (result^.IfIndex = ifindex) then // most likely the first (single) one
+    exit;
+  n := PDALen(PAnsiChar(result) - _DALEN)^ + _DAOFF; // = length(fInterface)
+  repeat
+    dec(n);
+    if n = 0 then
+      break;
+    inc(result);
+    if result^.IfIndex = ifindex then
+      exit;
+  until false;
+  result := nil;
 end;
+
+function TDhcpServerThread.GetFramePort: TNetPort;
+var
+  p: PDhcpServerInterface;
+begin
+  fOwner.fScopeSafe.ReadLock;
+  p := GetInterfacePtr(fFrameIfIndex); // fFrameIfIndex set for current frame
+  if p = nil then
+    result := p^.ClientPort
+  else
+    result := 0;
+  fOwner.fScopeSafe.ReadUnLock;
+end;
+{$endif DHCP_IFINDEX}
 
 function TDhcpServerThread.DoBind: TNetResult;
 begin
@@ -6596,13 +6627,20 @@ end;
 procedure TDhcpServerThread.OnFrameReceived(len: integer; var remote: TNetAddr);
 var
   nr: TNetResult;
-  itf: TDhcpServerInterface;
+  port: TNetPort;
   ifindex: integer;
 begin
-  // avoid GPF during shutdown, and only serve the interfaces set by Bind()
-  if (fOwner = nil) or
-     not GetInterface(itf) then
+  // avoid GPF during shutdown
+  if fOwner = nil then
     exit;
+  // only serve the interfaces set by Bind()
+  {$ifdef DHCP_IFINDEX}
+  port := GetFramePort; // fInterface[] lookup using UDP fFrameIfIndex
+  if port = 0 then
+    exit;
+  {$else}
+  port := fClientPort;
+  {$endif DHCP_IFINDEX}
   // parse the request, and compute the response
   fState.RecvLen := len;
   fState.RecvIp4 := remote.IP4;
@@ -6620,15 +6658,15 @@ begin
   else if fState.SendType = dmtNak then
     // RFC 2131 4.3.2: with no relay, a DHCPNAK MUST be broadcasted to
     // 0xffffffff because the client may have a wrong address or subnet mask
-    remote.SetIP4Port(cAnyHost32, itf.ClientPort)
+    remote.SetIP4Port(cAnyHost32, port)
   else if (fState.Recv.ciaddr <> 0) and
           (fState.Recv.flags and DHCP_BROADCAST_FLAG = 0) and
           (fState.RecvType in [dmtRequest, dmtInform]) then
     // unicast to known client IP
-    remote.SetIP4Port(fState.Recv.ciaddr, itf.ClientPort)
+    remote.SetIP4Port(fState.Recv.ciaddr, port)
   else
     // RFC 2131 4.1: broadcast back the response to 0xffffffff
-    remote.SetIP4Port(cAnyHost32, itf.ClientPort);
+    remote.SetIP4Port(cAnyHost32, port);
   // a broadcast would follow the default route: force the receiving interface
   ifindex := 0;
   if remote.IP4 = cAnyHost32 then
@@ -6657,7 +6695,7 @@ end;
 function TDhcpServer.GetThread(s: PDhcpScope): TDhcpServerThread;
 var
   t: ^TDhcpServerThread;
-  n, i: integer;
+  n {$ifdef DHCP_IFINDEX} , i {$endif}: integer;
 begin
   result := nil;
   if s = nil then
@@ -6667,8 +6705,12 @@ begin
     t := pointer(fThreads.List);
     for n := 1 to length(fThreads.List) do
     begin
+      {$ifdef DHCP_IFINDEX}
       for i := 0 to high(t^.fInterface) do
         if s^.Subnet.Match(t^.fInterface[i].IP4) then
+      {$else}
+      if s^.Subnet.Match(t^.BindAddress) then
+      {$endif DHCP_IFINDEX}
         begin
           result := t^;
           exit;
@@ -6681,15 +6723,22 @@ begin
 end;
 
 function TDhcpServer.EnsureBound(s: PDhcpScope; mac: PMacAddress): TDhcpServerThread;
-{$ifdef OSLINUX}
+{$ifdef DHCP_IFINDEX}
 var
   i: PtrInt;
-{$endif OSLINUX}
+{$endif DHCP_IFINDEX}
 begin
+  // validate the scope by subnet
   result := GetThread(s);
+  {$ifdef DHCP_IFINDEX}
   if result <> nil then
-    exit;
-  {$ifdef OSLINUX}
+  begin
+    if result.GetInterfacePtr(mac^.IfIndex) = nil then
+      EDhcpServer.RaiseUtf8(
+        '%.Bind(%): subnet already bound to another interface',
+        [self, mac^.IP]);
+    exit; // already registered on this interface
+  end;
   // a single 0.0.0.0 socket per server port identifies all its interfaces
   if mac^.IfIndex <= 0 then
     EDhcpServer.RaiseUtf8('%.Bind(%): no interface index', [self, mac^.IP]);
@@ -6703,7 +6752,10 @@ begin
     result.AddInterface(s^, mac^);
     exit;
   end;
-  {$endif OSLINUX}
+  {$else}
+  if result <> nil then
+    exit; // already registered on this interface
+  {$endif DHCP_IFINDEX}
   result := TDhcpServerThread.Create(self, s^, mac^); // may raise exception
   fThreads.Add(result);
 end;
