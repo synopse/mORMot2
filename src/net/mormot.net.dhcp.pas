@@ -5893,26 +5893,23 @@ end;
 
 function TDhcpProcess.RetrieveFrameIP(var State: TDhcpState;
   Lease: PDhcpLease): boolean;
-var
-  ip4: TNetIP4;
 begin
   // from DISCOVER or REQUEST to validate option 50 hint (not authoritative)
   result := false;
   // caller set State.Ip4 from doRequestedAddress value and ensured it is <> 0
   if (Lease = nil) or
-     (Lease^.IP4 <> ip4) then
-    if (not State.Scope^.SubNet.Match(ip4)) or
-       (not State.Pool^.Match(ip4)) or
-       State.Scope^.Exists(ip4) then
+     (Lease^.IP4 <> State.Ip4) then
+    if (not State.Scope^.SubNet.Match(State.Ip4)) or
+       (not State.Pool^.Match(State.Ip4)) or
+       State.Scope^.Exists(State.Ip4) then
     begin
       // this IP seems already used by another MAC, or in another subnet/pool
-      IP4Short(@ip4, State.Ip);
+      IP4Short(@State.Ip4, State.Ip);
       DoLog(sllTrace, 'ignore requested', State); // transient info: no DoError
       inc(State.Scope^.Metrics.Current[dsmDroppedInvalidIP]);
       exit;
     end;
   inc(State.Scope^.Metrics.Current[dsmOption50Hits]);
-  State.Ip4 := ip4;
   result := true;
 end;
 
