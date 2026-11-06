@@ -1679,12 +1679,30 @@ type
 
   TDhcpServer = class;
 
+  /// a network interface served by a TDhcpServerThread
+  TDhcpServerInterface = record
+    /// the TMacAddress.IfIndex of this interface
+    IfIndex: integer;
+    /// the IPv4 address of this interface, matching one Scope[] subnet
+    IP4: TNetIP4;
+    /// the UDP client port of this Scope[]
+    ClientPort: TNetPort;
+  end;
+  TDhcpServerInterfaceDynArray = array of TDhcpServerInterface;
+
   /// listen for DHCP messages on one local UDP IPv4 and port
+  // - on Linux, a socket bound to an interface IP does not receive the
+  // 255.255.255.255 broadcasts: so a single thread is bound to 0.0.0.0 for
+  // each server port, and identifies the receiving interface via IP_PKTINFO
   TDhcpServerThread = class(TUdpServerThread)
   protected
     fOwner: TDhcpServer;
     fState: TDhcpState;
-    fClientPort, fServerPort: TNetPort;
+    fServerPort: TNetPort;
+    fInterface: TDhcpServerInterfaceDynArray; // via fOwner.fScopeSafe
+    procedure AddInterface(const aScope: TDhcpScope;
+      const aInterface: TMacAddress);
+    function GetInterface(out itf: TDhcpServerInterface): boolean;
     function DoBind: TNetResult; override;
     procedure OnFrameReceived(len: integer; var remote: TNetAddr); override;
     procedure OnShutdown; override; // to call TDhcpServer.ThreadShutdownNotify
@@ -1709,6 +1727,9 @@ type
     /// bind and start listening to incoming UDP frames
     // - will bind all network interfaces matching a Scope[] by default; you
     // can limit to bind a single interface by providing its IPv4
+    // - on Linux, a single 0.0.0.0 socket is bound for each server port, and
+    // serves the requests received on those interfaces: so no other socket of
+    // this computer could be bound to this port
     procedure Bind(const InterfaceIP4: RawUtf8 = ''); virtual;
     /// relase all bound interfaces and their threads, and wait for finalization
     procedure Shutdown; virtual;
@@ -6506,10 +6527,51 @@ begin
   fOwner := aOwner;
   fFrameLen := SizeOf(fState); // directly fill our DHCP state machine buffer
   fFrame := @fState.Recv;
-  fClientPort := aScope.ClientPort;
   fServerPort := aScope.ServerPort;
-  inherited Create(aOwner.Log, aInterface.IP, UInt32ToUtf8(aScope.ServerPort),
+  AddInterface(aScope, aInterface);
+  {$ifdef OSLINUX}
+  // binding aInterface.IP would not receive the 255.255.255.255 broadcasts
+  fPacketInfo := true;
+  inherited Create(aOwner.Log, cAnyHost, UInt32ToUtf8(fServerPort), '', 1000);
+  {$else}
+  inherited Create(aOwner.Log, aInterface.IP, UInt32ToUtf8(fServerPort),
     aScope.Main.Name, 1000);
+  {$endif OSLINUX}
+end;
+
+procedure TDhcpServerThread.AddInterface(const aScope: TDhcpScope;
+  const aInterface: TMacAddress);
+var
+  n: PtrInt;
+begin
+  n := length(fInterface);
+  SetLength(fInterface, n + 1);
+  with fInterface[n] do
+  begin
+    IfIndex := aInterface.IfIndex;
+    ClientPort := aScope.ClientPort;
+    NetIsIP4(pointer(aInterface.IP), @IP4);
+  end;
+end;
+
+function TDhcpServerThread.GetInterface(out itf: TDhcpServerInterface): boolean;
+var
+  i: PtrInt;
+begin
+  result := false;
+  fOwner.fScopeSafe.ReadLock; // fInterface[] is set by TDhcpServer.Bind
+  try
+    for i := 0 to high(fInterface) do
+      if (not fPacketInfo) or // socket bound to a single interface
+         (fInterface[i].IfIndex = fFrameIfIndex) then
+      begin
+        itf := fInterface[i];
+        result := true;
+        break;
+      end;
+  finally
+    fOwner.fScopeSafe.ReadUnLock;
+  end;
 end;
 
 function TDhcpServerThread.DoBind: TNetResult;
@@ -6534,9 +6596,12 @@ end;
 procedure TDhcpServerThread.OnFrameReceived(len: integer; var remote: TNetAddr);
 var
   nr: TNetResult;
+  itf: TDhcpServerInterface;
+  ifindex: integer;
 begin
-  // avoid GPF during shutdown
-  if fOwner = nil then
+  // avoid GPF during shutdown, and only serve the interfaces set by Bind()
+  if (fOwner = nil) or
+     not GetInterface(itf) then
     exit;
   // parse the request, and compute the response
   fState.RecvLen := len;
@@ -6555,17 +6620,21 @@ begin
   else if fState.SendType = dmtNak then
     // RFC 2131 4.3.2: with no relay, a DHCPNAK MUST be broadcasted to
     // 0xffffffff because the client may have a wrong address or subnet mask
-    remote.SetIP4Port(cAnyHost32, fClientPort)
+    remote.SetIP4Port(cAnyHost32, itf.ClientPort)
   else if (fState.Recv.ciaddr <> 0) and
           (fState.Recv.flags and DHCP_BROADCAST_FLAG = 0) and
           (fState.RecvType in [dmtRequest, dmtInform]) then
     // unicast to known client IP
-    remote.SetIP4Port(fState.Recv.ciaddr, fClientPort)
+    remote.SetIP4Port(fState.Recv.ciaddr, itf.ClientPort)
   else
     // RFC 2131 4.1: broadcast back the response to 0xffffffff
-    remote.SetIP4Port(cAnyHost32, fClientPort);
+    remote.SetIP4Port(cAnyHost32, itf.ClientPort);
+  // a broadcast would follow the default route: force the receiving interface
+  ifindex := 0;
+  if remote.IP4 = cAnyHost32 then
+    ifindex := fFrameIfIndex;
   // actual send back the response frame over UDP
-  nr := fSock.SendTo(@fState.Send, len, remote);
+  nr := fSock.SendToIf(@fState.Send, len, remote, ifindex);
   if (nr <> nrOk) and
      (fOwner <> nil) and
      (fOwner.fLog <> nil) then
@@ -6588,7 +6657,7 @@ end;
 function TDhcpServer.GetThread(s: PDhcpScope): TDhcpServerThread;
 var
   t: ^TDhcpServerThread;
-  n: integer;
+  n, i: integer;
 begin
   result := nil;
   if s = nil then
@@ -6597,23 +6666,44 @@ begin
   try
     t := pointer(fThreads.List);
     for n := 1 to length(fThreads.List) do
-      if s^.Subnet.Match(t^.BindAddress) then
-      begin
-        result := t^;
-        exit;
-      end
-      else
-        inc(t);
+    begin
+      for i := 0 to high(t^.fInterface) do
+        if s^.Subnet.Match(t^.fInterface[i].IP4) then
+        begin
+          result := t^;
+          exit;
+        end;
+      inc(t);
+    end;
   finally
     fThreads.Safe.UnLock;
   end;
 end;
 
 function TDhcpServer.EnsureBound(s: PDhcpScope; mac: PMacAddress): TDhcpServerThread;
+{$ifdef OSLINUX}
+var
+  i: PtrInt;
+{$endif OSLINUX}
 begin
   result := GetThread(s);
   if result <> nil then
     exit;
+  {$ifdef OSLINUX}
+  // a single 0.0.0.0 socket per server port identifies all its interfaces
+  if mac^.IfIndex <= 0 then
+    EDhcpServer.RaiseUtf8('%.Bind(%): no interface index', [self, mac^.IP]);
+  fThreads.Safe.Lock;
+  for i := 0 to high(fThreads.List) do
+    if TDhcpServerThread(fThreads.List[i]).fServerPort = s^.ServerPort then
+      result := pointer(fThreads.List[i]);
+  fThreads.Safe.UnLock;
+  if result <> nil then
+  begin
+    result.AddInterface(s^, mac^);
+    exit;
+  end;
+  {$endif OSLINUX}
   result := TDhcpServerThread.Create(self, s^, mac^); // may raise exception
   fThreads.Add(result);
 end;

@@ -433,6 +433,52 @@ function getpeername(s: integer; name: PSockAddr; var namelen: TSockLen): intege
 
 {$endif SOCKDIRECTSYSCALL}
 
+{$ifdef OSLINUX}
+
+const
+  IP_PKTINFO = 8; // not defined by FPC
+
+type
+  // recvmsg/sendmsg structures, with a single IP_PKTINFO control message
+  TSockIoVec = record
+    iov_base: pointer;
+    iov_len: size_t;
+  end;
+
+  TSockMsgHdr = record
+    msg_name: pointer;
+    msg_namelen: cint;
+    msg_iov: ^TSockIoVec;
+    msg_iovlen: size_t;
+    msg_control: pointer;
+    msg_controllen: size_t;
+    msg_flags: cint;
+  end;
+
+  // cmsghdr followed by its in_pktinfo: no padding on 32-bit nor 64-bit
+  TSockPktInfo = record
+    cmsg_len: size_t;
+    cmsg_level: cint;
+    cmsg_type: cint;
+    ipi_ifindex: cint;
+    ipi_spec_dst: TNetIP4;
+    ipi_addr: TNetIP4;
+  end;
+
+const
+  // CMSG_LEN(SizeOf(in_pktinfo)) - CMSG_SPACE() being SizeOf(TSockPktInfo)
+  PKTINFO_LEN = SizeOf(size_t) + 5 * SizeOf(cint);
+
+// no syscall available from FPC -> use the libc wrapper
+
+function recvmsg(s: integer; var msg: TSockMsgHdr; flags: integer): ssize_t;
+  cdecl; external clib name 'recvmsg' + LIBC_SUFFIX;
+
+function sendmsg(s: integer; var msg: TSockMsgHdr; flags: integer): ssize_t;
+  cdecl; external clib name 'sendmsg' + LIBC_SUFFIX;
+
+{$endif OSLINUX}
+
 {$ifdef OSDARWIN2}
 // circumvent linking issue on Mac OSX
 function poll(fds: PPollFD; nfds, timeout: integer): integer; inline;
@@ -734,6 +780,94 @@ begin
     until (result >= 0) or
           (cerrno <> ESysEINTR); // retry on SIG received
 end;
+
+{$ifdef OSLINUX}
+
+function TNetSocketWrap.SetPacketInfo(enable: boolean): TNetResult;
+var
+  v: integer;
+begin
+  v := ord(enable);
+  if @self = nil then
+    result := nrNoSocket
+  else if setsockopt(TSocket(@self), IPPROTO_IP, IP_PKTINFO,
+            @v, SizeOf(v)) = NO_ERROR then
+    result := nrOk
+  else
+    result := NetLastError;
+end;
+
+function TNetSocketWrap.RecvFromIf(Buf: pointer; len: integer;
+  out addr: TNetAddr; out ifindex: integer): integer;
+var
+  iov: TSockIoVec;
+  msg: TSockMsgHdr;
+  info: TSockPktInfo;
+begin
+  ifindex := 0;
+  result := -1;
+  if @self = nil then
+    exit;
+  iov.iov_base := Buf;
+  iov.iov_len := len;
+  repeat
+    msg.msg_name := @addr;
+    msg.msg_namelen := SizeOf(addr);
+    msg.msg_iov := @iov;
+    msg.msg_iovlen := 1;
+    msg.msg_control := @info;
+    msg.msg_controllen := SizeOf(info);
+    msg.msg_flags := 0;
+    result := recvmsg(TSocket(@self), msg, 0);
+  until (result >= 0) or
+        (cerrno <> ESysEINTR); // retry on SIG received
+  if (result >= 0) and
+     (msg.msg_controllen >= PKTINFO_LEN) and
+     (info.cmsg_level = IPPROTO_IP) and
+     (info.cmsg_type = IP_PKTINFO) then
+    ifindex := info.ipi_ifindex; // ipi_spec_dst may be from another interface
+end;
+
+function TNetSocketWrap.SendToIf(Buf: pointer; len: integer;
+  const addr: TNetAddr; ifindex: integer): TNetResult;
+var
+  iov: TSockIoVec;
+  msg: TSockMsgHdr;
+  info: TSockPktInfo;
+  sent: integer;
+begin
+  if ifindex = 0 then
+    result := SendTo(Buf, len, addr)
+  else if @self = nil then
+    result := nrNoSocket
+  else
+  begin
+    iov.iov_base := Buf;
+    iov.iov_len := len;
+    FillCharFast(info, SizeOf(info), 0); // ipi_spec_dst=0 for the interface IP
+    info.cmsg_len := PKTINFO_LEN;
+    info.cmsg_level := IPPROTO_IP;
+    info.cmsg_type := IP_PKTINFO;
+    info.ipi_ifindex := ifindex;
+    msg.msg_name := @addr;
+    msg.msg_namelen := addr.Size;
+    msg.msg_iov := @iov;
+    msg.msg_iovlen := 1;
+    msg.msg_control := @info;
+    msg.msg_controllen := SizeOf(info);
+    msg.msg_flags := 0;
+    repeat
+      sent := sendmsg(TSocket(@self), msg, 0);
+    until (sent >= 0) or
+          (cerrno <> ESysEINTR); // retry on SIG received
+    if sent < 0 then
+      result := NetLastError
+    else
+      result := nrOk;
+  end;
+end;
+
+{$endif OSLINUX}
 
 procedure SetTimeVal(ms: PtrUInt; out tv: TTimeVal);
 var
