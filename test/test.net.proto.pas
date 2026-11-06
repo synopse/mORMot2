@@ -3823,6 +3823,19 @@ begin
     Check(server.ComputeResponse(d) > 0, 'scope ciaddr');
     Check(d.SendType = dmtAck, 'scope ciaddr type');
     CheckEqual(d.Send.yiaddr, ip4, 'scope ciaddr ip');
+    // no giaddr: DISCOVER ignores ciaddr and uses the receiving interface
+    d.ClientFlush(d.ClientNew(dmtDiscover, macs[1521]));
+    d.Recv.ciaddr := ToIP4('192.168.0.50');
+    d.RecvIp4 := ToIP4('10.0.0.1');
+    Check(server.ComputeResponse(d) > 0, 'scope discover');
+    Check(server.Scope[1].Subnet.Match(d.Send.yiaddr), 'scope discover subnet');
+    // no giaddr: RELEASE uses ciaddr even when received on another interface
+    d.ClientFlush(d.ClientNew(dmtRelease, macs[1520]));
+    d.Recv.ciaddr := ip4;
+    d.RecvIp4 := ToIP4('192.168.0.1');
+    CheckEqual(server.ComputeResponse(d), 0, 'scope release');
+    CheckEqual(server.Scope[1].Metrics.Current[dsmRelease], 1, 'scope release ciaddr count');
+    CheckEqual(server.Scope[0].Metrics.Current[dsmRelease], 0, 'scope release recvip4 count');
   finally
     server.Free;
     settings.Free;
