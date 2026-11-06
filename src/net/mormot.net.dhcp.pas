@@ -1673,10 +1673,13 @@ type
 
 { **************** High-Level DHCP Server over UDP }
 
+// define the needed interface tracking logic for proper broadcasting
+// - on Windows, a UDP socket bound to a particular local IPv4 address still
+// receives broadcasts for that interface so no IfIndex tracking is needed
+// - on Linux, a socket bound to an interface IP does not receive the
+// 255.255.255.255 broadcasts: so a single thread is bound to 0.0.0.0 for
+// each server port, and identifies the receiving interface via IP_PKTINFO
 {$ifdef OSLINUX}
-  // on Linux, a socket bound to an interface IP does not receive the
-  // 255.255.255.255 broadcasts: so a single thread is bound to 0.0.0.0 for
-  // each server port, and identifies the receiving interface via IP_PKTINFO
   {$define DHCP_IFINDEX}
 {$endif OSLINUX}
 
@@ -1687,7 +1690,7 @@ type
   TDhcpServer = class;
 
   {$ifdef DHCP_IFINDEX}
-  /// a network interface served by a TDhcpServerThread
+  /// define a network interface served by a TDhcpServerThread
   TDhcpServerInterface = record
     /// the TMacAddress.IfIndex of this interface
     IfIndex: integer;
@@ -1713,7 +1716,7 @@ type
     fInterface: TDhcpServerInterfaceDynArray; // via fOwner.fScopeSafe
     procedure AddInterface(const aScope: TDhcpScope;
       const aInterface: TMacAddress);
-    function GetFramePort: TNetPort;
+    function GetFramePort(ip: PNetIP4 = nil): TNetPort;
     function GetInterfacePtr(ifindex: integer): PDhcpServerInterface;
     {$endif DHCP_IFINDEX}
     function DoBind: TNetResult; override;
@@ -5943,7 +5946,8 @@ begin
     // e.g. VLAN 10 relay set giaddr=192.168.10.1 Gateway IP field
     // - giaddr from RFC 2131 is authoritative so we should not fallback
     State.Scope := GetScope(State.Recv.giaddr)
-  else if State.Recv.ciaddr <> 0 then
+  else if (State.Recv.ciaddr <> 0) and
+          (State.RecvType in [dmtRequest, dmtInform, dmtRelease]) then
     // no giaddr: RENEWING/REBINDING/INFORM unicast from a configured client
     State.Scope := GetScope(State.Recv.ciaddr)
   else if State.RecvIp4 <> 0 then
@@ -6594,14 +6598,18 @@ begin
   result := nil;
 end;
 
-function TDhcpServerThread.GetFramePort: TNetPort;
+function TDhcpServerThread.GetFramePort(ip: PNetIP4): TNetPort;
 var
   p: PDhcpServerInterface;
 begin
   fOwner.fScopeSafe.ReadLock;
   p := GetInterfacePtr(fFrameIfIndex); // fFrameIfIndex set for current frame
   if p <> nil then
-    result := p^.ClientPort
+  begin
+    result := p^.ClientPort;
+    if ip <> nil then
+      ip^ := p^.IP4;
+  end
   else
     result := 0;
   fOwner.fScopeSafe.ReadUnLock;
@@ -6636,17 +6644,17 @@ begin
   // avoid GPF during shutdown
   if fOwner = nil then
     exit;
-  // only serve the interfaces set by Bind()
+  // locate the interface and bound IP4 as set by Bind()
   {$ifdef DHCP_IFINDEX}
-  port := GetFramePort; // fInterface[] lookup using UDP fFrameIfIndex
+  port := GetFramePort(@fState.RecvIp4); // fFrameIfIndex lookup
   if port = 0 then
-    exit;
+    exit; // not found in fInterface[]
   {$else}
   port := fClientPort;
+  fState.RecvIp4 := fSockAddr.IP4; // bound server IP - not remote.IP4
   {$endif DHCP_IFINDEX}
   // parse the request, and compute the response
   fState.RecvLen := len;
-  fState.RecvIp4 := fSockAddr.IP4; // bound server IP - not remote.IP4
   fState.BootTix32 := GetUptimeSec; // not GetTickSec to include sleep time
   len := fOwner.ComputeResponse(fState);
   if len <= 0 then
