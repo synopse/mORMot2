@@ -4818,6 +4818,7 @@ procedure TTestCoreBase.Integers;
     bin := HexToBin(hex);
     r.Init(bin);
     failed := false;
+    // TSynLog.Family.ExceptionIgnoreCurrentThread := true; made by caller
     try
       r.VarLeb64;
     except
@@ -11479,9 +11480,9 @@ begin
     'MULTIPART/FORM-DATA; BOUNDARY=upper', bound) and
     (bound = 'upper'), 'b12');
   // invalid boundaries are rejected in the constructors
+  TSynLog.Family.ExceptionIgnoreCurrentThread := true;
   src := TRawByteStringStream.Create('X');
   try
-    TSynLog.Family.ExceptionIgnoreCurrentThread := true;
     raised := false;
     try
       SetLength(bound, 500);
@@ -11871,16 +11872,18 @@ procedure TTestCoreBase.Debugging;
   var
     deb: TDebugFile;
     exe: RawByteString;
+    p: PAnsiChar;
     fn: TFileName;
     raised: boolean;
   begin
     // minimal PE32 header, enough for SaveToExe() and its signature detection
-    SetLength(exe, 1024);
-    FillCharFast(pointer(exe)^, 1024, 0);
-    PWord(exe)^ := $5a4d;
-    PCardinal(@PByteArray(exe)[$3c])^ := $80;
-    PCardinal(@PByteArray(exe)[$80])^ := $00004550;
-    PWord(@PByteArray(exe)[$80 + 24])^ := $010b;
+    p := FastNewRawByteString(exe, 1024);
+    FillCharFast(p^, 1024, 0);
+    PWord(p)^ := $5a4d;
+    PCardinal(p + $3c)^ := $80; // set e_lfanew
+    inc(p, $80);                // move to PE header
+    PCardinal(p)^ := $00004550;
+    PWord(p + 24)^ := $010b;
     fn := WorkDir + 'mabsigned.exe';
     FileFromString(exe, fn);
     deb := TDebugFile.Create(fn, [dfsNoMabSaveAtCreate,
@@ -11889,16 +11892,18 @@ procedure TTestCoreBase.Debugging;
       deb.SaveToExe(fn);
       Check(FileSize(fn) > 1024, 'unsigned exe');
       // set IMAGE_DIRECTORY_ENTRY_SECURITY: appending would break the signature
-      PCardinal(@PByteArray(exe)[$80 + $98])^ := 1000;
-      PCardinal(@PByteArray(exe)[$80 + $9c])^ := 24;
+      PCardinal(p + $98)^ := 1000;
+      PCardinal(p + $9c)^ := 24;
       FileFromString(exe, fn);
       raised := false;
+      TSynLog.Family.ExceptionIgnore.Add(ESynLogException);
       try
         deb.SaveToExe(fn);
       except
         on ESynLogException do
           raised := true;
       end;
+      TSynLog.Family.ExceptionIgnore.Remove(ESynLogException);
       Check(raised, 'signed exe');
       CheckEqual(FileSize(fn), 1024, 'signed exe untouched');
     finally
