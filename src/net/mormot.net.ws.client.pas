@@ -250,13 +250,16 @@ type
     fLocals: TSocketIOLocalNamespaces;
     fWaitEvent: TSynEvent;
     fOptions: TSocketsIOClientOptions;
-    fDefaultWaitTimeoutSec: cardinal;
+    fReconnectClosing: boolean;
     fWaitEventPrepared: TSocketsIOWaitEventPacket;
+    fDefaultWaitTimeoutSec: cardinal;
     fWaitEventAckID: TSocketIOAckID;
     fWaitEventData: PDocVariantData;
     fRemoteNames, fLocalNames: TRawUtf8DynArray;
     fWaitEventParam: RawUtf8;
     fLocalNamespaceClass: TSocketIOLocalNamespaceClass; // customizable
+    fReconnectThreads: TThreads;
+    fLog: TSynLogClass;
     procedure WaitEventPrepare(Event: TSocketsIOWaitEventPacket);
     procedure WaitEventDone(Event: TSocketsIOWaitEventPacket);
     procedure WaitEventAck(const Message: TSocketIOMessage);
@@ -892,6 +895,7 @@ begin
   proto.fClient := Create;
   proto.fClient.fDefaultWaitTimeoutSec := 2;
   proto.fClient.fOptions := aOptions;
+  proto.fClient.fLog := aLog;
   c := THttpClientWebSockets.WebSocketsConnect(aHost, aPort, proto,
     aLog, 'TSocketsIOClient.Open', EngineIOHandshakeUri(aRoot),
     aCustomHeaders, aTls, aTLSContext);
@@ -917,7 +921,17 @@ begin
 end;
 
 destructor TSocketsIOClient.Destroy;
+var
+  log: ISynLog;
 begin
+  fLog.EnterLocal(log, self, 'Destroy');
+  fReconnectThreads.Safe.Lock;
+  try
+    fReconnectClosing := true;
+  finally
+    fReconnectThreads.Safe.UnLock;
+  end;
+  fReconnectThreads.TerminateAndWait(60, self, fLog);
   ObjArrayClear(fRemotes);
   ObjArrayClear(fLocals);
   fOwnedClient.Free;
@@ -1059,18 +1073,25 @@ constructor TWebSocketReconnectClientThread.Create(aClient: TSocketsIOClient);
 begin
   fClient := aClient;
   FreeOnTerminate := true;
-  inherited Create({suspended=}false, nil, nil, TSynLog, 'Reconnect');
+  inherited Create({suspended=}true, nil, nil, TSynLog, 'Reconnect');
 end;
 
 procedure TWebSocketReconnectClientThread.DoExecute;
 begin
-  // let the main ProcessLoop be reached
-  fClient.fOwnedClient.fProcess.WaitThreadStarted;
-  // re-Connect() to all previous remote namespaces
-  fClient.RegisterAgainAfterReconnect;
+  try
+    // let the main ProcessLoop be reached
+    fClient.fOwnedClient.fProcess.WaitThreadStarted;
+    // re-Connect() to all previous remote namespaces
+    if not Terminated then
+      fClient.RegisterAgainAfterReconnect;
+  finally
+    fClient.fReconnectThreads.Terminated(self);
+  end;
 end;
 
 function TSocketsIOClient.OnReconnect(Process: TWebSocketProcessClient): string;
+var
+  t: TWebSocketReconnectClientThread;
 begin
   result := '';
   if Process = nil then // was a reconnection failure
@@ -1090,9 +1111,21 @@ begin
     result := string(fOwnedClient.WebSocketsUpgrade(
       Process.Protocol.UpgradeUri, '', {ajax=}false, [],
       Process.Protocol, Process.Protocol.UpgradeBearerToken, {reconnect=}true));
-    if result = '' then
-      // all the registration should take place in another thread
-      TWebSocketReconnectClientThread.Create(self);
+    if result <> '' then
+      exit; // abort on error
+    // all the registration should take place in another thread
+    fReconnectThreads.Safe.Lock;
+    try
+      if not fReconnectClosing then
+      begin
+        t := TWebSocketReconnectClientThread.Create(self); // suspended
+        PtrArrayAdd(fReconnectThreads.List, t);
+        t.Start;
+      end;
+    finally
+      fReconnectThreads.Safe.UnLock;
+    end;
+
   except
     on E: Exception do
       result := E.Message;
