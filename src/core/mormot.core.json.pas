@@ -6870,7 +6870,7 @@ begin
       while (ValueLen > 0) and
             (Value[ValueLen - 1] <= ' ') do
         dec(ValueLen);
-      AddShort(Value, ValueLen);
+      AddNoJsonEscape(Value, ValueLen);
     end;
   end;
   if Json = nil then
