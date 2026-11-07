@@ -4663,7 +4663,7 @@ begin
               continue; // was within PropNamesToIgnore[]
             if IncludeQueryDelimiter then
               w.AddDirect(sep);
-            w.AddShort(Name.Text, Name.Len);
+            w.AddNoJsonEscape(Name.Text, Name.Len);
             w.AddDirect('=');
             UrlEncode(w, Value.Text, Value.Len);
             sep := '&';
