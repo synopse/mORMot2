@@ -5294,7 +5294,7 @@ begin
     if i = HighValues then
       break;
     if Sep <> '' then
-      AddShort(pointer(Sep), PStrLen(PtruInt(Sep) - _STRLEN)^);
+      AddNoJsonEscape(pointer(Sep), PStrLen(PtruInt(Sep) - _STRLEN)^);
     if Reverse then
       dec(i)
     else

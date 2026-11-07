@@ -1356,7 +1356,7 @@ begin
   else
   begin
     W.AddShorter(',IP:"');
-    W.AddShort(ip, StrLen(ip));
+    W.AddNoJsonEscape(ip, StrLen(ip)); // may come from nginx header > 255 bytes
     W.AddDirect('"', '}', ',');
   end;
   with Ctxt.ServiceExecution^ do

@@ -3197,7 +3197,7 @@ begin
       AddShort(',"values":["');
       // first row is FieldNames in non-expanded format
     end;
-    AddShort(aColName, len);
+    AddNoJsonEscape(aColName, len); // may be > 255 bytes
     if aColIndex = aColCount - 1 then
     begin
       // last AddColumn() call would finalize the non-expanded header
