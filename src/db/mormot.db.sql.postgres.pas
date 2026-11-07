@@ -1286,11 +1286,11 @@ begin
             W.Add((P <> nil) and (PUtf8Char(P)^ = 't'))
           else
             // note: StrLen slightly faster than PQ.GetLength for small content
-            W.AddShort(P, StrLen(P));
+            W.AddNoJsonEscape(P, StrLen(P));
         ftUtf8:
           if (ColumnAttr = JSONOID) or
              (ColumnAttr = JSONBOID) then
-            W.AddShort(P, PQ.GetLength(fRes, fCurrentRow, Col))
+            W.AddNoJsonEscape(P, PQ.GetLength(fRes, fCurrentRow, Col))
           else
           begin
             W.Add('"');

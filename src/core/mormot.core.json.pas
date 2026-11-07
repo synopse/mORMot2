@@ -4663,7 +4663,7 @@ begin
               continue; // was within PropNamesToIgnore[]
             if IncludeQueryDelimiter then
               w.AddDirect(sep);
-            w.AddShort(Name.Text, Name.Len);
+            w.AddNoJsonEscape(Name.Text, Name.Len);
             w.AddDirect('=');
             UrlEncode(w, Value.Text, Value.Len);
             sep := '&';
@@ -6870,7 +6870,7 @@ begin
       while (ValueLen > 0) and
             (Value[ValueLen - 1] <= ' ') do
         dec(ValueLen);
-      AddShort(Value, ValueLen);
+      AddNoJsonEscape(Value, ValueLen);
     end;
   end;
   if Json = nil then
