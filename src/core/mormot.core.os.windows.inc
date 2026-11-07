@@ -5090,30 +5090,18 @@ function TerminateJobObject(hJob: THandle; uExitCode: cardinal): BOOL;
 
 var
   // Vista+ API to restrict the handles inherited by a new process
+  // - resolved once at startup by InitializeSpecificUnit, i.e. thread-safe
   InitializeProcThreadAttributeList: function(lpAttributeList: pointer;
     dwAttributeCount, dwFlags: DWord; var lpSize: PtrUInt): BOOL; stdcall;
   UpdateProcThreadAttribute: function(lpAttributeList: pointer; dwFlags: DWord;
     Attribute: PtrUInt; lpValue: pointer; cbSize: PtrUInt;
     lpPreviousValue, lpReturnSize: pointer): BOOL; stdcall;
   DeleteProcThreadAttributeList: procedure(lpAttributeList: pointer); stdcall;
-  ProcThreadAttributeChecked: boolean;
   // serialize the inheritable handles window if there is no such API
   ExternalProcessSafe: TLightLock;
 
 function HasProcThreadAttribute: boolean;
-var
-  k: THandle;
 begin
-  if not ProcThreadAttributeChecked then
-  begin
-    k := GetModuleHandle(kernel32);
-    @InitializeProcThreadAttributeList :=
-      GetProcAddress(k, 'InitializeProcThreadAttributeList');
-    @UpdateProcThreadAttribute := GetProcAddress(k, 'UpdateProcThreadAttribute');
-    @DeleteProcThreadAttributeList :=
-      GetProcAddress(k, 'DeleteProcThreadAttributeList');
-    ProcThreadAttributeChecked := true;
-  end;
   result := Assigned(InitializeProcThreadAttributeList) and
             Assigned(UpdateProcThreadAttribute) and
             Assigned(DeleteProcThreadAttributeList);
@@ -5686,6 +5674,10 @@ begin
   if not Assigned(GetTickCount64) then
     GetTickCount64 := @GetTickCount64ForXP;
   QueryFullProcessImageNameW     := LibraryResolve(h, 'QueryFullProcessImageNameW');
+  InitializeProcThreadAttributeList :=
+    LibraryResolve(h, 'InitializeProcThreadAttributeList');
+  UpdateProcThreadAttribute      := LibraryResolve(h, 'UpdateProcThreadAttribute');
+  DeleteProcThreadAttributeList  := LibraryResolve(h, 'DeleteProcThreadAttributeList');
   GetLogicalProcessorInformation := LibraryResolve(h, 'GetLogicalProcessorInformation');
   CreateSymbolicLinkW            := LibraryResolve(h, 'CreateSymbolicLinkW');
   InitializeSRWLock              := LibraryResolve(h, 'InitializeSRWLock');
