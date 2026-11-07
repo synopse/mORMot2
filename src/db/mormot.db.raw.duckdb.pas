@@ -2071,7 +2071,7 @@ begin
   text := TrimU(Sql);
   while (text <> '') and
         (text[length(text)] = ';') do
-    SetLength(text, length(text) - 1); // within a sub-query
+    FakeLength(text, length(text) - 1); // within a sub-query
   Join(['SELECT ', list, ' FROM (', text, ')'], result);
 end;
 
@@ -2503,10 +2503,7 @@ end;
 function TQuackResponse.NewType: TQuackType;
 begin
   result := TQuackType.Create;
-  if fTypePoolCount = length(fTypePool) then
-    SetLength(fTypePool, fTypePoolCount + 8 + fTypePoolCount shr 1);
-  fTypePool[fTypePoolCount] := result;
-  inc(fTypePoolCount);
+  PtrArrayAdd(fTypePool, result, fTypePoolCount);
 end;
 
 function TQuackResponse.ReadType(var R: TFastReader): TQuackType;
