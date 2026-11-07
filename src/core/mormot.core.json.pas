@@ -3237,7 +3237,7 @@ begin
     m := pmPlainString; // AddJsonEscape
   ReformatBeginValue;
   if m = pmConstNum then
-    W.AddShort(v, l)
+    W.AddNoJsonEscape(v, l)
   else
   begin
     W.AddDirect('"');
@@ -3245,7 +3245,7 @@ begin
       if m = pmPlainString then
         W.AddJsonEscape(v, l)    // |default or enc:NAME
       else
-        W.AddShort(v, l); // pmEscapedString: val = "was \r quoted"
+        W.AddNoJsonEscape(v, l); // pmEscapedString: val = "was \r quoted"
     W.AddDirect('"');
   end;
   ReformatEndValue;
@@ -3318,7 +3318,7 @@ dquote:   ReformatBeginValue;
           if (Value <> nil) and
              (jcEndOfJsonValueField in JsonSet[Value^]) then // #0#9#10#13 ,}]{[
           begin
-            W.AddShort(P, Value - P); // true number
+            W.AddNoJsonEscape(P, Value - P); // true number, unbounded length
             P := Value;
             ReformatEndValue;
           end

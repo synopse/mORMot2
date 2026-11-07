@@ -4080,7 +4080,6 @@ var
   worker: TLoggedWorkThread;
   rnd: PLecuyer;
 begin
-  rnd := ThreadRandom; // use the TLecuyer of this thread
   // setup the two instances with the specified options and certificates
   TSynLogTestLog.EnterLocal(log, 'TunnelTest [%]', [ToText(tunneloptions)], self);
   clientinstance := TTunnelLocalClient.Create(TSynLog);
@@ -4090,6 +4089,7 @@ begin
   clienttunnel := clientinstance;
   servertunnel := serverinstance;
   // perform handshaking
+  rnd := ThreadRandom; // use the TLecuyer of this thread
   repeat
     sess := rnd.Next31;
   until sess <> 0;
