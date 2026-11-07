@@ -2748,13 +2748,13 @@ begin
   StackCount := 0;
   JsonFirst := @JSON_TOKENS;
   Max := PMax;
-end; // RootCount is not initialized by default unless InitCount() is called
+  RootCount := 0;
+end;
 
 procedure TJsonParser.InitCount(Strict: boolean; PMax: PUtf8Char;
   First: TJsonParserState);
 begin
   Init(Strict, PMax);
-  RootCount := 0;
   Stack[0] := stValue; // emulate parsing of the opening [ or {
   inc(StackCount);
   State := First;
@@ -4214,7 +4214,8 @@ begin
       begin // should be unescaped in-place
         info.Json := Name - 1;
         info.GetJsonField;
-        if (info.Value <> nil) and
+        if (info.Json <> nil) and
+           (info.Value <> nil) and
            info.WasString and
            (info.EndOfObject = ':') then
         begin
