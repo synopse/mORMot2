@@ -204,7 +204,9 @@ function IsConstantOrNumberJson(P: PUtf8Char; len: PtrUInt): boolean;
 
 /// test if the supplied text buffer seems to be a correct (extended) JSON value
 // - will allow comments and extended MongoDB JSON syntax unless Strict=true
-// - numbers, escaped strings and commas are wild guessed, for performance
+// - numbers, escaped strings and commas are wild guessed, for performance: even
+// in Strict=true mode, this is not a full RFC 8259 validation function, but
+// it validates the input would be good enough at least for our own JSON parser
 function IsValidJson(P: PUtf8Char; len: PtrInt; strict: boolean = false): boolean; overload;
 
 /// test if the supplied text seems to be a correct (extended) JSON value
