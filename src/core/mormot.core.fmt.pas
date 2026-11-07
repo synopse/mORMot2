@@ -6474,7 +6474,7 @@ begin
     inc(v);
     dec(l);
   end;
-  W.AddShort(v, l);
+  W.AddNoJsonEscape(v, l);
 end;
 
 procedure TPreproc.DoEndif(var P: PUtf8Char);
@@ -7061,7 +7061,7 @@ begin
     begin
       P := Expand(P, v, l, {keepmarker=}false);
       if v <> nil then
-        W.AddShort(v, l);
+        W.AddNoJsonEscape(v, l);
     end
     else
       inc(P); // this was not $(ident) -> write verbatim and continue
