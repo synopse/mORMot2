@@ -4132,7 +4132,8 @@ begin
         break;
       '''',
       '"':
-        result := SkipQuoted(LineIdx, result);
+        if result = p then
+          result := SkipQuoted(LineIdx, result) - 1;
       '{',
       '[':
         inc(depth);
