@@ -110,6 +110,7 @@ uses
   {$ifdef TEST_DBRAD}
   fmtbcd,
   mormot.db.rad,
+  mormot.db.rad.ui,
   {$endif TEST_DBRAD}
   mormot.orm.base,
   mormot.orm.core,
@@ -213,6 +214,8 @@ type
     {$ifdef TEST_DBRAD}
     /// our TBcd wrapper functions
     procedure _TBcd;
+    /// read-only TDataSet over TDocVariant rows
+    procedure _TDocVariantArrayDataSet;
     {$endif TEST_DBRAD}
     /// low-level TDecimal128 decimal value process (as used in BSON)
     procedure _TDecimal128;
@@ -5955,6 +5958,40 @@ begin
     BcdToUtf8(b2, u2);
     Check(u2 <> '');
     CheckEqual(u, u2, 'with spaces');
+  end;
+end;
+
+procedure TTestCoreProcess._TDocVariantArrayDataSet;
+var
+  rows: TVariantDynArray;
+  ds: TDocVariantArrayDataSet;
+begin
+  SetLength(rows, 4);
+  rows[0] := _JsonFast('{"id":1,"name":"a","n":10}');
+  rows[1] := _JsonFast('{"id":2}'); // fewer fields than columns
+  rows[2] := _JsonFast('{"name":"c","id":3.5}'); // out-of-order float
+  rows[3] := _JsonFast('{"id":4,"name":"d","n":null}'); // after 3rd row
+  ds := VariantsToDataSet(nil, rows);
+  try
+    CheckEqual(ds.RecordCount, 4);
+    ds.First;
+    CheckEqual(VarType(ds.Fields[0].Value), varDouble, 'float in any row');
+    CheckEqual(VarType(ds.Fields[2].Value), varInt64, 'null is no float');
+    CheckEqual(ds.Fields[0].AsInteger, 1);
+    CheckEqual(ds.Fields[2].AsInteger, 10);
+    ds.Next;
+    CheckEqual(ds.Fields[0].AsInteger, 2);
+    Check(ds.Fields[1].IsNull);
+    Check(ds.Fields[2].IsNull);
+    ds.Next;
+    CheckSame(ds.Fields[0].AsFloat, 3.5);
+    Check(ds.Fields[1].AsString = 'c');
+    Check(ds.Fields[2].IsNull);
+    ds.Next;
+    CheckEqual(ds.Fields[0].AsInteger, 4);
+    Check(ds.Fields[2].IsNull);
+  finally
+    ds.Free;
   end;
 end;
 {$endif TEST_DBRAD}
