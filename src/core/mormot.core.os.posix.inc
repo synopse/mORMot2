@@ -5476,8 +5476,6 @@ begin
   end;
 end;
 
-{$ifdef FPC}
-
 // retrieve the PATH= value from the environment to be passed to execve()
 // - i.e. from the RunBuildEnv() output, or the current environment
 function RunEnvPath(envpp: PPUtf8Char): RawUtf8;
@@ -5533,187 +5531,551 @@ begin
   FastAssignNew(result); // not found: caller would fallback to the shell
 end;
 
+{ TExternalProcess }
+
+{$ifdef FPCLINUX} // Delphi has no syscall, and libc close_range() is glibc 2.34+
+  {$if defined(CPUINTEL) or defined(CPUARM) or defined(CPUAARCH64)}
+const
+  syscall_nr_close_range = 436; // same number for all those CPUs
+  {$define HASCLOSERANGE}
+  {$ifend}
+{$endif FPCLINUX}
+
+{$ifdef OSBSD} // FreeBSD 8+, OpenBSD 3.5+, NetBSD 3+
+procedure closefrom(lowfd: cint);
+  cdecl; external clib name 'closefrom';
+{$endif OSBSD}
+
+const
+  // same values on Linux, BSD and MacOS - not defined by the RTL on Linux
+  FCNTL_DUPFD   = 0;
+  FCNTL_CLOEXEC = 1;
+
+procedure CloseValid(var fd: cint);
+begin
+  if fd < 0 then
+    exit;
+  fpclose(fd);
+  fd := -1;
+end;
+
+// set close-on-exec, and move a descriptor above stdin/stdout/stderr, so that
+// the dup2() calls in the child process won't overlap: the parent may have
+// closed its own standard descriptors, e.g. as a daemon
+function EnsureCloseOnExec(fd: cint): cint;
+begin
+  result := fd;
+  if fd < 0 then
+    exit;
+  if fd > 2 then
+  begin
+    {$ifndef OSLINUX} // O_CLOEXEC is set at creation on Linux
+    fpfcntl(fd, F_SETFD, FCNTL_CLOEXEC);
+    {$endif OSLINUX}
+    exit;
+  end;
+  result := fpfcntl(fd, FCNTL_DUPFD, 3);
+  if result >= 0 then
+    fpfcntl(result, F_SETFD, FCNTL_CLOEXEC);
+  fpclose(fd);
+end;
+
+// create a pipe with close-on-exec, to be inherited only via dup2()
+function NewPipe(var fd: TFilDes): boolean;
+begin
+  fd[0] := -1;
+  fd[1] := -1;
+  // without pipe2() e.g. on MacOS, there is a race window with any concurrent
+  // fork() by another library - but our own children close all their
+  // inherited descriptors anyway
+  {$ifdef OSLINUX}
+  {$ifdef FPC}
+  result := Do_SysCall(syscall_nr_pipe2, TSysParam(@fd), O_CLOEXEC) = 0;
+  {$else}
+  result := pipe2(@fd, O_CLOEXEC) = 0; // Delphi POSIX has no syscall
+  {$endif FPC}
+  {$else}
+  result := fppipe(fd) = 0;
+  {$endif OSLINUX}
+  if not result then
+    exit;
+  fd[0] := EnsureCloseOnExec(fd[0]);
+  fd[1] := EnsureCloseOnExec(fd[1]);
+  result := (fd[0] >= 0) and
+            (fd[1] >= 0);
+end;
+
+function OpenNull: cint;
+begin
+  result := EnsureCloseOnExec(FpOpen('/dev/null',
+    O_RDONLY {$ifdef OSLINUX} or O_CLOEXEC {$endif}));
+end;
+
+// close all descriptors >= lowfd, in the child process
+procedure CloseDescriptorsFrom(lowfd, maxfd: cint);
+begin
+  {$ifdef HASCLOSERANGE}
+  if Do_SysCall(syscall_nr_close_range, TSysParam(lowfd),
+       TSysParam($ffffffff), 0) = 0 then
+    exit; // Linux 5.9+
+  {$endif HASCLOSERANGE}
+  {$ifdef OSBSD}
+  closefrom(lowfd);
+  {$else}
+  while lowfd < maxfd do
+  begin
+    fpclose(lowfd);
+    inc(lowfd);
+  end;
+  {$endif OSBSD}
+end;
+
+function MaxDescriptors: cint;
+begin
+  result := GetFileOpenLimit; // -1 on Delphi POSIX
+  if (result <= 0) or
+     (result > 1 shl 20) then
+    result := 1 shl 20; // reasonable upper limit
+end;
+
+{$ifdef HASCLOSERANGE}
+var
+  CloseRangeState: integer; // 0 = not tested yet, 1 = available, 2 = missing
+
+function CloseRangeAvailable: boolean;
+begin
+  if CloseRangeState = 0 then
+    // nothing to close so far in the table, but ENOSYS before Linux 5.9
+    if Do_SysCall(syscall_nr_close_range, TSysParam($fffffffe),
+         TSysParam($fffffffe), 0) = 0 then
+      CloseRangeState := 1
+    else
+      CloseRangeState := 2;
+  result := CloseRangeState = 1;
+end;
+{$endif HASCLOSERANGE}
+
+// upper bound of the opened descriptors, for the closing loop of the child
+// - without closefrom() nor close_range(), e.g. on MacOS, Linux < 5.9 or
+// Delphi POSIX, a loop up to RLIMIT_NOFILE costs 118ms per execution with
+// 524288 descriptors, as set by TPollSockets from the hard limit
+// - descriptors opened by other threads until fork() take the lowest free
+// numbers, so should be within the margin
+function ChildMaxDescriptor: cint;
+{$ifdef OSBSD}
+begin
+  result := 0; // not used with closefrom()
+end;
+{$else}
+var
+  d: pDir;
+  e: pDirent;
+  fd, n: integer;
+begin
+  result := MaxDescriptors;
+  {$ifdef HASCLOSERANGE}
+  if CloseRangeAvailable then
+    exit;
+  {$endif HASCLOSERANGE}
+  d := fpOpendir(PAnsiChar({$ifdef OSLINUX}'/proc/self/fd'{$else}'/dev/fd'{$endif}));
+  if d = nil then
+    exit; // e.g. no /proc mounted
+  fd := -1;
+  repeat
+    e := FpReaddir(d^);
+    if e = nil then
+      break;
+    if AnsiChar(e.d_name[0]) in ['0'..'9'] then
+    begin
+      n := GetCardinal(@e.d_name[0]);
+      if n > fd then
+        fd := n;
+    end;
+  until false;
+  FpClosedir(d^);
+  if (fd >= 0) and
+     (fd + 65 < result) then
+    result := fd + 65; // margin of 64 descriptors
+end;
+{$endif OSBSD}
+
+function TExternalProcess.DoStart(const cmd: TRunArg; const args: array of TRunArg;
+  const env: TRunArg; const wrkdir: TFileName; options: TRunOptions;
+  withthread: boolean): boolean;
+var
+  i: PtrInt;
+  pid, nul, maxfd, e: cint;
+  n: ssize_t;
+  inp, outp, errp, rep, wake: TFilDes;
+  err: TParseCommands;
+  a: TParseCommandsArgs;
+  temp, path, wdir: RawUtf8;
+  ev: TRunEnv;
+  envpp: PPUtf8Char;
+  nomask: TSigSet;
+  dfl: SigactionRec;
+
+  function ChildRedirect: boolean;
+  begin
+    result := false;
+    if roStdinPipe in options then
+    begin
+      if fpdup2(inp[0], 0) < 0 then
+        exit;
+    end
+    else if (nul >= 0) and
+            (fpdup2(nul, 0) < 0) then
+      exit;
+    if fpdup2(outp[1], 1) < 0 then
+      exit;
+    if roStderrPipe in options then
+    begin
+      if fpdup2(errp[1], 2) < 0 then
+        exit;
+    end
+    else if (roStderrMerge in options) and
+            (fpdup2(1, 2) < 0) then
+      exit;
+    result := true;
+  end;
+
+  procedure CloseAll;
+  begin
+    CloseValid(inp[0]);
+    CloseValid(inp[1]);
+    CloseValid(outp[0]);
+    CloseValid(outp[1]);
+    CloseValid(errp[0]);
+    CloseValid(errp[1]);
+    CloseValid(rep[0]);
+    CloseValid(rep[1]);
+    CloseValid(wake[0]);
+    CloseValid(wake[1]);
+    CloseValid(nul);
+  end;
+
+begin
+  result := false;
+  fState := epsFailed; // until proven otherwise
+  fOptions := options;
+  // prepare the whole execution context before fork(): heap allocations
+  // are not fork-safe in a multi-threaded process
+  if not RunBuildEnv(env, options, ev, envpp) then
+    exit; // too many environment variables
+  a[0] := nil;
+  if cmd <> '' then
+  begin
+    err := ParseCommandArgs(cmd, @a, nil, @temp);
+    if err = [] then
+    begin
+      // no need to spawn the shell for simple commands - but resolve the
+      // executable as a shell would, from the PATH= actually supplied to
+      // execve(), and fallback to the shell if not found (e.g. for a
+      // shell built-in like "exit")
+      path := RunSearchPath(a[0], RunEnvPath(envpp));
+      if path <> '' then
+        a[0] := pointer(path)
+      else
+        err := [pcHasShellVariable]; // let the shell handle it below
+    end
+    else if err * PARSECOMMAND_ERROR <> [] then
+      exit; // no system call for clearly invalid command line
+    if err <> [] then
+    begin
+      // execute complex commands via the shell
+      path := GetSystemShell;
+      a[0] := pointer(path);
+      a[1] := '-c';
+      a[2] := pointer(cmd);
+      a[3] := nil;
+    end;
+  end
+  else
+  begin
+    // explicit arguments: no parsing, no shell, but search the env PATH
+    if length(args) > high(a) then
+      exit;
+    path := RunSearchPath(pointer(args[0]), RunEnvPath(envpp));
+    if path = '' then
+      exit; // not found
+    a[0] := pointer(path);
+    for i := 1 to high(args) do
+      if args[i] = '' then
+        a[i] := @NULCHAR // a void argument is not the end of argv[]
+      else
+        a[i] := pointer(args[i]);
+    a[length(args)] := nil;
+  end;
+  wdir := RawUtf8(wrkdir);
+  // create all the descriptors with close-on-exec
+  nul := -1;
+  inp[0] := -1;
+  inp[1] := -1;
+  errp[0] := -1;
+  errp[1] := -1;
+  rep[0] := -1;
+  rep[1] := -1;
+  wake[0] := -1;
+  wake[1] := -1;
+  outp[0] := -1;
+  outp[1] := -1;
+  if (roStdinNull in options) and
+     not (roStdinPipe in options) then
+    nul := OpenNull;
+  if not NewPipe(outp) or
+     ((roStdinPipe in options) and
+      not NewPipe(inp)) or
+     ((roStdinNull in options) and
+      not (roStdinPipe in options) and
+      (nul < 0)) or
+     ((roStderrPipe in options) and
+      not NewPipe(errp)) or
+     not NewPipe(rep) or
+     (withthread and
+      not NewPipe(wake)) then
+  begin
+    CloseAll;
+    exit;
+  end;
+  if roStdinPipe in options then
+    SigPipeIntercept; // Write() should return false, not raise SIGPIPE
+  maxfd := ChildMaxDescriptor; // after all our own descriptors were opened
+  fpsigemptyset(nomask);
+  FillCharFast(dfl, SizeOf(dfl), 0); // SIG_DFL = nil handler on all systems
+  pid := RunFork;
+  if pid = 0 then
+  begin
+    // we are in the child process: only low-level fork/vfork-safe syscalls
+    // until execve(), sending errno to the parent on any failure
+    if (fpsigprocmask(SIG_SETMASK, @nomask, nil) = 0) and // as RTL fpSystem
+       (fpsigaction(SIGPIPE, @dfl, nil) = 0) and // as set by SigPipeIntercept
+       (fpsetsid >= 0) and // new session/group, so the group can be signaled
+       ChildRedirect and
+       ((rep[1] = 3) or
+        ((fpdup2(rep[1], 3) >= 0) and
+         (fpfcntl(3, F_SETFD, FCNTL_CLOEXEC) >= 0))) then
+    begin
+      rep[1] := 3;
+      CloseDescriptorsFrom(4, maxfd); // don't leak any descriptor of this process
+      if (wdir = '') or
+         (FpChdir(pointer(wdir)) = 0) then
+        FpExecve(a[0], @a, envpp);
+    end;
+    e := fpgeterrno;
+    fpwrite(rep[1], @e, SizeOf(e));
+    FpExit(127);
+  end;
+  // in the parent process: close the descriptors of the child
+  CloseValid(inp[0]);
+  CloseValid(outp[1]);
+  CloseValid(errp[1]);
+  CloseValid(rep[1]);
+  CloseValid(nul);
+  if pid < 0 then
+  begin
+    CloseAll; // fork failed
+    exit;
+  end;
+  // wait for execve() to succeed (EOF on close-on-exec) or fail (errno)
+  repeat
+    n := fpread(rep[0], @e, SizeOf(e));
+  until (n >= 0) or
+        (fpgeterrno <> ESysEINTR);
+  CloseValid(rep[0]);
+  if n <> 0 then
+  begin
+    // execve() or a previous call failed: reap the child, and abort
+    repeat
+    until (FpWaitPid(pid, nil, 0) >= 0) or
+          (fpgeterrno <> ESysEINTR);
+    CloseAll;
+    exit;
+  end;
+  fPid := pid;
+  fStdin := inp[1];
+  fStdout := outp[0];
+  fStderr := errp[0];
+  fWakeUpRead := wake[0];
+  fWakeUpWrite := wake[1];
+  fState := epsRunning;
+  result := true;
+end;
+
+function TExternalProcess.DoReap: boolean;
+var
+  r, status: cint;
+begin
+  fSafe.Lock;
+  try
+    if fState = epsRunning then
+    begin
+      repeat
+        r := FpWaitPid(fPid, @status, WNOHANG); // 0 = no state change
+      until (r >= 0) or
+            (fpgeterrno <> ESysEINTR);
+      if r = cint(fPid) then
+      begin
+        if wifexited(status) then // as RTL WaitProcess()
+          fExitCode := wexitstatus(status)
+        else
+          fExitCode := -status;
+        fState := epsExited;
+      end
+      else if r < 0 then
+        fState := epsExited; // e.g. ECHILD if SIGCHLD = SIG_IGN
+    end;
+    result := fState <> epsRunning;
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+procedure TExternalProcess.DoSignal(hard: boolean);
+const
+  SIG: array[boolean] of cint = (SIGTERM, SIGKILL);
+begin
+  fSafe.Lock;
+  try
+    if fState = epsRunning then // never signal a reaped (maybe reused) pid
+      // the child did setsid: signal its whole process group so that even
+      // grand-children (e.g. spawned by a shell) won't leak as orphans
+      if fpkill(-cint(fPid), SIG[hard]) <> 0 then
+        fpkill(cint(fPid), SIG[hard]);
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+function TExternalProcess.DoPump(timeoutms: integer): integer;
+var
+  p: array[0..2] of TPollFD;
+  n, i: PtrInt;
+  r: ssize_t;
+  fd: cint;
+  buf: TBuffer64K;
+
+  procedure Add(h: cint);
+  begin
+    p[n].fd := h;
+    p[n].events := POLLIN or POLLPRI;
+    p[n].revents := 0;
+    inc(n);
+  end;
+
+begin
+  n := 0;
+  if fStdout >= 0 then
+    Add(fStdout);
+  if fStderr >= 0 then
+    Add(fStderr);
+  if n = 0 then
+  begin
+    fOutputEof := true;
+    result := -1;
+    exit;
+  end;
+  if fWakeUpRead >= 0 then
+    Add(fWakeUpRead);
+  result := 0;
+  if FpPoll(@p, n, timeoutms) <= 0 then
+    exit; // timeout or EINTR
+  for i := 0 to n - 1 do
+    if p[i].revents <> 0 then
+    begin
+      fd := p[i].fd;
+      if fd = fWakeUpRead then
+        fpread(fd, @buf, 16) // from DoWakeUp: the caller checks fTerminated
+      else
+      begin
+        if p[i].revents and (POLLIN or POLLPRI) <> 0 then
+          r := fpread(fd, @buf, SizeOf(buf))
+        else
+          r := 0; // HUP/ERR/NVAL with nothing to read = closed by the child
+        if r > 0 then
+        begin
+          DoOutput(@buf, r, fd = fStderr);
+          inc(result, r);
+        end
+        else if (r = 0) or
+                (fpgeterrno <> ESysEINTR) then
+          if fd = fStdout then
+            CloseValid(fStdout)
+          else
+            CloseValid(fStderr);
+      end;
+    end;
+  if (fStdout < 0) and
+     (fStderr < 0) then
+  begin
+    fOutputEof := true;
+    if result = 0 then
+      result := -1;
+  end;
+end;
+
+function TExternalProcess.DoWrite(p: pointer; len: PtrInt): boolean;
+var
+  w: ssize_t;
+begin
+  result := false;
+  if fStdin < 0 then
+    exit;
+  while len > 0 do
+  begin
+    w := fpwrite(fStdin, p, len);
+    if w < 0 then
+      if fpgeterrno = ESysEINTR then
+        continue
+      else
+        exit; // e.g. EPIPE if the process ended
+    inc(PByte(p), w);
+    dec(len, w);
+  end;
+  result := true;
+end;
+
+procedure TExternalProcess.DoCloseStdin;
+begin
+  CloseValid(fStdin);
+end;
+
+procedure TExternalProcess.DoClose;
+begin
+  CloseValid(fStdin);
+  CloseValid(fStdout);
+  CloseValid(fStderr);
+  CloseValid(fWakeUpRead);
+  CloseValid(fWakeUpWrite);
+end;
+
+procedure TExternalProcess.DoWakeUp;
+var
+  b: byte;
+begin
+  b := 0;
+  if fWakeUpWrite >= 0 then
+    fpwrite(fWakeUpWrite, @b, 1);
+end;
+
 function RunRedirect(const cmd: TRunArg; exitcode: PInteger;
   const onoutput: TOnRedirect; waitfordelayms: cardinal; setresult: boolean;
   const env: TRunArg; const wrkdir: TFileName; options: TRunOptions): RawByteString;
 var
-  fds: TFilDes;
-  fd: THandle;
-  pid, res, wr: cint;
-  n: ssize_t;
-  wait: cardinal;
-  endtix: Int64;
-  aborted, reaped: boolean;
-  err: TParseCommands;
-  a: TParseCommandsArgs;
-  temp, path, wdir: RawUtf8;
-  e: TRunEnv;
-  envpp: PPUtf8Char;
-  tmp: TBuffer64K;
-
-  function RedirectOutput(killing: boolean; var redir: RawByteString): boolean;
-  var
-    u: RawUtf8;
-    pending: integer;
-  begin
-    result := false; // return false on pipe closed
-    pending := WaitReadPending(fd, wait);
-    if pending < 0 then
-      exit; // HUP/ERR with nothing left to read = the child closed its stdout
-    if pending > 0 then
-    begin
-      n := fpread(fd, @tmp, SizeOf(tmp));
-      if n <= 0 then
-        exit; // n=0 on EOF (execution finished), n<0 on error or EINTR
-      if setresult then
-        AppendBufferToUtf8(@tmp, n, RawUtf8(redir)); // assume CP_UTF8
-      if Assigned(onoutput) then
-      begin
-        FastSetString(u, @tmp, n); // console output is likely UTF-8 on POSIX
-        if onoutput(u, pid) and
-           not killing then
-          endtix := 1; // returned true: force kill() on abort
-      end;
-    end
-    else if Assigned(onoutput) and // idle
-            onoutput('', pid) and
-            not killing then
-      endtix := 1; // returned true to abort -> kill()
-    result := true;
-  end;
-
-  procedure KillGroup(sig: integer);
-  begin
-    // the child did setsid: signal its whole process group so that even
-    // grand-children (e.g. spawned by a shell) won't leak as orphans
-    if fpkill(-pid, sig) <> 0 then
-      fpkill(pid, sig); // paranoid fallback (e.g. race before setsid)
-  end;
-
+  p: TExternalProcess;
 begin
   FastAssignNew(result);
   if exitcode <> nil then
     exitcode^ := -1; // if not executed or aborted
-  // prepare the whole execution context before fork(): heap allocations
-  // are not fork-safe in a multi-threaded process
-  if not RunBuildEnv(env, options, e, envpp) then
-    exit; // too many environment variables
-  a[0] := nil;
-  err := ParseCommandArgs(cmd, @a, nil, @temp);
-  if err = [] then
-  begin
-    // no need to spawn the shell for simple commands - but resolve the
-    // executable as a shell would, from the PATH= actually supplied to
-    // execve(), and fallback to the shell if not found (e.g. for a
-    // shell built-in like "exit")
-    path := RunSearchPath(a[0], RunEnvPath(envpp));
-    if path <> '' then
-      a[0] := pointer(path)
-    else
-      err := [pcHasShellVariable]; // let the shell handle it below
-  end
-  else if err * PARSECOMMAND_ERROR <> [] then
-    exit; // no system call for clearly invalid command line
-  if err <> [] then
-  begin
-    // execute complex commands via the shell
-    path := GetSystemShell;
-    a[0] := pointer(path);
-    a[1] := '-c';
-    a[2] := pointer(cmd);
-    a[3] := nil;
-  end;
-  wdir := RawUtf8(wrkdir);
-  if fppipe(fds) <> 0 then
-    exit;
-  pid := RunFork;
-  if pid < 0 then
-  begin
-    fpclose(fds[0]);
-    fpclose(fds[1]);
-    exit; // fork failed
-  end;
-  if pid = 0 then
-  begin
-    // we are in the child process: only low-level fork/vfork-safe syscalls
-    // until execve(), checking the failures which would break redirection
-    if fpsetsid < 0 then // new session/group, so the group can be signaled
-      FpExit(127);
-    if fpdup2(fds[1], 1) < 0 then // stdout to the pipe (stderr not touched)
-      FpExit(127);
-    fpclose(fds[0]);
-    if fds[1] <> 1 then
-      fpclose(fds[1]);
-    if (wdir <> '') and
-       (FpChdir(pointer(wdir)) <> 0) then
-      FpExit(127); // paranoid
-    FpExecve(a[0], @a, envpp);
-    FpExit(127); // command not found or not executable
-  end;
-  // parent process: redirect the pipe output until EOF
-  fpclose(fds[1]);
-  fd := fds[0];
-  aborted := false;
-  reaped := false;
-  wr := 0;
-  if Assigned(onoutput) then
-    onoutput('', pid);
-  wait := 200;
-  endtix := 0;
-  if waitfordelayms <> INFINITE then
-  begin
-    if waitfordelayms < wait then
-      wait := waitfordelayms;
-    endtix := GetTickCount64 + waitfordelayms;
-  end;
-  repeat
-    if not RedirectOutput({killing=}false, result) then
-      break; // pipe closed = execution finished
-    if (endtix <> 0) and
-       (GetTickCount64 > endtix) then
-    begin
-      // abort process execution after timeout or onoutput()=true
-      aborted := true;
-      if (RunAbortTimeoutSecs > 0) and
-         (ramSigTerm in RunAbortMethods) then
-      begin
-        // try gracefull death
-        KillGroup(SIGTERM);
-        endtix := GetTickCount64 + RunAbortTimeoutSecs * 1000;
-        repeat
-          wr := FpWaitPid(pid, @res, WNOHANG);    // 0 = no state change
-          RedirectOutput({killing=}true, result); // continue redirection
-          if (wr <> 0) or
-             (GetTickCount64 > endtix) then
-            break;
-          SleepHiRes(5);
-        until false;
-        reaped := (wr = pid); // gracefully ended and reaped
-      end;
-      // force process group termination alla Robespierre
-      KillGroup(SIGKILL);
-      break;
-    end;
-  until false;
-  fpclose(fd);
-  if not reaped then
-  begin
-    res := WaitProcess(pid); // reap the zombie (immediate after SIGKILL)
-    if (exitcode <> nil) and
-       not aborted then
-      exitcode^ := res;
+  p := TExternalProcess.Create;
+  try
+    p.fOnOutput := onoutput;
+    if p.DoStart(cmd, [], env, wrkdir, options - [roStdinPipe, roStderrPipe],
+         {withthread=}false) then
+      result := p.Redirect(waitfordelayms, setresult, exitcode);
+  finally
+    p.Free;
   end;
 end;
-{$else}
-function RunRedirect(const cmd: TRunArg; exitcode: PInteger;
-  const onoutput: TOnRedirect; waitfordelayms: cardinal; setresult: boolean;
-  const env: TRunArg; const wrkdir: TFileName; options: TRunOptions): RawByteString;
-begin
-  FastAssignNew(result); // not implemented yet on Delphi POSIX - see libc popen()
-  if exitcode <> nil then
-    exitcode^ := -1; // error
-end;
-{$endif FPC}
 
 
 { ****************** Gather Operating System Information }

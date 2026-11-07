@@ -6398,19 +6398,32 @@ type
   // - roWinNewConsole won't inherit the parent console, but have its own console
   // - roWinKeepProcessOnTimeout won't make Ctrl+C / WM_QUIT or TerminateProcess
   // - roWinCheckSynchronize will call CheckSynchronize() from the main thread
+  // - by default, the child stdin and stderr are inherited from the current
+  // process: roStdinNull reads stdin from the null device, and roStdinPipe from
+  // TExternalProcess.Write; roStderrMerge redirects stderr to stdout, and
+  // roStderrPipe to TExternalProcess.OnError/ReadErrorAvailable
+  // - RunRedirect() ignores roStdinPipe and roStderrPipe
   TRunOptions = set of (
     roEnvAddExisting,
     roWinJobCloseChildren,
     roWinNoProcessDetach,
     roWinNewConsole,
     roWinKeepProcessOnTimeout,
-    roWinCheckSynchronize);
+    roWinCheckSynchronize,
+    roStdinNull,
+    roStdinPipe,
+    roStderrMerge,
+    roStderrPipe);
 
 const
   /// the default options for RunCommand() and RunRedirect() transient execution
   // - detaching the process from the console and Job group by default does only
   // make sense for RunProcess() which will use TRunOptions = []
   RUN_CMD = [roWinNoProcessDetach];
+
+  /// the default options for TExternalProcess.Start
+  // - with the same behavior on all systems: no stdin, and stderr in stdout
+  RUN_PROCESS = [roWinNoProcessDetach, roStdinNull, roStderrMerge];
 type
   /// the low-level OS API type for executing processes arguments
   TRunArg = {$ifdef OSPOSIX} RawUtf8 {$else} TFileName {$endif};
@@ -6438,8 +6451,8 @@ function RunCommand(const cmd: TRunArg; waitfor: boolean = true;
   {$else} processhandle: PHandle = nil {$endif OSPOSIX}): integer;
 
 /// execute a command, returning its output console as text
-// - calls CreateProcessW on Windows (via our RunCommandWin function), and
-// FPC RTL popen/pclose on POSIX to be truly cross-platform
+// - calls CreateProcessW on Windows (via our RunCommandWin function), and our
+// TExternalProcess class on POSIX to be truly cross-platform
 // - return '' on cmd execution error, or the whole output console text content
 // with no conversion (unless setresult is false - see below)
 // - on POSIX, result is likely to be UTF-8 but on Windows it depends on each
@@ -6450,8 +6463,8 @@ function RunCommand(const cmd: TRunArg; waitfor: boolean = true;
 // onoutput() callback returns true - see RedirectToConsole global callback
 // - will abort once waitfordelayms expires - if not its default INFINITE
 // - force setresult=false if you only need onouput() and will discard the result
-// - optional env is Windows only, (FPC popen does not support it), and should
-// be encoded as name=value#0 pairs - with env[length(env)]=#0 to end with #0#0
+// - optional env should be encoded as name=value#0 pairs - with
+// env[length(env)]=#0 to end with #0#0
 // - you can specify a wrkdir if the path specified by cmd is not good enough
 // - TRunOptions = RUN_CMD as expected from executing a transient command
 // - warning: exitcode^ should be a 32-bit "integer" variable, not a PtrInt
@@ -6509,6 +6522,148 @@ var
   /// global variable to define RunRedirect/RunCommand soft termination methods
   // - used before hard SIGKILL/TerminateProcess
   RunAbortMethods: TRunAbortMethods = RUNABORT_DEFAULT;
+
+type
+  /// the execution state of a TExternalProcess instance
+  TExternalProcessState = (
+    epsNotStarted,
+    epsRunning,
+    epsExited,
+    epsFailed);
+
+  /// execute an external process with redirected standard input and output
+  // - stdin/stdout/stderr redirection is defined by the Start() options, by
+  // default RUN_PROCESS for the same behavior on all systems: stdin from the
+  // null device, and stderr merged into stdout
+  // - a single background thread per instance reads stdout/stderr in blocking
+  // mode, and calls OnOutput/OnError - or append to an internal buffer, to be
+  // retrieved by ReadAvailable/ReadErrorAvailable if no callback is set
+  // - Write/WriteAndCloseStdin/CloseStdin need the roStdinPipe option
+  // - on POSIX, a simple command line is executed with no shell, and the process
+  // is created in its own session, so that Terminate/Kill also stop its children
+  // - on Windows, the command line is given to CreateProcessW() as such - so use
+  // e.g. 'cmd /c ...' for a shell built-in - and the process is created in its
+  // own process group and job, so that Terminate/Kill also stop its children
+  // - RunRedirect() is implemented over this class on POSIX, from the calling
+  // thread, but still uses RunCommandWin() on Windows
+  TExternalProcess = class(TSynPersistent)
+  protected
+    fSafe: TLightLock; // protect fState/fExitCode against concurrent reaping
+    fState: TExternalProcessState;
+    fOutputEof, fTerminated, fAborted, fKilling, fThreaded: boolean;
+    fKeepOutput, fKeepError: boolean; // append to fOutput/fError
+    fThreadDone: integer; // set by the background thread when done
+    fPid: cardinal;
+    fExitCode: integer;
+    fOptions: TRunOptions;
+    fOnOutput, fOnError: TOnRedirect;
+    fOutputSafe: TLightLock; // protect fOutput/fError
+    fOutput, fError: RawUtf8;
+    fStdinSafe: TOSLightLock; // Write() may block: use an OS lock
+    fStdin, fStdout, fStderr, fWakeUpRead, fWakeUpWrite: THandle;
+    {$ifdef OSWINDOWS}
+    fProcess, fJob: THandle;
+    {$endif OSWINDOWS}
+    // OS-specific methods
+    function DoStart(const cmd: TRunArg; const args: array of TRunArg;
+      const env: TRunArg; const wrkdir: TFileName; options: TRunOptions;
+      withthread: boolean): boolean;
+    function DoReap: boolean; // true if not running any more
+    procedure DoSignal(hard: boolean);
+    function DoPump(timeoutms: integer): integer; // -1 on EOF, or bytes read
+    function DoWrite(p: pointer; len: PtrInt): boolean;
+    procedure DoCloseStdin;
+    procedure DoClose;
+    procedure DoWakeUp;
+    // cross-platform methods
+    procedure StartThread;
+    procedure DoOutput(p: pointer; len: PtrInt; iserror: boolean);
+    function WaitExit(endtix: Int64): boolean;
+    function Redirect(waitfordelayms: cardinal; setresult: boolean;
+      exitcode: PInteger): RawUtf8;
+    /// the background thread loop, reading stdout/stderr until EOF
+    // - may be overriden to customize how the output is retrieved
+    procedure Pump; virtual;
+  public
+    /// initialize this instance
+    constructor Create; override;
+    /// terminate the process if still running, and release all resources
+    // - will wait for the background thread to finish
+    destructor Destroy; override;
+    /// start the execution of a command line
+    // - on POSIX, a simple command is executed directly after a lookup in the
+    // PATH of env, and the shell is called only for complex commands
+    // - on Windows, cmd is given to CreateProcessW() as such, which searches
+    // the executable in the PATH of the current process
+    // - env is encoded as 'n1=v1'#0'n2=v2'#0#0 pairs, possibly with
+    // roEnvAddExisting to complete the current environment
+    // - returns false if the process could not be executed
+    function Start(const cmd: TRunArg; const env: TRunArg = '';
+      const wrkdir: TFileName = ''; options: TRunOptions = RUN_PROCESS): boolean; overload;
+    /// start the execution of an executable with some explicit arguments
+    // - args[0] is the executable, args[1..] its arguments, with no parsing
+    // nor shell call, e.g. if any argument comes from an untrusted source
+    // - on Windows, the arguments are quoted as CommandLineToArgvW() expects
+    function Start(const args: array of TRunArg; const env: TRunArg = '';
+      const wrkdir: TFileName = ''; options: TRunOptions = RUN_PROCESS): boolean; overload;
+    /// send some data to the process stdin, with the roStdinPipe option
+    // - returns false on error, e.g. if the process ended
+    // - on POSIX, Start() with roStdinPipe calls SigPipeIntercept, so that
+    // writing to an ended process does not raise SIGPIPE - but SigPipeIntercept
+    // does nothing yet on Delphi POSIX
+    function Write(const data: RawByteString): boolean; overload;
+    /// send some data to the process stdin, with the roStdinPipe option
+    function Write(p: pointer; len: PtrInt): boolean; overload;
+    /// send some data to the process stdin, then close it
+    function WriteAndCloseStdin(const data: RawByteString): boolean;
+    /// close the process stdin, so that it reads EOF
+    procedure CloseStdin;
+    /// retrieve and clear the pending stdout content, if OnOutput is not set
+    function ReadAvailable: RawByteString;
+    /// retrieve and clear the pending stderr content, with roStderrPipe and
+    // if OnError is not set
+    function ReadErrorAvailable: RawByteString;
+    /// check if some stdout content is pending, if OnOutput is not set
+    function HasDataAvailable: boolean;
+    /// try a graceful termination of the process, then a hard kill
+    // - on POSIX, send SIGTERM then SIGKILL to the whole process group
+    // - returns true if the process ended within waitms
+    function Terminate(waitms: cardinal = 5000): boolean;
+    /// unconditionally and immediately kill the process
+    procedure Kill;
+    /// wait for the process to end, and its output to be read
+    // - returns the exit code, or -1 on timeout
+    // - also waits for the end of output, so for any child process which
+    // inherited the process stdout or stderr
+    function WaitFor(waitms: cardinal = INFINITE): integer;
+    /// check if the process is still running
+    function Running: boolean;
+    /// the exit code of the process, once ended
+    // - is -1 before, and negative if the process was terminated by a signal
+    // on POSIX, following the RTL WaitProcess() function convention
+    // - on Windows, is 255 after a hard Terminate() or Kill()
+    property ExitCode: integer
+      read fExitCode;
+    /// the OS process ID
+    property Pid: cardinal
+      read fPid;
+    /// the current execution state of this instance
+    property State: TExternalProcessState
+      read fState;
+    /// the options used by Start()
+    property Options: TRunOptions
+      read fOptions;
+    /// optional callback receiving the stdout content
+    // - should be set before Start(), and is called from the background thread
+    // - the content is not appended to the ReadAvailable buffer, and the
+    // function result is ignored
+    property OnOutput: TOnRedirect
+      read fOnOutput write fOnOutput;
+    /// optional callback receiving the stderr content, with roStderrPipe
+    // - should be set before Start(), and is called from the background thread
+    property OnError: TOnRedirect
+      read fOnError write fOnError;
+  end;
 
 
 implementation
@@ -13597,6 +13752,326 @@ begin
     if d <> nil then
       inc(d);
   until false;
+end;
+
+
+{ TExternalProcess }
+
+type
+  // the background thread of a TExternalProcess instance
+  TExternalProcessThread = class(TThread)
+  protected
+    fOwner: TExternalProcess;
+    procedure Execute; override;
+  public
+    constructor Create(owner: TExternalProcess); reintroduce;
+  end;
+
+constructor TExternalProcessThread.Create(owner: TExternalProcess);
+begin
+  fOwner := owner;
+  inherited Create({suspended=}false);
+  // TThread.WaitFor from the main thread would loop over CheckSynchronize(100)
+  // on FPC/POSIX: the owner waits for fThreadDone instead
+  FreeOnTerminate := true;
+end;
+
+procedure TExternalProcessThread.Execute;
+begin
+  SetCurrentThreadName('process %', [fOwner.fPid]);
+  try
+    fOwner.Pump;
+  finally
+    fOwner.fOutputEof := true; // e.g. on OnOutput exception: don't WaitFor EOF
+    LockedInc32(@fOwner.fThreadDone); // with a barrier: last access to fOwner
+  end;
+end;
+
+const
+  NO_HANDLE = THandle({$ifdef OSPOSIX} -1 {$else} 0 {$endif});
+
+function Deadline(waitms: cardinal): Int64;
+begin
+  if waitms = INFINITE then
+    result := 0
+  else
+    result := GetTickCount64 + waitms;
+end;
+
+constructor TExternalProcess.Create;
+begin
+  inherited Create;
+  fExitCode := -1;
+  fStdin := NO_HANDLE;
+  fStdout := NO_HANDLE;
+  fStderr := NO_HANDLE;
+  fWakeUpRead := NO_HANDLE;
+  fWakeUpWrite := NO_HANDLE;
+  fStdinSafe.Init;
+end;
+
+destructor TExternalProcess.Destroy;
+begin
+  if fState = epsRunning then
+    Terminate(RunAbortTimeoutSecs * 1000);
+  if fThreaded then
+  begin
+    fTerminated := true;
+    DoWakeUp;
+    while fThreadDone = 0 do // wait for the background thread to finish
+      SleepHiRes(1);
+  end;
+  DoClose;
+  fStdinSafe.Done;
+  inherited Destroy;
+end;
+
+procedure TExternalProcess.StartThread;
+begin
+  fKeepOutput := not Assigned(fOnOutput);
+  fKeepError := not Assigned(fOnError);
+  if fOutputEof then
+    exit; // nothing to read
+  fThreaded := true;
+  TExternalProcessThread.Create(self); // with FreeOnTerminate = true
+end;
+
+function TExternalProcess.Start(const cmd: TRunArg; const env: TRunArg;
+  const wrkdir: TFileName; options: TRunOptions): boolean;
+begin
+  result := (fState = epsNotStarted) and
+            DoStart(cmd, [], env, wrkdir, options, {withthread=}true);
+  if result then
+    StartThread;
+end;
+
+function TExternalProcess.Start(const args: array of TRunArg;
+  const env: TRunArg; const wrkdir: TFileName; options: TRunOptions): boolean;
+begin
+  result := (fState = epsNotStarted) and
+            (high(args) >= 0) and
+            DoStart('', args, env, wrkdir, options, {withthread=}true);
+  if result then
+    StartThread;
+end;
+
+procedure TExternalProcess.Pump;
+begin
+  while not fTerminated and
+        (DoPump(-1) >= 0) do
+    ; // DoPump() calls DoOutput() until EOF or DoWakeUp
+end;
+
+procedure TExternalProcess.DoOutput(p: pointer; len: PtrInt; iserror: boolean);
+var
+  cb: TOnRedirect;
+  u: RawUtf8;
+begin
+  if iserror then
+    cb := fOnError
+  else
+    cb := fOnOutput;
+  if (iserror and fKeepError) or
+     (not iserror and fKeepOutput) then
+  begin
+    fOutputSafe.Lock;
+    try
+      if iserror then
+        AppendBufferToUtf8(p, len, fError) // assume CP_UTF8 on POSIX
+      else
+        AppendBufferToUtf8(p, len, fOutput);
+    finally
+      fOutputSafe.UnLock;
+    end;
+  end;
+  if Assigned(cb) then
+  begin
+    FastSetString(u, p, len);
+    if cb(u, fPid) and
+       not fKilling then
+      fAborted := true; // only used by Redirect()
+  end;
+end;
+
+function TExternalProcess.WaitExit(endtix: Int64): boolean;
+var
+  ms: integer;
+begin
+  ms := 0;
+  repeat
+    result := DoReap;
+    if result or
+       ((endtix <> 0) and
+        (GetTickCount64 >= endtix)) then
+      exit;
+    if fThreaded or
+       (DoPump(ms) < 0) then // no background thread: read output meanwhile
+      SleepHiRes(ms);
+    if ms < 10 then
+      inc(ms);
+  until false;
+end;
+
+function TExternalProcess.Redirect(waitfordelayms: cardinal; setresult: boolean;
+  exitcode: PInteger): RawUtf8;
+var
+  wait: integer;
+  endtix: Int64;
+begin
+  FastAssignNew(result);
+  fKeepOutput := setresult;
+  if Assigned(fOnOutput) then
+    fOnOutput('', fPid); // notify the process start, ignoring its result
+  wait := 200;
+  endtix := 0;
+  if waitfordelayms <> INFINITE then
+  begin
+    if waitfordelayms < cardinal(wait) then
+      wait := waitfordelayms;
+    endtix := GetTickCount64 + waitfordelayms;
+  end;
+  repeat
+    case DoPump(wait) of
+      -1:
+        break; // EOF = execution finished
+      0:
+        if Assigned(fOnOutput) and // idle
+           fOnOutput('', fPid) then
+          fAborted := true;
+    end;
+    if fAborted or
+       ((endtix <> 0) and
+        (GetTickCount64 > endtix)) then
+    begin
+      // abort process execution after timeout or onoutput()=true
+      fAborted := true;
+      fKilling := true;
+      if (RunAbortTimeoutSecs > 0)
+         {$ifdef OSPOSIX} and (ramSigTerm in RunAbortMethods) {$endif} then
+      begin
+        DoSignal({hard=}false); // try gracefull death
+        WaitExit(GetTickCount64 + RunAbortTimeoutSecs * 1000);
+      end;
+      DoSignal({hard=}true); // force termination alla Robespierre
+      break;
+    end;
+  until false;
+  WaitExit(0); // reap the zombie (immediate after SIGKILL)
+  DoClose;
+  if (exitcode <> nil) and
+     not fAborted then
+    exitcode^ := fExitCode;
+  pointer(result) := pointer(fOutput); // transfer ownership
+  pointer(fOutput) := nil;
+end;
+
+function TExternalProcess.Write(p: pointer; len: PtrInt): boolean;
+begin
+  fStdinSafe.Lock;
+  try
+    result := DoWrite(p, len);
+  finally
+    fStdinSafe.UnLock;
+  end;
+end;
+
+function TExternalProcess.Write(const data: RawByteString): boolean;
+begin
+  result := Write(pointer(data), length(data));
+end;
+
+function TExternalProcess.WriteAndCloseStdin(const data: RawByteString): boolean;
+begin
+  result := Write(pointer(data), length(data));
+  CloseStdin;
+end;
+
+procedure TExternalProcess.CloseStdin;
+begin
+  fStdinSafe.Lock;
+  try
+    DoCloseStdin;
+  finally
+    fStdinSafe.UnLock;
+  end;
+end;
+
+function TExternalProcess.ReadAvailable: RawByteString;
+begin
+  FastAssignNew(result);
+  if fOutput = '' then
+    exit;
+  fOutputSafe.Lock;
+  pointer(result) := pointer(fOutput); // transfer ownership
+  pointer(fOutput) := nil;
+  fOutputSafe.UnLock;
+end;
+
+function TExternalProcess.ReadErrorAvailable: RawByteString;
+begin
+  FastAssignNew(result);
+  if fError = '' then
+    exit;
+  fOutputSafe.Lock;
+  pointer(result) := pointer(fError);
+  pointer(fError) := nil;
+  fOutputSafe.UnLock;
+end;
+
+function TExternalProcess.HasDataAvailable: boolean;
+begin
+  result := fOutput <> '';
+end;
+
+function TExternalProcess.Running: boolean;
+begin
+  result := (fState = epsRunning) and
+            not DoReap;
+end;
+
+function TExternalProcess.Terminate(waitms: cardinal): boolean;
+begin
+  result := true;
+  if not Running then
+    exit;
+  fKilling := true;
+  if waitms <> 0 then
+  begin
+    DoSignal({hard=}false);
+    result := WaitExit(Deadline(waitms));
+    if result then
+      exit;
+  end;
+  DoSignal({hard=}true);
+  WaitExit(GetTickCount64 + 5000); // a killed process is reaped at once
+  result := false;
+end;
+
+procedure TExternalProcess.Kill;
+begin
+  if Running then
+    DoSignal({hard=}true);
+end;
+
+function TExternalProcess.WaitFor(waitms: cardinal): integer;
+var
+  endtix: Int64;
+begin
+  result := -1;
+  if fState in [epsNotStarted, epsFailed] then
+    exit;
+  endtix := Deadline(waitms);
+  if not WaitExit(endtix) then
+    exit;
+  while not fOutputEof do // wait for the end of the output
+    if (endtix <> 0) and
+       (GetTickCount64 >= endtix) then
+      exit
+    else if fThreaded then
+      SleepHiRes(1)
+    else if DoPump(10) < 0 then
+      break;
+  result := fExitCode;
 end;
 
 
