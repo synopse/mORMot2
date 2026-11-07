@@ -4607,7 +4607,7 @@ begin
         exit;
       if aftername = stPropNameUnquoted then // was 'a:' -> append '"a",'
         wk.AddDirect('"');
-      wk.AddShort(kb, ke - kb);
+      wk.AddNoJsonEscape(kb, ke - kb);
       if aftername = stPropNameUnquoted then
         wk.AddDirect('"', ',')
       else

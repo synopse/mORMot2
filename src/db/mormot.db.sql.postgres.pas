@@ -1398,11 +1398,11 @@ begin
         W.Add((v <> nil) and (PUtf8Char(v)^ = 't'))
       else
         // note: StrLen slightly faster than PQ.GetLength for small content
-        W.AddShort(v, mormot.core.base.StrLen(v));
+        W.AddNoJsonEscape(v, mormot.core.base.StrLen(v));
     ftUtf8:
       if (p^.ColumnAttr = JSONOID) or
          (p^.ColumnAttr = JSONBOID) then
-        W.AddShort(v, PQ.GetLength(fRes, fCurrentRow, Col))
+        W.AddNoJsonEscape(v, PQ.GetLength(fRes, fCurrentRow, Col))
       else
       begin
         W.Add('"');
