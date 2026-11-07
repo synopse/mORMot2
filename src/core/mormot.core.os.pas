@@ -6560,7 +6560,9 @@ type
     fOutputSafe: TLightLock; // protect fOutput/fError
     fOutput, fError: RawUtf8;
     fStdinSafe: TOSLightLock; // Write() may block: use an OS lock
-    fStdin, fStdout, fStderr, fWakeUpRead, fWakeUpWrite: THandle;
+    // POSIX descriptors are signed, but THandle is unsigned on Delphi POSIX
+    fStdin, fStdout, fStderr, fWakeUpRead, fWakeUpWrite:
+      {$ifdef OSWINDOWS} THandle {$else} integer {$endif OSWINDOWS};
     {$ifdef OSWINDOWS}
     fProcess, fJob: THandle;
     {$endif OSWINDOWS}
@@ -13788,7 +13790,7 @@ begin
 end;
 
 const
-  NO_HANDLE = THandle({$ifdef OSPOSIX} -1 {$else} 0 {$endif});
+  NO_HANDLE = {$ifdef OSPOSIX} -1 {$else} 0 {$endif};
 
 function Deadline(waitms: cardinal): Int64;
 begin

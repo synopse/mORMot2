@@ -5504,7 +5504,7 @@ var
   p, s: PUtf8Char;
 begin
   if name <> nil then
-    if PosChar(name, '/') <> nil then
+    if PosChar(PUtf8Char(name), '/') <> nil then
     begin
       // a supplied path is used as-is, with no $PATH lookup - as a shell would
       FastSetString(result, name, StrLen(name));
