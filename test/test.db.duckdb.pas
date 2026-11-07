@@ -643,276 +643,521 @@ end;
 
 { ************ Mock Quack Server Messages Encoding }
 
+// Quack mock protocol is always written to a binary stream.  No temporary
+// RawByteString values, AnsiString concatenation or implicit codepage changes.
+// Quack field ids are little endian; unsigned idx_t uses LEB128 (VarUInt64),
+// and signed values use signed LEB128, not zigzag encoding.
+// TBufferWriter.WriteVarUInt64 / WriteVarLeb64 do exactly what Quack needs.
+
+type
+  TMockQuackType = (
+    mqtInteger, mqtVarchar, mqtBigint, mqtDecimal, mqtDate,
+    mqtBoolean, mqtUuid, mqtEnum, mqtListInt, mqtStructAB,
+    mqtDouble, mqtVariant, mqtTimestamp, mqtBlob);
+
+  TMockQuackWriter = class(TBufferWriter)
+  public
+    // Own an internal TRawByteStringStream and its 4KB binary buffer.
+    constructor Create; reintroduce;
+    // FlushTo returns raw bytes without any code-page conversion.
+    procedure Field(Id: cardinal);
+    procedure EndObject;                     {$ifdef HASINLINE} inline; {$endif}
+    procedure UInt(Value: QWord);            {$ifdef HASINLINE} inline; {$endif}
+    procedure Signed(Value: Int64);          {$ifdef HASINLINE} inline; {$endif}
+    procedure Blob(P: pointer; Len: PtrInt); {$ifdef HASINLINE} inline; {$endif}
+    procedure Text(const Value: RawUtf8);    {$ifdef HASINLINE} inline; {$endif}
+    procedure BlobInt32(const Values: array of integer);
+    procedure Header(MsgType: cardinal; const ConnectionId: RawUtf8);
+    procedure WriteType(Typ: TMockQuackType);
+    procedure BeginPrepare(const Types: array of TMockQuackType;
+      const Names: array of RawUtf8; NeedsMore: boolean; Chunks: integer);
+    procedure EndPrepare;
+    procedure BeginChunk(Rows: integer; const Types: array of TMockQuackType;
+      Wrapped: boolean);
+    procedure EndChunk(Wrapped: boolean);
+    procedure BeginVector(const Validity: array of boolean);
+    procedure VectorInt32(const Values: array of integer;
+      const Validity: array of boolean);
+    procedure VectorInt64(const Values: array of Int64;
+      const Validity: array of boolean);
+    procedure VectorDouble(const Values: array of double;
+      const Validity: array of boolean);
+    procedure VectorBytes(const Values: array of byte;
+      const Validity: array of boolean);
+    procedure VectorText(const Values: array of RawUtf8;
+      const Validity: array of boolean);
+    procedure VectorBlobBytes(const Values: array of byte);
+    procedure BigintChunk(First, Count: integer; Wrapped: boolean);
+  end;
+
 var
-  MAGIC_, END_: RawUtf8;
+  MAGIC_: RawUtf8;
 
-function Fld(Id: cardinal): RawByteString;
+constructor TMockQuackWriter.Create;
 begin
-  FastSetString(RawUtf8(result), @Id, 2); // 16-bit little endian
+  inherited Create(TRawByteStringStream);
 end;
 
-function VU(Value: QWord): RawByteString;
+procedure TMockQuackWriter.Field(Id: cardinal);
+begin
+  Write2(Id); // Quack uint16, little endian (as on supported x86 targets)
+end;
+
+procedure TMockQuackWriter.EndObject;
+begin
+  Field($ffff);
+end;
+
+procedure TMockQuackWriter.UInt(Value: QWord);
+begin
+  WriteVarUInt64(Value);  // unsigned LEB128: NOT WriteVarInt64 (zigzag)
+end;
+
+procedure TMockQuackWriter.Signed(Value: Int64);
+begin
+  WriteVarLeb64(Value);   // signed LEB128, as consumed by TFastReader.VarLeb64
+end;
+
+procedure TMockQuackWriter.Blob(P: pointer; Len: PtrInt);
+begin
+  UInt(Len); // Quack byte length is an unsigned variable-length integer
+  if Len <> 0 then
+    Write(P, Len); // write bytes verbatim: never call Write(s) here
+end;
+
+procedure TMockQuackWriter.Text(const Value: RawUtf8);
+begin
+  Blob(pointer(Value), length(Value));
+end;
+
+procedure TMockQuackWriter.BlobInt32(const Values: array of integer);
+begin
+  if length(Values) <> 0 then
+    Blob(@Values[0], length(Values) * SizeOf(integer))
+  else
+    Blob(nil, 0);
+end;
+
+procedure TMockQuackWriter.Header(MsgType: cardinal; const ConnectionId: RawUtf8);
+begin
+  Field(1);
+  UInt(MsgType);
+  if ConnectionId <> '' then
+  begin
+    Field(2);
+    Text(ConnectionId);
+  end;
+  Field(3);
+  UInt(High(QWord)); // optional client_query_id = -1
+  EndObject;
+end;
+
+procedure TMockQuackWriter.WriteType(Typ: TMockQuackType);
 var
-  tmp: array[0..15] of byte;
-  n: integer;
+  id: cardinal;
 begin
-  n := 0;
-  repeat
-    tmp[n] := Value and $7f;
-    Value := Value shr 7;
-    if Value <> 0 then
-      tmp[n] := tmp[n] or $80;
-    inc(n);
-  until Value = 0;
-  FastSetString(RawUtf8(result), @tmp, n);
+  case Typ of
+    mqtDecimal:
+      begin
+        Field(100); UInt(QTYPE_DECIMAL);
+        Field(101); Write1(1);
+        Field(100); UInt(2); // LogicalTypeInfoType: DECIMAL
+        Field(200); UInt(10);
+        Field(201); UInt(2);
+        EndObject;
+        EndObject;
+        exit;
+      end;
+    mqtListInt:
+      begin
+        Field(100); UInt(QTYPE_LIST);
+        Field(101); Write1(1);
+        Field(100); UInt(4); // LogicalTypeInfoType: LIST
+        Field(200); WriteType(mqtInteger);
+        EndObject;
+        EndObject;
+        exit;
+      end;
+    mqtStructAB:
+      begin
+        Field(100); UInt(QTYPE_STRUCT);
+        Field(101); Write1(1);
+        Field(100); UInt(5); // LogicalTypeInfoType: STRUCT
+        Field(200); UInt(2);
+        Field(0); Text('a'); Field(1); WriteType(mqtInteger); EndObject;
+        Field(0); Text('b'); Field(1); WriteType(mqtVarchar); EndObject;
+        EndObject;
+        EndObject;
+        exit;
+      end;
+    mqtEnum:
+      begin
+        Field(100); UInt(QTYPE_ENUM);
+        Field(101); Write1(1);
+        Field(100); UInt(6); // LogicalTypeInfoType: ENUM
+        Field(200); UInt(2);
+        Field(201); UInt(2);
+        Text('red');
+        Text('green');
+        EndObject;
+        EndObject;
+        exit;
+      end;
+    mqtInteger:
+      id := QTYPE_INTEGER;
+    mqtVarchar:
+      id := QTYPE_VARCHAR;
+    mqtBigint:
+      id := QTYPE_BIGINT;
+    mqtDate:
+      id := QTYPE_DATE;
+    mqtBoolean:
+      id := QTYPE_BOOLEAN;
+    mqtUuid:
+      id := QTYPE_UUID;
+    mqtDouble:
+      id := QTYPE_DOUBLE;
+    mqtVariant:
+      id := QTYPE_VARIANT;
+    mqtTimestamp:
+      id := QTYPE_TIMESTAMP;
+    mqtBlob:
+      id := QTYPE_BLOB;
+  else
+    exit;
+  end;
+  Field(100);
+  UInt(id);
+  EndObject;
 end;
 
-function VS(Value: Int64): RawByteString;
-var
-  tmp: array[0..15] of byte;
-  n: integer;
-  b: byte;
-  done: boolean;
-begin
-  n := 0;
-  repeat
-    b := Value and $7f;
-    if Value < 0 then
-      Value := not (not Value shr 7)
-    else
-      Value := Value shr 7;
-    done := ((Value = 0) and (b and $40 = 0)) or
-            ((Value = -1) and (b and $40 <> 0));
-    if not done then
-      b := b or $80;
-    tmp[n] := b;
-    inc(n);
-  until done;
-  FastSetString(RawUtf8(result), @tmp, n);
-end;
-
-function Blb(const Value: RawByteString): RawByteString;
-begin
-  result := VU(length(Value)) + Value;
-end;
-
-function Txt(const Value: RawUtf8): RawByteString;
-begin
-  result := Blb(Value);
-end;
-
-function Bytes(const Values: array of byte): RawByteString;
-begin
-  FastSetString(RawUtf8(result), @Values[0], length(Values));
-end;
-
-function Int32s(const Values: array of integer): RawByteString;
-begin
-  FastSetString(RawUtf8(result), @Values[0], length(Values) * 4);
-end;
-
-function Int64s(const Values: array of Int64): RawByteString;
-begin
-  FastSetString(RawUtf8(result), @Values[0], length(Values) * 8);
-end;
-
-function Doubles(const Values: array of double): RawByteString;
-begin
-  FastSetString(RawUtf8(result), @Values[0], length(Values) * 8);
-end;
-
-// bit mask of the valid rows, as 64-bit words
-function Valid(const Rows: array of boolean): RawByteString;
+procedure TMockQuackWriter.BeginPrepare(
+  const Types: array of TMockQuackType; const Names: array of RawUtf8;
+  NeedsMore: boolean; Chunks: integer);
 var
   i: integer;
+begin
+  Header(QUACK_PREPARE_RESPONSE, '');
+  Field(1);
+  UInt(length(Types));
+  for i := 0 to high(Types) do
+    WriteType(Types[i]);
+  Field(2);
+  UInt(length(Names));
+  for i := 0 to high(Names) do
+    Text(Names[i]);
+  if NeedsMore then
+  begin
+    Field(3);
+    Write1(1);
+  end;
+  if Chunks <> 0 then
+  begin
+    Field(4);
+    UInt(Chunks);
+  end;
+end;
+
+procedure TMockQuackWriter.EndPrepare;
+begin
+  Field(5);
+  Signed(-1234567);
+  UInt($123456789abcdef);
+  EndObject;
+end;
+
+procedure TMockQuackWriter.BeginChunk(Rows: integer;
+  const Types: array of TMockQuackType; Wrapped: boolean);
+var
+  i: integer;
+begin
+  if Wrapped then
+  begin
+    Write1(1); // non-null chunk wrapper
+    Field(300);
+  end;
+  Field(100);
+  UInt(Rows);
+  Field(101);
+  UInt(length(Types));
+  for i := 0 to high(Types) do
+    WriteType(Types[i]);
+  Field(102);
+  UInt(length(Types));
+end;
+
+procedure TMockQuackWriter.EndChunk(Wrapped: boolean);
+begin
+  EndObject; // chunk
+  if Wrapped then
+    EndObject; // nullable DataChunkWrapper
+end;
+
+procedure TMockQuackWriter.BeginVector(const Validity: array of boolean);
+var
+  i, n: integer;
   b: array of byte;
 begin
-  SetLength(b, ((length(Rows) + 63) shr 6) * 8);
-  for i := 0 to high(Rows) do
-    if Rows[i] then
+  Field(100);
+  if length(Validity) = 0 then
+  begin
+    Write1(0);
+    exit;
+  end;
+  Write1(1);
+  n := ((length(Validity) + 63) shr 6) * 8;
+  SetLength(b, n);
+  for i := 0 to high(Validity) do
+    if Validity[i] then
       b[i shr 3] := b[i shr 3] or (1 shl (i and 7));
-  FastSetString(RawUtf8(result), pointer(b), length(b));
+  Field(101);
+  Blob(pointer(b), n);
 end;
 
-function Join(const Parts: array of RawByteString): RawByteString;
-var
-  i: integer;
+procedure TMockQuackWriter.VectorInt32(const Values: array of integer;
+  const Validity: array of boolean);
 begin
-  result := '';
-  for i := 0 to high(Parts) do
-    result := result + Parts[i];
-end;
-
-// LogicalType objects
-function TypeObj(Id: cardinal): RawByteString;
-begin
-  result := Join([Fld(100), VU(Id), END_]);
-end;
-
-function TypeDecimal(Width, Scale: cardinal): RawByteString;
-begin
-  result := Join([Fld(100), VU(21), Fld(101), #1, Fld(100), VU(2) +
-    Fld(200), VU(Width), Fld(201), VU(Scale), END_, END_]);
-end;
-
-function TypeList(const Child: RawByteString): RawByteString;
-begin
-  result := Join([Fld(100), VU(101), Fld(101), #1, Fld(100), VU(4) +
-    Fld(200), Child, END_, END_]);
-end;
-
-function TypeStruct(const Names: array of RawUtf8;
-  const Types: array of RawByteString): RawByteString;
-var
-  i: integer;
-begin
-  result := Join([Fld(100), VU(100), Fld(101), #1, Fld(100), VU(5) +
-    Fld(200), VU(length(Names))]);
-  for i := 0 to high(Names) do
-    Append(result, [Fld(0), Txt(Names[i]), Fld(1), Types[i], END_]);
-  Append(result, [END_, END_]);
-end;
-
-function TypeEnum(const Values: array of RawUtf8): RawByteString;
-var
-  i: integer;
-begin
-  result := Join([Fld(100), VU(104), Fld(101), #1, Fld(100), VU(6) +
-    Fld(200), VU(length(Values)), Fld(201), VU(length(Values))]);
-  for i := 0 to high(Values) do
-    Append(result, Txt(Values[i]));
-  Append(result, [END_, END_]);
-end;
-
-// vector bodies (without the object terminator)
-function VecFlat(const Validity, Data: RawByteString): RawByteString;
-begin
-  if Validity = '' then
-    result := Join([Fld(100), #0])
+  BeginVector(Validity);
+  Field(102);
+  if length(Values) <> 0 then
+    Blob(@Values[0], length(Values) * SizeOf(integer))
   else
-    result := Join([Fld(100), #1, Fld(101), Blb(Validity)]);
-  Append(result, [Fld(102), Blb(Data)]);
+    Blob(nil, 0);
 end;
 
-function VecStr(const Validity: RawByteString;
-  const Values: array of RawUtf8): RawByteString;
+procedure TMockQuackWriter.VectorInt64(const Values: array of Int64;
+  const Validity: array of boolean);
+begin
+  BeginVector(Validity);
+  Field(102);
+  if length(Values) <> 0 then
+    Blob(@Values[0], length(Values) * SizeOf(Int64))
+  else
+    Blob(nil, 0);
+end;
+
+procedure TMockQuackWriter.VectorDouble(const Values: array of double;
+  const Validity: array of boolean);
+begin
+  BeginVector(Validity);
+  Field(102);
+  if length(Values) <> 0 then
+    Blob(@Values[0], length(Values) * SizeOf(double))
+  else
+    Blob(nil, 0);
+end;
+
+procedure TMockQuackWriter.VectorBytes(const Values: array of byte;
+  const Validity: array of boolean);
+begin
+  BeginVector(Validity);
+  Field(102);
+  if length(Values) <> 0 then
+    Blob(@Values[0], length(Values))
+  else
+    Blob(nil, 0);
+end;
+
+procedure TMockQuackWriter.VectorText(const Values: array of RawUtf8;
+  const Validity: array of boolean);
 var
   i: integer;
-  lens: array of integer;
-  bytes: RawUtf8;
+  total: PtrInt;
 begin
-  SetLength(lens, length(Values));
+  BeginVector(Validity);
+  total := 0;
+  for i := 0 to high(Values) do
+    inc(total, length(Values[i]));
+  Field(107);
+  UInt(total);
+  Field(108);
+  UInt(length(Values) * SizeOf(integer));
   for i := 0 to high(Values) do
   begin
-    lens[i] := length(Values[i]);
-    Append(bytes, Values[i]);
+    Write4(length(Values[i]));
   end;
-  if Validity = '' then
-    result := Join([Fld(100), #0])
+  Field(109);
+  UInt(total);
+  for i := 0 to high(Values) do
+    Write(pointer(Values[i]), length(Values[i]));
+end;
+
+procedure TMockQuackWriter.VectorBlobBytes(const Values: array of byte);
+begin
+  BeginVector([]);
+  Field(107); UInt(length(Values));
+  Field(108); UInt(4);
+  Write4(length(Values)); // int32 byte length
+  Field(109);
+  if length(Values) <> 0 then
+    Blob(@Values[0], length(Values))
   else
-    result := Join([Fld(100), #1, Fld(101), Blb(Validity)]);
-  Append(result, [Fld(107), VU(length(bytes)) +
-    Fld(108), Blb(Int32s(lens)), Fld(109), Blb(bytes)]);
+    Blob(nil, 0);
 end;
 
-function Chunk(Rows: integer; const Types, Columns: array of RawByteString):
-  RawByteString;
+procedure TMockQuackWriter.BigintChunk(First, Count: integer;
+  Wrapped: boolean);
 var
+  values: array of Int64;
   i: integer;
 begin
-  result := Join([Fld(100), VU(Rows), Fld(101), VU(length(Types))]);
-  for i := 0 to high(Types) do
-    Append(result, Types[i]);
-  Append(result, [Fld(102), VU(length(Columns))]);
-  for i := 0 to high(Columns) do
-    Append(result, [Columns[i], END_]);
-  Append(result, [END_]);
-end;
-
-function Hdr(MsgType: cardinal; const ConnectionId: RawUtf8): RawByteString;
-begin
-  result := Join([Fld(1), VU(MsgType)]);
-  if ConnectionId <> '' then
-    Append(result, [Fld(2), Txt(ConnectionId)]);
-  Append(result, [Fld(3), Bytes([$ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff,
-    $ff, $01]), END_]);
-end;
-
-function PrepareResponse(const Types: array of RawByteString;
-  const Names: array of RawUtf8; NeedsMore: boolean;
-  const Chunks: array of RawByteString): RawByteString;
-var
-  i: integer;
-begin
-  result := Join([Hdr(QUACK_PREPARE_RESPONSE, ''), Fld(1), VU(length(Types))]);
-  for i := 0 to high(Types) do
-    Append(result, Types[i]);;
-  Append(result, [Fld(2), VU(length(Names))]);
-  for i := 0 to high(Names) do
-    Append(result, Txt(Names[i]));
-  if NeedsMore then
-    Append(result, [Fld(3), #1]);
-  if length(Chunks) > 0 then
-  begin
-    Append(result, [Fld(4), VU(length(Chunks))]);
-    for i := 0 to high(Chunks) do
-      Append(result, [#1, Fld(300), Chunks[i], END_]);
-  end;
-  Append(result, [Fld(5), VS(-1234567), VU($123456789abcdef), END_]);
-end;
-
-function FetchResponse(Batch, Total: integer;
-  const Chunks: array of RawByteString): RawByteString;
-var
-  i: integer;
-begin
-  result := Hdr(QUACK_FETCH_RESPONSE, '');
-  if length(Chunks) > 0 then
-    Append(result, [Fld(1), VU(length(Chunks))]);
-  if Total > 0 then
-    Append(result, [Fld(2), VU(Total)]);
-  if Batch > 0 then
-    Append(result, [Fld(3), VU(Batch)]);
-  Append(result, END_);;
-  for i := 0 to high(Chunks) do
-    Append(result, Chunks[i]); // raw chunks after the message
-end;
-
-// version 1 of the protocol: chunks are inlined, with no batch numbers
-function FetchResponseV1(const Chunks: array of RawByteString): RawByteString;
-var
-  i: integer;
-begin
-  result := Hdr(QUACK_FETCH_RESPONSE, '');
-  if length(Chunks) > 0 then
-  begin
-    Append(result, [Fld(1), VU(length(Chunks))]);
-    for i := 0 to high(Chunks) do
-      Append(result, [#1, Fld(300), Chunks[i], END_]);
-    Append(result, [Fld(2), VU(1), END_]);
-  end
-  else
-    Append(result, [Fld(2), Bytes([$ff, $ff, $ff, $ff, $ff, $ff, $ff,
-      $ff, $ff, $01]), END_]);
-end;
-
-function ErrorResponse(const ErrType, Msg: RawUtf8): RawByteString;
-begin
-  result := Join([Hdr(QUACK_ERROR_RESPONSE, ''),
-    Fld(1), Txt(Msg), Fld(2), Txt(ErrType), END_]);
-end;
-
-function BigintChunk(First, Count: integer): RawByteString;
-var
-  i: integer;
-  v: array of Int64;
-begin
-  SetLength(v, Count);
+  SetLength(values, Count);
   for i := 0 to Count - 1 do
-    v[i] := First + i;
-  result := Chunk(Count, [TypeObj(QTYPE_BIGINT)], [VecFlat('', Int64s(v))]);
+    values[i] := First + i;
+  BeginChunk(Count, [mqtBigint], Wrapped);
+  VectorInt64(values, []);
+  EndObject; // vector object
+  EndChunk(Wrapped);
 end;
 
+function MockErrorResponse(const ErrType, Msg: RawUtf8): RawByteString;
+var
+  w: TMockQuackWriter;
+begin
+  w := TMockQuackWriter.Create;
+  try
+    w.Header(QUACK_ERROR_RESPONSE, '');
+    w.Field(1); w.Text(Msg);
+    w.Field(2); w.Text(ErrType);
+    w.EndObject;
+    result := w.FlushTo;
+  finally
+    w.Free;
+  end;
+end;
+
+function MockConnectionResponse(Version: cardinal): RawByteString;
+var
+  w: TMockQuackWriter;
+begin
+  w := TMockQuackWriter.Create;
+  try
+    w.Header(QUACK_CONNECTION_RESPONSE, 'CONN1');
+    w.Field(1); w.Text('v1.5.0');
+    w.Field(2); w.Text('mock');
+    w.Field(3); w.UInt(Version);
+    if Version = 3 then
+    begin
+      w.Field(4);
+      w.UInt(60);
+    end;
+    w.EndObject;
+    result := w.FlushTo;
+  finally
+    w.Free;
+  end;
+end;
+
+function MockSuccessResponse: RawByteString;
+var
+  w: TMockQuackWriter;
+begin
+  w := TMockQuackWriter.Create;
+  try
+    w.Header(QUACK_SUCCESS_RESPONSE, '');
+    w.EndObject;
+    result := w.FlushTo;
+  finally
+    w.Free;
+  end;
+end;
+
+function MockEmptyFetchResponseV1: RawByteString;
+var
+  w: TMockQuackWriter;
+begin
+  w := TMockQuackWriter.Create;
+  try
+    w.Header(QUACK_FETCH_RESPONSE, '');
+    w.Field(2);
+    w.UInt(High(QWord));
+    w.EndObject;
+    result := w.FlushTo;
+  finally
+    w.Free;
+  end;
+end;
+
+function MockTruncatedPrepare: RawByteString;
+var
+  w: TMockQuackWriter;
+begin
+  w := TMockQuackWriter.Create;
+  try
+    w.Header(QUACK_PREPARE_RESPONSE, '');
+    w.Field(1); // truncated body
+    result := w.FlushTo;
+  finally
+    w.Free;
+  end;
+end;
+
+function MockIncompleteSuccess: RawByteString;
+var
+  w: TMockQuackWriter;
+begin
+  w := TMockQuackWriter.Create;
+  try
+    w.Header(QUACK_SUCCESS_RESPONSE, '');
+    // Missing the body terminator on purpose.
+    result := w.FlushTo;
+  finally
+    w.Free;
+  end;
+end;
+
+function MockFetchResponse(Version: cardinal; Batch, Fetches: integer): RawByteString;
+var
+  w: TMockQuackWriter;
+begin
+  w := TMockQuackWriter.Create;
+  try
+    w.Header(QUACK_FETCH_RESPONSE, '');
+    if Version = 1 then
+    begin
+      if Fetches = 1 then
+      begin
+        w.Field(1); w.UInt(3);
+        w.BigintChunk(4, 3, true);
+        w.BigintChunk(7, 2, true);
+        w.BigintChunk(9, 4, true);
+        w.Field(2); w.UInt(1);
+        w.EndObject;
+      end
+      else
+      begin
+        w.Field(2); w.UInt(High(QWord));
+        w.EndObject;
+      end;
+    end
+    else
+    begin
+      case Batch of
+        1:
+          begin
+            w.Field(1); w.UInt(2); // two raw chunks
+            w.Field(3); w.UInt(1);
+            w.EndObject;
+            w.BigintChunk(4, 3, false);
+            w.BigintChunk(7, 2, false);
+          end;
+        2:
+          begin
+            w.Field(1); w.UInt(1);
+            w.Field(3); w.UInt(2);
+            w.EndObject;
+            w.BigintChunk(9, 4, false);
+          end;
+      else
+        w.Field(2); w.UInt(2); // terminal total batch count
+        w.EndObject;
+      end;
+    end;
+    result := w.FlushTo;
+  finally
+    w.Free;
+  end;
+end;
 
 { TTestQuack }
 
@@ -923,59 +1168,94 @@ begin
 end;
 
 function TTestQuack.MockQuery(const Sql: RawUtf8): RawByteString;
+var
+  w: TMockQuackWriter;
 begin
-  if Sql = 'select 1' then
-    // nothing more to fetch
-    result := PrepareResponse([TypeObj(QTYPE_INTEGER), TypeObj(QTYPE_VARCHAR),
-        TypeObj(QTYPE_DOUBLE)], ['i', 's', 'd'], false,
-      [Chunk(3, [TypeObj(QTYPE_INTEGER), TypeObj(QTYPE_VARCHAR),
-         TypeObj(QTYPE_DOUBLE)],
-        [VecFlat(Valid([true, false, true]), Int32s([1, 0, 3])),
-         VecStr(Valid([true, false, true]), ['a', '', 'ccc']),
-         VecFlat('', Doubles([1.5, 2.5, 3.5]))])])
-  else if Sql = 'select big' then
-    // the first rows are inlined, then FETCH_REQUEST get the other batches
-    result := PrepareResponse([TypeObj(QTYPE_BIGINT)], ['n'], true,
-      [BigintChunk(1, 3)])
-  else if Sql = 'select variant' then
-    // the VARIANT rows can't be decoded: the client has to ask them as JSON
-    result := PrepareResponse([TypeObj(QTYPE_INTEGER), TypeObj(QTYPE_VARIANT)],
-      ['id', 'v'], false, [])
-  else if Sql = 'SELECT #1 AS "id", NULLIF(#2::JSON, ''null''::JSON) AS "v" FROM (select variant)' then
-    result := PrepareResponse([TypeObj(QTYPE_INTEGER), TypeObj(QTYPE_VARCHAR)],
-      ['id', 'v'], false,
-      [Chunk(2, [TypeObj(QTYPE_INTEGER), TypeObj(QTYPE_VARCHAR)],
-        [VecFlat('', Int32s([1, 2])),
-         VecStr(Valid([true, false]), ['{"a":[1,2]}', ''])])])
-  else if Sql = 'select flags' then
-    // columns of several types, to check the value conversions
-    result := PrepareResponse([TypeObj(QTYPE_BOOLEAN), TypeDecimal(10, 2),
-        TypeObj(QTYPE_DATE), TypeObj(QTYPE_TIMESTAMP),
-        TypeList(TypeObj(QTYPE_INTEGER)), TypeObj(QTYPE_BLOB)],
-      ['b', 'm', 'd', 't', 'l', 'x'], false,
-      [Chunk(1, [TypeObj(QTYPE_BOOLEAN), TypeDecimal(10, 2),
-          TypeObj(QTYPE_DATE), TypeObj(QTYPE_TIMESTAMP),
-          TypeList(TypeObj(QTYPE_INTEGER)), TypeObj(QTYPE_BLOB)],
-        [VecFlat('', Bytes([1])),
-         VecFlat('', Int64s([12345])),
-         VecFlat('', Int32s([19000])),
-         VecFlat('', Int64s([981173106789000])),
-         Fld(100) + #0 + Fld(104) + VU(2) + Fld(105) + VU(1) +
-           Fld(100) + VU(0) + Fld(101) + VU(2) + END_ +
-           Fld(106) + VecFlat('', Int32s([7, 8])) + END_,
-         VecStr('', [RawUtf8(Bytes([1, 0, 255]))])])])
-  else if copy(Sql, 1, 4) = 'echo' then
-    // return the SQL as received
-    result := PrepareResponse([TypeObj(QTYPE_VARCHAR)], ['sql'], false,
-      [Chunk(1, [TypeObj(QTYPE_VARCHAR)], [VecStr('', [Sql])])])
-  else if copy(Sql, 1, 6) = 'insert' then
-    result := PrepareResponse([TypeObj(QTYPE_BIGINT)], ['Count'], false,
-      [BigintChunk(7, 1)])
-  else if copy(Sql, 1, 4) = 'fail' then
-    result := ErrorResponse('Catalog', 'Table does not exist!')
-  else
-    result := PrepareResponse([TypeObj(QTYPE_BIGINT)], ['Count'], false,
-      [BigintChunk(0, 1)]);
+  if copy(Sql, 1, 4) = 'fail' then
+  begin
+    result := MockErrorResponse('Catalog', 'Table does not exist!');
+    exit;
+  end;
+  w := TMockQuackWriter.Create;
+  try
+    if Sql = 'select 1' then
+    begin
+      // three rows of INTEGER, VARCHAR, DOUBLE
+      w.BeginPrepare([mqtInteger, mqtVarchar, mqtDouble],
+        ['i', 's', 'd'], false, 1);
+      w.BeginChunk(3, [mqtInteger, mqtVarchar, mqtDouble], true);
+      w.VectorInt32([1, 0, 3], [true, false, true]); w.EndObject;
+      w.VectorText(['a', '', 'ccc'], [true, false, true]); w.EndObject;
+      w.VectorDouble([1.5, 2.5, 3.5], []); w.EndObject;
+      w.EndChunk(true);
+      w.EndPrepare;
+    end
+    else if Sql = 'select big' then
+    begin
+      w.BeginPrepare([mqtBigint], ['n'], true, 1);
+      w.BigintChunk(1, 3, true);
+      w.EndPrepare;
+    end
+    else if Sql = 'select variant' then
+    begin
+      w.BeginPrepare([mqtInteger, mqtVariant], ['id', 'v'], false, 0);
+      w.EndPrepare;
+    end
+    else if Sql = 'SELECT #1 AS "id", NULLIF(#2::JSON, ''null''::JSON) AS "v" FROM (select variant)' then
+    begin
+      w.BeginPrepare([mqtInteger, mqtVarchar], ['id', 'v'], false, 1);
+      w.BeginChunk(2, [mqtInteger, mqtVarchar], true);
+      w.VectorInt32([1, 2], []); w.EndObject;
+      w.VectorText(['{"a":[1,2]}', ''], [true, false]); w.EndObject;
+      w.EndChunk(true);
+      w.EndPrepare;
+    end
+    else if Sql = 'select flags' then
+    begin
+      // logical conversions and a BLOB containing $00/$FF
+      w.BeginPrepare([mqtBoolean, mqtDecimal, mqtDate, mqtTimestamp,
+        mqtListInt, mqtBlob], ['b', 'm', 'd', 't', 'l', 'x'], false, 1);
+      w.BeginChunk(1, [mqtBoolean, mqtDecimal, mqtDate, mqtTimestamp,
+        mqtListInt, mqtBlob], true);
+      w.VectorBytes([1], []); w.EndObject;
+      w.VectorInt64([12345], []); w.EndObject;
+      w.VectorInt32([19000], []); w.EndObject;
+      w.VectorInt64([981173106789000], []); w.EndObject;
+      // one list [7,8] encoded with a flat child vector
+      w.BeginVector([]);
+      w.Field(104); w.UInt(2);
+      w.Field(105); w.UInt(1);
+      w.Field(100); w.UInt(0); w.Field(101); w.UInt(2); w.EndObject;
+      w.Field(106); w.VectorInt32([7, 8], []); w.EndObject;
+      w.EndObject; // list column
+      w.VectorBlobBytes([1, 0, 255]); w.EndObject;
+      w.EndChunk(true);
+      w.EndPrepare;
+    end
+    else if copy(Sql, 1, 4) = 'echo' then
+    begin
+      w.BeginPrepare([mqtVarchar], ['sql'], false, 1);
+      w.BeginChunk(1, [mqtVarchar], true);
+      w.VectorText([Sql], []); w.EndObject;
+      w.EndChunk(true);
+      w.EndPrepare;
+    end
+    else if copy(Sql, 1, 6) = 'insert' then
+    begin
+      w.BeginPrepare([mqtBigint], ['Count'], false, 1);
+      w.BigintChunk(7, 1, true);
+      w.EndPrepare;
+    end
+    else
+    begin
+      w.BeginPrepare([mqtBigint], ['Count'], false, 1);
+      w.BigintChunk(0, 1, true);
+      w.EndPrepare;
+    end;
+    result := w.FlushTo;
+  finally
+    w.Free;
+  end;
 end;
 
 function TTestQuack.OnMockRequest(Ctxt: THttpServerRequestAbstract): cardinal;
@@ -1013,19 +1293,16 @@ begin
   repeat
     f := r.Next2;
     case f of
-      2:
-        conn := r.VarUtf8;
-      3:
-        r.VarUInt64;
+      2: conn := r.VarUtf8;
+      3: r.VarUInt64;
     end;
   until f = $ffff;
   if mt <> QUACK_CONNECTION_REQUEST then
     if conn <> 'CONN1' then
     begin
-      Ctxt.OutContent := ErrorResponse('Invalid', 'Invalid connection id');
+      Ctxt.OutContent := MockErrorResponse('Invalid', 'Invalid connection id');
       exit;
     end;
-  // decode the request body, and compute the response
   case mt of
     QUACK_CONNECTION_REQUEST:
       begin
@@ -1035,40 +1312,26 @@ begin
         repeat
           f := r.Next2;
           case f of
-            1:
-              token := r.VarUtf8; // auth_string
-            2, 3, 6:
-              r.VarUtf8; // versions and client_id
-            4:
-              minv := r.VarUInt32;
-            5:
-              maxv := r.VarUInt32;
-            7:
-              lease := r.VarUInt32;
+            1: token := r.VarUtf8;
+            2, 3, 6: r.VarUtf8;
+            4: minv := r.VarUInt32;
+            5: maxv := r.VarUInt32;
+            7: lease := r.VarUInt32;
           end;
         until f = $ffff;
-        if (fMockVersion = 1) and
-           (lease <> 0) then
-          result := HTTP_SERVERERROR // unknown field: deserialization failure
-        else if (minv > fMockVersion) or
-                (maxv < fMockVersion) then
-          Ctxt.OutContent := ErrorResponse('InvalidInput', FormatUtf8(
+        if (fMockVersion = 1) and (lease <> 0) then
+          result := HTTP_SERVERERROR
+        else if (minv > fMockVersion) or (maxv < fMockVersion) then
+          Ctxt.OutContent := MockErrorResponse('InvalidInput', FormatUtf8(
             'Unsupported Quack version - server only supports version %',
             [fMockVersion]))
-        else if (fMockVersion = 3) and
-                (lease = 0) then
-          Ctxt.OutContent := ErrorResponse('InvalidInput',
+        else if (fMockVersion = 3) and (lease = 0) then
+          Ctxt.OutContent := MockErrorResponse('InvalidInput',
             'heartbeat_timeout out of range')
         else if token <> 'secret' then
-          Ctxt.OutContent := ErrorResponse('Invalid', 'Authentication failed')
-        else if fMockVersion = 1 then
-          Ctxt.OutContent := Hdr(QUACK_CONNECTION_RESPONSE, 'CONN1') +
-            Fld(1) + Txt('v1.5.0') + Fld(2) + Txt('mock') + Fld(3) + VU(1) +
-            END_
+          Ctxt.OutContent := MockErrorResponse('Invalid', 'Authentication failed')
         else
-          Ctxt.OutContent := Hdr(QUACK_CONNECTION_RESPONSE, 'CONN1') +
-            Fld(1) + Txt('v1.5.0') + Fld(2) + Txt('mock') + Fld(3) + VU(3) +
-            Fld(4) + VU(60) + END_;
+          Ctxt.OutContent := MockConnectionResponse(fMockVersion);
       end;
     QUACK_PREPARE_REQUEST:
       begin
@@ -1091,38 +1354,20 @@ begin
             CheckEqual(r.VarUInt32, batch - 1, 'ack index');
         until f = $ffff;
         inc(fFetches);
-        if fMockVersion = 1 then
-        begin
-          // no batch numbers: the next chunks, or none at the end
-          if fFetches = 1 then
-            Ctxt.OutContent := FetchResponseV1(
-              [BigintChunk(4, 3), BigintChunk(7, 2), BigintChunk(9, 4)])
-          else
-            Ctxt.OutContent := FetchResponseV1([]);
-        end
-        else
-        case batch of
-          1:
-            Ctxt.OutContent := FetchResponse(1, 0,
-              [BigintChunk(4, 3), BigintChunk(7, 2)]);
-          2:
-            Ctxt.OutContent := FetchResponse(2, 0, [BigintChunk(9, 4)]);
-        else
-          Ctxt.OutContent := FetchResponse(0, 2, []); // terminal response
-        end;
+        Ctxt.OutContent := MockFetchResponse(fMockVersion, batch, fFetches);
       end;
     QUACK_CANCEL_REQUEST:
       begin
         inc(fCancels);
-        Ctxt.OutContent := Hdr(QUACK_SUCCESS_RESPONSE, '') + END_;
+        Ctxt.OutContent := MockSuccessResponse;
       end;
     QUACK_DISCONNECT_MESSAGE:
       begin
         inc(fDisconnects);
-        Ctxt.OutContent := Hdr(QUACK_SUCCESS_RESPONSE, '') + END_;
+        Ctxt.OutContent := MockSuccessResponse;
       end;
   else
-    Ctxt.OutContent := Hdr(QUACK_SUCCESS_RESPONSE, '') + END_;
+    Ctxt.OutContent := MockSuccessResponse;
   end;
 end;
 
@@ -1179,7 +1424,7 @@ begin
     '877CE45F500BE01EAE5EF96DE8FB31AF')),
     '01000b02002038373743453435463530304245303145414535454639364445384642' +
     '333141460300ffffffffffffffffff01ffffffff', 'real disconnect');
-  CheckEqual(BinToHexLower(FetchResponseV1([])),
+  CheckEqual(BinToHexLower(MockEmptyFetchResponseV1),
     '0100080300ffffffffffffffffff01ffff0200ffffffffffffffffff01ffff',
     'real empty fetch');
   resp := TQuackResponse.Create(HexToBin(
@@ -1221,17 +1466,20 @@ begin
   QuackNewQueryUuid(uuid);
   Check((uuid.Lower <> 0) or
         (uuid.Upper <> 0));
+  // check the generated mock header byte for byte under FPC i386
+  CheckEqual(BinToHexLower(copy(MockQuery('select 1'), 1, 19)),
+    '0100040300ffffffffffffffffff01ffff0100', 'mock header bytes');
   // malformed responses are rejected
   TSynLog.Family.ExceptionIgnoreCurrentThread := true;
   try
-    TQuackResponse.Create(Hdr(QUACK_PREPARE_RESPONSE, '') + Fld(1)).Free;
+    TQuackResponse.Create(MockTruncatedPrepare).Free;
     Check(false, 'truncated');
   except
     on ESqlDBQuack do
       Check(true);
   end;
   try
-    TQuackResponse.Create(Hdr(QUACK_SUCCESS_RESPONSE, '')).Free;
+    TQuackResponse.Create(MockIncompleteSuccess).Free;
     Check(false, 'void body');
   except
     on ESqlDBQuack do
@@ -1254,6 +1502,8 @@ var
   w: TJsonWriter;
   tmp: TTextWriterStackBuffer;
   js: RawUtf8;
+  writer: TMockQuackWriter;
+  message: RawByteString;
 const
   ROWS = 4;
 begin
@@ -1262,23 +1512,37 @@ begin
   sel[2] := 1;
   sel[3] := 0;
   // flat, constant, dictionary and sequence vectors
-  resp := TQuackResponse.Create(PrepareResponse(
-    [TypeObj(QTYPE_INTEGER), TypeObj(QTYPE_VARCHAR), TypeObj(QTYPE_BIGINT),
-     TypeDecimal(10, 2), TypeObj(QTYPE_DATE), TypeObj(QTYPE_BOOLEAN),
-     TypeObj(QTYPE_UUID), TypeEnum(['red', 'green'])],
-    ['k', 'dict', 'seq', 'dec', 'day', 'flag', 'id', 'color'], false,
-    [Chunk(ROWS, [TypeObj(QTYPE_INTEGER), TypeObj(QTYPE_VARCHAR),
-        TypeObj(QTYPE_BIGINT), TypeDecimal(10, 2), TypeObj(QTYPE_DATE),
-        TypeObj(QTYPE_BOOLEAN), TypeObj(QTYPE_UUID), TypeEnum(['red', 'green'])],
-      [Fld(90) + VU(2) + VecFlat('', Int32s([42])),
-       Fld(90) + VU(3) + Fld(91) + Blb(Int32s(sel)) + Fld(92) + VU(2) +
-         VecStr(Valid([true, false]), ['one', '']),
-       Fld(90) + VU(4) + Fld(91) + VS(-5) + Fld(92) + VS(3),
-       VecFlat('', Int64s([12345, -5, 0, 100])), // DECIMAL(10,2) as int64
-       VecFlat('', Int32s([19000, 0, -1, 1])),
-       VecFlat('', Bytes([1, 0, 1, 0])),
-       VecFlat('', Int64s([1, 0, 2, 0, 3, 0, 4, 0])), // 4 uuid as 2x int64
-       VecFlat('', Bytes([0, 1, 1, 0]))])]));
+  writer := TMockQuackWriter.Create;
+  try
+    writer.BeginPrepare(
+      [mqtInteger, mqtVarchar, mqtBigint, mqtDecimal, mqtDate,
+       mqtBoolean, mqtUuid, mqtEnum],
+      ['k', 'dict', 'seq', 'dec', 'day', 'flag', 'id', 'color'], false, 1);
+    writer.BeginChunk(ROWS,
+      [mqtInteger, mqtVarchar, mqtBigint, mqtDecimal, mqtDate,
+       mqtBoolean, mqtUuid, mqtEnum], true);
+    writer.Field(90); writer.UInt(2); // constant vector
+    writer.VectorInt32([42], []); writer.EndObject;
+    writer.Field(90); writer.UInt(3); // dictionary vector
+    writer.Field(91); writer.Blob(@sel[0], SizeOf(sel));
+    writer.Field(92); writer.UInt(2);
+    writer.VectorText(['one', ''], [true, false]); writer.EndObject;
+    writer.Field(90); writer.UInt(4); // sequence vector
+    writer.Field(91); writer.Signed(-5);
+    writer.Field(92); writer.Signed(3);
+    writer.EndObject;
+    writer.VectorInt64([12345, -5, 0, 100], []); writer.EndObject;
+    writer.VectorInt32([19000, 0, -1, 1], []); writer.EndObject;
+    writer.VectorBytes([1, 0, 1, 0], []); writer.EndObject;
+    writer.VectorInt64([1, 0, 2, 0, 3, 0, 4, 0], []); writer.EndObject;
+    writer.VectorBytes([0, 1, 1, 0], []); writer.EndObject;
+    writer.EndChunk(true);
+    writer.EndPrepare;
+    message := writer.FlushTo;
+  finally
+    writer.Free;
+  end;
+  resp := TQuackResponse.Create(message);
   try
     CheckEqual(resp.MessageType, QUACK_PREPARE_RESPONSE);
     CheckEqual(length(resp.ColumnTypes), 8);
@@ -1315,23 +1579,34 @@ begin
     resp.Free;
   end;
   // nested LIST and STRUCT vectors
-  resp := TQuackResponse.Create(PrepareResponse(
-    [TypeList(TypeObj(QTYPE_INTEGER)),
-     TypeStruct(['a', 'b'], [TypeObj(QTYPE_INTEGER), TypeObj(QTYPE_VARCHAR)])],
-    ['l', 's'], false,
-    [Chunk(3, [TypeList(TypeObj(QTYPE_INTEGER)),
-        TypeStruct(['a', 'b'], [TypeObj(QTYPE_INTEGER), TypeObj(QTYPE_VARCHAR)])],
-      [Fld(100) + #1 + Fld(101) + Blb(Valid([true, true, false])) +
-         Fld(104) + VU(3) +
-         Fld(105) + VU(3) +
-           Fld(100) + VU(0) + Fld(101) + VU(2) + END_ +
-           Fld(100) + VU(2) + Fld(101) + VU(1) + END_ +
-           Fld(100) + VU(0) + Fld(101) + VU(0) + END_ +
-         Fld(106) + VecFlat('', Int32s([10, 20, 30])) + END_,
-       Fld(100) + #0 +
-         Fld(103) + VU(2) +
-           VecFlat(Valid([true, false, true]), Int32s([1, 0, 3])) + END_ +
-           VecStr('', ['x', 'y', 'z']) + END_])]));
+  writer := TMockQuackWriter.Create;
+  try
+    writer.BeginPrepare([mqtListInt, mqtStructAB], ['l', 's'], false, 1);
+    writer.BeginChunk(3, [mqtListInt, mqtStructAB], true);
+    writer.BeginVector([true, true, false]);
+    writer.Field(104); writer.UInt(3);
+    writer.Field(105); writer.UInt(3);
+    writer.Field(100); writer.UInt(0); writer.Field(101); writer.UInt(2);
+    writer.EndObject;
+    writer.Field(100); writer.UInt(2); writer.Field(101); writer.UInt(1);
+    writer.EndObject;
+    writer.Field(100); writer.UInt(0); writer.Field(101); writer.UInt(0);
+    writer.EndObject;
+    writer.Field(106);
+    writer.VectorInt32([10, 20, 30], []); writer.EndObject;
+    writer.EndObject; // list vector
+    writer.BeginVector([]);
+    writer.Field(103); writer.UInt(2);
+    writer.VectorInt32([1, 0, 3], [true, false, true]); writer.EndObject;
+    writer.VectorText(['x', 'y', 'z'], []); writer.EndObject;
+    writer.EndObject; // struct vector
+    writer.EndChunk(true);
+    writer.EndPrepare;
+    message := writer.FlushTo;
+  finally
+    writer.Free;
+  end;
+  resp := TQuackResponse.Create(message);
   try
     c := resp.Chunks[0];
     CheckEqual(VectorText(c.Vectors[0], 0), '[10,20]', 'list0');
@@ -1355,20 +1630,42 @@ begin
   finally
     resp.Free;
   end;
-  // invalid chunk content is rejected, and not accessed out of its bounds
+  // invalid chunk content must be rejected before accessing its bounds
+  writer := TMockQuackWriter.Create;
   try
-    TQuackResponse.Create(PrepareResponse([TypeObj(QTYPE_BIGINT)], ['n'], false,
-      [Chunk(3, [TypeObj(QTYPE_BIGINT)], [VecFlat('', Int64s([1, 2]))])])).Free;
+    writer.BeginPrepare([mqtBigint], ['n'], false, 1);
+    writer.BeginChunk(3, [mqtBigint], true);
+    writer.VectorInt64([1, 2], []); writer.EndObject;
+    writer.EndChunk(true);
+    writer.EndPrepare;
+    message := writer.FlushTo;
+  finally
+    writer.Free;
+  end;
+  try
+    TQuackResponse.Create(message).Free;
     Check(false, 'data size');
   except
     on ESqlDBQuack do
       Check(true);
   end;
+  writer := TMockQuackWriter.Create;
   try
-    TQuackResponse.Create(PrepareResponse([TypeObj(QTYPE_VARCHAR)], ['s'], false,
-      [Chunk(2, [TypeObj(QTYPE_VARCHAR)],
-        [Fld(100) + #0 + Fld(107) + VU(3) + Fld(108) + Blb(Int32s([2, 2])) +
-         Fld(109) + Blb('abc')])])).Free;
+    writer.BeginPrepare([mqtVarchar], ['s'], false, 1);
+    writer.BeginChunk(2, [mqtVarchar], true);
+    writer.BeginVector([]);
+    writer.Field(107); writer.UInt(3); // total bytes intentionally wrong
+    writer.Field(108); writer.BlobInt32([2, 2]);
+    writer.Field(109); writer.Text('abc');
+    writer.EndObject;
+    writer.EndChunk(true);
+    writer.EndPrepare;
+    message := writer.FlushTo;
+  finally
+    writer.Free;
+  end;
+  try
+    TQuackResponse.Create(message).Free;
     Check(false, 'string lengths');
   except
     on ESqlDBQuack do
@@ -1524,7 +1821,7 @@ var
     st.Bind(1, 5);
     st.BindTextU(2, 'O''Neil ?');
     st.BindCurrency(3, 12.5);
-    st.BindBlob(4, Bytes([1, 2, 255]));
+    st.BindBlob(4, HexToBin('0102ff'));
     st.BindNull(5);
     st.Bind(6, 1.25);
     st.BindDateTime(7, EncodeDate(2001, 2, 3) + EncodeTime(4, 5, 6, 789));
@@ -1673,7 +1970,7 @@ begin
       st.BindTextU(2, 'O''Neil ? -- "x" \n');
       st.BindCurrency(3, 1234.5678);
       st.BindDateTime(4, EncodeDate(2001, 2, 3) + EncodeTime(4, 5, 6, 789));
-      st.BindBlob(5, Bytes([0, 1, ord(''''), ord('\'), 255])); //  #0#1'''\'#255
+      st.BindBlob(5, HexToBin('0001275cff')); //  #0#1'''\'#255
       st.Bind(6, 0.1);
       st.ExecutePrepared;
       CheckEqual(st.UpdateCount, 1);
@@ -1761,7 +2058,7 @@ end;
 
 
 initialization
-  PWord(FastSetString(END_, 2))^ := $ffff;
   PCardinal(FastSetString(MAGIC_, 3))^ := JSON_BASE64_MAGIC_C;
+
 
 end.
