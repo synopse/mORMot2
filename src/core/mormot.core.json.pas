@@ -3032,7 +3032,7 @@ begin
       State := stValue;
   else if Fmt * [jrfTrailingComma, jrfNoTrailingComma] = [] then
          if (FmtJson <> jsonMorml) or  // no need of },value or ],value
-            not (W.B^ in ['}', ']']) then
+            not (W.LastChar in ['}', ']']) then
            W.AddDirect(',');
   end;
   if jrfIndent in Fmt then
@@ -3413,9 +3413,9 @@ ident:    Value := P;
           inc(StackCount);
           inc(W.fHumanReadableLevel);
           if FmtJson = jsonMorml then // no need of ,{ ,[ :{ or :[
-            if W.B^ in [':', ','] then
+            if W.LastChar in [':', ','] then
               W.CancelLastChar;
-          W.AddDirect(P^);
+          W.Add(P^);
           if P^ = '{' then
             State := stObjectNameFirst
           else
@@ -3431,7 +3431,7 @@ ident:    Value := P;
           dec(W.fHumanReadableLevel);
           if jrfIndent in Fmt then
             W.AddCRAndIndent;
-          W.AddDirect(P^);
+          W.Add(P^);
           inc(P);
           if (jrfTrailingComma in Fmt) and
              not (State in [stObjectNameFirst, stValueFirst]) then
