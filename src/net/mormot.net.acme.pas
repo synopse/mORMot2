@@ -44,6 +44,7 @@ uses
   mormot.crypt.core,
   mormot.crypt.jwt,
   mormot.crypt.secure,
+  mormot.crypt.factory,
   mormot.lib.openssl11, // for per-domain-name PSSL_CTX certificates
   mormot.net.sock,
   mormot.net.http,

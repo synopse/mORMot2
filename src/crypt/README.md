@@ -10,7 +10,7 @@ Those units implement hashing, message digests, encryption, and asymmetric crypt
 
 They are written in a cross-platform way in mind, with a very efficient stand-alone version (using optimized pascal code and assembly), or via an external OpenSSL library.
 
-Hint: If you are not familiar with the algorithms themselves and their details, consider using [mormot.crypt.secure](./mormot.crypt.secure.pas) and its `Rnd`/`Hash`/`Sign`/`Cipher`/`Asym`/`Cert`/`Store` high-level factories.
+Hint: If you are not familiar with the algorithms themselves and their details, consider using [mormot.crypt.factory](./mormot.crypt.factory.pas) and its `Rnd`/`Hash`/`Sign`/`Cipher`/`Asym`/`Cert`/`Store` high-level factories.
 
 Legal Notice: as stated by [our licensing terms](../../LICENCE.md), make sure that you comply to any restriction about the use of cryptographic software in your country.
 
@@ -46,9 +46,17 @@ Authentication and Security types shared by all framework units.
 - 64-bit `TSynUniqueIdentifier` and its efficient Generator
 - `IProtocol` Safe Communication with Unilateral or Mutual Authentication
 - `TBinaryCookieGenerator` Simple Cookie Generator
-- `Rnd`/`Hash`/`Sign`/`Cipher`/`Asym`/`Cert`/`Store` High-Level Algorithms Factories
 - Minimal `PEM`/`DER` Encoding/Decoding
 - `TSynMustache` Cryptographic Expression Helpers
+
+### mormot.crypt.factory
+
+High-Level Cryptographic Algorithms Factories shared by all framework units.
+- `ICryptHash`/`ICryptCipher`/`ICryptCert`/`ICryptStore` interfaces and their `TCrypt*` abstract classes
+- `Rnd`/`Hash`/`Sign`/`Cipher`/`Asym`/`Cert`/`Store` High-Level Algorithms Factories
+- Algorithm registration, as used by the `mormot.crypt.ecc`/`rsa`/`x509`/`openssl`/`pkcs11`/`win` providers
+- `TCryptCertCache`/`TCryptCertList` certificates collections and `TCryptCertPerUsage` lookup
+- Key and Certificate aware PEM/DER helpers, e.g. `X509PubKeyToDer`, `PrivateKeyToPkcs8`, `TX509Parsed` and the `X509Parse` hook
 
 ### mormot.crypt.ecc256r1
 

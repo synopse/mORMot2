@@ -33,7 +33,8 @@ uses
   mormot.core.rtti,
   mormot.core.variants,
   mormot.crypt.core,
-  mormot.crypt.secure;
+  mormot.crypt.secure,
+  mormot.crypt.factory;
   
 {
   Implementation notes:
@@ -3818,7 +3819,7 @@ end;
 
 constructor TCryptAsymRsa.Create(const name, hasher: RawUtf8);
 begin
-  fDefaultHasher := mormot.crypt.secure.Hasher(hasher); // set before Create()
+  fDefaultHasher := mormot.crypt.factory.Hasher(hasher); // set before Create()
   if fDefaultHasher = nil then
     ECrypt.RaiseUtf8('%.Create: unknown hasher=%', [self, hasher]);
   Create(name);
