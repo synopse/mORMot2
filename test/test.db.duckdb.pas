@@ -664,7 +664,6 @@ type
     procedure EndObject;                     {$ifdef HASINLINE} inline; {$endif}
     procedure UInt(Value: QWord);            {$ifdef HASINLINE} inline; {$endif}
     procedure Signed(Value: Int64);          {$ifdef HASINLINE} inline; {$endif}
-    procedure Blob(P: pointer; Len: PtrInt); {$ifdef HASINLINE} inline; {$endif}
     procedure Text(const Value: RawUtf8);    {$ifdef HASINLINE} inline; {$endif}
     procedure BlobInt32(const Values: array of integer);
     procedure Header(MsgType: cardinal; const ConnectionId: RawUtf8);
@@ -689,9 +688,6 @@ type
     procedure VectorBlobBytes(const Values: array of byte);
     procedure BigintChunk(First, Count: integer; Wrapped: boolean);
   end;
-
-var
-  MAGIC_: RawUtf8;
 
 constructor TMockQuackWriter.Create;
 begin
@@ -718,24 +714,17 @@ begin
   WriteVarLeb64(Value);   // signed LEB128, as consumed by TFastReader.VarLeb64
 end;
 
-procedure TMockQuackWriter.Blob(P: pointer; Len: PtrInt);
-begin
-  UInt(Len); // Quack byte length is an unsigned variable-length integer
-  if Len <> 0 then
-    Write(P, Len); // write bytes verbatim: never call Write(s) here
-end;
-
 procedure TMockQuackWriter.Text(const Value: RawUtf8);
 begin
-  Blob(pointer(Value), length(Value));
+  Write(Value); // has VarUInt32 length prefix
 end;
 
 procedure TMockQuackWriter.BlobInt32(const Values: array of integer);
 begin
   if length(Values) <> 0 then
-    Blob(@Values[0], length(Values) * SizeOf(integer))
+    WriteVar(@Values[0], length(Values) * SizeOf(integer))
   else
-    Blob(nil, 0);
+    WriteVar(nil, 0);
 end;
 
 procedure TMockQuackWriter.Header(MsgType: cardinal; const ConnectionId: RawUtf8);
@@ -911,7 +900,7 @@ begin
     if Validity[i] then
       b[i shr 3] := b[i shr 3] or (1 shl (i and 7));
   Field(101);
-  Blob(pointer(b), n);
+  WriteVar(pointer(b), n);
 end;
 
 procedure TMockQuackWriter.VectorInt32(const Values: array of integer;
@@ -920,9 +909,9 @@ begin
   BeginVector(Validity);
   Field(102);
   if length(Values) <> 0 then
-    Blob(@Values[0], length(Values) * SizeOf(integer))
+    WriteVar(@Values[0], length(Values) * SizeOf(integer))
   else
-    Blob(nil, 0);
+    WriteVar(nil, 0);
 end;
 
 procedure TMockQuackWriter.VectorInt64(const Values: array of Int64;
@@ -931,9 +920,9 @@ begin
   BeginVector(Validity);
   Field(102);
   if length(Values) <> 0 then
-    Blob(@Values[0], length(Values) * SizeOf(Int64))
+    WriteVar(@Values[0], length(Values) * SizeOf(Int64))
   else
-    Blob(nil, 0);
+    WriteVar(nil, 0);
 end;
 
 procedure TMockQuackWriter.VectorDouble(const Values: array of double;
@@ -942,9 +931,9 @@ begin
   BeginVector(Validity);
   Field(102);
   if length(Values) <> 0 then
-    Blob(@Values[0], length(Values) * SizeOf(double))
+    WriteVar(@Values[0], length(Values) * SizeOf(double))
   else
-    Blob(nil, 0);
+    WriteVar(nil, 0);
 end;
 
 procedure TMockQuackWriter.VectorBytes(const Values: array of byte;
@@ -953,9 +942,9 @@ begin
   BeginVector(Validity);
   Field(102);
   if length(Values) <> 0 then
-    Blob(@Values[0], length(Values))
+    WriteVar(@Values[0], length(Values))
   else
-    Blob(nil, 0);
+    WriteVar(nil, 0);
 end;
 
 procedure TMockQuackWriter.VectorText(const Values: array of RawUtf8;
@@ -979,7 +968,7 @@ begin
   Field(109);
   UInt(total);
   for i := 0 to high(Values) do
-    Write(pointer(Values[i]), length(Values[i]));
+    WriteBinary(Values[i]);
 end;
 
 procedure TMockQuackWriter.VectorBlobBytes(const Values: array of byte);
@@ -990,9 +979,9 @@ begin
   Write4(length(Values)); // int32 byte length
   Field(109);
   if length(Values) <> 0 then
-    Blob(@Values[0], length(Values))
+    WriteVar(@Values[0], length(Values))
   else
-    Blob(nil, 0);
+    WriteVar(nil, 0);
 end;
 
 procedure TMockQuackWriter.BigintChunk(First, Count: integer;
@@ -1524,7 +1513,7 @@ begin
     writer.Field(90); writer.UInt(2); // constant vector
     writer.VectorInt32([42], []); writer.EndObject;
     writer.Field(90); writer.UInt(3); // dictionary vector
-    writer.Field(91); writer.Blob(@sel[0], SizeOf(sel));
+    writer.Field(91); writer.WriteVar(@sel[0], SizeOf(sel));
     writer.Field(92); writer.UInt(2);
     writer.VectorText(['one', ''], [true, false]); writer.EndObject;
     writer.Field(90); writer.UInt(4); // sequence vector
@@ -1693,7 +1682,7 @@ var
     conn: TSqlDBConnection;
     rows: ISqlDBRows;
     st: ISqlDBStatement;
-    u: RawUtf8;
+    u, m: RawUtf8;
     i: integer;
     bad: TSqlDBQuackConnectionProperties;
   begin
@@ -1770,8 +1759,9 @@ var
     Check(rows.ColumnType(5) = ftBlob);
     rows := nil;
     rows := props.Execute('select flags', []);
-    u := Join(['[{"b":1,"m":123.45,"d":"2022-01-08","t":"2001-02-03T04:05:06",' +
-          '"l":[7,8],"x":"', MAGIC_, 'AQD/"}]'#10]);
+    PCardinal(FastSetString(m, 3))^ := JSON_BASE64_MAGIC_C;
+    Join(['[{"b":1,"m":123.45,"d":"2022-01-08","t":"2001-02-03T04:05:06",' +
+          '"l":[7,8],"x":"', m, 'AQD/"}]'#10], u);
     CheckEqual(rows.FetchAllAsJson(true), u, 'flags json');
     // several batches, requested on demand
     fFetches := 0;
@@ -2055,10 +2045,6 @@ begin
   end;
 end;
 {$endif CPU64}
-
-
-initialization
-  PCardinal(FastSetString(MAGIC_, 3))^ := JSON_BASE64_MAGIC_C;
 
 
 end.
