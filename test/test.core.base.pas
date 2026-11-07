@@ -311,10 +311,14 @@ type
 
 implementation
 
-{$ifdef FPCPOSIX}
+{$ifdef OSPOSIX}
 uses
+  {$ifdef FPC}
   baseunix;
-{$endif FPCPOSIX}
+  {$else}
+  mormot.core.os.delphi;
+  {$endif FPC}
+{$endif OSPOSIX}
 
 
 { TOrmPeople }
@@ -3696,7 +3700,9 @@ begin
             (text <> '');
 end;
 
-{$ifdef FPCPOSIX}
+{$ifdef OSPOSIX}
+
+{$ifdef FPC} // sigaction_t handler field name depends on the Delphi platform
 
 type
   // send SIGUSR1 to a given thread every 20 ms
@@ -3731,6 +3737,8 @@ end;
 procedure NoopSignalHandler(sig: cint); cdecl;
 begin
 end;
+
+{$endif FPC}
 
 function ProcessExists(pid: cint): boolean; // also true for a zombie
 begin
@@ -3782,8 +3790,10 @@ end;
 procedure TTestCoreBase._RunRedirect;
 var
   r: TRunRedirectTest;
+  {$ifdef FPC}
   sender: TSignalSender;
   sa, old: SigactionRec;
+  {$endif FPC}
   exitcode: integer;
   bg: cint;
   output: RawByteString;
@@ -3829,6 +3839,7 @@ begin
   // the child should not inherit an ignored SIGPIPE, e.g. from a server
   SigPipeIntercept;
   Run('kill -PIPE $$; echo alive', '', -SIGPIPE);
+  {$ifdef FPC}
   // a signal received by the calling thread should not abort the redirection
   FillCharFast(sa, SizeOf(sa), 0);
   sa.sa_handler := SigActionHandler(@NoopSignalHandler);
@@ -3844,6 +3855,7 @@ begin
     sender.Free;
     fpsigaction(SIGUSR1, @old, nil);
   end;
+  {$endif FPC}
   r := TRunRedirectTest.Create;
   try
     // the callback is called at startup with '', then with the output
@@ -3981,7 +3993,7 @@ begin
   Check(CreateDir(Utf8ToString(dir)), 'dir');
   tool := dir + '/zvb648tool';
   FileFromString('#!/bin/sh'#10'echo found $ZVB648'#10, Utf8ToString(tool));
-  fpchmod(pointer(tool), &755);
+  fpchmod(pointer(tool), $1ed); // octal 755
   p := TExternalProcess.Create;
   try
     Check(p.Start(['zvb648tool'], 'PATH=' + dir + #0'ZVB648=bar'#0#0), 'path');
@@ -4435,20 +4447,8 @@ begin
   CheckUtf8(OpenedHandles - files < 20, 'handles=% %', [files, OpenedHandles]);
 end;
 
-{$else}
-
-procedure TTestCoreBase._RunRedirect;
-begin
-  // not implemented on Delphi POSIX
-end;
-
-procedure TTestCoreBase._TExternalProcess;
-begin
-  // not implemented on Delphi POSIX
-end;
-
 {$endif OSWINDOWS}
-{$endif FPCPOSIX}
+{$endif OSPOSIX}
 
 procedure TTestCoreBase._TExecutableCommandLine;
 var

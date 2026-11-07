@@ -6451,8 +6451,8 @@ function RunCommand(const cmd: TRunArg; waitfor: boolean = true;
   {$else} processhandle: PHandle = nil {$endif OSPOSIX}): integer;
 
 /// execute a command, returning its output console as text
-// - calls CreateProcessW on Windows (via our RunCommandWin function), and
-// FPC RTL popen/pclose on POSIX to be truly cross-platform
+// - calls CreateProcessW on Windows (via our RunCommandWin function), and our
+// TExternalProcess class on POSIX to be truly cross-platform
 // - return '' on cmd execution error, or the whole output console text content
 // with no conversion (unless setresult is false - see below)
 // - on POSIX, result is likely to be UTF-8 but on Windows it depends on each
@@ -6463,8 +6463,8 @@ function RunCommand(const cmd: TRunArg; waitfor: boolean = true;
 // onoutput() callback returns true - see RedirectToConsole global callback
 // - will abort once waitfordelayms expires - if not its default INFINITE
 // - force setresult=false if you only need onouput() and will discard the result
-// - optional env is Windows only, (FPC popen does not support it), and should
-// be encoded as name=value#0 pairs - with env[length(env)]=#0 to end with #0#0
+// - optional env should be encoded as name=value#0 pairs - with
+// env[length(env)]=#0 to end with #0#0
 // - you can specify a wrkdir if the path specified by cmd is not good enough
 // - TRunOptions = RUN_CMD as expected from executing a transient command
 // - warning: exitcode^ should be a 32-bit "integer" variable, not a PtrInt
@@ -6609,7 +6609,8 @@ type
     /// send some data to the process stdin, with the roStdinPipe option
     // - returns false on error, e.g. if the process ended
     // - on POSIX, Start() with roStdinPipe calls SigPipeIntercept, so that
-    // writing to an ended process does not raise SIGPIPE
+    // writing to an ended process does not raise SIGPIPE - but SigPipeIntercept
+    // does nothing yet on Delphi POSIX
     function Write(const data: RawByteString): boolean; overload;
     /// send some data to the process stdin, with the roStdinPipe option
     function Write(p: pointer; len: PtrInt): boolean; overload;

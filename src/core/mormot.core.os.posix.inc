@@ -5476,8 +5476,6 @@ begin
   end;
 end;
 
-{$ifdef FPC}
-
 // retrieve the PATH= value from the environment to be passed to execve()
 // - i.e. from the RunBuildEnv() output, or the current environment
 function RunEnvPath(envpp: PPUtf8Char): RawUtf8;
@@ -5535,13 +5533,13 @@ end;
 
 { TExternalProcess }
 
-{$ifdef OSLINUX}
+{$ifdef FPCLINUX} // Delphi has no syscall, and libc close_range() is glibc 2.34+
   {$if defined(CPUINTEL) or defined(CPUARM) or defined(CPUAARCH64)}
 const
   syscall_nr_close_range = 436; // same number for all those CPUs
   {$define HASCLOSERANGE}
   {$ifend}
-{$endif OSLINUX}
+{$endif FPCLINUX}
 
 {$ifdef OSBSD} // FreeBSD 8+, OpenBSD 3.5+, NetBSD 3+
 procedure closefrom(lowfd: cint);
@@ -5591,7 +5589,11 @@ begin
   // fork() by another library - but our own children close all their
   // inherited descriptors anyway
   {$ifdef OSLINUX}
+  {$ifdef FPC}
   result := Do_SysCall(syscall_nr_pipe2, TSysParam(@fd), O_CLOEXEC) = 0;
+  {$else}
+  result := pipe2(@fd, O_CLOEXEC) = 0; // Delphi POSIX has no syscall
+  {$endif FPC}
   {$else}
   result := fppipe(fd) = 0;
   {$endif OSLINUX}
@@ -5629,13 +5631,11 @@ begin
 end;
 
 function MaxDescriptors: cint;
-var
-  rl: TRLimit;
 begin
-  result := 1 shl 20; // reasonable upper limit
-  if (fpgetrlimit(RLIMIT_NOFILE, @rl) = 0) and
-     (rl.rlim_cur < 1 shl 20) then
-    result := rl.rlim_cur;
+  result := GetFileOpenLimit; // -1 on Delphi POSIX
+  if (result <= 0) or
+     (result > 1 shl 20) then
+    result := 1 shl 20; // reasonable upper limit
 end;
 
 {$ifdef HASCLOSERANGE}
@@ -5656,9 +5656,9 @@ end;
 {$endif HASCLOSERANGE}
 
 // upper bound of the opened descriptors, for the closing loop of the child
-// - without closefrom() nor close_range(), e.g. on MacOS or Linux < 5.9, a loop
-// up to RLIMIT_NOFILE costs 118ms per execution with 524288 descriptors, as set
-// by TPollSockets from the hard limit
+// - without closefrom() nor close_range(), e.g. on MacOS, Linux < 5.9 or
+// Delphi POSIX, a loop up to RLIMIT_NOFILE costs 118ms per execution with
+// 524288 descriptors, as set by TPollSockets from the hard limit
 // - descriptors opened by other threads until fork() take the lowest free
 // numbers, so should be within the margin
 function ChildMaxDescriptor: cint;
@@ -5841,8 +5841,7 @@ begin
     SigPipeIntercept; // Write() should return false, not raise SIGPIPE
   maxfd := ChildMaxDescriptor; // after all our own descriptors were opened
   fpsigemptyset(nomask);
-  FillCharFast(dfl, SizeOf(dfl), 0);
-  dfl.sa_handler := SigActionHandler(SIG_DFL);
+  FillCharFast(dfl, SizeOf(dfl), 0); // SIG_DFL = nil handler on all systems
   pid := RunFork;
   if pid = 0 then
   begin
@@ -6077,63 +6076,6 @@ begin
     p.Free;
   end;
 end;
-
-{$else}
-
-function RunRedirect(const cmd: TRunArg; exitcode: PInteger;
-  const onoutput: TOnRedirect; waitfordelayms: cardinal; setresult: boolean;
-  const env: TRunArg; const wrkdir: TFileName; options: TRunOptions): RawByteString;
-begin
-  FastAssignNew(result); // not implemented yet on Delphi POSIX - see libc popen()
-  if exitcode <> nil then
-    exitcode^ := -1; // error
-end;
-
-{ TExternalProcess }
-
-// NOT IMPLEMENTED YET on Delphi POSIX
-
-function TExternalProcess.DoStart(const cmd: TRunArg; const args: array of TRunArg;
-  const env: TRunArg; const wrkdir: TFileName; options: TRunOptions;
-  withthread: boolean): boolean;
-begin
-  fState := epsFailed;
-  result := false;
-end;
-
-function TExternalProcess.DoReap: boolean;
-begin
-  result := true;
-end;
-
-procedure TExternalProcess.DoSignal(hard: boolean);
-begin
-end;
-
-function TExternalProcess.DoPump(timeoutms: integer): integer;
-begin
-  fOutputEof := true;
-  result := -1;
-end;
-
-function TExternalProcess.DoWrite(p: pointer; len: PtrInt): boolean;
-begin
-  result := false;
-end;
-
-procedure TExternalProcess.DoCloseStdin;
-begin
-end;
-
-procedure TExternalProcess.DoClose;
-begin
-end;
-
-procedure TExternalProcess.DoWakeUp;
-begin
-end;
-
-{$endif FPC}
 
 
 { ****************** Gather Operating System Information }
