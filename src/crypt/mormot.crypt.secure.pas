@@ -1960,7 +1960,10 @@ type
 { ************* Rnd/Hash/Sign/Cipher/Asym/Cert/Store High-Level Algorithms Factories }
 
 type
-  ECrypt = class(ESynException);
+  /// exception raised by the Rnd/Hash/Sign/Cipher/Asym/Cert/Store factories
+  // - inherits from ESynCrypto, so that a single handler can catch the whole
+  // cryptographic stack, from mormot.crypt.core up to the factories
+  ECrypt = class(ESynCrypto);
 
   TCryptAlgo = class;
   TCryptAlgos = array of TCryptAlgo;
