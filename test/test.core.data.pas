@@ -3435,6 +3435,18 @@ begin
   TestReformat(
     'one:{a:1,b:2}'#10'two:2',
     '{one:{a:1,b:2},two:2}');
+  // content bigger than the TTextWriterStackBuffer (was a stack overflow)
+  U2 := RawUtf8OfChar('1', 70000);
+  TestReformat('[' + U2 + ']', '[' + U2 + ']', jsonCompact);
+  U2 := StringReplaceAll(RawUtf8OfChar('x', 5000), 'x', '[],');
+  TestReformat('[' + U2 + '1]', '[' + U2 + '1]', jsonCompact);
+  U2 := StringReplaceAll(RawUtf8OfChar('x', 5000), 'x', '{},');
+  TestReformat('[' + U2 + '{}]', '[' + U2 + '{}]', jsonCompact);
+  K := RawUtf8OfChar('k', 20000);
+  J2 := '{"' + K + '":1,"b":2}';
+  CheckEqual(JsonObjectAsJsonArrays(pointer(J2), y, U2), 2);
+  CheckEqual(y, '["' + K + '","b"]');
+  CheckEqual(U2, '[1,2]');
   CheckEqual(JsonReformat(
     #10' // test'#10' # ignored'#10'one: 1'#10'"two": 2'#10, jsonCompact),
     '{"one":1,"two":2}');
@@ -9242,7 +9254,13 @@ const
      ExpectedJson: '{"k":[[1,2],[3,4]]}')
   );
 
-  ERRORS: array[0..8] of TYamlGoldenCase = (
+  ERRORS: array[0..10] of TYamlGoldenCase = (
+    (Name: 'quoted-double-json-injection';
+     Yaml: 'user: "x","admin":true,"y":"z"';
+     ExpectedJson: ''),
+    (Name: 'quoted-single-json-injection';
+     Yaml: 'user: ''x'',"admin":true';
+     ExpectedJson: ''),
     (Name: 'anchor';
      Yaml: 'a: &ref 1'#10'b: *ref';
      ExpectedJson: ''),
@@ -9403,6 +9421,13 @@ begin
     YamlMaxDepth := 100;
     YamlToVariant(yaml, doc);
     Check(doc.Count <> 0,  'depth 20 must parse when YamlMaxDepth=100');
+    // Compact one-line nested sequences must use the same depth limit.
+    yaml := '';
+    for i := 1 to 100 do
+      Append(yaml, '- ');
+    Append(yaml, 'x');
+    YamlMaxDepth := 8;
+    YamlExpectRaise('compact nested sequence must respect YamlMaxDepth', yaml);
   finally
     YamlMaxDepth := saved;
   end;
