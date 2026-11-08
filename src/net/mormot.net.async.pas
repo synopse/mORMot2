@@ -286,6 +286,7 @@ type
     fOptions: TPollAsyncSocketsOptions;
     fTerminated: boolean;
     fReadWaitMs: integer;
+    fReadMaxBytes: integer;
     fOnStart: TOnPollAsyncFunc;
     fOnFirstRead, fOnStop: TOnPollAsyncProc;
     fWaitingWrite: TPollAsyncConnections; // to implement soWaitWrite
@@ -394,6 +395,14 @@ type
     // - use with care: performance degrades with highly concurrent HTTP/1.1
     property ReadWaitMs: integer
       read fReadWaitMs write fReadWaitMs;
+    /// how many bytes ProcessRead() may receive before calling OnRead()
+    // - i.e. the maximum fRd input buffered per connection between two OnRead()
+    // calls, so that e.g. a big request body is streamed by blocks of this size
+    // instead of being retrieved as a whole when the client sends faster than
+    // the server reads it, e.g. on the loopback or a loaded server
+    // - equals 1MB by default - but at least one recv() of up to 32KB is made
+    property ReadMaxBytes: integer
+      read fReadMaxBytes write fReadMaxBytes;
     {$ifdef USE_WINIOCP}
     /// low-level access to the IOCP polling class used for all events
     property IocpRecvSend: TWinIocp
@@ -1900,6 +1909,7 @@ constructor TPollAsyncSockets.Create(aOptions: TPollAsyncSocketsOptions;
   aThreadCount: integer);
 begin
   fOptions := aOptions;
+  fReadMaxBytes := 1 shl 20;
   inherited Create;
   {$ifdef USE_WINIOCP}
   fIocpRecvSend := TWinIocp.Create(aThreadCount,
@@ -2368,7 +2378,11 @@ begin
              (fProcessingRead < 4) then // < 4 for "wrk -c 10000" not fail
             retryms := 50;
         end;
-        // receive as much data as possible into connection.fRd buffer
+        // receive up to fReadMaxBytes of pending data into connection.fRd
+        // - any remaining input is left in the socket buffer and will be
+        // notified again (level-triggered poll or IOCP re-subscription), as
+        // already after any recv() < SizeOf(temp): so a fast client won't
+        // make fRd grow without limit before OnRead can consume it
         repeat
           if fTerminated or
              (connection.fSocket = nil) then
@@ -2408,7 +2422,8 @@ begin
             connection.fRd.Reserve(1024); // minimal reusable fRd.Buffer
           connection.fRd.Append(@temp, recved);
           inc(added, recved);
-        until recved < SizeOf(temp);
+        until (recved < SizeOf(temp)) or
+              (added + SizeOf(temp) > fReadMaxBytes);
         // process the received data by calling connection.OnRead
         if added > 0 then
         begin
