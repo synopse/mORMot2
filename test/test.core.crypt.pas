@@ -3757,6 +3757,37 @@ var
   dig: TDigestAuthServerFile;
   users, pwds, users2: TRawUtf8DynArray;
   bak: RawByteString;
+
+  function ValueOf(const resp, name: RawUtf8): RawUtf8;
+  var
+    i, j: PtrInt;
+  begin
+    result := '';
+    i := PosEx(name, resp);
+    if i = 0 then
+      exit;
+    inc(i, length(name));
+    j := PosEx('"', resp, i);
+    if j > i then
+      result := copy(resp, i, j - i);
+  end;
+
+  procedure CheckVoidValue(const challenge, aRealm, aNonce: RawUtf8);
+  var
+    resp, expected: RawUtf8;
+  begin
+    CheckEqual(DigestRealm(challenge), aRealm, 'void realm');
+    resp := DigestClient(daMD5, challenge, 'POST', '/onvif/device_service',
+      'admin', 'pass');
+    CheckUtf8(resp <> '', 'void value in %', [challenge]);
+    CheckEqual(ValueOf(resp, ',nonce="'), aNonce, 'void nonce');
+    // RFC 7616 3.4.1 with qop=auth
+    expected := Md5(Join([Md5(Join(['admin:', aRealm, ':pass'])), ':', aNonce,
+      ':00000001:', ValueOf(resp, ',cnonce="'), ':auth:',
+      Md5('POST:/onvif/device_service')]));
+    CheckEqual(ValueOf(resp, ',response="'), expected, 'void response');
+  end;
+
 begin
   // validate raw client-server Digest access authentication
   Check(DigestServerInit(daUndefined, '', '', '', 0) = '');
@@ -3792,6 +3823,18 @@ begin
     end;
   end;
   Check(DigestServerInit(daUndefined, realm, '', '', opaque) = '');
+  // a parameter value may be void (RFC 9110 5.6.4 quoted-string), e.g. the
+  // opaque="" of the WWW-Authenticate header sent by some IP cameras - with
+  // their exact layout, but anonymized realm and nonce values
+  CheckVoidValue('realm="Login to 0123456789ABCDEF",qop="auth",' +
+    'nonce="A4C123B1612DD272D1371C17149D439536B3216FDAEEB975729FAE923D5A4FD", ' +
+    'opaque="", stale="false"', 'Login to 0123456789ABCDEF',
+    'A4C123B1612DD272D1371C17149D439536B3216FDAEEB975729FAE923D5A4FD');
+  CheckVoidValue('realm="Login to 0123456789abcdef0123456789abcdef",qop="auth", ' +
+    'algorithm="MD5", nonce="b252aWYtZGlnZXN0OjEyMzQ1Njc4OTAx", opaque="", ' +
+    'stale="false"', 'Login to 0123456789abcdef0123456789abcdef',
+    'b252aWYtZGlnZXN0OjEyMzQ1Njc4OTAx');
+  CheckVoidValue('realm="r",opaque="",nonce="n"', 'r', 'n');
   // validate TDigestAuthServerFile
   SetLength(users, 100);
   SetLength(pwds, length(users));
