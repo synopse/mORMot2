@@ -25,7 +25,8 @@ uses
   mormot.crypt.core,
   mormot.net.sock,
   mormot.net.client,
-  mormot.net.server;
+  mormot.net.server,
+  mormot.net.peercache;
 
 
 type

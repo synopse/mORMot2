@@ -52,6 +52,9 @@ The `mormot.net.*` units provide the complete network communication layer for th
   - Per-HTTP-method trees (GET/POST/PUT/DELETE/OPTIONS/HEAD/PATCH)
 - `TUdpServerThread` - Abstract UDP server base
 
+**mormot.net.peercache** - Local peer-to-peer HTTP cache
+- `THttpPeerCache` - Shares downloaded files between peers of a local network, with UDP discovery
+
 ### Asynchronous Layer (High-Performance)
 
 **mormot.net.async** - Event-driven architecture
