@@ -129,3 +129,9 @@ Deprecated or Seldom Used Cryptographic Features
 - BCrypt Password-Hashing Function
 - SCrypt Password-Hashing Function
 
+### mormot.crypt.zip
+
+Password Encryption for `mormot.core.zip` `TZipWrite`/`TZipRead`
+- `TZipCryptPkware` Class Implementing the Traditional PKWARE ZipCrypto
+- `TZipCryptAes` Class Implementing the WinZip AE-1/AE-2 Format
+
