@@ -40,6 +40,7 @@ uses
   mormot.core.search, // for EccKeyFileFind()
   mormot.crypt.core,
   mormot.crypt.secure,
+  mormot.crypt.factory,
   mormot.crypt.ecc256r1;
 
 

@@ -22,6 +22,7 @@ uses
   mormot.crypt.other,
   mormot.crypt.openssl,
   mormot.crypt.secure,
+  mormot.crypt.factory,
   mormot.crypt.ecc256r1,
   mormot.core.perf,
   mormot.core.test,
@@ -4156,7 +4157,7 @@ var
   n, s: RawByteString;
   timer: TPrecisionTimer;
 begin
-  Check(mormot.crypt.secure.Asym(asy.AlgoName) = asy);
+  Check(mormot.crypt.factory.Asym(asy.AlgoName) = asy);
   if (asy.KeyAlgo in CKA_RSA) and
      not fCatalogAllGenerate then
   begin
@@ -4742,7 +4743,7 @@ begin
   begin
     rnd := alg[a] as TCryptRandom;
     NotifyProgress([rnd.AlgoName]);
-    Check(mormot.crypt.secure.Rnd(rnd.AlgoName) = rnd);
+    Check(mormot.crypt.factory.Rnd(rnd.AlgoName) = rnd);
     timer.Start;
     cprev := 0;
     dprev := 0;
@@ -4780,7 +4781,7 @@ begin
   begin
     hsh := alg[a] as TCryptHasher;
     NotifyProgress([hsh.AlgoName]);
-    Check(mormot.crypt.secure.Hasher(hsh.AlgoName) = hsh);
+    Check(mormot.crypt.factory.Hasher(hsh.AlgoName) = hsh);
     h := hsh.Full(n);
     for i := 1 to length(n) do
     begin
@@ -4796,7 +4797,7 @@ begin
   begin
     sig := alg[a] as TCryptSigner;
     NotifyProgress([sig.AlgoName]);
-    Check(mormot.crypt.secure.Signer(sig.AlgoName) = sig);
+    Check(mormot.crypt.factory.Signer(sig.AlgoName) = sig);
     h := sig.Full('key', n);
     for i := 1 to length(n) do
     begin
@@ -4819,7 +4820,7 @@ begin
   begin
     cip := alg[a] as TCryptCipherAlgo;
     NotifyProgress([cip.AlgoName]);
-    Check(mormot.crypt.secure.CipherAlgo(cip.AlgoName) = cip);
+    Check(mormot.crypt.factory.CipherAlgo(cip.AlgoName) = cip);
     if cip.IsAead then
       aead := cip.AlgoName
     else

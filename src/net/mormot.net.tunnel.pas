@@ -37,6 +37,7 @@ uses
   mormot.core.interfaces,
   mormot.crypt.core,
   mormot.crypt.secure,   // for ICryptCert
+  mormot.crypt.factory,
   mormot.crypt.ecc256r1, // for ECDHE encryption
   mormot.net.sock;
 

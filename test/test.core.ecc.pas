@@ -23,6 +23,7 @@ uses
   mormot.core.search,
   mormot.core.test,
   mormot.crypt.secure,
+  mormot.crypt.factory,
   mormot.crypt.jwt,
   mormot.crypt.ecc256r1,
   mormot.crypt.ecc,

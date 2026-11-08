@@ -150,6 +150,7 @@ mORMot2 follows a **strict layered architecture** with 14 source folders organiz
 - **Key Units:**
   - `mormot.crypt.core` - AES, SHA-2, SHA-3, HMAC, PBKDF2
   - `mormot.crypt.secure` - Secure random, password hashing
+  - `mormot.crypt.factory` - High-level `Rnd`/`Hash`/`Sign`/`Cipher`/`Asym`/`Cert`/`Store` factories
   - `mormot.crypt.ecc` - Elliptic Curve Cryptography
   - `mormot.crypt.ecc256r1` - ECC secp256r1 curve
   - `mormot.crypt.rsa` - RSA encryption/signatures

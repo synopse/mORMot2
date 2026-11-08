@@ -51,7 +51,8 @@ uses
   mormot.lib.gssapi, // void unit on Windows
   mormot.net.client,
   mormot.crypt.core,
-  mormot.crypt.secure;
+  mormot.crypt.secure,
+  mormot.crypt.factory;
 
 
 { ******************** Abstract UDP Server }

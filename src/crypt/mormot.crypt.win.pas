@@ -35,6 +35,7 @@ uses
   mormot.core.log,
   mormot.crypt.core,
   mormot.crypt.secure,
+  mormot.crypt.factory,
   mormot.crypt.rsa,
   mormot.crypt.x509,
   mormot.lib.sspi;

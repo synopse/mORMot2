@@ -38,6 +38,7 @@ uses
   mormot.core.zip,
   mormot.crypt.core,
   mormot.crypt.secure,
+  mormot.crypt.factory,
   mormot.net.tftp.client,
   mormot.net.tftp.server,
   {$ifdef OSPOSIX}

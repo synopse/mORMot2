@@ -16,7 +16,7 @@ uses
   mormot.core.text, mormot.core.threads, mormot.core.unicode, 
   mormot.core.variants, mormot.core.zip, mormot.crypt.core, mormot.crypt.ecc, 
   mormot.crypt.ecc256r1, mormot.crypt.jwt, mormot.crypt.openssl, 
-  mormot.crypt.secure, mormot.db.core, mormot.db.nosql.bson, 
+  mormot.crypt.secure, mormot.crypt.factory, mormot.db.core, mormot.db.nosql.bson, 
   mormot.db.nosql.mongodb, mormot.db.proxy, mormot.db.rad, mormot.db.rad.bde, 
   mormot.db.rad.firedac, mormot.db.rad.nexusdb, mormot.db.rad.unidac, 
   mormot.db.raw.odbc, mormot.db.raw.oledb, mormot.db.raw.oracle, 
