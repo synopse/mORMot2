@@ -6141,8 +6141,9 @@ end;
 procedure TTestCoreProcess._BSON;
 const
   BSONAWESOME = '{"BSON":["awesome",5.05,1986]}';
-  BSONAWESOMEBIN = #$31#0#0#0#4'BSON'#0#$26#0#0#0#2'0'#0#8#0#0#0'awesome'#0 +
-    #1'1'#0'333333'#$14#$40#$10'2'#0#$c2#7#0#0#0#0;
+  BSONAWESOMEHEX = // BSONAWESOME as BSON binary, in hexadecimal for Delphi
+    '310000000442534f4e002600000002300008000000617765736f6d6500' +
+    '0131003333333333331440103200c20700000000';
   BSONID = '507F191E810C19729DE860EA';
   REGEX = '{"$regex":"acme.*corp","$options":"i"}';
   REGEX2 = '{name:"John",field:/acme.*corp/i}';
@@ -6166,7 +6167,7 @@ var
   d, d2: TDateTime;
   oid, oid2: TBsonObjectID;
   oids: array of TBsonObjectID;
-  bsonDat, temp, bin: RawByteString;
+  bsonDat, temp, bin, awesomeBin: RawByteString;
   i, j: integer;
   b: PByte;
   elem, item: TBsonElement;
@@ -6203,6 +6204,7 @@ var
   end;
 
 begin
+  awesomeBin := HexToBin(BSONAWESOMEHEX);
   if CheckFailed(BsonVariantType <> nil, 'no BsonVariantType') then
     exit;
   if CheckFailed(BsonVariantVType <> 0, 'no BsonVariantVType') then
@@ -6329,7 +6331,7 @@ begin
   o := _Json('{"BSON": ["awesome", 5.05, 1986]}');
   bsonDat := Bson(TDocVariantData(o));
   Check(length(bsonDat) = $31);
-  Check(bsonDat = BSONAWESOMEBIN);
+  Check(bsonDat = awesomeBin);
   b := pointer(bsonDat);
   Check(BsonParseLength(b, $31) = length(bsonDat));
   Check(elem.FromNext(b));
@@ -6428,16 +6430,16 @@ begin
   Check(VariantSaveJson(_Json('{BSON:["awesome",5.05,1986]}')) = BSONAWESOME);
   Check(VariantSaveJson(_JsonFast('{ BSON : ["awesome", 5.05, 1986] }')) = BSONAWESOME);
   Check(VariantSaveJson(_JsonFast('{ ''BSON'' : ["awesome", 5.05, 1986] } ')) = BSONAWESOME);
-  Check(Bson('{BSON:["awesome",5.05,1986]}', [], []) = BSONAWESOMEBIN);
-  Check(Bson('{ BSON : ["awesome", 5.05, 1986] }', [], []) = BSONAWESOMEBIN);
-  Check(Bson('{ ''BSON'' : ["awesome", 5.05, 1986] } ', [], []) = BSONAWESOMEBIN);
-  Check(Bson('{%:[?,?,?]}', ['BSON'], ['awesome', 5.05, 1986]) = BSONAWESOMEBIN);
-  Check(Bson('{%:?}', ['BSON'], [_Arr(['awesome', 5.05, 1986])]) = BSONAWESOMEBIN);
-  Check(Bson(['BSON', '[', 'awesome', 5.05, 1986, ']']) = BSONAWESOMEBIN);
+  Check(Bson('{BSON:["awesome",5.05,1986]}', [], []) = awesomeBin);
+  Check(Bson('{ BSON : ["awesome", 5.05, 1986] }', [], []) = awesomeBin);
+  Check(Bson('{ ''BSON'' : ["awesome", 5.05, 1986] } ', [], []) = awesomeBin);
+  Check(Bson('{%:[?,?,?]}', ['BSON'], ['awesome', 5.05, 1986]) = awesomeBin);
+  Check(Bson('{%:?}', ['BSON'], [_Arr(['awesome', 5.05, 1986])]) = awesomeBin);
+  Check(Bson(['BSON', '[', 'awesome', 5.05, 1986, ']']) = awesomeBin);
   temp := Bson(['BSON', '[', 'awesome', 5.05, 1986]);
-  Check(temp = BSONAWESOMEBIN);
+  Check(temp = awesomeBin);
   temp := Bson(['BSON', '[', 'awesome', 5.05, 1986]);
-  Check(temp = BSONAWESOMEBIN);
+  Check(temp = awesomeBin);
   o2 := BsonVariantType[bsonDat];
   Check(VariantSaveJson(o2) = u);
   _Json('{BSON: ["test", 5.05, 1986]}', o);
