@@ -1117,6 +1117,7 @@ type
     fRequestClass: THttpServerRequestClass;
     fInterning: PRawUtf8InterningSlot;
     fInterningTix: cardinal;
+    fHttpDateNowUtcSafe: TLightLock;
     fExecuteEvent: TSynEvent;
     fClientSockets: THttpAsyncClientConnections; // allocated when needed
     fHttpDateNowUtc: THttpDateNowUtc;            // set by IdleEverySecond
@@ -5780,7 +5781,9 @@ begin
   if hsoIncludeDateHeader in fOptions then
   begin
     FromGlobalTime(T, {local=}false);
+    fHttpDateNowUtcSafe.Lock;
     T.ToHttpDateShort(fHttpDateNowUtc, 'GMT'#13#10, 'Date: ');
+    fHttpDateNowUtcSafe.UnLock;
   end;
   // ensure log file(s) are flushed/consolidated if needed
   DoIdle(fAsync.fLastOperationMS, fAsync.fLastOperationSec);
@@ -5805,7 +5808,9 @@ end;
 
 procedure THttpAsyncServer.AppendHttpDate(var Dest: TRawByteStringBuffer);
 begin
+  fHttpDateNowUtcSafe.Lock;          // paranoid lock
   Dest.AppendShort(fHttpDateNowUtc); // set by IdleEverySecond
+  fHttpDateNowUtcSafe.UnLock;
 end;
 
 function THttpAsyncServer.GetHttpQueueLength: cardinal;
