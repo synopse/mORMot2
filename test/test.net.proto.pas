@@ -57,6 +57,9 @@ uses
   {$endif SCHANNEL_VERIFY}
   mormot.net.client,
   mormot.net.server,
+  {$ifdef USEWININET}
+  mormot.net.server.win,
+  {$endif USEWININET}
   mormot.net.peercache,
   mormot.net.async,
   mormot.net.ws.core,

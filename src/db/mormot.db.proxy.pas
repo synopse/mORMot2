@@ -45,6 +45,9 @@ uses
   mormot.net.sock,
   mormot.net.http,
   mormot.net.client,
+  {$ifdef USEHTTPSYS}
+  mormot.net.server.win,
+  {$endif USEHTTPSYS}
   mormot.net.server;
 
 

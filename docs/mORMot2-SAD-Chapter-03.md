@@ -220,7 +220,7 @@ end;
 
 ## 3.5. Layer 2: Networking (mormot.net.*)
 
-**20 units** for network communication:
+**21 units** for network communication:
 
 ### Socket & HTTP
 
@@ -229,7 +229,8 @@ end;
 | `mormot.net.sock` | Cross-platform socket abstraction |
 | `mormot.net.http` | HTTP protocol state machine |
 | `mormot.net.client` | HTTP clients (Socket, WinHTTP, curl) |
-| `mormot.net.server` | HTTP servers (threaded, http.sys) |
+| `mormot.net.server` | HTTP servers (threaded) |
+| `mormot.net.server.win` | HTTP and WebSockets servers over Windows http.sys |
 | `mormot.net.peercache` | Local peer-to-peer HTTP cache |
 | `mormot.net.async` | Event-driven async I/O |
 

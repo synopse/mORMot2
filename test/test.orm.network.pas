@@ -33,6 +33,9 @@ uses
   mormot.net.http,
   mormot.net.client,
   mormot.net.server,
+  {$ifndef ONLYUSEHTTPSOCKET}
+  mormot.net.server.win,
+  {$endif ONLYUSEHTTPSOCKET}
   mormot.net.async,
   mormot.net.relay,
   mormot.net.ws.core,

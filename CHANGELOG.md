@@ -17,6 +17,7 @@ Details are available [on out GitHub repository](https://github.com/synopse/mORM
 ### Changed
 - refactored main units to reduce their size: you may need to explicitly add `mormot.core.fmt`, `mormot.core.datetime` or `mormot.core.search` to your uses clause now
 - extracted `THttpPeerCache` from `mormot.net.server.pas` into the new `mormot.net.peercache.pas` unit: add it to your `uses` clause if you use the peer-to-peer cache
+- extracted `THttpApiServer` and `THttpApiWebSocketServer` from `mormot.net.server.pas` into the new `mormot.net.server.win.pas` unit: add it to your `uses` clause if you use the Windows http.sys servers
 - refactored cross-platform and cross-cpu conditionals (e.g. new internal `ASM*` definitions)
 - breaking change: deprecated GetExecutableVersion and TSynLog format as RawUtf8
 - Lots of bug fixes, optimisations and enhancements.
