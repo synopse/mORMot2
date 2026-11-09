@@ -4418,9 +4418,7 @@ begin
   if p = nil then
     exit;
   inc(p);
-  GetNextItem(p, ',', '"', RawUtf8(tmp));
-  if tmp = '' then
-    exit;
+  GetNextItem(p, ',', '"', RawUtf8(tmp)); // tmp='' is valid e.g. for opaque=""
   case IdemPCharSep(n, 'REALM=|QOP=|URI=|ALGORITHM=|NONCE=|NC=|CNONCE=|' +
                        'RESPONSE=|OPAQUE=|USERNAME=|AUTHZID=|') of
     0: // realm="http-auth@example.org"
