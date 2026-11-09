@@ -179,6 +179,11 @@ type
     function DoKeepAliveOptionsRequest(Ctxt: THttpServerRequestAbstract): cardinal;
     /// validate that THttpAsyncServer rejects an endless header or chunk line
     procedure DoHttpLongLine(Sender: TObject);
+    /// validate that THttpAsyncServer streams a big body by ReadMaxBytes blocks
+    procedure DoHttpReadMaxBytes(Sender: TObject);
+    function DoReadMaxBytesRequest(Ctxt: THttpServerRequestAbstract): cardinal;
+    function DoReadMaxBytesDownload(const aUrl, aMethod, aInHeaders,
+      aInContentType, aRemoteIP: RawUtf8; aContentLength: Int64): TStream;
     /// validate clean start/shutdown of several DHCP servers
     procedure DoDhcpServerShutdown(Sender: TObject);
   published
@@ -518,6 +523,7 @@ begin
   Run(DoHttpAsyncShutdown, self, 'HttpAsyncShutdown', true, false);
   Run(DoHttpKeepAliveOptions, self, 'HttpKeepAliveOptions', true, false);
   Run(DoHttpLongLine, self, 'HttpLongLine', true, false);
+  Run(DoHttpReadMaxBytes, self, 'HttpReadMaxBytes', true, false);
   {$ifdef OSPOSIX}
   Run(DoUnixDomainSocket, self, 'UnixDomainSocket', true, false);
   {$endif OSPOSIX}
@@ -7229,6 +7235,97 @@ begin
       finally
         raw.Free;
       end;
+    end;
+  finally
+    srv.Free;
+  end;
+end;
+
+type
+  // a stream which does not store anything, but tracks its biggest Write(),
+  // i.e. the biggest input processed at once by THttpAsyncServerConnection
+  TMaxWriteStream = class(TFakeWriterStream)
+  public
+    MaxWrite: integer;
+    function Write(const Buffer; Count: Longint): Longint; override;
+  end;
+
+function TMaxWriteStream.Write(const Buffer; Count: Longint): Longint;
+begin
+  if Count > MaxWrite then
+    MaxWrite := Count;
+  result := inherited Write(Buffer, Count);
+end;
+
+function TNetworkProtocols.DoReadMaxBytesDownload(const aUrl, aMethod,
+  aInHeaders, aInContentType, aRemoteIP: RawUtf8; aContentLength: Int64): TStream;
+begin
+  result := TMaxWriteStream.Create; // owned and released by the server
+end;
+
+function TNetworkProtocols.DoReadMaxBytesRequest(
+  Ctxt: THttpServerRequestAbstract): cardinal;
+begin
+  // return the received body size, and its biggest block
+  if Ctxt.InContentStream is TMaxWriteStream then
+    Ctxt.OutContent := Make([Ctxt.InContentStream.Size, ' ',
+      TMaxWriteStream(Ctxt.InContentStream).MaxWrite])
+  else
+    Ctxt.OutContent := 'no stream';
+  Ctxt.OutContentType := TEXT_CONTENT_TYPE;
+  result := HTTP_SUCCESS;
+end;
+
+procedure TNetworkProtocols.DoHttpReadMaxBytes(Sender: TObject);
+const
+  BODYMB = 16; // well above ReadMaxBytes
+var
+  srv: THttpAsyncServer;
+  raw: TCrtSocket;
+  block: RawByteString;
+  cmd, answer, left, right: RawUtf8;
+  clen, i, maxbytes: integer;
+  size, maxwrite: Int64;
+begin
+  srv := THttpAsyncServer.Create('8884', nil, nil, 'readmax', 2);
+  try
+    srv.OnBodyDownload := DoReadMaxBytesDownload;
+    srv.OnRequest := DoReadMaxBytesRequest;
+    srv.WaitStarted(10);
+    maxbytes := srv.Async.Sockets.ReadMaxBytes;
+    Check(maxbytes > 0, 'ReadMaxBytes');
+    raw := TCrtSocket.Open('127.0.0.1', srv.SockPort, nlTcp, 5000);
+    try
+      raw.CreateSockIn; // needed for proper SockRecvLn() below
+      raw.SockSend('POST /readmax HTTP/1.1');
+      raw.SockSend(['Host: 127.0.0.1:', srv.SockPort]);
+      raw.SockSend(['Content-Length: ', BODYMB shl 20]);
+      raw.SockSendCRLF; // void line: end of headers
+      raw.SockSendFlush;
+      // send the body as fast as possible: the server should not retrieve
+      // more than ReadMaxBytes before streaming it to TMaxWriteStream
+      block := RawUtf8OfChar('x', 1 shl 20);
+      for i := 1 to BODYMB do
+        raw.SndLow(block);
+      cmd := '';
+      raw.SockRecvLn(cmd);
+      CheckUtf8(PosEx(' 200 ', cmd) > 0, 'readmax %', [cmd]);
+      clen := 0;
+      repeat
+        cmd := '';
+        raw.SockRecvLn(cmd);
+        if IdemPChar(pointer(cmd), 'CONTENT-LENGTH:') then
+          clen := Utf8ToInteger(TrimU(copy(cmd, 16, 20)), 0);
+      until cmd = '';
+      answer := raw.SockInRead(clen);
+      Split(answer, ' ', left, right);
+      size := GetInt64(pointer(left));
+      maxwrite := GetInt64(pointer(right));
+      CheckEqual(size, BODYMB shl 20, 'readmax size');
+      CheckUtf8((maxwrite > 0) and
+                (maxwrite <= maxbytes), 'readmax max=% > %', [maxwrite, maxbytes]);
+    finally
+      raw.Free;
     end;
   finally
     srv.Free;
