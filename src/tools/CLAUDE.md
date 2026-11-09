@@ -97,7 +97,7 @@ mget --prompt --peer                                      # With PeerCache enabl
 
 **Architecture Notes**:
 - Built on `THttpClientSocket.WGet()` from `mormot.net.client`
-- PeerCache uses `THttpPeerCache` from `mormot.net.server`
+- PeerCache uses `THttpPeerCache` from `mormot.net.peercache`
 - Secret-derived AES-GCM for UDP/HTTP authentication
 - IP banning for invalid requests (DOS protection)
 
@@ -208,7 +208,7 @@ agl.dpr                      # CLI entry point
 ### HTTP Stack (mget)
 ```
 mormot.net.client.pas        # THttpClientSocket.WGet()
-mormot.net.server.pas        # THttpPeerCache
+mormot.net.peercache.pas     # THttpPeerCache
          ↓
 mormot.tools.mget.pas        # CLI implementation
          ↓

@@ -166,13 +166,14 @@ mORMot2 follows a **strict layered architecture** with 14 source folders organiz
 
 ### Layer 2: Networking
 
-#### **net** (18 files)
+#### **net** (20 files)
 - **Dependencies:** core, crypt
 - **Key Units:**
   - `mormot.net.sock` - Low-level sockets API abstraction
   - `mormot.net.http` - HTTP protocol implementation
   - `mormot.net.client` - HTTP client
   - `mormot.net.server` - HTTP server
+  - `mormot.net.peercache` - Local peer-to-peer HTTP cache
   - `mormot.net.async` - Asynchronous I/O
   - `mormot.net.ws.core` - WebSocket core
   - `mormot.net.ws.client` - WebSocket client

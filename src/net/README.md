@@ -56,9 +56,15 @@ HTTP/UDP Server Classes
 - Custom URI Routing using an efficient Radix Tree
 - Shared Server-Side HTTP Process
 - `THttpServerSocket`/`THttpServer` HTTP/1.1 Server
-- `THttpPeerCache` Local Peer-to-peer Cache
 - `THttpApiServer` HTTP/1.1 Server Over Windows `http.sys` Module
 - `THttpApiWebSocketServer` Over Windows `http.sys` Module
+
+### mormot.net.peercache
+
+HTTP Local Peer-to-peer Cache
+- `THttpPeerCache` Local Peer-to-peer Cache, with its UDP discovery and `THttpPeerCrypt` frames encryption
+
+Used e.g. by the `mget` tool to share downloads between peers on the same local network.
 
 ### mormot.net.asynch
 

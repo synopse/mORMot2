@@ -49,7 +49,7 @@
     <Description Value="mORMot 2 ORM/SOA/MVC framework"/>
     <License Value="MPL, GPL or LGPL"/>
     <Version Major="2" Minor="4"/>
-    <Files Count="128">
+    <Files Count="129">
       <Item1>
         <Filename Value="../../src/app/mormot.app.console.pas"/>
         <UnitName Value="mormot.app.console"/>
@@ -563,6 +563,10 @@
         <Filename Value="../../src/crypt/mormot.crypt.factory.pas"/>
         <UnitName Value="mormot.crypt.factory"/>
       </Item128>
+      <Item129>
+        <Filename Value="../../src/net/mormot.net.peercache.pas"/>
+        <UnitName Value="mormot.net.peercache"/>
+      </Item129>
     </Files>
     <CompatibilityMode Value="True"/>
     <UsageOptions>
