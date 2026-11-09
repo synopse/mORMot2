@@ -2642,7 +2642,11 @@ type
   /// opaque storage of a pthread_mutex_t, as used by TOSLightLock on Delphi POSIX
   // - pthread_mutex_t is 40 bytes on Linux x86_64 and 64 bytes on Darwin, so
   // we reserve enough room without referencing Posix.SysTypes in this interface
-  TPosixLightMutex = array[0..63] of byte;
+  TPosixLightMutex = record
+    aligned: pointer;
+    padding: array[1 .. 7] of PtrUInt;
+  end;
+
   TLibHandle = PtrUInt;
   TSystemTime = packed record
     Year, Month, DayOfWeek, Day, Hour, Minute, Second, MilliSecond: word;
