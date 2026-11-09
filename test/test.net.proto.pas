@@ -4168,11 +4168,11 @@ begin
     // Binary KVM video and input messages, delivered with no TCP port.
     for i := 1 to 8 do
     begin
-      data := 'video'#0#128#255;
+      data := HexToBin('766964656F0080FF'); // 'video'#0#128#255
       client.SendData(data);
       CheckEqual(serverkvm.Frames, i);
       CheckBlocks(log, data, serverkvm.LastFrame, 1);
-      data := 'key'#0#1#27;
+      data := HexToBin('6B657900011B');; // 'key'#0#1#27
       server.SendData(data);
       CheckEqual(clientkvm.Frames, i);
       CheckBlocks(log, data, clientkvm.LastFrame, 2);
