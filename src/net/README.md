@@ -63,7 +63,7 @@ HTTP Server Classes Over Windows `http.sys` Module
 - `THttpApiServer` HTTP/1.1 Server Over Windows `http.sys` Module
 - `THttpApiWebSocketServer` Over Windows `http.sys` Module
 
-This unit is void on POSIX: it only has content when `USEWININET` is defined, i.e. on Windows.
+This unit is void on POSIX: it only has content when `USEHTTPSYS` is defined, i.e. on Windows.
 
 ### mormot.net.peercache
 
@@ -78,6 +78,7 @@ Event-Driven Network Classes and Functions
 - Low-Level Non-blocking Connections
 - Client or Server Asynchronous Process
 - `THttpAsyncServer` Event-Driven HTTP Server
+- `THttpProxyServer` HTTP Server With Proxy and Cache
 
 Used e.g. by both `mormot.net.relay` and `mormot.net.rtsphttp` to handle thousands on concurrent streams, with minimal resources, in a cross-platform way.
 

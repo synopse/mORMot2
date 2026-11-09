@@ -1909,7 +1909,7 @@ constructor TPollAsyncSockets.Create(aOptions: TPollAsyncSocketsOptions;
   aThreadCount: integer);
 begin
   fOptions := aOptions;
-  fReadMaxBytes := 1 shl 20;
+  fReadMaxBytes := 1 shl 20; // trigger OnRead() after 1MB by default
   inherited Create;
   {$ifdef USE_WINIOCP}
   fIocpRecvSend := TWinIocp.Create(aThreadCount,
