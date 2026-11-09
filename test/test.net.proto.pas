@@ -122,7 +122,9 @@ type
     procedure TunnelDeferred(const agent: ITunnelAgent;
       const console: ITunnelConsole);
     function TunnelBackgroundOpen(l: TTunnelLocal; s: TTunnelSession;
-     const r: ITunnelTransmit; const sc, vc: ICryptCert): TLoggedWorkThread;
+      const r: ITunnelTransmit; const sc, vc: ICryptCert;
+      const kvm: ITunnelTransmit = nil): TLoggedWorkThread;
+    procedure TunnelDirect;
     procedure CheckBlocks(const log: ISynLog; const sent, recv: RawByteString;
       num: integer);
     procedure TunnelTest(const clientcert, servercert: ICryptCert; packets: integer = 100);
@@ -3864,7 +3866,7 @@ type
    public
      local: TTunnelLocal;
      session: TTunnelSession;
-     remote: ITunnelTransmit;
+     remote, kvm: ITunnelTransmit;
      signcert, verifcert: ICryptCert;
    end;
 
@@ -3876,8 +3878,29 @@ type
      address: RawUtf8;
    end;
 
+   // Minimal in-process KVM endpoint: receives decrypted binary frames.
+   TTunnelKvmReceiver = class(TInterfacedObject, ITunnelTransmit)
+   public
+     Frames: integer;
+     LastFrame: RawByteString;
+     procedure TunnelSend(const Frame: RawByteString);
+     function TunnelInfo: variant;
+   end;
+
+procedure TTunnelKvmReceiver.TunnelSend(const Frame: RawByteString);
+begin
+  inc(Frames);
+  LastFrame := Frame;
+end;
+
+function TTunnelKvmReceiver.TunnelInfo: variant;
+begin
+  VarClear(result);
+end;
+
 function TNetworkProtocols.TunnelBackgroundOpen(l: TTunnelLocal; s: TTunnelSession;
-  const r: ITunnelTransmit; const sc, vc: ICryptCert): TLoggedWorkThread;
+  const r: ITunnelTransmit; const sc, vc: ICryptCert;
+  const kvm: ITunnelTransmit): TLoggedWorkThread;
 var
   context: TTunnelExecute;
   name: RawUtf8;
@@ -3886,6 +3909,7 @@ begin
   context.local := l;
   context.session := s;
   context.remote := r;
+  context.kvm := kvm;
   context.signcert := sc;
   context.verifcert := vc;
   inc(tunnelsequence);
@@ -3905,13 +3929,24 @@ begin
   try
     check(exec.local <> nil);
     check(exec.session <> 0);
-    with exec do
-      port := local.Open(session, remote, tunneloptions, 1000, tunnelappsec,
-        cLocalHost, ['remoteHost', Executable.Host], signcert, verifcert);
-    check(port <> 0);
-    checkEqual(port, exec.local.Port);
-    check(exec.local.Port <> 0);
-    check(exec.local.RemotePort <> 0);
+    if exec.kvm <> nil then
+    begin
+      with exec do
+        Check(local.OpenDirect(session, remote, kvm, tunneloptions, 1000,
+          tunnelappsec, ['side', 'kvm'], signcert, verifcert), 'direct server');
+      Check(exec.local.Thread = nil, 'direct worker thread');
+      CheckEqual(exec.local.Port, 0);
+    end
+    else
+    begin
+      with exec do
+        port := local.Open(session, remote, tunneloptions, 1000, tunnelappsec,
+          cLocalHost, ['remoteHost', Executable.Host], signcert, verifcert);
+      check(port <> 0);
+      checkEqual(port, exec.local.Port);
+      check(exec.local.Port <> 0);
+      check(exec.local.RemotePort <> 0);
+    end;
   finally
     exec.Free; // always free transient call parameters
   end;
@@ -4084,6 +4119,78 @@ begin
   while (GetTickSec < endtix) and
         not (fClosed in serverinstance.Flags) do
     Sleep(1);
+end;
+
+procedure TNetworkProtocols.TunnelDirect;
+var
+  log: ISynLog;
+  sess: TTunnelSession;
+  client, server: TTunnelLocal;
+  clientwire, serverwire: ITunnelLocal;
+  clientlocal, serverlocal: ITunnelTransmit;
+  clientkvm, serverkvm: TTunnelKvmReceiver;
+  worker: TLoggedWorkThread;
+  data: RawByteString;
+  i: integer;
+begin
+  TSynLogTestLog.EnterLocal(log, 'TunnelDirect [%]', [ToText(tunneloptions)], self);
+  client := TTunnelLocalClient.Create(TSynLog);
+  server := TTunnelLocalServer.Create(TSynLog);
+  clientwire := client;
+  serverwire := server;
+  clientkvm := TTunnelKvmReceiver.Create;
+  serverkvm := TTunnelKvmReceiver.Create;
+  clientlocal := clientkvm;
+  serverlocal := serverkvm;
+  repeat
+    sess := ThreadRandom.Next31;
+  until sess <> 0;
+  tunnelappsec := 'mORMot KVM in-process regression';
+  try
+    // The two cryptographic roles still exchange a reciprocal handshake.
+    worker := TunnelBackgroundOpen(server, sess, clientwire,
+      nil, nil, serverlocal);
+    try
+      Check(client.OpenDirect(sess, serverwire, clientlocal, tunneloptions,
+        1000, tunnelappsec, ['side', 'viewer']), 'direct client');
+      Check(worker.WaitFinished(5000), 'direct handshake');
+    finally
+      worker.Free;
+    end;
+    CheckEqual(client.Port, 0);
+    CheckEqual(server.Port, 0);
+    CheckEqual(client.RemotePort, 0);
+    CheckEqual(server.RemotePort, 0);
+    Check(client.Thread = nil, 'no client TCP thread');
+    Check(server.Thread = nil, 'no server TCP thread');
+    Check(client.Encrypted = (toEncrypted * tunneloptions <> []), 'cDirectEncrypted');
+    Check(server.Encrypted = (toEncrypted * tunneloptions <> []), 'sDirectEncrypted');
+    // Binary KVM video and input messages, delivered with no TCP port.
+    for i := 1 to 8 do
+    begin
+      data := 'video'#0#128#255;
+      client.SendData(data);
+      CheckEqual(serverkvm.Frames, i);
+      CheckBlocks(log, data, serverkvm.LastFrame, 1);
+      data := 'key'#0#1#27;
+      server.SendData(data);
+      CheckEqual(clientkvm.Frames, i);
+      CheckBlocks(log, data, clientkvm.LastFrame, 2);
+    end;
+    CheckEqual(client.BytesOut, server.BytesIn);
+    CheckEqual(server.BytesOut, client.BytesIn);
+    client.ClosePort;
+    Check(fClosed in server.Flags, 'direct closure propagated');
+    client.SendData('ignored after close');
+    CheckEqual(serverkvm.Frames, 8);
+  finally
+    // Break the interface cycle introduced by this in-memory relay.
+    client.ClosePort;
+    client.RawTransmit := nil;
+    server.RawTransmit := nil;
+    clientwire := nil;
+    serverwire := nil;
+  end;
 end;
 
 procedure TNetworkProtocols.TunnelTest(const clientcert, servercert: ICryptCert;
@@ -4466,12 +4573,15 @@ begin
   //TSynLog.Family.Level := LOG_VERBOSE; // for convenient LUTI debugging
   // plain tunnelling
   TunnelTest(nil, nil);
+  TunnelDirect;
   // symmetric secret encrypted tunnelling
   tunneloptions := [toEncrypt];
   TunnelTest(nil, nil);
+  TunnelDirect;
   // ECDHE encrypted tunnelling
   tunneloptions := [toEcdhe];
   TunnelTest(nil, nil);
+  TunnelDirect;
   // tunnelling with mutual authentication
   tunneloptions := [];
   clientcert := Cert('syn-es256').Generate([cuDigitalSignature]);
