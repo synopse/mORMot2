@@ -5701,7 +5701,6 @@ procedure THttpAsyncServer.AsyncResponse(Handle: TConnectionAsyncHandle;
   const Content, ContentType: RawUtf8; Status: cardinal);
 var
   c: THttpAsyncServerConnection;
-  res: TPollAsyncSocketOnReadWrite;
 begin
   // thread-safe locate the connection using O(log(n)) Handle binary search
   c := fAsync.ConnectionFindAndWaitLock(Handle, {LockWrite=}false, {ms=}40);
@@ -5721,11 +5720,7 @@ begin
     c.fRequest.OutContentStreamDiscard; // delayed Content replace any OutStream
     c.fRequest.OutContent := Content;
     c.fRequest.OutContentType := ContentType;
-    if hfConnectionClose in c.fHttp.HeaderFlags then
-      res := soClose
-    else
-      res := soContinue;
-    if c.DoResponse(res) = soClose then
+    if c.DoResponse(soContinue) = soClose then // don't involve hfConnectionClose
     begin
       if acoVerboseLog in fAsync.fOptions then
         fAsync.DoLog(sllTrace, 'final AsyncResponse: closing #%', [Handle], self);
