@@ -7906,10 +7906,12 @@ end;
 { --------- Baudot encoding/decoding }
 
 const
-  Baudot2Char: TChar64 = // see https://en.wikipedia.org/wiki/Baudot_code
-   #0'e'#10'a siu'#13'drjnfcktzlwhypqobg'#254'mxv'#255+
-   #0'3'#10'- ''87'#13#0'4'#0',!:(5+)2$6019?@'#254'./;'#255;
+  // the Baudot table as hexadecimal, since Delphi decodes #nnn escapes of
+  // concatenated literals in the host code page, which fails on DBCS hosts
+  BAUDOT2CHAR_HEX = '00650a61207369750d64726a6e66636b747a6c77687970716f6267fe6d7876ff' +
+                    '00330a2d202738370d0034002c213a28352b293224363031393f40fe2e2f3bff';
 var
+  Baudot2Char: TChar64; // see https://en.wikipedia.org/wiki/Baudot_code
   Char2Baudot: array[AnsiChar] of byte;
 
 procedure FillBaudotDecode(s, d: PByteArray);
@@ -11274,6 +11276,8 @@ begin
   end;
   {$endif ASMX64AVX1}
   RawToBase64 := _RawToBase64; // for mormot.net.sock and mormot.crypt.core
+  // initialize the Baudot encoding table
+  HexToBin(BAUDOT2CHAR_HEX, @Baudot2Char, SizeOf(Baudot2Char));
   // setup internal compression algorithms
   AlgoSynLZ := TAlgoSynLZ.Create;
   AlgoRleLZ := TAlgoRleLZ.Create;
