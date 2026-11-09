@@ -41,9 +41,6 @@ uses
   mormot.core.search,
   mormot.net.sock,
   mormot.net.http,
-  {$ifdef USEWININET}
-  mormot.lib.winhttp,
-  {$endif USEWININET}
   mormot.lib.sspi,   // void unit on POSIX
   mormot.lib.gssapi, // void unit on Windows
   mormot.net.client,

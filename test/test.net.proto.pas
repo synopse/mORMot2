@@ -57,9 +57,9 @@ uses
   {$endif SCHANNEL_VERIFY}
   mormot.net.client,
   mormot.net.server,
-  {$ifdef USEWININET}
+  {$ifdef USEHTTPSYS}
   mormot.net.server.win,
-  {$endif USEWININET}
+  {$endif USEHTTPSYS}
   mormot.net.peercache,
   mormot.net.async,
   mormot.net.ws.core,
@@ -183,8 +183,10 @@ type
     procedure DoDhcpServerShutdown(Sender: TObject);
   published
     {$ifdef USEWININET}
+    {$ifdef USEHTTPSYS}
     /// validate lazy initialization of the http.sys WebSocket API
     procedure _HttpApiWebSocketServer;
+    {$endif USEHTTPSYS}
     {$endif USEWININET}
     /// asynchronously start slow tests in background threads on /multithread
     procedure SlowTests;
@@ -241,6 +243,7 @@ type
     procedure TerminateAndWaitFinished(TimeOutMs: integer = 5000); override;
   end;
 
+  {$ifdef USEHTTPSYS}
   {$ifdef USEWININET}
   TWebSocketApiInitializeThread = class(TThreadAbstract)
   protected
@@ -254,6 +257,7 @@ type
       read fError;
   end;
   {$endif USEWININET}
+  {$endif USEHTTPSYS}
 
 procedure TSlowTftpConnection.DoExecute;
 begin
@@ -285,6 +289,7 @@ begin
   inherited TerminateAndWaitFinished(1);
 end;
 
+{$ifdef USEHTTPSYS}
 {$ifdef USEWININET}
 constructor TWebSocketApiInitializeThread.Create(Ready, Start: PCardinal);
 begin
@@ -450,6 +455,7 @@ begin
     'WinHTTP initialization should preserve the parallel WebSocket API');
 end;
 {$endif USEWININET}
+{$endif USEHTTPSYS}
 
 procedure TNetworkProtocols.Setup;
 begin

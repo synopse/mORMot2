@@ -18,9 +18,9 @@ interface
 
 {$I ..\mormot.defines.inc}
 
-{$ifdef USEWININET}
+{$ifdef USEHTTPSYS}
 
-// compile as a void unit if USEWININET is not defined
+// compile as a void unit if USEHTTPSYS is not defined
 
 uses
   sysutils,
@@ -554,13 +554,9 @@ type
       NumberOfThreads: integer = 1); reintroduce;
   end;
 
-{$endif USEWININET}
-
 
 implementation
 
-
-{$ifdef USEWININET}
 
 { **************** THttpApiServer HTTP/1.1 Server Over Windows http.sys Module }
 
@@ -2566,7 +2562,9 @@ begin
   inherited Create(NumberOfThreads, Server.fReqQueue);
 end;
 
-{$endif USEWININET}
+{$else}
+implementation
+{$endif USEHTTPSYS}
 
 
 end.
