@@ -5147,6 +5147,25 @@ begin
   result := GetExtended(P, err); // resolve the proper GetExtended() overload
 end;
 
+// raw ULP comparison helper to be used instead of CheckSame() for huge numbers
+function SameWithin2Ulps(A, B: PDouble): boolean;
+var
+  a64, b64: QWord;
+begin
+  result := A^ = B^; // also handles +0/-0 (NAN/INF never appear here)
+  if result then
+    exit;
+  a64 := PUInt64(A)^;
+  b64 := PUInt64(B)^;
+  result := false;
+  if ((a64 xor b64) shr 63) <> 0 then
+    exit; // different signs
+  if a64 > b64 then
+    result := a64 - b64 <= 2
+  else
+    result := b64 - a64 <= 2;
+end;
+
 procedure TTestCoreBase.NumericalConversionsSlow(Sender: TObject);
 var
   HasFP80: boolean;
@@ -5321,13 +5340,20 @@ var
         p2 := GetNum(p, vd, {double=}true);
         Check(p2 - p = lens[i]);
         Check(vd.VType >= varInteger);
-        if not HasFP80 then
+        {$ifdef ASMX64NOTPIC}
+        if (@GetExt <> @GetExtendedPas) and
+           not HasFP80 then
+        begin
+          // exact comparison when pure 64-bit double are involved
           if vd.VType = varDouble then
             Check(ref[i] = vd.VInt64, 'refvd1')
           else if Check(VariantToDouble(variant(vd), PDouble(@d64)^)) then
-            Check(ref[i] = d64, 'refvd2')
-        else if Check(VariantToDouble(variant(vd), d)) then
-          CheckSame(d, PDouble(@ref[i])^, DOUBLE_SAME, 'refvd3');
+            Check(ref[i] = d64, 'refvd2');
+        end
+        else // fallback for pure pascal version, but with high resolution
+        {$endif ASMX64NOTPIC}
+        if Check(VariantToDouble(variant(vd), d)) then
+          Check(SameWithin2Ulps(@d, @ref[i]), 'refvd3');
         p := p2 + 1;
       end;
       NotifyTestSpeed('GetNumericVariant%', [tmp], length(lens), length(data), @Timer);
