@@ -3880,33 +3880,36 @@ begin
       begin
         // 'RANGE: BYTES='
         P1 := GotoNextNotSpace(P + 13); // use pointer on stack
-        RangeOffset := GetNextRange(P1);
-        if P1^ = '-' then
+        if P1^ in ['0' ..'9'] then      // only positive offset, as http.sys
         begin
-          inc(P1);
-          if P1^ in ['0'..'9'] then
+          RangeOffset := GetNextRange(P1);
+          if P1^ = '-' then // accepts bytes=100-200 or bytes=100-
           begin
-            // "Range: bytes=0-499" -> start=0, len=500
-            RangeLength := Int64(GetNextRange(P1));
-            if RangeLength >= MAX_INT64 - RangeOffset then
-              // last-byte-pos above any possible size: up to end of file, as
-              // RFC 9110 does expect - and no RangeLength + 1 overflow
-              RangeLength := -1
-            else
+            inc(P1);
+            if P1^ in ['0'..'9'] then
             begin
-              RangeLength := RangeLength - RangeOffset + 1;
-              if RangeLength < 0 then
-                RangeLength := 0;
+              // "Range: bytes=0-499" -> start=0, len=500
+              RangeLength := Int64(GetNextRange(P1));
+              if RangeLength >= MAX_INT64 - RangeOffset then
+                // last-byte-pos above any possible size: up to end of file, as
+                // RFC 9110 does expect - and no RangeLength + 1 overflow
+                RangeLength := -1
+              else
+              begin
+                RangeLength := RangeLength - RangeOffset + 1;
+                if RangeLength < 0 then
+                  RangeLength := 0;
+              end;
             end;
-          end;
-          // "bytes=1000-" -> start=1000, keep RangeLength=-1 to eof
-          if P1^ = ',' then
-            State := hrsErrorUnsupportedRange // no multipart range
+            // "bytes=1000-" -> start=1000, keep RangeLength=-1 to eof
+            if P1^ = ',' then
+              State := hrsErrorUnsupportedRange    // no multipart range
+            else
+              include(ResponseFlags, rfWantRange); // trigger range response
+          end
           else
-            include(ResponseFlags, rfWantRange);
-         end
-        else
-          State := hrsErrorUnsupportedRange;
+            State := hrsErrorUnsupportedRange;
+        end; // range: bytes=-10 fallback to 200 and the whole content as http.sys
         if not HeadersUnFiltered then
           exit;
       end;
