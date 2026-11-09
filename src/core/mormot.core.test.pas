@@ -1043,7 +1043,7 @@ function TSynTestCase.CheckMatchAny(const Value: RawUtf8; const Values: array of
   CaseSentitive, ExpectedResult: boolean; const msg: string): boolean;
 begin
   result := (FindRawUtf8(Values, Value, CaseSentitive) >= 0) = ExpectedResult;
-  Check(result);
+  CheckUtf8(result, '%=%', [msg, Value]);
 end;
 
 function TSynTestCase.CheckRaised(const Method: TOnTestCheck;
