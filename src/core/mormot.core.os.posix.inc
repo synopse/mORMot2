@@ -38,6 +38,7 @@ uses
 {$else}
 
 uses
+   Posix.SysTypes,
    Posix.Pthread,
    Posix.SysMman,
    mormot.core.os.delphi;
@@ -1547,6 +1548,47 @@ end;
 
 {$endif OSFUTEX}
 {$endif HAS_OSPTHREADS}
+
+{$ifndef FPC}
+
+// on Delphi POSIX, TOSLightLock calls pthread_mutex_*() with no recursive
+// attribute: the TRTLCriticalSection fallback is a TMonitor, which is reentrant
+{$define HAS_TOSLIGHTLOCK}
+
+type
+  PPosixMutex = ^pthread_mutex_t;
+
+{ TOSLightLock }
+
+procedure TOSLightLock.Init;
+begin
+  Assert(SizeOf(pthread_mutex_t) <= SizeOf(fMutex));
+  FillCharFast(fMutex, SizeOf(fMutex), 0);
+  pthread_mutex_init(PPosixMutex(@fMutex)^, nil); // no recursive attribute
+end;
+
+procedure TOSLightLock.Done;
+begin
+  if not IsZero(@fMutex, SizeOf(fMutex)) then
+    pthread_mutex_destroy(PPosixMutex(@fMutex)^);
+end;
+
+procedure TOSLightLock.Lock;
+begin
+  pthread_mutex_lock(PPosixMutex(@fMutex)^);
+end;
+
+function TOSLightLock.TryLock: boolean;
+begin
+  result := pthread_mutex_trylock(PPosixMutex(@fMutex)^) = 0;
+end;
+
+procedure TOSLightLock.UnLock;
+begin
+  pthread_mutex_unlock(PPosixMutex(@fMutex)^);
+end;
+
+{$endif FPC}
 
 procedure PosixSetThreadName(ThreadID: TThreadID; const Name: RawByteString);
 var
