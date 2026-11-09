@@ -4523,8 +4523,10 @@ end;
 function TLoggedThread.WaitFinished(TimeOutMs: integer): boolean;
 begin
   result := false;
-  if (self = nil) or
-     not fProcessing then
+  if self = nil then
+    exit;
+  result := not fProcessing;
+  if result then
     exit;
   if TimeOutMs < 0 then
     TimeOutMs := 10; // avoid integer -> cardinal sign overflow
