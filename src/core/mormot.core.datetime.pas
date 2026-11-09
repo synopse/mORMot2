@@ -3739,11 +3739,18 @@ var
     Value: THttpDateNowUtc;
   end;
 
+procedure SetLocalHttpDate(var Value: THttpDateNowUtc; Tix64: Int64);
+var
+  T: TSynSystemTime;
+begin
+  FromGlobalTime(T, {local=}false, Tix64);
+  T.ToHttpDateShort(Value, 'GMT'#13#10, 'Date: ');
+end;
+
 function HttpDateNowUtc(Tix64: Int64): THttpDateNowUtc;
 var
   tix32: cardinal;
-  T: TSynSystemTime;
-  now: THttpDateNowUtc; // use a temp variable for _HttpDateNowUtc atomic set
+  now: THttpDateNowUtc;
 begin
   if Tix64 = 0 then
     tix32 := GetTickSec
@@ -3752,14 +3759,19 @@ begin
   with _HttpDateNowUtc do
   begin
     Safe.Lock;
-    if tix32 <> Tix then
+    if Value[0] = #0 then // initialize once at startup under the lock
     begin
-      Tix := tix32; // let this single thread update the Value
+      SetLocalHttpDate(Value, Tix64);
+      Tix := tix32;
+    end
+    else if tix32 > Tix then
+    begin
+      Tix := tix32;       // call OS outside of the lock on a single thread
       Safe.UnLock;
-      FromGlobalTime(T, {local=}false, Tix64);
-      T.ToHttpDateShort(now, 'GMT'#13#10, 'Date: ');
+      SetLocalHttpDate(now, Tix64);
       Safe.Lock;
-      Value := now;
+      if Tix = tix32 then // discard any obsolete computation
+        Value := now;
     end;
     MoveFast(Value[0], result[0], ord(Value[0]) + 1);
     Safe.UnLock;
