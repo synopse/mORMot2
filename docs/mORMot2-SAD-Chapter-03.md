@@ -180,12 +180,13 @@ end;
 
 ### Cryptography (mormot.crypt.*)
 
-**10 units** for cryptographic operations:
+**11 units** for cryptographic operations:
 
 | Unit | Purpose |
 |------|---------|
 | `mormot.crypt.core` | AES, SHA-2, SHA-3, HMAC, PBKDF2 |
-| `mormot.crypt.secure` | High-level factories, password hashing |
+| `mormot.crypt.secure` | Authentication, password hashing, PEM/DER encoding |
+| `mormot.crypt.factory` | High-level `ICrypt*` / `TCrypt*` factories |
 | `mormot.crypt.ecc` | Elliptic Curve Cryptography |
 | `mormot.crypt.ecc256r1` | secp256r1 curve implementation |
 | `mormot.crypt.rsa` | RSA encryption/signatures |
@@ -199,7 +200,8 @@ end;
 
 ```pascal
 uses
-  mormot.crypt.secure;
+  mormot.crypt.secure,
+  mormot.crypt.factory;
 
 // High-level factories (recommended)
 var
