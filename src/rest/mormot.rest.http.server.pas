@@ -52,6 +52,9 @@ uses
   mormot.net.sock,
   mormot.net.http,
   mormot.net.server,
+  {$ifdef USEHTTPSYS}
+  mormot.net.server.win,
+  {$endif USEHTTPSYS}
   mormot.net.async,
   mormot.net.ws.core,
   mormot.net.ws.server,

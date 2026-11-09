@@ -838,7 +838,7 @@
         <PackageName Value="LCL"/>
       </Item3>
     </RequiredPackages>
-    <Units Count="103">
+    <Units Count="104">
       <Unit0>
         <Filename Value="mormot2tests.dpr"/>
         <IsPartOfProject Value="True"/>
@@ -1251,6 +1251,10 @@
         <Filename Value="..\src\net\mormot.net.peercache.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit102>
+      <Unit103>
+        <Filename Value="..\src\net\mormot.net.server.win.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit103>
     </Units>
   </ProjectOptions>
   <CompilerOptions>

@@ -56,8 +56,14 @@ HTTP/UDP Server Classes
 - Custom URI Routing using an efficient Radix Tree
 - Shared Server-Side HTTP Process
 - `THttpServerSocket`/`THttpServer` HTTP/1.1 Server
+
+### mormot.net.server.win
+
+HTTP Server Classes Over Windows `http.sys` Module
 - `THttpApiServer` HTTP/1.1 Server Over Windows `http.sys` Module
 - `THttpApiWebSocketServer` Over Windows `http.sys` Module
+
+This unit is void on POSIX: it only has content when `USEWININET` is defined, i.e. on Windows.
 
 ### mormot.net.peercache
 
