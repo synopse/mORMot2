@@ -2935,7 +2935,7 @@ var
     if VerQueryValueW(pointer(pt),
          Utf8ToWin32PWideChar(Join([lngnfo, From]), u), str, sz) and
        (sz > 0) then
-      Win32PWideCharToUtf8(str, Res)
+      Unicode_ToUtf8(str, sz, res)
     else
       FastAssignNew(Res);
     u.Done;
