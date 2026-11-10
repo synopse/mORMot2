@@ -188,6 +188,9 @@ type
       aInContentType, aRemoteIP: RawUtf8; aContentLength: Int64): TStream;
     /// validate clean start/shutdown of several DHCP servers
     procedure DoDhcpServerShutdown(Sender: TObject);
+    /// validate that TCrtSocket.Close won't touch a handle closed by Abort
+    procedure CrtSocketAbort;
+    procedure CrtSocketAbortRecv(Sender: TObject);
   published
     {$ifdef USEWININET}
     {$ifdef USEHTTPSYS}
@@ -235,6 +238,111 @@ var
   TftpConnectionStarted: integer;
   TftpConnectionDestroyed: integer;
   TftpOwnerAccessed: integer;
+
+var
+  FakeTlsSocketClosed: integer;
+  FakeTlsDestroyed: integer;
+  FakeTlsReceiving: integer;
+
+type
+  // minimal INetTls to track how TCrtSocket.Close releases its TLS layer
+  TFakeNetTls = class(TInterfacedObject, INetTls)
+  protected
+    fSocket: TNetSocket;
+  public
+    destructor Destroy; override;
+    procedure AfterConnection(Socket: TNetSocket; var Context: TNetTlsContext;
+      const ServerAddress: RawUtf8);
+    procedure AfterBind(Socket: TNetSocket; var Context: TNetTlsContext;
+      const ServerAddress: RawUtf8);
+    procedure AfterAccept(Socket: TNetSocket; const BoundContext: TNetTlsContext;
+      LastError, CipherName: PRawUtf8);
+    function GetCipherName: RawUtf8;
+    function GetRawTls: pointer;
+    function GetRawCert(SignHashName: PRawUtf8): RawByteString;
+    function Receive(Buffer: pointer; var Length: integer): TNetResult;
+    function ReceivePending: integer;
+    function Send(Buffer: pointer; var Length: integer): TNetResult;
+    function ReleaseBuffers: PtrInt;
+    procedure SocketClosed;
+  end;
+
+  // to inject a TFakeNetTls instance with no TLS handshake
+  TFakeTlsCrtSocket = class(TCrtSocket)
+  public
+    procedure SetFakeTls;
+  end;
+
+destructor TFakeNetTls.Destroy;
+begin
+  LockedInc32(@FakeTlsDestroyed);
+  inherited Destroy;
+end;
+
+procedure TFakeNetTls.AfterConnection(Socket: TNetSocket;
+  var Context: TNetTlsContext; const ServerAddress: RawUtf8);
+begin
+end;
+
+procedure TFakeNetTls.AfterBind(Socket: TNetSocket;
+  var Context: TNetTlsContext; const ServerAddress: RawUtf8);
+begin
+end;
+
+procedure TFakeNetTls.AfterAccept(Socket: TNetSocket;
+  const BoundContext: TNetTlsContext; LastError, CipherName: PRawUtf8);
+begin
+end;
+
+function TFakeNetTls.GetCipherName: RawUtf8;
+begin
+  result := '';
+end;
+
+function TFakeNetTls.GetRawTls: pointer;
+begin
+  result := nil;
+end;
+
+function TFakeNetTls.GetRawCert(SignHashName: PRawUtf8): RawByteString;
+begin
+  result := '';
+end;
+
+function TFakeNetTls.Receive(Buffer: pointer; var Length: integer): TNetResult;
+begin
+  LockedInc32(@FakeTlsReceiving);
+  result := fSocket.Recv(Buffer, Length); // plain blocking recv()
+end;
+
+function TFakeNetTls.ReceivePending: integer;
+begin
+  result := 0;
+end;
+
+function TFakeNetTls.Send(Buffer: pointer; var Length: integer): TNetResult;
+begin
+  result := nrNotImplemented;
+end;
+
+function TFakeNetTls.ReleaseBuffers: PtrInt;
+begin
+  result := 0;
+end;
+
+procedure TFakeNetTls.SocketClosed;
+begin
+  LockedInc32(@FakeTlsSocketClosed);
+end;
+
+procedure TFakeTlsCrtSocket.SetFakeTls;
+var
+  tls: TFakeNetTls;
+begin
+  tls := TFakeNetTls.Create;
+  tls.fSocket := fSock;
+  fSecure := tls;
+end;
 
 type
   TSlowTftpConnection = class(TTftpConnectionThread)
@@ -6272,6 +6380,110 @@ begin
   finally
     ctx.ContentStream := nil;
     ms.Free;
+  end;
+  CrtSocketAbort;
+end;
+
+procedure TNetworkProtocols.CrtSocketAbortRecv(Sender: TObject);
+var
+  buf: array[0..15] of byte;
+  len: integer;
+begin
+  len := SizeOf(buf);
+  // blocking recv() released by Abort, then TrySockRecv() calls Close at once
+  Check(not TCrtSocket(Sender).TrySockRecv(@buf, len), 'aborted recv');
+end;
+
+procedure TNetworkProtocols.CrtSocketAbort;
+var
+  srv, cli: TCrtSocket;
+  {$ifdef OSWINDOWS}
+  other: array[0..15] of TCrtSocket;
+  abortedsock: TNetSocket;
+  addr: TNetAddr;
+  reused: boolean;
+  {$endif OSWINDOWS}
+  i: PtrInt;
+  th: TLoggedWorkThread;
+begin
+  srv := TCrtSocket.Bind('127.0.0.1:0'); // ephemeral port
+  try
+    // 1. sequential Abort + Close, with a new socket opened in-between
+    FakeTlsSocketClosed := 0;
+    FakeTlsDestroyed := 0;
+    {$ifdef OSWINDOWS}
+    FillCharFast(other, SizeOf(other), 0);
+    {$endif OSWINDOWS}
+    cli := TFakeTlsCrtSocket.Open('127.0.0.1', srv.Port, nlTcp, 5000);
+    try
+      TFakeTlsCrtSocket(cli).SetFakeTls;
+      {$ifdef OSWINDOWS}
+      abortedsock := cli.Sock;
+      {$endif OSWINDOWS}
+      cli.Abort; // as THttpServerResp.Shutdown from THttpServer.Destroy
+      Check(cli.Aborted, 'aborted');
+      {$ifdef OSWINDOWS}
+      // Abort did closesocket(): Windows will eventually reuse this handle
+      for i := 0 to high(other) do
+      begin
+        other[i] := TCrtSocket.Open('127.0.0.1', srv.Port, nlTcp, 5000);
+        reused := other[i].Sock = abortedsock;
+        if reused then
+          break;
+      end;
+      {$endif OSWINDOWS}
+      cli.Close; // as THttpServerResp.Execute cleanup
+      CheckEqual(FakeTlsDestroyed, 1, 'tls released');
+      {$ifdef OSWINDOWS}
+      CheckEqual(FakeTlsSocketClosed, 1, 'no close_notify after Abort');
+      if reused then
+        Check(other[i].Sock.GetName(addr) = nrOk, 'reused handle not closed')
+      else
+        AddConsole('CrtSocketAbort: handle not reused');
+      {$else}
+      CheckEqual(FakeTlsSocketClosed, 0, 'POSIX Abort does not close');
+      {$endif OSWINDOWS}
+    finally
+      cli.Free;
+      {$ifdef OSWINDOWS}
+      for i := 0 to high(other) do
+        other[i].Free;
+      {$endif OSWINDOWS}
+    end;
+    // 2. Abort releasing a blocking recv() in another thread
+    FakeTlsSocketClosed := 0;
+    FakeTlsDestroyed := 0;
+    FakeTlsReceiving := 0;
+    cli := TFakeTlsCrtSocket.Open('127.0.0.1', srv.Port, nlTcp, 5000);
+    try
+      TFakeTlsCrtSocket(cli).SetFakeTls;
+      th := TLoggedWorkThread.Create(TSynLog, 'abortrecv', cli,
+        CrtSocketAbortRecv, {suspended=}false, {ManualWaitForAndFree=}true);
+      try
+        i := 0;
+        while (FakeTlsReceiving = 0) and
+              (i < 500) do
+        begin
+          SleepHiRes(10); // wait for the thread to enter Receive()
+          inc(i);
+        end;
+        CheckEqual(FakeTlsReceiving, 1, 'recv entered');
+        SleepHiRes(50); // let the thread actually block in recv()
+        cli.Abort;
+        th.WaitFor;
+      finally
+        th.Free;
+      end;
+      // TrySockRecv() did call Close within the thread, not cli.Free below
+      CheckEqual(FakeTlsDestroyed, 1, 'recv tls released');
+      {$ifdef OSWINDOWS}
+      CheckEqual(FakeTlsSocketClosed, 1, 'recv no close_notify after Abort');
+      {$endif OSWINDOWS}
+    finally
+      cli.Free;
+    end;
+  finally
+    srv.Free;
   end;
 end;
 
