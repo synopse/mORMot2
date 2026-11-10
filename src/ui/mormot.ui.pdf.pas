@@ -13114,6 +13114,13 @@ begin
       fClipRegions[n][i] := DeviceBox(pr^);
       inc(pr);
     end;
+    // an empty region clips everything: one empty box, as IntersectClip -
+    // without a rectangle the clip was 'n h W n', no path at all
+    if fClipRegions[n] = nil then
+    begin
+      SetLength(fClipRegions[n], 1);
+      fClipRegions[n][0] := PdfBox(0, 0, 0, 0);
+    end;
     DC[nDC].ClipRegion := n + 1;
     // the text and bitmaps clip to its box: it was never set, so empty
     DC[nDC].ClipRgn := RegionBox(n + 1);

@@ -77,6 +77,7 @@ type
     procedure EmfClipBoxes;
     procedure EmfWorldBoxes;
     procedure EmfBitmapBounds;
+    procedure EmfEmptyClip;
     procedure EmfWorldRotation;
     procedure EmfWorldReflection;
     procedure IntegerCoordinates;
@@ -3902,6 +3903,76 @@ begin
         (clip.Width > 20), 'the text clipped to its bounds');
   Check(LastClip(mapped, PosEx(#10'BT'#10, mapped), b, at) and
         SameBox(b, clip), 'the same bounds at 10 units per pixel');
+end;
+
+// a bitmap on 10..50 after an empty clip: two disjoint IntersectClipRect
+// (Kind 0) or SelectClipRgn of an empty region (Kind 1)
+function EmptyClipEmf(Kind: integer): RawUtf8;
+var
+  mf: TMetaFile;
+  mc: TMetaFileCanvas;
+  bmi: TBitmapInfo;
+  pix: array[0..15] of cardinal;
+  i: integer;
+  rgn: HRGN;
+begin
+  mf := TMetaFile.Create;
+  try
+    mf.Width := 100;
+    mf.Height := 100;
+    mc := TMetaFileCanvas.Create(mf, 0);
+    try
+      if Kind = 0 then
+      begin
+        IntersectClipRect(mc.Handle, 10, 10, 20, 20);
+        IntersectClipRect(mc.Handle, 30, 30, 40, 40);
+      end
+      else
+      begin
+        rgn := CreateRectRgn(0, 0, 0, 0);
+        SelectClipRgn(mc.Handle, rgn);
+        DeleteObject(rgn);
+      end;
+      FillChar(bmi, SizeOf(bmi), 0);
+      bmi.bmiHeader.biSize := SizeOf(bmi.bmiHeader);
+      bmi.bmiHeader.biWidth := 4;
+      bmi.bmiHeader.biHeight := 4;
+      bmi.bmiHeader.biPlanes := 1;
+      bmi.bmiHeader.biBitCount := 32;
+      for i := 0 to high(pix) do
+        pix[i] := cardinal(i) * $00101010;
+      StretchDIBits(mc.Handle, 10, 10, 40, 40, 0, 0, 4, 4,
+        @pix, bmi, DIB_RGB_COLORS, SRCCOPY);
+    finally
+      mc.Free;
+    end;
+    result := RenderedEmf(mf);
+  finally
+    mf.Free;
+  end;
+end;
+
+procedure TTestUiPdf.EmfEmptyClip;
+var
+  k: integer;
+  txt: RawUtf8;
+  clip: TPdfBox;
+  draw, at: PtrInt;
+begin
+  { GDI records SelectClipRgn of an empty region as EMR_EXTSELECTCLIPRGN
+    without a rectangle: its clip was 'n h W n', no path at all, which a
+    viewer may take as no clip; it is an empty box now, as two disjoint
+    IntersectClipRect give - the bitmap after it is clipped away }
+  for k := 0 to 1 do
+  begin
+    txt := EmptyClipEmf(k);
+    draw := PosEx(' Do'#10, txt);
+    CheckUtf8((draw > 0) and
+              LastClip(txt, draw, clip, at) and
+              (clip.Width * clip.Height = 0) and
+              ClipHolds(txt, at, draw),
+      'kind %: the bitmap under an empty clip', [k]);
+  end;
 end;
 
 // a rectangle and text under the world transform M11, M12, M21, M22 moved
