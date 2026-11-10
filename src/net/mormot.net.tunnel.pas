@@ -306,18 +306,18 @@ type
       const AppSecret: RawUtf8; var Socket: TNetSocket; LocalPort: TNetPort;
       const InfoNameValue: array of const; const SignCert: ICryptCert = nil;
       const VerifyCert: ICryptCert = nil): TNetPort;
-     /// open a tunnel directly to an in-process plaintext destination
-     // - no local TCP socket or background thread is created
-     // - inherited by TTunnelLocalClient and TTunnelLocalServer, preserving
-     // their opposite cryptographic handshake roles
-     // - Transmit carries relay frames with a 4-byte session trailer,
-     // optionally encrypted according to TransmitOptions
-     // - LocalTransmit.TunnelSend receives plaintext without this trailer
-     // - use SendData() to transmit local application data, e.g. KVM frames
-     // - performs the same reciprocal handshake as Open() and OpenSocket(),
-     // with optional shared-secret and/or certificate authentication
-     // - the local port remains zero, so check this boolean result
-     // - returns false on handled setup failure; invalid calls raise ETunnel
+    /// open a tunnel directly to an in-process plaintext destination
+    // - no local TCP socket or background thread is created
+    // - inherited by TTunnelLocalClient and TTunnelLocalServer, preserving
+    // their opposite cryptographic handshake roles
+    // - Transmit carries relay frames with a 4-byte session trailer,
+    // optionally encrypted according to TransmitOptions
+    // - LocalTransmit.TunnelSend receives plaintext without this trailer
+    // - use SendData() to transmit local application data, e.g. KVM frames
+    // - performs the same reciprocal handshake as Open() and OpenSocket(),
+    // with optional shared-secret and/or certificate authentication
+    // - the local port remains zero, so check this boolean result
+    // - returns false on handled setup failure; invalid calls raise ETunnel
     function OpenDirect(Sess: TTunnelSession;
       const Transmit, LocalTransmit: ITunnelTransmit;
       TransmitOptions: TTunnelOptions; TimeOutMS: integer;
@@ -777,7 +777,10 @@ const
   TRAIL_SIZE = SizeOf(TTunnelSession);
 
   // defensive limits against malformed or excessive tunnel frames
-  MAX_TUNNEL_FRAME_BYTES = 72 shl 10; // TransmitSock.RecvWait is 64KB max
+  MAX_TUNNEL_FRAME_BYTES = 72 shl 10;       // TransmitSock.RecvWait is 64KB max
+  MAX_TUNNEL_TCP_DATA_BYTES = 64 shl 10;
+  MAX_TUNNEL_DIRECT_DATA_BYTES = 16 shl 20; // allow 16MB JPEG/KVM direct payload
+  MAX_TUNNEL_DIRECT_FRAME_BYTES = MAX_TUNNEL_DIRECT_DATA_BYTES + GMAC_SIZE + TRAIL_SIZE;
   MAX_TUNNEL_PENDING_FRAMES = 128;    // remote end could start transmitting
 
 function ToText(opt: TTunnelOptions): ShortString;
@@ -1111,7 +1114,9 @@ begin
   if fVerboseLog then
     fLogClass.Add.Log(sllTrace, 'TunnelSend=%', [length(aFrame)]);
   // reject unreasonably large incoming frames before queuing or decrypting
-  if length(aFrame) > MAX_TUNNEL_FRAME_BYTES then
+  if (length(aFrame) > MAX_TUNNEL_DIRECT_FRAME_BYTES) or
+     ((fHandshake <> nil) and // small limit during handshake
+      (length(aFrame) > MAX_TUNNEL_FRAME_BYTES)) then // large direct KVM frames
     ETunnel.RaiseUtf8('%.TunnelSend: oversized frame=%', [self, length(aFrame)]);
   fSafe.Lock; // protect fHandshake and fFlags
   try
@@ -1316,9 +1321,11 @@ var
 begin
   if (self = nil) or (Data = '') then
     exit;
-  // Keep the old 64 KB payload bound, including when using a direct adapter.
-  if length(Data) > (64 shl 10) then
-    ETunnel.RaiseUtf8('%.SendData: oversized plaintext=%', [self, length(Data)]);
+  // TCP reads are 64KB, but direct KVM payloads may be much larger (16MB)
+  if (length(Data) > MAX_TUNNEL_DIRECT_DATA_BYTES) or
+     ((fThread <> nil) and
+      (length(Data) > MAX_TUNNEL_TCP_DATA_BYTES)) then
+  ETunnel.RaiseUtf8('%.SendData: oversized plaintext=%', [self, length(Data)]);
   fSendSafe.Lock;
   try
     if not fReady or (fClosed in fFlags) then
@@ -1342,7 +1349,7 @@ begin
   if not flush then
     exit;
   // Drain outside the lock: a synchronous in-process relay may reenter
-  // SendData() from a receiving callback, which then only queues its frame.
+  // SendData() from a receiving callback, which then only queues its frame
   repeat
     fSendSafe.Lock;
     try

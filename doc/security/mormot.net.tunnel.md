@@ -70,7 +70,7 @@ Both endpoints must agree on the session number, effective options, and `AppSecr
 | --- | --- | --- |
 | `toEcdhe` | Fresh P-256 ECDH key agreement (unless a `SpecificKey` is supplied), followed by AES-128-GCM forwarding | Preferred mode for remote assistance; combine with a strong `AppSecret` and/or independently trusted peer certificates |
 | `toEncrypt` without `toEcdhe` | AES-128-GCM with keys based on `AppSecret`, without ECDHE forward secrecy | Use only where a strong, confidential PSK is available; the code rejects an empty `AppSecret` in this mode |
-| Neither encryption option | Forwarded TCP bytes remain plaintext | Suitable for debugging and explicitly trusted local transport, not confidential VNC traffic over a relay |
+| Neither encryption option | Forwarded application bytes remain plaintext | Suitable for debugging and explicitly trusted local transport, not confidential VNC traffic over a relay |
 | `toClientSigned`, `toServerSigned` | Describe which endpoint's handshake is digitally signed | Do not set these by hand to request signatures; `OpenInternal()` recomputes them from `SignCert` and `VerifyCert` |
 | `toAcceptNonLocal` | Allows non-loopback connections to the listener bound by `Open()` | Usually leave unset; the VNC viewer should connect on the local machine |
 
@@ -372,15 +372,15 @@ The traffic-key derivation uses `THmacSha256`, incorporating the `AppSecret` con
 
 This is an application-specific, HMAC-based key schedule, not TLS, Noise, or a claimed implementation of RFC 5869 HKDF extract-and-expand. The protocol's conditional security argument relies on its specific transcript checks, correct ECDH implementation, key separation, correct randomness, and authenticators trusted outside the relay.
 
-## 7. AES-128-GCM protection of forwarded TCP frames
+## 7. AES-128-GCM protection of forwarded frames
 
 For encrypted traffic, the wire frame is:
 
 ```text
-[ciphertext of N TCP bytes][16-byte GCM authentication tag][4-byte session ID]
+[ciphertext of N application bytes][16-byte GCM authentication tag][4-byte session ID]
 ```
 
-`TTunnelLocal.Create()` uses separate `TAesFast[mGcm]` objects for receiving and sending. Their keys are independently derived. The local `TTunnelSession` is passed as **GCM additional authenticated data (AAD)**, binding ciphertext frames to the session even though the routing trailer is transmitted in cleartext.
+`TTunnelLocal.OpenInternal()` initializes separate `TAesFast[mGcm]` objects for receiving and sending. Their keys are independently derived. The local `TTunnelSession` is passed as **GCM additional authenticated data (AAD)**, binding ciphertext frames to the session even though the routing trailer is transmitted in cleartext.
 
 Each direction maintains its own evolving GCM IV. `GCM_IncIV()` advances the nonce for each send or receive operation, and the record does not carry a redundant explicit nonce. This keeps the record overhead at **20 bytes** (16-byte tag plus 4-byte routing trailer), with the tradeoff that the transport must preserve **frame order and frame boundaries** for each direction.
 
@@ -494,6 +494,7 @@ A focused negative-security suite should also exercise:
 | Send oversized or truncated frames / invalid JSON lengths | No out-of-bounds access or uncontrolled plaintext allocation |
 | Exceed 128 queued handshake frames | Predictable rejection without unbounded local queue growth |
 | Repeated open/close, deferred callbacks, and socket shutdown races | No deadlock, use-after-free, leaked descriptor, or unintended key reuse |
+| `OpenDirect` validation | Proper handshake and AES-GCM without TCP forwarding |
 
 Test runs should record compiler (Delphi/FPC), operating system, architecture, cryptographic backend (native/OpenSSL), and transport (direct callbacks/WebSockets). The present review is based on source code and test inspection; it does **not** assert these negative cases were run successfully.
 
