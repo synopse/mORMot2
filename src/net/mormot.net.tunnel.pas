@@ -933,6 +933,11 @@ begin
       finally
         fSafe.UnLock;
       end;
+      // local client is connected: deliver frames buffered during the handshake
+      if (fState = stProcessing) and
+         not Terminated and
+         (fOwner <> nil) then
+        fOwner.DrainHandshakeQueue;
     end
     else
       // newsocket() with connect() was done in the main thread
@@ -1113,17 +1118,17 @@ begin
   // ITunnelTransmit method: when a Frame is received from the relay server
   if fVerboseLog then
     fLogClass.Add.Log(sllTrace, 'TunnelSend=%', [length(aFrame)]);
-  // reject unreasonably large incoming frames before queuing or decrypting
-  if (length(aFrame) > MAX_TUNNEL_DIRECT_FRAME_BYTES) or
-     ((fHandshake <> nil) and // small limit during handshake
-      (length(aFrame) > MAX_TUNNEL_FRAME_BYTES)) then // large direct KVM frames
-    ETunnel.RaiseUtf8('%.TunnelSend: oversized frame=%', [self, length(aFrame)]);
   fSafe.Lock; // protect fHandshake and fFlags
   try
+    // reject unreasonably large incoming frames before queuing or decrypting
+    if (length(aFrame) > MAX_TUNNEL_DIRECT_FRAME_BYTES) or
+       ((fHandshake <> nil) and // small limit during handshake - within lock
+        (length(aFrame) > MAX_TUNNEL_FRAME_BYTES)) then // large direct KVM frames
+      ETunnel.RaiseUtf8('%.TunnelSend: oversized frame=%', [self, length(aFrame)]);
+    // handle special rendez-vous initial phase
     inc(fFramesIn);
     if fHandshake <> nil then
     begin
-      // handle special rendez-vous initial phase
       fLogClass.Add.Log(sllTrace, 'TunnelSend: Handshake phase', self);
       if length(aFrame) <= TRAIL_SIZE then // received closure notification
         fFlags := fFlags + [fClosed, fClosePortNotified]
@@ -1730,7 +1735,8 @@ begin
           [BOOL_STR[fThread.fStarted], fThread], self);
     end;
     fStartTicks := GetUptimeSec; // wall clock
-    DrainHandshakeQueue;
+    if not SocketBound then      // if not already drained
+      DrainHandshakeQueue;
     // now everything is running and we can prepare the fixed info
     fInfo.AddNameValuesToObject([
       'remotePort', fRemotePort,
