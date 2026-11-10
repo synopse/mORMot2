@@ -4263,6 +4263,7 @@ end;
 constructor THttpServerSocket.Create(aServer: THttpServer);
 begin
   inherited Create(5000);
+  Http.ResetZero; // e.g. RangeLength := -1 but keep State=hrsNoStateMachine
   if aServer <> nil then // nil e.g. from TRtspOverHttpServer
   begin
     fServer := aServer;
