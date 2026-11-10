@@ -1067,6 +1067,7 @@ type
     Server: TWebSocketAsyncServer;
     Connected, Done: TSynEvent;
     Sent: integer;
+    ConnHandle: TConnectionAsyncHandle; // set by WebSocketConnect
     constructor Create(aServer: TWebSocketAsyncServer);
     destructor Destroy; override;
     procedure Broadcast(Sender: TObject);
@@ -1107,6 +1108,7 @@ procedure TWebSocketBroadcastTask.WebSocketConnect(
 begin
   // DoConnect() is called after the 101 response has been written,
   // fProcess has been created, ProcessStart() called and state set to wpsRun
+  ConnHandle := Sender.Handle;
   Connected.SetEvent;
   // each broadcast is synchronized with an actual WebSocket upgrade
 end;
@@ -1117,6 +1119,7 @@ var
   bcast: TWebSocketBroadcastTask;
   client: TCrtSocket;
   i: PtrInt;
+  endtix: cardinal;
   sent: integer; // not PtrInt
   wedged: boolean;
   status, line: RawUtf8;
@@ -1179,6 +1182,15 @@ begin
         // The HTTP response may reach us just before the server executes
         // DoConnect(), so explicitly wait until fProcess is fully initialized.
         if not Check(bcast.Connected.WaitFor(5000), 'websocket connected') then
+          break;
+        // On slow systems (e.g. RPi), the first read may finish the WebSocket
+        // upgrade before the connection is registered.
+        endtix := GetTickSec + 5;
+        while (server.Async.ConnectionFind(bcast.ConnHandle) = nil) and
+              (GetTickSec <= endtix) do
+          SleepHiRes(1);
+        if not Check(server.Async.ConnectionFind(bcast.ConnHandle) <> nil,
+            'websocket registered') then
           break;
         // Run one broadcast from the shared test thread pool now that this
         // connection is known to be a fully initialized WebSocket.
