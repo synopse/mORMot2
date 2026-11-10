@@ -513,8 +513,11 @@ type
     ProgressiveID: THttpPartialID;
     /// internal GetTickSec set by THttpServerSocketGeneric.DoProgressive
     ProgressiveTix: cardinal;
-    /// reset this request context to be used prior to any ProcessInit/Read/Write
+    /// reset this request context to be used prior to any ProcessRead/Write
     procedure Reset;
+    /// reset this context when all fields are known to be 0 e.g. after Create
+    procedure ResetZero;
+      {$ifdef HASINLINE} inline; {$endif}
     /// parse CommandUri into CommandMethod/CommandUri fields on server side
     // - e.g. from CommandUri = 'GET /uri HTTP/1.1'
     function ParseCommand: boolean;
@@ -578,9 +581,6 @@ type
     // add a second (wrong) Content-Range header
     // - returns HTTP_RANGENOTSATISFIABLE, so can be used as a result
     function RangeNotSatisfiable(aSize: Int64): integer;
-    /// (re)initialize the HTTP Server state machine for ProcessRead/ProcessWrite
-    procedure ProcessInit;
-      {$ifdef HASINLINE} inline; {$endif}
     /// receiving socket entry point of our asynchronous HTTP Server
     // - to be called with the incoming bytes from the socket receive buffer
     // - caller should have checked that current State is in HTTP_REQUEST_READ
@@ -3668,8 +3668,14 @@ begin
   ProgressiveTix := 0;
   fProgressivePosition := 0;
   fContentLeft := 0; // a body rejected in the middle may have left it <> 0
-  fContentPos := nil; // ProcessInit expects those fields to be 0/nil
+  fContentPos := nil; // ResetZero expects those fields to be 0/nil
 end;
+
+procedure THttpRequestContext.ResetZero;
+begin
+  RangeLength := -1;
+  ContentLength := -1; // -1 = no Content-Length: header
+end; // caller should set State := hrsGetCommand / hrsConnect depending
 
 procedure THttpRequestContext.GetTrimmed(P, P2: PUtf8Char; L: PtrInt;
   var result: RawUtf8; nointern: boolean);
@@ -4139,13 +4145,6 @@ begin // caller checked that ContentEncoding <> nil
     EHttpSocket.RaiseUtf8('% UncompressData failed', [ContentEncoding^.Name]);
   ContentLength := length(Content); // uncompressed Content-Length
   ContentEncoding := nil; // field will be used for output encoding now
-end;
-
-procedure THttpRequestContext.ProcessInit;
-begin // all other fields are expected to be filled with 0/nil/''
-  RangeLength := -1;
-  ContentLength := -1; // not yet parsed
-  State := hrsGetCommand;
 end;
 
 procedure THttpRequestContext.SetRawUtf8(var res: RawUtf8;

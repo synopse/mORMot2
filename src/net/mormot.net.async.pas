@@ -4615,7 +4615,7 @@ begin
   if (fServer <> nil) and
      (fServer.fCompressList.Algo <> nil) then
     fHttp.CompressList := @fServer.fCompressList;
-  fHttp.ProcessInit; // ready to process this HTTP request
+  fHttp.ResetZero; // ready to process this HTTP request
   fHttp.State := hrsConnect;
   // inherited AfterCreate; // void parent method
 end;
@@ -4922,7 +4922,8 @@ end;
 
 procedure THttpAsyncServerConnection.HttpInit;
 begin
-  fHttp.ProcessInit; // ready to process a new HTTP request
+  fHttp.ResetZero; // ready to process a new HTTP request
+  fHttp.State := hrsGetCommand; // just like fHttp.Reset: not hrsNoStateMachine
   // fHttp.Reset did clear the options of the previous request on this
   // kept-alive connection, e.g. hroHeadersUnfiltered from hsoHeadersUnfiltered
   fHttp.Options := fServer.fDefaultRequestOptions;
