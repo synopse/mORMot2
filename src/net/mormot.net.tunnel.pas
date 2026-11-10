@@ -1045,10 +1045,9 @@ var
   log: ISynLog;
 begin
   fLogClass.EnterLocal(log, 'Destroy %', [fPort], self);
-  ClosePort; // only aborts the worker; never joins while inside ClosePort()
-  // dropping the interface joins and destroys the worker, outside fSafe.Lock
-  fThread := nil; // non-owning alias: do not free it directly
-  fLocalTransmit := nil;
+  ClosePort;                // aborts the worker; never joins
+  fThread := nil;           // non-owning alias: do not free it directly
+  fLocalTransmit := nil;    // joins and destroys the thread, outside fSafe.Lock
   FreeAndNil(fAesGcm[true]);
   FreeAndNil(fAesGcm[false]);
   inherited Destroy;
@@ -1696,7 +1695,7 @@ begin
       hmac2.Update('IV'#1);
       hmac2.Done(iv.b);           // same initial AES-128-GCM iv
     end;
-    // GCM now belongs to the session, independently of its local endpoint.
+    // GCM now belongs to the session, independently of its local endpoint
     if toEncrypted * fOptions <> [] then
     begin
       fAesGcm[false] := TAesFast[mGcm].Create(keyrec.Lo, 128, @iv.Lo);

@@ -5437,7 +5437,7 @@ var
       tmp := 'Pas';
       DoTest(@GetExtendedPas, @GetNumericVariantPas);
       tmp := 'Ssse3';
-      if cfSSE3 in CpuFeatures then
+      if cfSSSE3 in CpuFeatures then
         DoTest(@GetExtendedSsse3, @GetNumericVariantSsse3);
       {$else}
       tmp[0] := #0;
