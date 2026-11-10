@@ -3967,11 +3967,11 @@ begin
   begin
     txt := EmptyClipEmf(k);
     draw := PosEx(' Do'#10, txt);
-    Check((draw > 0) and
-          LastClip(txt, draw, clip, at) and
-          (clip.Width * clip.Height = 0) and
-          ClipHolds(txt, at, draw),
-      Utf8ToString(FormatUtf8('kind %: the bitmap under an empty clip', [k])));
+    CheckUtf8((draw > 0) and
+              LastClip(txt, draw, clip, at) and
+              (clip.Width * clip.Height = 0) and
+              ClipHolds(txt, at, draw),
+      'kind %: the bitmap under an empty clip', [k]);
   end;
 end;
 
