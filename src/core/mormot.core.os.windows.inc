@@ -2935,7 +2935,12 @@ var
     if VerQueryValueW(pointer(pt),
          Utf8ToWin32PWideChar(Join([lngnfo, From]), u), str, sz) and
        (sz > 0) then
-      Win32PWideCharToUtf8(str, Res)
+      begin
+      // sz is in WideChars and includes the #0 terminator, if any
+      if PWideChar(str)[sz - 1] = #0 then
+        dec(sz);
+      Unicode_ToUtf8(str, sz, Res);
+      end
     else
       FastAssignNew(Res);
     u.Done;
