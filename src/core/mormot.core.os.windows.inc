@@ -5350,8 +5350,9 @@ begin
   end;
   // put the process in its own job, to terminate it with its children
   if roWinJobCloseChildren in options then
+    // no silent breakaway: the children should stay in the job
     fJob := CreateJobToClose(pi.dwProcessId, 'ExternalProcess',
-      {allowSilentBreakaway=}true)
+      {allowSilentBreakaway=}false)
   else
     fJob := CreateJobObjectA(nil, nil);
   if (fJob <> 0) and

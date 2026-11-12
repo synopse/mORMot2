@@ -6557,6 +6557,8 @@ type
   // - on Windows, the command line is given to CreateProcessW() as such - so use
   // e.g. 'cmd /c ...' for a shell built-in - and the process is created in its
   // own process group and job, so that Terminate/Kill also stop its children
+  // - on Windows, roWinJobCloseChildren also kills any child still running
+  // when this instance is released, or when the current process ends
   // - RunRedirect() is implemented over this class on POSIX, from the calling
   // thread, but still uses RunCommandWin() on Windows
   TExternalProcess = class(TSynPersistent)
