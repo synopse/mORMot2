@@ -1434,7 +1434,7 @@ begin
                   end;
               end;
               for j := 0 to fParamsArrayCount - 1 do
-                if VArray[j] = 'null' then // bind null (ftUtf8 should be '"null"')
+                if IsNullJson(VArray[j]) then // bind null (ftUtf8 should be '"null"')
                   aIndicator[i][j] := -1
                 else
                 begin

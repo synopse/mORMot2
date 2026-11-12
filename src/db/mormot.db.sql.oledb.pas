@@ -768,7 +768,7 @@ begin
     for i := 0 to high(Values) do
       if StoreVoidStringAsNull and
          (Values[i] = '') then
-        VArray[i] := 'null'
+        VArray[i] := NULL_STR_VAR
       else
         QuotedStr(Values[i], '''', VArray[i]);
 end;

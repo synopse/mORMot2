@@ -14130,9 +14130,9 @@ begin
   // setup some constants
   JSON_CONTENT_TYPE_VAR        := JSON_CONTENT_TYPE;
   JSON_CONTENT_TYPE_HEADER_VAR := JSON_CONTENT_TYPE_HEADER;
-  NULL_STR_VAR     := 'null';
-  BOOL_UTF8[false] := 'false';
-  BOOL_UTF8[true]  := 'true';
+  PCardinal(FastSetString(NULL_STR_VAR, 4))^ := NULL_LOW;    // 'null'
+  FastSetString(BOOL_UTF8[false], @BOOL_STR[false][1], 5);   // 'false'
+  PCardinal(FastSetString(BOOL_UTF8[true], 4))^ := TRUE_LOW; // 'true'
   // minimal stubs which will be properly implemented in other mormot.core units
   ShortToUuid           := _ShortToUuid;           // mormot.core.text
   AppendShortUuid       := _AppendShortUuid;

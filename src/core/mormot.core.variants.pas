@@ -6276,7 +6276,7 @@ var
   begin
     json := dv^.ToJson;
     if (json <> '') and
-       (json <> 'null')  then
+       (PInteger(json)^ <> NULL_LOW)  then
       PropertyFromJson(prop, obj, pointer(json), valid, JSONPARSER_TOLERANTOPTIONS);
   end;
 

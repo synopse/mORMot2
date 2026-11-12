@@ -916,10 +916,8 @@ var
   tmp: RawUtf8;
 begin
   curInd := fidxRow - 2;
-  if farr[curInd] = 'null' then
-  begin
-    pCurrentRec.IDST := ord(stIsNull);
-  end
+  if IsNullJson(farr[curInd]) then
+    pCurrentRec.IDST := ord(stIsNull)
   else
   begin
     pCurrentRec.IDST := 0;

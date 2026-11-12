@@ -2751,7 +2751,7 @@ var
 begin
   if (fReply = '') or
      (fDocumentCount <= 0) then
-    result := 'null'
+    result := NULL_STR_VAR
   else
   begin
     W := TJsonWriter.CreateOwnedStream(tmp);
@@ -2911,7 +2911,7 @@ begin
     if (result = '') or
        (result = '[]') or
        (result = '{}') then
-      result := 'null';
+      result := NULL_STR_VAR;
   finally
     W.Free;
   end;

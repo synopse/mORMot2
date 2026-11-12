@@ -645,7 +645,7 @@ var
             begin
               iParam := iParams.getSQLParam(iA * fParamCount + iP);
               ndx := iA + iStart;
-              if VArray[ndx] = 'null' then
+              if IsNullJson(VArray[ndx]) then
                 iParam.SetIsNull(true)
               else
               begin

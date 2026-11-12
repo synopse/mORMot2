@@ -3376,7 +3376,7 @@ var
         exit; // end of string before end quote -> incorrect
       RawUtf8ToVariant(Where.Value, Where.ValueVariant);
     end
-    else if (PInteger(P)^ and $DFDFDFDF = NULL_HI) and
+    else if (PInteger(P)^ and $DFDFDFDF = NULL_HI) and // case-insentive
             (P[4] in [#0..' ', ';']) then
     begin
       // NULL statement

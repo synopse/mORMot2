@@ -195,6 +195,10 @@ function IsStringJson(P: PUtf8Char; len: PtrInt): boolean; overload;
 /// test if the supplied buffer is a valid JSON number with no trailing space
 function IsNumberJson(P: PUtf8Char): boolean;
 
+/// test if the supplied variable is case-sensitive 'null' JSON identifier
+function IsNullJson(const U: RawUtf8): boolean;
+  {$ifdef HASINLINE} inline; {$endif}
+
 /// test if the supplied buffer is a valid JSON true/false boolean with no space
 function IsBooleanJson(P: PUtf8Char; V: PBoolean = nil): boolean;
   {$ifdef HASINLINE} inline; {$endif}
@@ -3637,6 +3641,12 @@ begin
         end;
     end;
   result := false;
+end;
+
+function IsNullJson(const U: RawUtf8): boolean;
+begin
+  result := (pointer(U) <> nil) and
+            (PInteger(U)^ = NULL_LOW);
 end;
 
 function IsConstantOrNumberJson(P: PUtf8Char; len: PtrUInt): boolean;
