@@ -5502,6 +5502,7 @@ var
   cv: TSynInvokeableVariantType;
   vt: cardinal;
   dummy: boolean;
+  quote: AnsiChar;
 begin // supports complex or simple values
   if cardinal(V.VType) = varVariantByRef then
     V := V^.VPointer;
@@ -5511,10 +5512,27 @@ begin // supports complex or simple values
     vt := V.VType;
     if (vt >= varFirstCustom) or
        ((Escape <> twNone) and
-        not (vt in VTYPE_SIMPLE)) then
-      __VariantSaveJsonEscape(PVariant(V)^, result, Escape) // AddVariant()
+        not (vt in VTYPE_SIMPLE)) then // complex types require AddVariant
+      __VariantSaveJsonEscape(PVariant(V)^, result, Escape)
     else
-      VariantToUtf8(PVariant(V)^, result, dummy); // no escape for simple values
+      case vt of
+        varBoolean:
+          result := BOOL_UTF8[ord(V^.VBoolean) <> 0]; // normalize
+        varDate: // follow _JS_DateTime/TTextDateWriter.AddDateTime format
+          if V^.VInt64 = 0 then
+            result := NULL_STR_VAR
+          else
+          begin
+            if Escape = twJsonEscape then
+              quote := '"'
+            else
+              quote := #0;
+            DateTimeToIso8601Var(V^.VDate, {exp=}true, {ms=}false, 'T', quote,
+              result, {AlwaysDateAndTime=}false);
+          end;
+      else // no escape for simple values
+        VariantToUtf8(PVariant(V)^, result, dummy);
+      end;
   end
   else
     cv.ToJson(V, result);

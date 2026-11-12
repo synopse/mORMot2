@@ -807,6 +807,56 @@ begin
   CheckEqual(i64, 12);
   Check(AnyVariantToDouble(v, d));
   Check(d = 12.0, '12');
+  // VariantSaveJson: Boolean and TDateTime regression (#766)
+  v := true;
+  CheckEqual(vd.VType, varBoolean);
+  CheckEqual(VariantSaveJson(v), 'true');
+  CheckEqual(VariantSaveJson(v, twNone), 'true');
+  v := false;
+  CheckEqual(vd.VType, varBoolean);
+  CheckEqual(VariantSaveJson(v), 'false');
+  CheckEqual(VariantSaveJson(v, twNone), 'false');
+  // Date and time
+  dt := EncodeDate(2030, 1, 1) + EncodeTime(8, 30, 45, 0);
+  v := VarAsType(dt, varDate);
+  CheckEqual(vd.VType, varDate);
+  CheckEqual(VariantSaveJson(v), '"2030-01-01T08:30:45"');
+  CheckEqual(VariantSaveJson(v, twNone), '2030-01-01T08:30:45');
+  // Date only
+  v := VarAsType(EncodeDate(2030, 1, 1), varDate);
+  CheckEqual(VariantSaveJson(v), '"2030-01-01"');
+  CheckEqual(VariantSaveJson(v, twNone), '2030-01-01');
+  // Time only
+  v := VarAsType(EncodeTime(8, 30, 45, 0), varDate);
+  CheckEqual(VariantSaveJson(v), '"T08:30:45"');
+  CheckEqual(VariantSaveJson(v, twNone), 'T08:30:45');
+  // Milliseconds are not serialized
+  dt := EncodeDate(2030, 1, 1) + EncodeTime(8, 30, 45, 123);
+  v := VarAsType(dt, varDate);
+  CheckEqual(VariantSaveJson(v), '"2030-01-01T08:30:45"');
+  // Zero TDateTime
+  v := VarAsType(0, varDate);
+  CheckEqual(vd.VType, varDate);
+  CheckEqual(VariantSaveJson(v), 'null');
+  CheckEqual(VariantSaveJson(v, twNone), 'null');
+  // Reusing the same destination RawUtf8
+  s := 'previous value';
+  v := true;
+  VariantSaveJson(v, twJsonEscape, s);
+  CheckEqual(s, 'true');
+  v := false;
+  VariantSaveJson(v, twJsonEscape, s);
+  CheckEqual(s, 'false');
+  v := VarAsType(EncodeDate(2030, 1, 1), varDate);
+  VariantSaveJson(v, twJsonEscape, s);
+  CheckEqual(s, '"2030-01-01"');
+  v := VarAsType(0, varDate);
+  VariantSaveJson(v, twJsonEscape, s);
+  CheckEqual(s, 'null');
+  // Currency serialization remains unchanged
+  v := Currency(1.5);
+  CheckEqual(vd.VType, varCurrency);
+  CheckEqual(VariantSaveJson(v), '1.50');
 end;
 
 type
