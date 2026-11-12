@@ -83,6 +83,7 @@ type
     procedure IntegerCoordinates;
     procedure EncryptionAes256;
     procedure Pdf20File;
+    procedure VersionAfterHeader;
   end;
 
 implementation
@@ -4454,6 +4455,64 @@ begin
   end;
   Check(refused, 'RC4 is not allowed in PDF 2.0');
   {$endif NO_USE_PDFSECURITY}
+end;
+
+// a document streamed from a 1.4 or 1.5 header, a page flushed: then on
+// page 2 either vpEnforcePrintScaling, or GeneratePdf15File set
+function StreamedAfterHeader(Pdf15, PrintScaling: boolean): RawByteString;
+var
+  pdf: TPdfDocument;
+  stream: TMemoryStream;
+begin
+  stream := TMemoryStream.Create;
+  try
+    pdf := TPdfDocument.Create;
+    try
+      pdf.CompressionMethod := cmNone;
+      pdf.GeneratePdf15File := Pdf15;
+      pdf.SaveToStreamDirectBegin(stream);
+      pdf.AddPage;
+      pdf.SaveToStreamDirectPageFlush;
+      pdf.AddPage;
+      if PrintScaling then
+        pdf.Root.ViewerPreference := [vpEnforcePrintScaling]
+      else
+        pdf.GeneratePdf15File := true;
+      pdf.SaveToStreamDirectPageFlush;
+      pdf.SaveToStreamDirectEnd;
+    finally
+      pdf.Free;
+    end;
+    SetString(result, PAnsiChar(stream.Memory), stream.Size);
+  finally
+    stream.Free;
+  end;
+end;
+
+procedure TTestUiPdf.VersionAfterHeader;
+var
+  s: RawByteString;
+begin
+  { vpEnforcePrintScaling set once the header was written raised the format
+    to 1.6: the file ended with a cross-reference stream (PDF 1.5) under a
+    1.4 header; the catalog's /Version says 1.6 now - it is written last,
+    after a page flushed too }
+  s := StreamedAfterHeader(false, true);
+  CheckEqual(copy(s, 1, 8), '%PDF-1.4', 'print scaling: the header written');
+  Check(PosEx('/Enforce', s) > 0, 'print scaling: /Enforce');
+  Check(PosEx('/Version/1.6', s) > 0, 'print scaling: the catalog /Version');
+  Check((PosEx('/XRef', s) = 0) and
+        (PosEx(#10'xref'#10, s) > 0), 'print scaling: an xref table');
+  // a 1.5 header keeps its cross-reference stream
+  s := StreamedAfterHeader(true, true);
+  Check((PosEx('/Version/1.6', s) > 0) and
+        (PosEx('/XRef', s) > 0), 'print scaling: 1.5, an xref stream');
+  // GeneratePdf15File set after the header: the file follows the header
+  s := StreamedAfterHeader(false, false);
+  Check((copy(s, 1, 8) = '%PDF-1.4') and
+        (PosEx('/Version', s) = 0), 'GeneratePdf15File late: no version');
+  Check((PosEx('/XRef', s) = 0) and
+        (PosEx(#10'xref'#10, s) > 0), 'GeneratePdf15File late: an xref table');
 end;
 
 {$else}

@@ -1402,6 +1402,7 @@ type
     fMissingBookmarks: TRawUtf8List;
     fLastOutline: TPdfOutlineEntry; // used by CreateOutline
     fFileFormat: TPdfFileFormat;
+    fHeaderFileFormat: TPdfFileFormat;
     fPdfA: TPdfALevel;
     fPdfAMetadaExtension: RawUtf8;
     fSaveToStreamWriter: TPdfWrite;
@@ -1417,6 +1418,9 @@ type
     function GetGeneratePdf20File: boolean;
     procedure SetGeneratePdf20File(Value: boolean);
     procedure PreparePdf20;
+    // a feature needs at least Value: raises the file format, or the
+    // catalog's /Version once a lower header was written
+    procedure NeedFileFormat(Value: TPdfFileFormat);
     function GetInfo: TPdfInfo;
       {$ifdef HASINLINE}inline;{$endif}
     function GetOutlineRoot: TPdfOutlineRoot;
@@ -7754,6 +7758,7 @@ begin
   end;
   // write beginning of the content
   fSaveToStreamWriter := TPdfWrite.Create(self, AStream);
+  fHeaderFileFormat := fFileFormat; // the format may still be raised
   fSaveToStreamWriter.Add('%PDF-').Add(PDF_HEADER[fFileformat]).Add(#10);
   if fFileFormat > pdf13 then
     fSaveToStreamWriter.Add(@PDFA_MARKER, SizeOf(PDFA_MARKER));
@@ -7795,8 +7800,9 @@ begin
       with TPdfFontTrueType(fFontList.List[i]) do
         if fTrueTypeFontsIndex <> 0 then
           PrepareForSaving;
-    // write pending objects
-    if fFileFormat >= pdf15 then
+    // write pending objects - the cross-reference as the header allows:
+    // the format may have been raised after it
+    if fHeaderFileFormat >= pdf15 then
       fTrailer.ToCrossReference(self);
     for i := 1 to fXRef.ItemCount - 1 do
       with fXRef.Items[i] do
@@ -7810,7 +7816,7 @@ begin
     if Assigned(fTrailer.fCrossReference) and
       (fTrailer.fCrossReference.ObjectNumber > 0) then
       fXRef.Items[fTrailer.fCrossReference.ObjectNumber].fByteOffset := fTrailer.XrefAddress;
-    if fFileFormat < pdf15 then
+    if fHeaderFileFormat < pdf15 then
       fXRef.WriteTo(fSaveToStreamWriter);
     fTrailer.Attributes.PdfNumberByName('Size').Value := fXRef.ItemCount;
     fTrailer.WriteTo(fSaveToStreamWriter);
@@ -8425,6 +8431,23 @@ begin
     fFileFormat := pdf20
   else if fFileFormat = pdf20 then
     fFileFormat := pdf17;
+end;
+
+procedure TPdfDocument.NeedFileFormat(Value: TPdfFileFormat);
+var
+  v: TPdfObject;
+begin
+  if fFileFormat < Value then
+    fFileFormat := Value;
+  if (fSaveToStreamWriter = nil) or
+     (fHeaderFileFormat >= Value) then
+    exit;
+  // the header is written (SaveToStreamDirectBegin): the catalog, written
+  // last, overrides its version (ISO 32000-1 7.5.2)
+  v := fRoot.Data.ValueByName('Version');
+  if not (v is TPdfName) or
+     (TPdfName(v).Value < PDF_HEADER[Value]) then // never lower it
+    fRoot.Data.AddItem('Version', PDF_HEADER[Value]);
 end;
 
 procedure TPdfDocument.PreparePdf20;
@@ -10149,9 +10172,8 @@ begin
     if vpEnforcePrintScaling in Value then
     begin
       d.AddItem('Enforce', TPdfArray.CreateNames(Data.ObjectMgr, ['PrintScaling']));
-      if (fOwner <> nil) and
-         (fOwner.fFileFormat < pdf16) then
-        fOwner.fFileFormat := pdf16;
+      if fOwner <> nil then
+        fOwner.NeedFileFormat(pdf16);
     end
     else
       d.RemoveItem('Enforce');
