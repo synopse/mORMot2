@@ -1785,6 +1785,8 @@ type
     property PdfAMetadaExtension: RawUtf8
       read fPdfAMetadaExtension write fPdfAMetadaExtension;
     /// set to true to force PDF 1.5 format, which may produce smaller files
+    // - set after SaveToStreamDirectBegin, it no longer changes the file's
+    // cross-reference format, which follows the header written
     property GeneratePdf15File: boolean
       read GetGeneratePdf15File write SetGeneratePdf15File;
     /// set to true to generate a PDF 2.0 (ISO 32000-2) file

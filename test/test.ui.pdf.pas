@@ -4493,12 +4493,9 @@ procedure TTestUiPdf.VersionAfterHeader;
 var
   s: RawByteString;
 begin
-  { vpEnforcePrintScaling set once the header was written raised the format
-    to 1.6: the file ended with a cross-reference stream (PDF 1.5) under a
-    1.4 header; the catalog's /Version says 1.6 now - it is written last,
-    after a page flushed too }
+  // a format raised after the header: the catalog's /Version, written last
   s := StreamedAfterHeader(false, true);
-  CheckEqual(copy(s, 1, 8), '%PDF-1.4', 'print scaling: the header written');
+  Check(copy(s, 1, 8) = '%PDF-1.4', 'print scaling: the header written');
   Check(PosEx('/Enforce', s) > 0, 'print scaling: /Enforce');
   Check(PosEx('/Version/1.6', s) > 0, 'print scaling: the catalog /Version');
   Check((PosEx('/XRef', s) = 0) and
