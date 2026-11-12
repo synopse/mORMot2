@@ -4099,7 +4099,7 @@ begin
   begin
     // may need to be root to follow /fn/[pid]/exe
     AppendShort('/exe'#0, fn);
-    l := fpReadLink(@fn, @tmp, SizeOf(tmp)); // a single syscall is enough
+    l := fpReadLink(@fn[1], @tmp, SizeOf(tmp)); // a single syscall is enough
     if l > 0 then
     begin
       FastSetString(result, pointer(@tmp), l);
