@@ -8007,7 +8007,7 @@ begin
     // on thread contention, will use a transient temporary instance
     result := TInterfaceMethodExecuteCached.Create(
       fFactory, fMethod, ExecuteOptions);
-  fWR.CustomOptions := WROptions;
+  result.fWR.CustomOptions := WROptions;
 end;
 
 procedure TInterfaceMethodExecuteCached.Release(exec: TInterfaceMethodExecuteCached);
