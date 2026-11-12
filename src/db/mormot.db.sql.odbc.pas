@@ -1150,9 +1150,12 @@ retry:            VData := CurrentAnsiConvert.Utf8ToAnsi(VData);
               else
                 ParameterValue := pointer(VData);
               BufferSize := length(VData);
-              if (CValueType = SQL_C_CHAR) or
-                 (CValueType = SQL_C_WCHAR) then // SQL_C_WCHAR is in bytes
-                inc(BufferSize, 4); // ftUtf8 VData always includes 4 ending #0
+              case CValueType of // ftUtf8 VData always includes 4 ending #0
+                SQL_C_CHAR:
+                  inc(BufferSize);
+                SQL_C_WCHAR: // SQL_C_WCHAR is in bytes
+                  inc(BufferSize, 2);
+              end;
             end
             else
               BufferSize := SizeOf(Int64);
