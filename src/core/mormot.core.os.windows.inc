@@ -5135,7 +5135,7 @@ begin
 end;
 
 // append an argument to a command line, quoted as CommandLineToArgvW() expects
-procedure AppendArg(var line: TFileName; const arg: TFileName);
+procedure AppendArg(var line: TRunArg; const arg: TRunArg);
 var
   i, bs: PtrInt;
   c: char;
@@ -5216,8 +5216,8 @@ begin
   else
     for i := 0 to high(args) do
       AppendArg(line, args[i]);
-  wcmd := SynUnicode(line);
-  UniqueString(wcmd); // CreateProcessW() modifies wcmd buffer in-place
+  wcmd := SynUnicode(line);    // inc(refcnt) on Delphi where SynUnicode=TRunArg
+  UniqueString(wcmd);          // CreateProcessW() modifies wcmd buffer in-place
   wpath := SynUnicode(wrkdir); // '' = inherit the current folder, as on POSIX
   if env <> '' then
   begin
@@ -5350,9 +5350,9 @@ begin
   end;
   // put the process in its own job, to terminate it with its children
   if roWinJobCloseChildren in options then
-    // no silent breakaway: the children should stay in the job
+    
     fJob := CreateJobToClose(pi.dwProcessId, 'ExternalProcess',
-      {allowSilentBreakaway=}false)
+      {allowSilentBreakaway=}false) // false: children should stay in the job
   else
     fJob := CreateJobObjectA(nil, nil);
   if (fJob <> 0) and

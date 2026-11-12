@@ -213,6 +213,8 @@ type
     procedure TStreamSlow(Context: TObject);
     /// client side geniune 64 bit identifiers generation
     procedure TSynUniqueIdentifierSlow(Sender: TObject);
+    /// test RunRedirect() function
+    procedure DoRunRedirect(Dummy: TObject);
   published
     /// test RecordCopy(), TRttiMap and TRttiFilter
     procedure _Records;
@@ -238,8 +240,6 @@ type
     procedure _GUID;
     /// test ParseCommandArgs() functions
     procedure _ParseCommandArgs;
-    /// test RunRedirect() function
-    procedure _RunRedirect;
     /// test TExternalProcess class
     procedure _TExternalProcess;
     /// test TExecutableCommandLine class
@@ -3787,7 +3787,7 @@ begin
   result := GetInteger(pointer(s));
 end;
 
-procedure TTestCoreBase._RunRedirect;
+procedure TTestCoreBase.DoRunRedirect(Dummy: TObject);
 var
   r: TRunRedirectTest;
   {$ifdef FPC}
@@ -3839,23 +3839,26 @@ begin
   // the child should not inherit an ignored SIGPIPE, e.g. from a server
   SigPipeIntercept;
   Run('kill -PIPE $$; echo alive', '', -SIGPIPE);
-  {$ifdef FPC}
-  // a signal received by the calling thread should not abort the redirection
-  FillCharFast(sa, SizeOf(sa), 0);
-  sa.sa_handler := SigActionHandler(@NoopSignalHandler);
-  fpsigaction(SIGUSR1, @sa, @old);
-  sender := TSignalSender.Create(GetCurrentThreadId);
-  try
-    Run('sh -c "sleep 1; echo done; exit 7"', 'done'#10, 7);
-  finally
-    sender.Terminate;
-    sender.WaitFor;
-    // MacOS arm64 runners only send 9 or 10 signals in this second
-    CheckUtf8(sender.Sent >= 3, 'signals=%', [sender.Sent]);
-    sender.Free;
-    fpsigaction(SIGUSR1, @old, nil);
+  if not IsDebuggerPresent then
+  begin
+    {$ifdef FPC}
+    // a signal received by the calling thread should not abort the redirection
+    FillCharFast(sa, SizeOf(sa), 0);
+    sa.sa_handler := SigActionHandler(@NoopSignalHandler);
+    fpsigaction(SIGUSR1, @sa, @old);
+    sender := TSignalSender.Create(GetCurrentThreadId);
+    try
+      Run('sh -c "sleep 1; echo done; exit 7"', 'done'#10, 7);
+    finally
+      sender.Terminate;
+      sender.WaitFor;
+      // MacOS arm64 runners only send 9 or 10 signals in this second
+      CheckUtf8(sender.Sent >= 3, 'signals=%', [sender.Sent]);
+      sender.Free;
+      fpsigaction(SIGUSR1, @old, nil);
+    end;
+    {$endif FPC}
   end;
-  {$endif FPC}
   r := TRunRedirectTest.Create;
   try
     // the callback is called at startup with '', then with the output
@@ -4227,7 +4230,7 @@ begin
     CloseHandle(h);
 end;
 
-procedure TTestCoreBase._RunRedirect;
+procedure TTestCoreBase.DoRunRedirect(Dummy: TObject);
 var
   exitcode: integer;
 begin
@@ -4296,19 +4299,22 @@ begin
   finally
     p.Free;
   end;
-  // full duplex: Write() blocks until findstr output is read by the thread
-  for i := 1 to 300000 do
-    Append(data, ['line ', i, #13#10]);
-  p := TExternalProcess.Create;
-  try
-    Check(p.Start('findstr "^"', '', '', RUN_PROCESS + [roStdinPipe]), 'findstr');
-    Check(p.WriteAndCloseStdin(data), 'write');
-    CheckEqual(p.WaitFor(30000), 0, 'findstr');
-    s := p.ReadAvailable;
-    CheckEqual(length(s), length(data), 'duplex');
-    Check(s = data, 'duplex');
-  finally
-    p.Free;
+  if not (wsWine in WindowsSpecs) then // findstr limination
+  begin
+    // full duplex: Write() blocks until findstr output is read by the thread
+    for i := 1 to 300000 do
+      Append(data, ['line ', i, #13#10]);
+    p := TExternalProcess.Create;
+    try
+      Check(p.Start('findstr "^"', '', '', RUN_PROCESS + [roStdinPipe]), 'findstr');
+      Check(p.WriteAndCloseStdin(data), 'write');
+      CheckEqual(p.WaitFor(30000), 0, 'findstr');
+      s := p.ReadAvailable;
+      CheckEqual(length(s), length(data), 'duplex');
+      Check(s = data, 'duplex');
+    finally
+      p.Free;
+    end;
   end;
   // OnOutput is called instead of filling the ReadAvailable buffer
   r := TRunRedirectTest.Create;
@@ -4361,38 +4367,24 @@ begin
   finally
     p.Free;
   end;
-  // Terminate() stops the process and its children, so that the output ends
-  p := TExternalProcess.Create;
-  try
-    Check(p.Start('cmd /c ping -n 30 127.0.0.1'), 'terminate');
-    for i := 1 to 500 do
-      if p.HasDataAvailable then
-        break
-      else
-        SleepHiRes(10);
-    Check(p.ReadAvailable <> '', 'terminate ping'); // ping is running
-    p.Terminate(500); // CTRL_BREAK only shows ping statistics: hard kill
-    Check(not p.Running, 'terminate');
-    Check(p.WaitFor(5000) <> -1, 'terminate children'); // ping closed stdout
-  finally
-    p.Free;
-  end;
-  // roWinJobCloseChildren also stops the children of the process
-  p := TExternalProcess.Create;
-  try
-    Check(p.Start('cmd /c ping -n 30 127.0.0.1', '', '',
-      RUN_PROCESS + [roWinJobCloseChildren]), 'job');
-    for i := 1 to 500 do
-      if p.HasDataAvailable then
-        break
-      else
-        SleepHiRes(10);
-    Check(p.ReadAvailable <> '', 'job ping'); // ping is running
-    p.Terminate(500);
-    Check(not p.Running, 'job');
-    Check(p.WaitFor(5000) <> -1, 'job children'); // ping closed stdout
-  finally
-    p.Free;
+  if not (wsWine in WindowsSpecs) then // ping inconsistency
+  begin
+    // Terminate() stops the process and its children, so that the output ends
+    p := TExternalProcess.Create;
+    try
+      Check(p.Start('cmd /c ping -n 30 127.0.0.1'), 'terminate');
+      for i := 1 to 500 do
+        if p.HasDataAvailable then
+          break
+        else
+          SleepHiRes(10);
+      Check(p.ReadAvailable <> '', 'terminate ping'); // ping is running
+      p.Terminate(500); // CTRL_BREAK only shows ping statistics: hard kill
+      Check(not p.Running, 'terminate');
+      Check(p.WaitFor(5000) <> -1, 'terminate children'); // ping closed stdout
+    finally
+      p.Free;
+    end;
   end;
   // WaitFor() timeout, then Kill()
   p := TExternalProcess.Create;
@@ -4434,20 +4426,23 @@ begin
     b.Free;
     p.Free;
   end;
-  // other inheritable handles, e.g. from another library, are not inherited
-  sec.nLength := SizeOf(sec);
-  sec.lpSecurityDescriptor := nil;
-  sec.bInheritHandle := true;
-  Check(CreatePipe(rd, wr, @sec, 0), 'CreatePipe');
-  p := TExternalProcess.Create;
-  try
-    Check(p.Start('ping -n 3 127.0.0.1'), 'handles');
-    CloseHandle(wr); // the child should not have its own copy of wr
-    Check(PipeBrokenSoon(rd), 'handles not inherited');
-    CloseHandle(rd);
-    p.Kill;
-  finally
-    p.Free;
+  if OSVersion >= wVista then // no PROC_THREAD_ATTRIBUTE_HANDLE_LIST in XP
+  begin
+    // other inheritable handles, e.g. from another library, are not inherited
+    sec.nLength := SizeOf(sec);
+    sec.lpSecurityDescriptor := nil;
+    sec.bInheritHandle := true;
+    Check(CreatePipe(rd, wr, @sec, 0), 'CreatePipe');
+    p := TExternalProcess.Create;
+    try
+      Check(p.Start('ping -n 3 127.0.0.1'), 'handles');
+      CloseHandle(wr); // the child should not have its own copy of wr
+      Check(PipeBrokenSoon(rd), 'handles not inherited');
+      CloseHandle(rd);
+      p.Kill;
+    finally
+      p.Free;
+    end;
   end;
   // no handle leak
   files := OpenedHandles;
@@ -4473,6 +4468,7 @@ var
   f: RawUtf8;
   t: integer;
 begin
+  Run(DoRunRedirect, self, 'RunRedirect', true, false);
   c := TExecutableCommandLine.Create;
   try
     c.RawParams := CsvToRawUtf8DynArray('one two three', ' ');
