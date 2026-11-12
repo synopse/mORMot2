@@ -2448,7 +2448,7 @@ var
         exit
       else
         inc(L);
-    Iso8601ToDateTimePUtf8CharVar(P + 1, L, varvalue.VDate);
+    Iso8601ToDateTimePUtf8CharVar(P + 1, L - 1, varvalue.VDate);
     if varvalue.VDate <> 0 then
       Return(betDateTime, P + L + 1, GotoEndOfObject);
   end;
