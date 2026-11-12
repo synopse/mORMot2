@@ -250,7 +250,7 @@ function DateTimeToIso8601(D: TDateTime; Expanded: boolean; FirstChar: AnsiChar 
 
 /// raw basic Date/Time conversion into ISO-8601 RawUtf8
 procedure DateTimeToIso8601Var(D: TDateTime; Expanded, WithMS: boolean;
-  FirstChar, QuotedChar: AnsiChar; var Result: RawUtf8);
+  FirstChar, QuotedChar: AnsiChar; var Result: RawUtf8; AlwaysDateAndTime: boolean = true);
 
 /// raw basic Date/Time conversion into ISO-8601 ShortString
 function DateTimeToIso8601Short(D: TDateTime; Expanded: boolean = true;
@@ -266,7 +266,7 @@ function DateTimeToIso8601Short(D: TDateTime; Expanded: boolean = true;
 // - returns the number of chars written to P^ buffer
 function DateTimeToIso8601(P: PUtf8Char; D: TDateTime; Expanded: boolean;
   FirstChar: AnsiChar = 'T'; WithMS: boolean = false;
-  QuotedChar: AnsiChar = #0): PtrInt; overload;
+  QuotedChar: AnsiChar = #0; AlwaysDateAndTime: boolean = true): PtrInt; overload;
 
 /// basic Date conversion into ISO-8601
 // - use 'YYYYMMDD' format if not Expanded
@@ -2226,7 +2226,8 @@ begin
 end;
 
 function DateTimeToIso8601(P: PUtf8Char; D: TDateTime; Expanded: boolean;
-  FirstChar: AnsiChar; WithMS: boolean; QuotedChar: AnsiChar): PtrInt;
+  FirstChar: AnsiChar; WithMS: boolean; QuotedChar: AnsiChar;
+  AlwaysDateAndTime: boolean): PtrInt;
 var
   beg: PUtf8Char;
 begin
@@ -2236,8 +2237,12 @@ begin
     P^ := QuotedChar;
     inc(P);
   end;
-  P := DateToIso8601PChar(D, P, Expanded);
-  P := TimeToIso8601PChar(D, P, Expanded, FirstChar, WithMS);
+  if AlwaysDateAndTime or // see TTextDateWriter.AddDateTime()
+     (trunc(D) <> 0) then
+    P := DateToIso8601PChar(D, P, Expanded);
+  if AlwaysDateAndTime or
+     (frac(D) <> 0) then
+    P := TimeToIso8601PChar(D, P, Expanded, FirstChar, WithMS);
   if QuotedChar <> #0 then
   begin
     P^ := QuotedChar;
@@ -2253,13 +2258,13 @@ begin
 end;
 
 procedure DateTimeToIso8601Var(D: TDateTime; Expanded, WithMS: boolean;
-  FirstChar, QuotedChar: AnsiChar; var Result: RawUtf8);
+  FirstChar, QuotedChar: AnsiChar; var Result: RawUtf8; AlwaysDateAndTime: boolean);
 var
   tmp: TTemp32;
 begin
   // D=0 is handled in DateTimeToIso8601Text()
   FastSetString(result, @tmp,
-    DateTimeToIso8601(@tmp, D, Expanded, FirstChar, WithMS, QuotedChar));
+    DateTimeToIso8601(@tmp, D, Expanded, FirstChar, WithMS, QuotedChar, AlwaysDateAndTime));
 end;
 
 function DateTimeToIso8601Short(D: TDateTime; Expanded, WithMS: boolean;
