@@ -5394,15 +5394,12 @@ begin
     else
       W.AddShort4(NULL_LOW);
     exit;
-  end
-  else
-    W.Add('"');
+  end;
   bak := W.CustomOptions;
   if woDateTimeWithZSuffix in Options then
     include(W.fCustomOptions, twoDateTimeWithZ);
-  W.AddDateTime(Value, 'T', #0, WithMS);
+  W.AddDateTime(Value, 'T', '"', WithMS);
   W.CustomOptions := bak;
-  W.AddDirect('"');
 end;
 
 procedure TJsonSaveContext.AddShortBoolean(PS: PShortString; Value: boolean);
