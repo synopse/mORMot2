@@ -3973,6 +3973,7 @@ var
   h: THandle;
 begin
   result := 0;
+  dest[0] := #0; // callers expect a #0 terminated buffer, even on error
   repeat
     h := FpOpen(fn, O_RDONLY); // direct PAnsiChar syscall with no fpFlock()
   until (PtrInt(h) >= 0) or (fpgeterrno <> ESysEINTR); // as FileOpen()
