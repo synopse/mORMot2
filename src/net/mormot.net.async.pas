@@ -6312,8 +6312,9 @@ begin
   finally
     // stop writing before notifying progressive readers of a failure
     if back.writestream <> back.filestream then
-      FreeAndNil(back.writestream);
-    FreeAndNil(back.filestream);
+      back.writestream.Free // TStreamRedirect.Destroy releases filestream
+    else
+      back.filestream.Free;
     back.Free;
     fOwner.fLog.Add.Log(sllInfo, 'BackgroundGet=%: % [%] size=% expected=%',
       [status, fn, msg, actual, expected], self);
