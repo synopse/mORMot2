@@ -6593,7 +6593,7 @@ type
     procedure DoClose;
     procedure DoWakeUp;
     // cross-platform methods
-    procedure StartThread;
+    function StartThread: boolean;
     procedure DoOutput(p: pointer; len: PtrInt; iserror: boolean);
     function WaitExit(endtix: Int64): boolean;
     function Redirect(waitfordelayms: cardinal; setresult: boolean;
@@ -6614,7 +6614,8 @@ type
     // the executable in the PATH of the current process
     // - env is encoded as 'n1=v1'#0'n2=v2'#0#0 pairs, possibly with
     // roEnvAddExisting to complete the current environment
-    // - returns false if the process could not be executed
+    // - returns false if the process could not be executed, or if its
+    // background thread could not be created - the process is then killed
     function Start(const cmd: TRunArg; const env: TRunArg = '';
       const wrkdir: TFileName = ''; options: TRunOptions = RUN_PROCESS): boolean; overload;
     /// start the execution of an executable with some explicit arguments
@@ -6644,7 +6645,15 @@ type
     function HasDataAvailable: boolean;
     /// try a graceful termination of the process, then a hard kill
     // - on POSIX, send SIGTERM then SIGKILL to the whole process group
+    // - on Windows, send CTRL_BREAK if the process shares the console of the
+    // caller - i.e. roWinNoProcessDetach without roWinNewConsole, from a
+    // console application - and WM_QUIT, then terminate it: a console
+    // process started from a GUI application has therefore no graceful
+    // termination, and is killed after waitms - rather write to its stdin
+    // if it expects a quit command, e.g. 'q' for ffmpeg
     // - returns true if the process ended within waitms
+    // - at return, the last output of the process may not have been read
+    // yet: call WaitFor() to wait for the end of the output
     function Terminate(waitms: cardinal = 5000): boolean;
     /// unconditionally and immediately kill the process
     procedure Kill;
@@ -13843,23 +13852,33 @@ begin
   inherited Destroy;
 end;
 
-procedure TExternalProcess.StartThread;
+function TExternalProcess.StartThread: boolean;
 begin
+  result := true;
   fKeepOutput := not Assigned(fOnOutput);
   fKeepError := not Assigned(fOnError);
   if fOutputEof then
     exit; // nothing to read
   fThreaded := true;
-  TExternalProcessThread.Create(self); // with FreeOnTerminate = true
+  try
+    TExternalProcessThread.Create(self); // with FreeOnTerminate = true
+  except
+    // the thread could not be created, e.g. out of resources: nothing would
+    // read the output of this process, and Destroy would wait for ever
+    Terminate(0);       // hard kill - fThreaded: WaitExit() only reaps
+    fThreaded := false; // Destroy has no thread to wait for
+    DoClose;
+    fState := epsFailed;
+    result := false;
+  end;
 end;
 
 function TExternalProcess.Start(const cmd: TRunArg; const env: TRunArg;
   const wrkdir: TFileName; options: TRunOptions): boolean;
 begin
   result := (fState = epsNotStarted) and
-            DoStart(cmd, [], env, wrkdir, options, {withthread=}true);
-  if result then
-    StartThread;
+            DoStart(cmd, [], env, wrkdir, options, {withthread=}true) and
+            StartThread;
 end;
 
 function TExternalProcess.Start(const args: array of TRunArg;
@@ -13867,9 +13886,8 @@ function TExternalProcess.Start(const args: array of TRunArg;
 begin
   result := (fState = epsNotStarted) and
             (high(args) >= 0) and
-            DoStart('', args, env, wrkdir, options, {withthread=}true);
-  if result then
-    StartThread;
+            DoStart('', args, env, wrkdir, options, {withthread=}true) and
+            StartThread;
 end;
 
 procedure TExternalProcess.Pump;
