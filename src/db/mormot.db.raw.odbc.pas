@@ -1082,9 +1082,9 @@ var
 begin
   Len := 0;
   Check(nil, nil,
-    GetInfoW(ConnectionHandle, InfoType, @Info, SizeOf(Info) shr 1, @Len),
+    GetInfoW(ConnectionHandle, InfoType, @Info, SizeOf(Info){bytes!}, @Len),
       SQL_HANDLE_DBC, ConnectionHandle);
-  Dest := RawUnicodeToUtf8(Info, Len shr 1);
+  Dest := RawUnicodeToUtf8(Info, Len shr 1{bytes to WideChar});
 end;
 
 procedure TOdbcLib.HandleError(Conn: TSqlDBConnection; Stmt: TSqlDBStatement;
