@@ -293,6 +293,7 @@ function fppipe(var fd: TFilDes): cint;
 function fpdup2(oldfd, newfd: cint): cint;
 function fpfcntl(fd, cmd: cint; arg: cint = 0): cint;
 function fpwaitpid(pid: TPid; status: pcint; options: cint): TPid;
+function fpwaitid(pid: TPid; info: pointer; options: cint): cint;
 function wifexited(status: cint): boolean;
 function wexitstatus(status: cint): cint;
 function fpsigemptyset(var nset: TSigSet): cint;
@@ -843,6 +844,11 @@ end;
 function fpwaitpid(pid: TPid; status: pcint; options: cint): TPid;
 begin
   result := waitpid(pid, PInteger(status), options);
+end;
+
+function fpwaitid(pid: TPid; info: pointer; options: cint): cint;
+begin
+  result := waitid(P_PID, pid, info, options);
 end;
 
 function wifexited(status: cint): boolean;

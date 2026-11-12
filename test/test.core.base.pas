@@ -4100,6 +4100,36 @@ begin
     exit; // never fpkill(0) = our own process group
   fpkill(bg, SIGKILL);
   Check(ProcessEnded(bg), 'background');
+  {$if defined(OSLINUX) or defined(OSDARWIN) or defined(OSFREEBSD)}
+  // roWinJobCloseChildren closes at Destroy a child left by an ended process
+  bg := 0;
+  p := TExternalProcess.Create;
+  try
+    Check(p.Start('sleep 30 >/dev/null 2>&1 & echo $!; exit 3', '', '',
+      RUN_PROCESS + [roWinJobCloseChildren]), 'closechildren');
+    bg := ReadFirstLinePid(p);
+    CheckEqual(p.WaitFor(5000), 3, 'closechildren exitcode');
+    Check(ProcessExists(bg), 'closechildren alive');
+    p.Terminate(100); // as on Windows, does nothing once the process ended
+    Check(ProcessExists(bg), 'closechildren terminate');
+  finally
+    p.Free;
+  end;
+  Check(ProcessEnded(bg), 'closechildren');
+  if ProcessExists(bg) then
+    fpkill(bg, SIGKILL);
+  p := TExternalProcess.Create;
+  try
+    Check(p.Start('kill -9 $$', '', '',
+      RUN_PROCESS + [roWinJobCloseChildren]), 'closechildren9');
+    CheckEqual(p.WaitFor(10000), -SIGKILL, 'closechildren signal');
+    pid := p.Pid;
+    Check(ProcessExists(pid), 'closechildren zombie'); // not reaped yet
+  finally
+    p.Free;
+  end;
+  Check(not ProcessExists(pid), 'closechildren reaped');
+  {$ifend}
   // the pipes of a process are not inherited by another process
   p := TExternalProcess.Create;
   b := TExternalProcess.Create;

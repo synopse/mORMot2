@@ -6557,8 +6557,10 @@ type
   // - on Windows, the command line is given to CreateProcessW() as such - so use
   // e.g. 'cmd /c ...' for a shell built-in - and the process is created in its
   // own process group and job, so that Terminate/Kill also stop its children
-  // - on Windows, roWinJobCloseChildren also kills any child still running
-  // when this instance is released, or when the current process ends
+  // - roWinJobCloseChildren also kills any child still running when this
+  // instance is released - and on Windows, when the current process ends:
+  // on Linux, FreeBSD and MacOS, the ended process is then not reaped
+  // before this instance is released, so that its process group is kept
   // - RunRedirect() is implemented over this class on POSIX, from the calling
   // thread, but still uses RunCommandWin() on Windows
   TExternalProcess = class(TSynPersistent)
@@ -6566,6 +6568,7 @@ type
     fSafe: TLightLock; // protect fState/fExitCode against concurrent reaping
     fState: TExternalProcessState;
     fOutputEof, fTerminated, fAborted, fKilling, fThreaded: boolean;
+    fZombie: boolean; // POSIX: ended but not reaped, to keep its group
     fKeepOutput, fKeepError: boolean; // append to fOutput/fError
     fThreadDone: integer; // set by the background thread when done
     fPid: cardinal;

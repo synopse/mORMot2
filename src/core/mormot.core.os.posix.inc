@@ -5944,12 +5944,93 @@ begin
   result := true;
 end;
 
+{$if defined(OSLINUX) or defined(OSDARWIN) or defined(OSFREEBSD)}
+  {$define HASWAITID} // not validated on other systems
+{$ifend}
+
+{$ifdef HASWAITID}
+
+const
+  // waitid() is not defined by the FPC RTL
+  {$ifdef OSFREEBSD}
+  WAITID_P_PID   = 0;
+  WAITID_WEXITED = $10;
+  WAITID_WNOWAIT = 8;
+  {$else}
+  WAITID_P_PID   = 1;
+  WAITID_WEXITED = 4;
+  WAITID_WNOWAIT = {$ifdef OSDARWIN} $20 {$else} $01000000 {$endif};
+  {$endif OSFREEBSD}
+  // siginfo_t starts with si_signo, si_errno, si_code, then si_pid, si_uid,
+  // si_status as integers - after some padding on Linux 64-bit
+  SIGINFO_CODE   = 2;
+  SIGINFO_STATUS = {$if defined(OSLINUX) and defined(CPU64)} 6 {$else} 5 {$ifend};
+
+{$ifdef FPC}
+{$ifndef FPCLINUX}
+function waitid(idtype, id: cint; info: pointer; options: cint): cint;
+  cdecl external clib name 'waitid';
+{$endif FPCLINUX}
+{$endif FPC}
+
+// get the exit code of an ended child with no reaping: its zombie keeps
+// its pid, so its process group number, from being reused
+// - returns 1 if ended, 0 if still running, -1 on error
+function ChildEndedNoReap(pid: cint; var exitcode: integer): integer;
+var
+  info: array[0..31] of cint; // siginfo_t is up to 128 bytes
+begin
+  FillCharFast(info, SizeOf(info), 0);
+  repeat
+    {$ifdef FPC}
+      {$ifdef FPCLINUX}
+    result := Do_SysCall(syscall_nr_waitid, WAITID_P_PID, pid,
+      TSysParam(@info), WNOHANG or WAITID_WEXITED or WAITID_WNOWAIT, 0);
+      {$else}
+    result := waitid(WAITID_P_PID, pid, @info,
+      WNOHANG or WAITID_WEXITED or WAITID_WNOWAIT);
+      {$endif FPCLINUX}
+    {$else}
+    result := fpwaitid(pid, @info,
+      WNOHANG or WAITID_WEXITED or WAITID_WNOWAIT);
+    {$endif FPC}
+  until (result >= 0) or
+        (fpgeterrno <> ESysEINTR);
+  if result < 0 then
+    exit;
+  case info[SIGINFO_CODE] of // MacOS may also notify a stopped process
+    1: // CLD_EXITED
+      exitcode := info[SIGINFO_STATUS];
+    2, 3: // CLD_KILLED, CLD_DUMPED
+      exitcode := -info[SIGINFO_STATUS]; // as RTL WaitProcess()
+  else
+    exit; // result = 0 = still running
+  end;
+  result := 1;
+end;
+
+{$endif HASWAITID}
+
 function TExternalProcess.DoReap: boolean;
 var
   r, status: cint;
 begin
   fSafe.Lock;
   try
+    {$ifdef HASWAITID}
+    if (fState = epsRunning) and
+       (roWinJobCloseChildren in fOptions) then
+    begin
+      // don't reap yet: DoClose will kill the process group of this zombie
+      r := ChildEndedNoReap(fPid, fExitCode);
+      if r <> 0 then
+      begin
+        fZombie := r > 0;
+        fState := epsExited; // r < 0 e.g. ECHILD if SIGCHLD = SIG_IGN
+      end;
+    end
+    else
+    {$endif HASWAITID}
     if fState = epsRunning then
     begin
       repeat
@@ -6084,6 +6165,15 @@ end;
 
 procedure TExternalProcess.DoClose;
 begin
+  if fZombie then
+  begin
+    // roWinJobCloseChildren: the zombie kept its process group number
+    fZombie := false;
+    fpkill(-cint(fPid), SIGKILL); // kill any child still running
+    repeat
+    until (FpWaitPid(fPid, nil, 0) >= 0) or // eventually reap the process
+          (fpgeterrno <> ESysEINTR);
+  end;
   CloseValid(fStdin);
   CloseValid(fStdout);
   CloseValid(fStderr);
@@ -6112,7 +6202,8 @@ begin
   p := TExternalProcess.Create;
   try
     p.fOnOutput := onoutput;
-    if p.DoStart(cmd, [], env, wrkdir, options - [roStdinPipe, roStderrPipe],
+    if p.DoStart(cmd, [], env, wrkdir,
+         options - [roStdinPipe, roStderrPipe, roWinJobCloseChildren],
          {withthread=}false) then
       result := p.Redirect(waitfordelayms, setresult, exitcode);
   finally
