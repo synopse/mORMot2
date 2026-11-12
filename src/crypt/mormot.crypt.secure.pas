@@ -1382,15 +1382,16 @@ const
 /// compute the RFC 6238 TOTP user code from its base32 (or binary) secret
 // - supports digits in [4..8] and at least 128-bit = 16-byte of binary secret
 function TotpGenerate(const secret: RawUtf8; digits: integer = TOTP_DIGITS;
-  algo: TSignAlgo = saSha1; binary: boolean = false; timestep: Int64 = -1): RawUtf8;
+  algo: TSignAlgo = saSha1; binary: boolean = false; timestep: TUnixTime = -1): RawUtf8;
 
 /// compute a base32-encoded RFC 6238 TOTP secret to share with the client
 // - any len < 16 bytes would be rounded up to 16 (i.e. 128-bit)
 function TotpGenerateSecret(len: PtrInt = 20): RawUtf8;
 
 /// verify a RFC 6238 TOTP user code from its base32 (or binary) secret
-function TotpValidate(const secret, usercode: RawUtf8; window: integer = 1;
-  algo: TSignAlgo = saSha1; timestep: Int64 = -1; binary: boolean = false): boolean;
+function TotpValidate(const secret, usercode: RawUtf8;
+  digits: integer = TOTP_DIGITS; window: integer = 1; algo: TSignAlgo = saSha1;
+  timestep: TUnixTime = -1; timematch: PUnixTime = nil; binary: boolean = false): boolean;
 
 /// encode Google Authenticator otpauth:// URI scheme value
 function TotpUrl(const issuer, account, b32secret: RawUtf8;
@@ -4279,7 +4280,7 @@ const
   TOTP_MOD: array[4..8] of cardinal = (10000, 100000, 1000000, 10000000, 100000000);
 
 function TotpGenerate(const secret: RawUtf8; digits: integer; algo: TSignAlgo;
-  binary: boolean; timestep: Int64): RawUtf8;
+  binary: boolean; timestep: TUnixTime): RawUtf8;
 var
   sec: RawByteString;
   signer: TSynSigner;
@@ -4313,16 +4314,16 @@ begin
   FillZero(bin);
 end;
 
-function TotpValidate(const secret, usercode: RawUtf8; window: integer;
-  algo: TSignAlgo; timestep: Int64; binary: boolean): boolean;
+function TotpValidate(const secret, usercode: RawUtf8; digits, window: integer;
+  algo: TSignAlgo; timestep: TUnixTime; timematch: PUnixTime; binary: boolean): boolean;
 var
   sec: RawByteString;
-  digits, key: cardinal;
+  key: cardinal;
   w: PtrInt;
 begin
   result := false;
-  digits := length(usercode);
   if (cardinal(window) > 100) or
+     (digits <> length(usercode)) or
      not (digits in [low(TOTP_MOD) .. high(TOTP_MOD)]) or
      not ToCardinal(usercode, key) then
     exit; // reject weak usercode ASAP
@@ -4335,12 +4336,18 @@ begin
   if timestep < 0 then
     timestep := UnixTimeUtc div TOTP_PERIOD;
   result := true;
+  if timematch <> nil then
+    timematch^ := timestep;
   if TotpGenerate(sec, digits, algo, {bin=}true, timestep) = userCode then
     exit; // first check current time step (most common)
   for w := -window to +window do
     if (w <> 0) and
        (TotpGenerate(sec, digits, algo, {bin=}true, timestep + w) = userCode) then
+    begin
+      if timematch <> nil then
+        timematch^ := timestep + w;
       exit; // verify previous and next time steps
+    end;
   result := false;
 end;
 

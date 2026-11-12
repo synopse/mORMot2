@@ -1995,6 +1995,7 @@ var
   buf: RawByteString;
   u, pw, nfo, nfo2, exp, db, proof, mech, sec, pin: RawUtf8;
   iv: Int64;
+  t: TUnixTime;
   P: PAnsiChar;
   unalign: PtrInt;
   n, rnd, dig: integer;
@@ -2425,18 +2426,27 @@ begin
       pin := TotpGenerate(sec, dig, s);
       Check(pin <> '', 'TotpGenerate');
       CheckEqual(length(pin), dig);
-      Check(TotpValidate(sec, pin, 1, s), 'TotpValidate with current time');
-      Check(TotpValidate(Base32ToBin(sec), pin, 1, s, -1, true), 'Totp bin');
-      Check(TotpValidate(sec, pin, 0, s, 123) =
+      Check(TotpValidate(sec, pin, dig, 1, s), 'TotpValidate with current time');
+      Check(TotpValidate(Base32ToBin(sec), pin, dig, 1, s, -1, nil, true), 'Totp bin');
+      Check(TotpValidate(sec, pin, dig, 0, s, 123) =
             (TotpGenerate(sec, dig, s, false, 123) = pin),
             'TotpValidate with time=123');
       CheckEqual(TotpGenerate('', 6, s), '', 'no sec');
       CheckEqual(TotpGenerate(sec, 3, s), '', 'dig=3<4');
       CheckEqual(TotpGenerate(sec, 9, s), '', 'dig=9>8');
-      Check(not TotpValidate(sec, '', 1, s));
-      Check(not TotpValidate(sec, '123', 1, s));
-      Check(not TotpValidate(sec, '123456789', 1, s));
+      Check(not TotpValidate(sec, '', dig, 1, s));
+      Check(not TotpValidate(sec, '123', dig, 1, s));
+      Check(not TotpValidate(sec, '123456789', dig, 1, s));
     end;
+  sec := 'GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ';
+  t := 0;
+  Check(TotpValidate(sec, '287082', 6, 0, saSha1, 1, @t));
+  CheckEqual(t, 1);
+  Check(not TotpValidate(sec, '7082', 6, 0, saSha1, 1, @t));
+  Check(TotpValidate(sec, '94287082', 8, 0, saSha1, 1, @t));
+  CheckEqual(t, 1);
+  Check(not TotpValidate(sec, '123456', 6, 0, saSha1, 1, @t));
+  CheckEqual(t, 1);
   CheckEqual(TotpUrl('Google', 'alice@google.com', 'JBSWY3DPEHPK3PXP'),
     'otpauth://totp/Google:alice%40google.com?secret=JBSWY3DPEHPK3PXP&issuer=' +
     'Google&digits=6&period=30');

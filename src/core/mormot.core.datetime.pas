@@ -4567,7 +4567,6 @@ end;
 
 { ******************* TTextDateWriter supporting date/time ISO-8601 serialization }
 
-
 { TTextDateWriter }
 
 procedure TTextDateWriter.AddSpaced(Value: QWord; Width: PtrInt; SepChar: AnsiChar);

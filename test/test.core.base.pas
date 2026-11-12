@@ -9748,10 +9748,10 @@ begin
   CheckReducedTime('20300101T081742', 8, 17, 42, '2030-01-01T08:17:42');
   CheckReducedTime('2030-01-01T08:17Z', 8, 17, 0, '2030-01-01T08:17:00');
   CheckReducedTime('2030-01-01T08:17:42', 8, 17, 42, '2030-01-01T08:17:42');
-  Check(Iso8601ToTimeLog('20300101081742') =
-        Iso8601ToTimeLog('2030-01-01T08:17:42'));
-  Check(DateTimeToIso8601(Iso8601ToDateTime('2030-01-01'), true) =
-        '2030-01-01T00:00:00');
+  CheckEqual(Iso8601ToTimeLog('20300101081742'),
+             Iso8601ToTimeLog('2030-01-01T08:17:42'));
+  CheckEqual(DateTimeToIso8601(Iso8601ToDateTime('2030-01-01'), true),
+             '2030-01-01T00:00:00');
   tmp := '2030-01-01';
   noTime := false;
   b.Value := Iso8601ToTimeLogPUtf8Char(pointer(tmp), length(tmp), @noTime);
@@ -9762,6 +9762,14 @@ begin
   b.Value := Iso8601ToTimeLogPUtf8Char(pointer(tmp), length(tmp), @noTime);
   Check(not noTime);
   Check(b.Hour = 0);
+  // Midnight and over-range values coverage
+  CheckReducedTime('2030-01-01T00', 0, 0, 0, '2030-01-01T00:00:00');
+  CheckReducedTime('2030-01-01T00:00', 0, 0, 0, '2030-01-01T00:00:00');
+  CheckReducedTime('2030-01-01T23:59', 23, 59, 0, '2030-01-01T23:59:00');
+  Check(Iso8601ToDateTime('2030-01-01T24') = 0);
+  Check(Iso8601ToDateTime('2030-01-01T08:60') = 0);
+  Check(Iso8601ToTimeLog('2030-01-01T24') = 0);
+  Check(Iso8601ToTimeLog('2030-01-01T08:60') = 0);
   // Standalone time-only decoders: hh, hhmm, hh:mm, complete and midnight.
   CheckSame(Iso8601ToTime('08'), 8 / 24, 1e-10);
   CheckSame(Iso8601ToTime('T08'), 8 / 24, 1e-10);
