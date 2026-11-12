@@ -6642,7 +6642,15 @@ type
     function HasDataAvailable: boolean;
     /// try a graceful termination of the process, then a hard kill
     // - on POSIX, send SIGTERM then SIGKILL to the whole process group
+    // - on Windows, send CTRL_BREAK if the process shares the console of the
+    // caller - i.e. roWinNoProcessDetach without roWinNewConsole, from a
+    // console application - and WM_QUIT, then terminate it: a console
+    // process started from a GUI application has therefore no graceful
+    // termination, and is killed after waitms - rather write to its stdin
+    // if it expects a quit command, e.g. 'q' for ffmpeg
     // - returns true if the process ended within waitms
+    // - at return, the last output of the process may not have been read
+    // yet: call WaitFor() to wait for the end of the output
     function Terminate(waitms: cardinal = 5000): boolean;
     /// unconditionally and immediately kill the process
     procedure Kill;
