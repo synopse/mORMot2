@@ -431,10 +431,11 @@ begin
       exit; // already prepared -> we will just give the statement name to PQ
     end;
   end;
-  result := fPrepared.Add(aSql);
-  aName := Int64ToHexLower(result);
+  result := fPrepared.Count;
+  aName := Int64ToHexLower(result); // 00,01,...,09,0a,0b,...
   PQ.Check(fPGConn, 'Prepare',
     PQ.Prepare(fPGConn, pointer(aName), pointer(aSql), aParamCount, nil));
+  fPrepared.Add(aSql);
 end;
 
 procedure TSqlDBPostgresConnection.DirectExecSql(const SQL: RawUtf8);
