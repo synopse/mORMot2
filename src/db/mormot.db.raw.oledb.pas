@@ -142,6 +142,7 @@ const
   DBACCESSOR_PARAMETERDATA = $00000004;
   DBACCESSOR_OPTIMIZED     = $00000008;
 
+  DB_E_BADROWHANDLE = HRESULT($80040E04);
   DB_E_CANCELED     = HRESULT($80040E4E);
   DB_E_NOTSUPPORTED = HRESULT($80040E53);
 
@@ -945,12 +946,14 @@ end;
 
 function TIDListRowset.GetData(HROW: HROW; HACCESSOR: HACCESSOR;
   pData: pointer): HResult;
-var
-  currentRec: PIDListRec;
 begin
-  inherited GetData(HROW, HACCESSOR, pData);
-  currentRec := pData;
-  FillRowData(HROW, currentRec);
+  if (HROW = 0) or
+     (HROW > PtrUInt(Length(farr))) then
+  begin
+    result := DB_E_BADROWHANDLE;
+    exit;
+  end;
+  FillRowData(HROW, PIDListRec(pData));
   result := S_OK;
 end;
 
