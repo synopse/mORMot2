@@ -4377,6 +4377,23 @@ begin
   finally
     p.Free;
   end;
+  // roWinJobCloseChildren also stops the children of the process
+  p := TExternalProcess.Create;
+  try
+    Check(p.Start('cmd /c ping -n 30 127.0.0.1', '', '',
+      RUN_PROCESS + [roWinJobCloseChildren]), 'job');
+    for i := 1 to 500 do
+      if p.HasDataAvailable then
+        break
+      else
+        SleepHiRes(10);
+    Check(p.ReadAvailable <> '', 'job ping'); // ping is running
+    p.Terminate(500);
+    Check(not p.Running, 'job');
+    Check(p.WaitFor(5000) <> -1, 'job children'); // ping closed stdout
+  finally
+    p.Free;
+  end;
   // WaitFor() timeout, then Kill()
   p := TExternalProcess.Create;
   try
