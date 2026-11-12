@@ -1037,8 +1037,8 @@ end;
 
 { TOdbcLib }
 
-procedure TOdbcLib.Check(Conn: TSqlDBConnection; Stmt: TSqlDBStatement; Status:
-  SqlReturn; HandleType: SqlSmallint; Handle: SqlHandle;
+procedure TOdbcLib.Check(Conn: TSqlDBConnection; Stmt: TSqlDBStatement;
+  Status: SqlReturn; HandleType: SqlSmallint; Handle: SqlHandle;
   InfoRaiseException: boolean; LogLevelNoRaise: TSynLogLevel);
 begin
   if Status <> SQL_SUCCESS then

@@ -366,6 +366,9 @@ procedure TSqlDBOdbcConnection.Connect;
 var
   Log: ISynLog;
   Len: SqlSmallint;
+  ret: SqlReturn;
+  srv, usr, pwd, db: SynUnicode; // UTF-16 for the *W() API
+  full: TBytes;
 begin
   SynDBLog.EnterLocal(Log, self, 'Connect');
   Disconnect; // force fDbc=nil
@@ -382,26 +385,35 @@ begin
     Check(self, nil,
       AllocHandle(SQL_HANDLE_DBC, fEnv, fDbc),
       SQL_HANDLE_ENV, fEnv);
+    // note: use *W() for conenction to trigger UTF-16 in provider e.g. MariaDB
     with fOdbcProperties do
       if fServerName <> '' then
-        Check(self, nil,
-          ConnectA(fDbc, pointer(fServerName), length(fServerName),
-          pointer(fUserID), length(fUserID), pointer(fPassWord), length(fPassWord)),
-        SQL_HANDLE_DBC, fDbc)
-      else if fDatabaseName = '' then
-        EOdbcException.RaiseU(
-          'Missing ServerName=DataSourceName or DataBaseName=FullConnectString')
+      begin
+        Utf8ToSynUnicode(fServerName, srv);
+        Utf8ToSynUnicode(fUserID, usr);
+        Utf8ToSynUnicode(fPassWord, pwd);
+        ret := ConnectW(fDbc, pointer(srv), length(srv),
+                 pointer(usr), length(usr), pointer(pwd), length(pwd));
+        FillZero(pointer(pwd)^, length(pwd) shl 1);
+        Check(self, nil, ret, SQL_HANDLE_DBC, fDbc);
+      end
       else
       begin
-        FastSetString(fSqlDriverFullString, 1024);
-        fSqlDriverFullString[1] := #0;
+        if fDatabaseName = '' then
+          EOdbcException.RaiseU(
+            'Missing ServerName=DataSourceName or DataBaseName=FullConnectString');
+        SetLength(full, 2048); // 1024 UTF-16 codepoints - filled with 0
+        Utf8ToSynUnicode(fDatabaseName, db);
         Len := 0;
         Check(self, nil,
-          SqlDriverConnectA(fDbc, GetDesktopWindow, pointer(fDatabaseName),
-            length(fDatabaseName), pointer(fSqlDriverFullString), length(fSqlDriverFullString),
-            Len, DRIVERCOMPLETION[fOdbcProperties.fSqlDriverConnectPrompt]),
+          SqlDriverConnectW(fDbc, GetDesktopWindow,
+            pointer(db), length(db), pointer(full), length(full) shr 1, Len,
+            DRIVERCOMPLETION[fOdbcProperties.fSqlDriverConnectPrompt]),
           SQL_HANDLE_DBC, fDbc);
-        SetLength(fSqlDriverFullString, Len);
+        if (Len >= length(full) shr 1) then
+          EOdbcException.RaiseU(
+            'SQLDriverConnectW output connection string truncated');
+        RawUnicodeToUtf8(pointer(full), Len, fSqlDriverFullString);
       end;
     // retrieve information of the just created connection
     GetInfoString(fDbc, SQL_DRIVER_NAME, fDriverName);
