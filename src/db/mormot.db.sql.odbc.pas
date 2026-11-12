@@ -385,7 +385,7 @@ begin
     Check(self, nil,
       AllocHandle(SQL_HANDLE_DBC, fEnv, fDbc),
       SQL_HANDLE_ENV, fEnv);
-    // note: use *W() for conenction to trigger UTF-16 in provider e.g. MariaDB
+    // note: use *W() to connect and trigger UTF-16 in providers e.g. MariaDB
     with fOdbcProperties do
       if fServerName <> '' then
       begin
@@ -394,7 +394,8 @@ begin
         Utf8ToSynUnicode(fPassWord, pwd);
         ret := ConnectW(fDbc, pointer(srv), length(srv),
                  pointer(usr), length(usr), pointer(pwd), length(pwd));
-        FillZero(pointer(pwd)^, length(pwd) shl 1);
+        if pwd <> '' then
+          FillZero(pointer(pwd)^, length(pwd) shl 1); // anti-forensic
         Check(self, nil, ret, SQL_HANDLE_DBC, fDbc);
       end
       else
@@ -402,7 +403,7 @@ begin
         if fDatabaseName = '' then
           EOdbcException.RaiseU(
             'Missing ServerName=DataSourceName or DataBaseName=FullConnectString');
-        SetLength(full, 2048); // 1024 UTF-16 codepoints - filled with 0
+        SetLength(full, 2048); // 1024 UTF-16 WideChar - filled with 0
         Utf8ToSynUnicode(fDatabaseName, db);
         Len := 0;
         Check(self, nil,

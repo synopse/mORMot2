@@ -553,7 +553,8 @@ end;
 
 function TSqlDBPostgresConnection.IsConnected: boolean;
 begin
-  result := (fPGConn <> nil);
+  result := (fPGConn <> nil) and
+            (PQ.Status(fPGConn) = CONNECTION_OK); // very fast API field lookup
 end;
 
 function TSqlDBPostgresConnection.NewStatement: TSqlDBStatement;
