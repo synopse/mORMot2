@@ -191,7 +191,6 @@ function Iso8601CheckAndDecode(P: PUtf8Char; L: PtrInt;
 // - calls internally Iso8601ToTimeLogPUtf8Char() and returns true if contains
 // at least a valid year (YYYY)
 function IsIso8601(P: PUtf8Char; L: PtrInt): boolean;
-  {$ifdef HASINLINE}inline;{$endif}
 
 /// Time conversion from ISO-8601 (with no Date part)
 // - handle 'hhmmss' and 'hh:mm:ss' format
@@ -1769,10 +1768,91 @@ begin
     inc(result, c);
 end;
 
+// internal inlined ISO-8601 time text decoder used by other functions
+type
+  TIsoTime = record
+    H, M, S, MS: cardinal;
+  end;
+
+function _Iso8601DecodeTime(P: PUtf8Char; L: PtrInt; var iso: TIsoTime): boolean;
+  {$ifdef HASINLINE}inline;{$endif}
+var
+  i: PtrInt;
+begin
+  result := false;
+  if P = nil then
+    exit;
+  if L = 0 then
+    while P[L] <> #0 do
+      inc(L);
+  i := 0;
+  if (L > 0) and (P[0] = 'T') then
+    inc(i);
+  if (L - i < 2) or
+     not (P[i] in ['0'..'9']) or
+     not (P[i + 1] in ['0'..'9']) then
+    exit;
+  iso.H := (ord(P[i]) - 48) * 10 + ord(P[i + 1]) - 48;
+  iso.M := 0;
+  iso.S := 0;
+  iso.MS := 0;
+  if iso.H >= 24 then
+    exit;
+  inc(i, 2);
+  if (i = L) or ((i + 1 = L) and (P[i] = 'Z')) then
+  begin
+    result := true;
+    exit;
+  end;
+  if P[i] = ':' then
+    inc(i)
+  else if not (P[i] in ['0'..'9']) then
+    exit;
+  if (L - i < 2) or
+     not (P[i] in ['0'..'9']) or
+     not (P[i + 1] in ['0'..'9']) then
+    exit;
+  iso.M := (ord(P[i]) - 48) * 10 + ord(P[i + 1]) - 48;
+  if iso.M >= 60 then
+    exit;
+  inc(i, 2);
+  if (i = L) or ((i + 1 = L) and (P[i] = 'Z')) then
+  begin
+    result := true;
+    exit;
+  end;
+  if P[i] = ':' then
+    inc(i)
+  else if not (P[i] in ['0'..'9']) then
+    exit;
+  if (L - i < 2) or
+     not (P[i] in ['0'..'9']) or
+     not (P[i + 1] in ['0'..'9']) then
+    exit;
+  iso.S := (ord(P[i]) - 48) * 10 + ord(P[i + 1]) - 48;
+  if iso.S >= 60 then
+    exit;
+  inc(i, 2);
+  if (i < L) and (P[i] = '.') then
+  begin
+    inc(i);
+    if (i = L) or not (P[i] in ['0'..'9']) then
+      exit;
+    iso.MS := Iso8601FractionToMS(@P[i], L - i);
+    while (i < L) and (P[i] in ['0'..'9']) do
+      inc(i);
+  end;
+  // preserve the existing UTC marker and unconverted numeric offset policy
+  result := (i = L) or
+            ((i + 1 = L) and (P[i] = 'Z')) or
+            ((i < L) and (P[i] in ['+', '-']));
+end;
+
 procedure Iso8601ToDateTimePUtf8CharVar(P: PUtf8Char; L: PtrInt;
   var result: TDateTime);
 var
-  b, y, m, d, h, mi, ss, ms: cardinal;
+  b, y, m, d: cardinal;
+  t: TIsoTime;
   time: TDateTime;
   {$ifdef FPC}
   y100: cardinal;
@@ -1784,8 +1864,6 @@ var
   {$else}
   tab: PByteArray; // faster on PIC, ARM and x86_64
   {$endif CPUX86NOTPIC}
-// expect 'YYYYMMDDThhmmss[.sss]' format but handle also
-// 'YYYY-MM-DDThh:mm:ss[.sss]' or plain '[T]hh:mm:ss[.sss]'
 begin
   PInt64(@result)^ := 0;
   if P = nil then
@@ -1793,28 +1871,29 @@ begin
   if L = 0 then
     while P[L] <> #0 do // no need to call external StrLen() for a few chars
       inc(L);
-  if L < 4 then
-    exit; // we need 'YYYY' at least
+  if L < 2 then
+    exit; // at least 'hh' or 'YYYY'
   if (P[0] = '''') and
      (P[L - 1] = '''') then
   begin
     // in-place unquote of input - typical from SQL values
     inc(P);
     dec(L, 2);
-    if L < 4 then
+    if L < 2 then
       exit;
   end;
-  if P[0] = 'T' then // 'Thhmmss[.sss]'
+  if (P[0] = 'T') or (L = 2) or
+     ((L >= 3) and (P[2] = ':')) then
   begin
-    dec(P, 8); // hhmmss at P[9..] position
-    inc(L, 8);
-  end
-  else if P[2] = ':' then // 'hh:mm:ss[.sss]'
-  begin
-    dec(P, 9); // hh:mm:ss at P[9..] position
-    inc(L, 9);
-  end
-  else
+    if not _Iso8601DecodeTime(P, L, t) then
+      exit;
+    result := integer(cardinal(t.H * MilliSecsPerHour) +
+                      cardinal(t.M * MilliSecsPerMin) +
+                      cardinal(t.S * MilliSecsPerSec) + t.MS) * MilliSecsPerDate;
+    exit;
+  end;
+  if L < 4 then
+    exit;
   begin
     {$ifndef CPUX86NOTPIC}
     tab := @ConvertHexToBin;
@@ -1892,36 +1971,19 @@ begin
               cardinal(cardinal(D2 * m + 2) div 5) + d;
     {$endif FPC}
     unaligned(result) := unaligned(result) - D1899; // avoid sign issue
-    if L < 15 then
-      exit; // not enough space to retrieve the time
+    if L <= 8 then
+      exit; // valid date-only (including reduced-precision dates)
+    if (L < 11) or not (P[8] in ['T', ' ']) or
+       not _Iso8601DecodeTime(@P[9], L - 9, t) then
+    begin
+      PInt64(@result)^ := 0; // never silently discard a malformed time
+      exit;
+    end;
   end;
-  h := ord(P[9]) * 10 + ord(P[10]) - (48 + 480);
-  if P[11] = ':' then
-  begin
-    inc(P);
-    dec(L);
-  end; // allow hh:mm:ss
-  mi := ord(P[11]) * 10 + ord(P[12]) - (48 + 480);
-  if P[13] = ':' then
-  begin
-    inc(P);
-    dec(L);
-  end; // allow hh:mm:ss
-  ss := ord(P[13]) * 10 + ord(P[14]) - (48 + 480);
-  if (L > 16) and
-     (P[15] = '.') then
-    // one or more digits representing a decimal fraction of a second
-    ms := Iso8601FractionToMS(@P[16], L - 16)
-  else
-    ms := 0;
-  if (h >= 24) or
-     (mi >= 60) or
-     (ss >= 60) then
-    exit;
   // inlined EncodeTime()
-  time := integer(cardinal(h * MilliSecsPerHour) +
-                  cardinal(mi * MilliSecsPerMin) +
-                  cardinal(ss * MilliSecsPerSec) + ms) * MilliSecsPerDate;
+  time := integer(cardinal(t.H * MilliSecsPerHour) +
+                  cardinal(t.M * MilliSecsPerMin) +
+                  cardinal(t.S * MilliSecsPerSec) + t.MS) * MilliSecsPerDate;
   if result < 0 then
     unaligned(result) := unaligned(result) - time
   else
@@ -1946,10 +2008,10 @@ function Iso8601CheckAndDecode(P: PUtf8Char; L: PtrInt;
 begin
   if P = nil then
     result := false
-  else if (((L = 9) or (L = 13)) and
-            (P[0] = 'T') and (P[3] = ':')) or // 'Thh:mm:ss[.sss]'
+  else if (((L = 9) or (L = 13)) and // quickly validate the allowed masks
+            (P[0] = 'T') and (P[3] = ':')) or
           ((L = 10) and
-           (P[4] = '-') and (P[7] = '-')) or // 'YYYY-MM-DD'
+           (P[4] = '-') and (P[7] = '-')) or
           (((L = 19) or (L = 23)) and
            (P[4] = '-') and (P[10] = 'T')) then
   begin
@@ -1961,8 +2023,13 @@ begin
 end;
 
 function IsIso8601(P: PUtf8Char; L: PtrInt): boolean;
+var
+  t: TIsoTime;
 begin
   result := Iso8601ToTimeLogPUtf8Char(P, L) <> 0;
+  // the TTimeLog encoding of midnight without a date is zero, not an error
+  if not result and (P <> nil) then
+    result := _Iso8601DecodeTime(P, L, t);
 end;
 
 function Iso8601ToTimePUtf8Char(P: PUtf8Char; L: PtrInt): TDateTime;
@@ -1976,60 +2043,26 @@ end;
 procedure Iso8601ToTimePUtf8CharVar(P: PUtf8Char; L: PtrInt;
   var result: TDateTime);
 var
-  H, MI, SS, MS: cardinal;
+  t: TIsoTime;
 begin
-  if Iso8601ToTimePUtf8Char(P, L, H, MI, SS, MS) then
-    unaligned(result) := integer(cardinal(H * MilliSecsPerHour) +
-                         cardinal(MI * MilliSecsPerMin) +
-                         cardinal(SS * MilliSecsPerSec + MS)) * MilliSecsPerDate
+  if _Iso8601DecodeTime(P, L, t) then
+    unaligned(result) := integer(cardinal(t.H * MilliSecsPerHour) +
+                         cardinal(t.M * MilliSecsPerMin) +
+                         cardinal(t.S * MilliSecsPerSec + t.MS)) * MilliSecsPerDate
   else
     PInt64(@result)^ := 0;
 end;
 
 function Iso8601ToTimePUtf8Char(P: PUtf8Char; L: PtrInt;
   var H, M, S, MS: cardinal): boolean;
+var
+  t: TIsoTime;
 begin
-  result := false; // error
-  if P = nil then
-    exit;
-  if L = 0 then
-    while P[L] <> #0 do // no need to call external StrLen() for a few chars
-      inc(L);
-  if L < 6 then
-    exit; // we need 'hhmmss' at least
-  if P[0] = 'T' then
-  begin
-    inc(P); // 'Thhmmss' -> 'hhmmss'
-    dec(L);
-  end;
-  H := ord(P[0]) * 10 + ord(P[1]) - (48 + 480);
-  if P[2] = ':' then
-  begin
-    inc(P);
-    dec(L);
-  end; // allow hh:mm:ss
-  M := ord(P[2]) * 10 + ord(P[3]) - (48 + 480);
-  if P[4] = ':' then
-  begin
-    inc(P);
-    dec(L);
-  end; // allow hh:mm:ss
-  S := ord(P[4]) * 10 + ord(P[5]) - (48 + 480);
-  if (L > 6) and
-     (P[6] = '.') then
-    // one or more digits representing a decimal fraction of a second
-    if (L > 7) and
-       (P[7] in ['0'..'9']) then
-      MS := Iso8601FractionToMS(@P[7], L - 7)
-    else
-      exit
-  else
-    MS := 0;
-  if (H < 24) and
-     (M < 60) and
-     (S < 60) and
-     (MS < MilliSecsPerSec) then
-    result := true;
+  result := _Iso8601DecodeTime(P, L, t);
+  H := t.H;
+  M := t.M;
+  S := t.S;
+  MS := t.MS;
 end;
 
 function Iso8601ToDatePUtf8Char(P: PUtf8Char; L: PtrInt;
@@ -2970,14 +3003,14 @@ end;
 
 function TSynSystemTime.FromTimeBuffer(P: PUtf8Char; L: PtrInt): boolean;
 var
-  h, mi, ss, ms: cardinal;
+  t: TIsoTime;
 begin
-  if Iso8601ToTimePUtf8Char(P, L, h, mi, ss, ms) then
+  if _Iso8601DecodeTime(P, L, t) then
   begin
-    Hour := h;
-    Minute := mi;
-    Second := ss;
-    MilliSecond := ms;
+    Hour := t.H;
+    Minute := t.M;
+    Second := t.S;
+    MilliSecond := t.MS;
     result := true;
   end
   else
@@ -4407,9 +4440,9 @@ end;
 function Iso8601ToTimeLogPUtf8Char(P: PUtf8Char; L: PtrInt;
   ContainsNoTime: PBoolean): TTimeLog;
 // bits: S=0..5 M=6..11 H=12..16 D=17..21 M=22..25 Y=26..40
-// i.e. S<64 M<64 H<32 D<32 M<16 Y<9999: power of 2 -> use fast shl/shr
 var
   v, b: PtrUInt;
+  t: TIsoTime;
   {$ifdef CPUX86NOTPIC}
   tab: TNormTableByte absolute ConvertHexToBin;
   {$else}
@@ -4417,16 +4450,24 @@ var
   {$endif CPUX86NOTPIC}
 begin
   result := 0;
+  if ContainsNoTime <> nil then
+    ContainsNoTime^ := false;
   if P = nil then
     exit;
   if L = 0 then
-    while P[L] <> #0 do // no need to call external StrLen() for a few chars
+    while P[L] <> #0 do
       inc(L);
+  if L = 0 then
+    exit;
+  if (P[0] = 'T') or (L = 2) or
+     ((L >= 3) and (P[2] = ':')) then
+  begin
+    if _Iso8601DecodeTime(P, L, t) then
+      result := (t.H shl 12) + (t.M shl 6) + t.S; // t.MS is ignored
+    exit;
+  end;
   if L < 4 then
-    exit; // we need 'YYYY' at least
-  if P[0] = 'T' then
-    dec(P, 8)
-  else
+    exit;
   begin
     // 'YYYY' -> year decode
     {$ifndef CPUX86NOTPIC}
@@ -4451,7 +4492,7 @@ begin
     else
       v := v * 10 + b;
     result := Int64(v) shl 26;  // store YYYY
-    if P[4] in ['-', '/'] then
+    if (L > 4) and (P[4] in ['-', '/']) then
     begin
       inc(P);
       dec(L);
@@ -4467,7 +4508,7 @@ begin
         result := 0;
         exit;
       end;
-      if P[6] in ['-', '/'] then
+      if (L > 6) and (P[6] in ['-', '/']) then
       begin
         inc(P);
         dec(L);
@@ -4477,9 +4518,8 @@ begin
         // YYYYMMDD
         v := ord(P[6]) * 10 + ord(P[7]) - (48 + 480 + 1); // Day 1..31 -> 0..30
         if (v <= 30) and
-           ((L = 8) or
-            (L = 14) or
-            (P[8] in [#0, ' ', 'T'])) then
+           ((L = 8) or (L = 14) or
+            ((L > 8) and (P[8] in [' ', 'T']))) then
           inc(result, v shl 17)
         else
         begin
@@ -4488,35 +4528,35 @@ begin
         end;
       end;
     end;
-    if L = 14 then
-      dec(P) // no 'T' or ' ' separator for YYYYMMDDhhmmss
-    else if L < 14 then
+    if L <= 8 then
     begin
-      // not enough place to retrieve a time
       if ContainsNoTime <> nil then
         ContainsNoTime^ := true;
       exit;
     end;
+    if (L = 14) and (P[8] in ['0'..'9']) then
+    begin
+      // Legacy compact YYYYMMDDhhmmss (without 'T').
+      if not _Iso8601DecodeTime(@P[8], 6, t) then
+        result := 0
+      else
+        inc(result, (t.H shl 12) + (t.M shl 6) + t.S);
+      exit;
+    end;
+    if L < 11 then
+    begin
+      if ContainsNoTime <> nil then
+        ContainsNoTime^ := true;
+      exit; // preserve the already decoded date
+    end;
+    if not (P[8] in ['T', ' ']) or
+       not _Iso8601DecodeTime(@P[9], L - 9, t) then
+    begin
+      result := 0;
+      exit;
+    end;
+    inc(result, (t.H shl 12) + (t.M shl 6) + t.S);
   end;
-  if ContainsNoTime <> nil then
-    ContainsNoTime^ := false;
-  b := ord(P[9]) * 10 + ord(P[10]) - (48 + 480);
-  if b <= 23 then
-    v := b shl 12
-  else
-    exit;
-  if P[11] = ':' then
-    inc(P); // allow hh:mm:ss
-  b := ord(P[11]) * 10 + ord(P[12]) - (48 + 480);
-  if b <= 59 then
-    inc(v, b shl 6)
-  else
-    exit;
-  if P[13] = ':' then
-    inc(P); // allow hh:mm:ss
-  b := ord(P[13]) * 10 + ord(P[14]) - (48 + 480);
-  if b <= 59 then
-    inc(result, PtrUInt(v + b));
 end;
 
 function Iso8601ToTimeLog(const S: RawByteString): TTimeLog;
