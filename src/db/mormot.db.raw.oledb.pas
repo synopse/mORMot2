@@ -668,16 +668,15 @@ type
 type
   /// our custom IRowSet implementation
   TBaseAggregatingRowset = class(TObject, IUnknown, IRowset)
-  private
-   fcTotalRows: UINT;
-   // Defining as an array because in general there can be as many accessors as necessary
-   // the reading rules from the provider for such scenarios are describe in the Books online
-   fhAccessor: HACCESSORDynArray;
   protected
-   fidxRow: UINT;
-   fUnkInnerSQLNCLIRowset: IUnknown;
-   // Save the handle of the accessor that we create, the indexing is 0 based
-   procedure SetAccessorHandle(idxAccessor: ULONG; hAccessor: HACCESSOR );
+    fcTotalRows: UINT;
+    // Defining as an array because in general there can be as many accessors as necessary
+    // the reading rules from the provider for such scenarios are describe in the Books online
+    fhAccessor: HACCESSORDynArray;
+    fidxRow: UINT;
+    fUnkInnerSQLNCLIRowset: IUnknown;
+    // Save the handle of the accessor that we create, the indexing is 0 based
+    procedure SetAccessorHandle(idxAccessor: ULONG; hAccessor: HACCESSOR );
   public
     constructor Create(cTotalRows: UINT);
     function SetupAccessors(pIAccessorTVP: IAccessor): HRESULT; virtual; abstract;
@@ -723,7 +722,7 @@ type
     function GetData(HROW: HROW; HACCESSOR: HACCESSOR; pData: pointer): HRESULT; override; stdcall;
     function SetupAccessors(pIAccessorIDList: IAccessor): HRESULT; override;
 
-    procedure FillRowData(pCurrentRec:PIDListRec);
+    procedure FillRowData(HROW: HROW; pCurrentRec:PIDListRec);
     procedure FillBindingsAndSetupRowBuffer(pBindingsList: PDBBindingArray);
   end;
 
@@ -906,13 +905,13 @@ begin
   pBindingsList[0].obLength := PAnsiChar(@rec^.IDLen) - pointer(rec);
 end;
 
-procedure TIDListRowset.FillRowData(pCurrentRec: PIDListRec);
+procedure TIDListRowset.FillRowData(HROW: HROW; pCurrentRec: PIDListRec);
 var
   p: pointer;
   tmp: RawUtf8;
-  w: WideString; // BSTR
+  w: WideString; // BSTR local variable allocation
 begin
-  p := pointer(farr[fidxRow - 2]);
+  p := pointer(farr[HROW - 1]);
   if (p <> nil) and
      (PInteger(p)^ = NULL_LOW) then
   begin
@@ -951,7 +950,7 @@ var
 begin
   inherited GetData(HROW, HACCESSOR, pData);
   currentRec := pData;
-  FillRowData(currentRec);
+  FillRowData(HROW, currentRec);
   result := S_OK;
 end;
 
