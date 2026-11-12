@@ -9583,11 +9583,11 @@ procedure TTestCoreBase.Iso8601DateAndTime;
     t := s;
     t[11] := ''''; // as in SynDB VArray[] quoted parameters
     J.From(pointer(t), 10);
-    Check(I.Value and not (1 shl (6 + 6 + 5) - 1) = J.Value);
+    CheckEqual(I.Value and not (1 shl (6 + 6 + 5) - 1), J.Value);
     I.From(s);
     t := I.Text(Expanded);
     if t <> s then // we allow error on time = 00:00:00 -> I.Text = just date
-      Check(I.Value and (1 shl (6 + 6 + 5) - 1) = 0)
+      CheckEqual(I.Value and (1 shl (6 + 6 + 5) - 1), 0)
     else
       Check(true);
     J.From(E);
@@ -9631,12 +9631,32 @@ procedure TTestCoreBase.Iso8601DateAndTime;
     end;
   end;
 
+  procedure CheckReducedTime(const S: RawUtf8;
+    H, M, Sec: cardinal; const Expected: RawUtf8);
+  var
+    d: TDateTime;
+    bits: TTimeLogBits;
+    noTime: boolean;
+  begin
+    d := Iso8601ToDateTime(S);
+    CheckEqual(DateTimeToIso8601(d, true), Expected);
+    bits.Value := Iso8601ToTimeLog(S);
+    CheckEqual(bits.Value, TimeLogFromDateTime(d), S);
+    CheckEqual(bits.Hour, H, S);
+    CheckEqual(bits.Minute, M, S);
+    CheckEqual(bits.Second, Sec, S);
+    noTime := true;
+    bits.Value := Iso8601ToTimeLogPUtf8Char(pointer(S), length(S), @noTime);
+    CheckUtf8(not noTime, S);
+  end;
+
 var
   i: integer;
   D, D2: TDateTime;
   u: Int64; // TUnixTime/TUnixMSTime
   tmp: RawUtf8;
   b: TTimeLogBits;
+  noTime: boolean;
   st, start: TSynSystemTime;
 begin
   Check(TTextDateWriter.InstanceSize <= SizeOf(TLocalWriter) - 256, 'TLocalWriter');
@@ -9719,6 +9739,91 @@ begin
     Check(Abs(D2 - D) < (1 / MilliSecsPerDay)); // we allow 1 ms error
     D := D + rnd.NextDouble * 57; // go further a little bit: change date/time
   end;
+  // Issue #755 - support ISO-8601 reduced time precision in both parsers.
+  CheckReducedTime('2030-01-01T08', 8, 0, 0, '2030-01-01T08:00:00');
+  CheckReducedTime('2030-01-01T08:17', 8, 17, 0, '2030-01-01T08:17:00');
+  CheckReducedTime('2030-01-01 08:17', 8, 17, 0, '2030-01-01T08:17:00');
+  CheckReducedTime('20300101T08', 8, 0, 0, '2030-01-01T08:00:00');
+  CheckReducedTime('20300101T0817', 8, 17, 0, '2030-01-01T08:17:00');
+  CheckReducedTime('20300101T081742', 8, 17, 42, '2030-01-01T08:17:42');
+  CheckReducedTime('2030-01-01T08:17Z', 8, 17, 0, '2030-01-01T08:17:00');
+  CheckReducedTime('2030-01-01T08:17:42', 8, 17, 42, '2030-01-01T08:17:42');
+  Check(Iso8601ToTimeLog('20300101081742') =
+        Iso8601ToTimeLog('2030-01-01T08:17:42'));
+  Check(DateTimeToIso8601(Iso8601ToDateTime('2030-01-01'), true) =
+        '2030-01-01T00:00:00');
+  tmp := '2030-01-01';
+  noTime := false;
+  b.Value := Iso8601ToTimeLogPUtf8Char(pointer(tmp), length(tmp), @noTime);
+  Check(noTime);
+  Check(b.Year = 2030);
+  tmp := '2030-01-01T00';
+  noTime := true;
+  b.Value := Iso8601ToTimeLogPUtf8Char(pointer(tmp), length(tmp), @noTime);
+  Check(not noTime);
+  Check(b.Hour = 0);
+  // Standalone time-only decoders: hh, hhmm, hh:mm, complete and midnight.
+  CheckSame(Iso8601ToTime('08'), 8 / 24, 1e-10);
+  CheckSame(Iso8601ToTime('T08'), 8 / 24, 1e-10);
+  CheckSame(Iso8601ToTime('0800'), 8 / 24, 1e-10);
+  CheckSame(Iso8601ToTime('08:17'),
+    (8 * 60 + 17) / 1440, 1e-10);
+  CheckSame(Iso8601ToTime('T0817'),
+    (8 * 60 + 17) / 1440, 1e-10);
+  CheckSame(Iso8601ToTime('T08:17'),
+    (8 * 60 + 17) / 1440, 1e-10);
+  CheckSame(Iso8601ToDateTime('T08'), 8 / 24, 1e-10);
+  CheckSame(Iso8601ToDateTime('08:17'),
+    (8 * 60 + 17) / 1440, 1e-10);
+  CheckSame(Iso8601ToTime('T00'), 0, 1e-10);
+  Check(IsIso8601('T00', 3));
+  Check(IsIso8601('08', 2));
+  Check(Iso8601ToTimeLog('08') = Iso8601ToTimeLog('T08'));
+  Check(Iso8601ToTimeLog('08:17') = Iso8601ToTimeLog('T08:17'));
+  Check(IsIso8601('2030-01-01T08:17', 16));
+  // Strict JSON/BSON decoder keeps its full-precision format contract.
+  tmp := '2030-01-01T08';
+  Check(not Iso8601CheckAndDecode(pointer(tmp), length(tmp), D));
+  tmp := '2030-01-01T08:17';
+  Check(not Iso8601CheckAndDecode(pointer(tmp), length(tmp), D));
+  tmp := '20300101T0817';
+  Check(not Iso8601CheckAndDecode(pointer(tmp), length(tmp), D));
+  tmp := 'T08';
+  Check(not Iso8601CheckAndDecode(pointer(tmp), length(tmp), D));
+  tmp := 'T00';
+  Check(not Iso8601CheckAndDecode(pointer(tmp), length(tmp), D));
+  tmp := 'T08:17';
+  Check(not Iso8601CheckAndDecode(pointer(tmp), length(tmp), D));
+  // When successful, the strict decoder must also populate Value.
+  tmp := '2030-01-01T08:17:42';
+  D := 0;
+  Check(Iso8601CheckAndDecode(pointer(tmp), length(tmp), D));
+  CheckEqual(DateTimeToIso8601(D, true), tmp);
+  tmp := 'T08:17:42';
+  D := 0;
+  Check(Iso8601CheckAndDecode(pointer(tmp), length(tmp), D));
+  CheckSame(D, (8 * 3600 + 17 * 60 + 42) / SecsPerDay, 1e-10);
+  // Standalone time parser rejects invalid reduced-precision values.
+  Check(Iso8601ToTime('24') = 0);
+  Check(Iso8601ToTime('08:60') = 0);
+  Check(Iso8601ToTime('08:') = 0);
+  Check(Iso8601ToTimeLog('20300101T0817') =
+        Iso8601ToTimeLog('2030-01-01T08:17'));
+  // Explicit length: buffer with no terminator beyond last byte.
+  tmp := '2030-01-01T08:17X';
+  CheckSame(Iso8601ToDateTimePUtf8Char(pointer(tmp), 16),
+    Iso8601ToDateTime('2030-01-01T08:17'), 1e-10);
+  Check(Iso8601ToTimeLogPUtf8Char(pointer(tmp), 16) =
+    Iso8601ToTimeLog('2030-01-01T08:17'));
+  // Truncated date/time must retain the decoded date (SynDB VArray case).
+  tmp := '19060506T204351';
+  u := Iso8601ToTimeLog(tmp);
+  tmp[11] := '''';
+  noTime := false;
+  b.Value := Iso8601ToTimeLogPUtf8Char(pointer(tmp), 10, @noTime);
+  Check(noTime);
+  Check(b.Value = (u and not ((1 shl 17) - 1)));
+  // TTimeLog parsing
   b.Value := Iso8601ToTimeLog('20150504');
   Check(b.Year = 2015);
   Check(b.Month = 5);

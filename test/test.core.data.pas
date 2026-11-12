@@ -506,6 +506,7 @@ end;
 procedure TTestCoreProcess.Variants;
 var
   v: Variant;
+  c: currency;
   u: SynUnicode;
   i64: Int64;
   d: double;
@@ -854,7 +855,8 @@ begin
   VariantSaveJson(v, twJsonEscape, s);
   CheckEqual(s, 'null');
   // Currency serialization remains unchanged
-  v := Currency(1.5);
+  c := 1.5;
+  v := c;
   CheckEqual(vd.VType, varCurrency);
   CheckEqual(VariantSaveJson(v), '1.50');
 end;
@@ -6523,7 +6525,7 @@ begin
   u := VariantSaveMongoJson(o, modMongoStrict);
   CheckEqual(u, FormatUtf8('{"id":{"$oid":"%"},"name":"John","date":{"$date":"%"}}',
     [BSONID, st]));
-  Check(u3 = u);
+  CheckEqual(u3, u);
   _Json(u, o2);
   u := VariantSaveMongoJson(o2, modMongoShell);
   CheckEqual(u, FormatUtf8('{id:ObjectId("%"),name:"John",date:ISODate("%")}',
