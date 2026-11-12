@@ -877,10 +877,9 @@ end;
 
 procedure TIDListRowset.FillBindingsAndSetupRowBuffer(pBindingsList: PDBBindingArray);
 var
-  i: PtrInt;
-  rec: TIDListRec; // pseudo record to compute offset within TIDListRec
+  rec: PIDListRec; // pseudo record to compute offset within TIDListRec
 begin
-  FillcharFast(rec, SizeOf(rec), 0); // makes Win64 compiler happy
+  rec := nil; // make Delphi compiler happy (rec is never accessed by itself)
   pBindingsList[0].pTypeInfo := nil;
   pBindingsList[0].pObject := nil;
   pBindingsList[0].pBindExt := nil;
@@ -893,45 +892,50 @@ begin
     ftInt64:
       begin
         pBindingsList[0].cbMaxLen := SizeOf(int64);
-        pBindingsList[0].obValue := PAnsiChar(@rec.IDVal) - pointer(@rec);
-        pBindingsList[0].wType := DBTYPE_I8;
+        pBindingsList[0].obValue  := PAnsiChar(@rec^.IDVal) - pointer(rec);
+        pBindingsList[0].wType    := DBTYPE_I8;
       end;
     ftUtf8:
       begin
-        pBindingsList[0].cbMaxLen := SizeOf(PWideChar); //Check bind ''
-        for i := 0 to Length(farr) - 1 do
-          if Length(farr[i]) * SizeOf(WideChar) > integer(pBindingsList[0].cbMaxLen) then
-            pBindingsList[0].cbMaxLen := Length(farr[i]) * SizeOf(WideChar);
-        pBindingsList[0].obValue := PAnsiChar(@rec.StrVal) - pointer(@rec);
-        pBindingsList[0].wType := DBTYPE_BSTR
+        pBindingsList[0].cbMaxLen := SizeOf(pointer);
+        pBindingsList[0].obValue  := PAnsiChar(@rec^.StrVal) - pointer(rec);
+        pBindingsList[0].wType    := DBTYPE_BSTR;
       end;
   end;
-  pBindingsList[0].obStatus := PAnsiChar(@rec.IDST) - pointer(@rec);
-  pBindingsList[0].obLength := PAnsiChar(@rec.IDLen) - pointer(@rec);
+  pBindingsList[0].obStatus := PAnsiChar(@rec^.IDST) - pointer(rec);
+  pBindingsList[0].obLength := PAnsiChar(@rec^.IDLen) - pointer(rec);
 end;
 
 procedure TIDListRowset.FillRowData(pCurrentRec: PIDListRec);
 var
-  curInd: integer;
+  p: pointer;
   tmp: RawUtf8;
+  w: WideString; // BSTR
 begin
-  curInd := fidxRow - 2;
-  if IsNullJson(farr[curInd]) then
-    pCurrentRec.IDST := ord(stIsNull)
+  p := pointer(farr[fidxRow - 2]);
+  if (p <> nil) and
+     (PInteger(p)^ = NULL_LOW) then
+  begin
+    pCurrentRec.IDST := ord(stIsNull);
+    pCurrentRec.IDLen := 0;
+    pCurrentRec.StrVal := nil; // should be reset
+  end
   else
   begin
     pCurrentRec.IDST := 0;
     case fType of
       ftInt64:
         begin
-          SetInt64(pointer(farr[curInd]), pCurrentRec.IDVal);
+          SetInt64(p, pCurrentRec.IDVal);
           pCurrentRec.IDLen := SizeOf(Int64);
         end;
       ftUtf8:
         begin
-          tmp := UnQuoteSqlString(farr[curInd]);
-          pCurrentRec.IDLen := (Length(tmp) + 1) * SizeOf(WideChar);
-          pCurrentRec.StrVal := pointer(Utf8ToWideString(tmp));
+          UnQuoteSqlStringVar(p, tmp);
+          Utf8ToWideString(tmp, w);
+          pCurrentRec.IDLen := SizeOf(pointer); // DBTYPE_BSTR
+          pCurrentRec.StrVal := pointer(w);
+          pointer(w) := nil; // binding uses DBMEMOWNER_CLIENTOWNED
         end
     else
       EOleDBException.RaiseUtf8('Unsupported array parameter type %',
