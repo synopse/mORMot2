@@ -3287,7 +3287,9 @@ begin
           end;
     until (n = 0) or
           (mormot.core.os.GetTickCount64 > endtix);
-    ObjArrayClear(fThreads, {continueonexception=}true); // joins the workers
+    for i := 0 to high(fThreads) do
+      fThreads[i].WaitFor; // require explicit WaitFor for each thread
+    ObjArrayClear(fThreads, {continueonexception=}true); // release instances
   end;
   // the accept/client-connect thread can still be rolling back ConnectionNew
   if (GetCurrentThreadId <> ThreadID) and
