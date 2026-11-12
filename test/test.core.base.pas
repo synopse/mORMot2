@@ -3914,6 +3914,13 @@ begin
     CheckEqual(p.ReadAvailable, 'hello'#10, 'output');
     CheckEqual(p.ReadAvailable, '', 'output2');
     Check(not p.Start('true'), 'restart');
+    {$ifdef OSLINUX}
+    // a pid which is gone has no name, even just after a successful call
+    s := EnumProcessName(GetCurrentProcessId); // from /proc/<pid>/exe
+    Check((s <> '') and
+          (s[1] = '/'), 'ownpath');
+    CheckEqual(EnumProcessName(p.Pid), '', 'noname');
+    {$endif OSLINUX}
   finally
     p.Free;
   end;

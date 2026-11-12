@@ -3973,6 +3973,7 @@ var
   h: THandle;
 begin
   result := 0;
+  dest[0] := #0; // callers expect a #0 terminated buffer, even on error
   repeat
     h := FpOpen(fn, O_RDONLY); // direct PAnsiChar syscall with no fpFlock()
   until (PtrInt(h) >= 0) or (fpgeterrno <> ESysEINTR); // as FileOpen()
@@ -4098,7 +4099,7 @@ begin
   begin
     // may need to be root to follow /fn/[pid]/exe
     AppendShort('/exe'#0, fn);
-    l := fpReadLink(@fn, @tmp, SizeOf(tmp)); // a single syscall is enough
+    l := fpReadLink(@fn[1], @tmp, SizeOf(tmp)); // a single syscall is enough
     if l > 0 then
     begin
       FastSetString(result, pointer(@tmp), l);
