@@ -954,13 +954,13 @@ var
 begin
   // prepare file streaming as response
   with304 := not (hpoDisable304 in fSettings.Options);
-  if lastmod = 0 then
+  if fSource <> hpsRemoteUri then
     // from hpsLocalFolder: check local file size+date attributes
     result := ctxt.SetOutFile(filename, with304, '',
       fSettings.CacheControlMaxAgeSec, @size)
   else
   begin
-    // from hpsRemoteUri: we have the resource size+date attributes
+    // from hpsRemoteUri: we have the resource size+date/etag attributes
     result := ctxt.SetOutFile(filename, with304,
       size, lastmod, fSettings.CacheControlMaxAgeSec);
     if (result = HTTP_SUCCESS) or

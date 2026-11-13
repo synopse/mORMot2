@@ -8337,6 +8337,12 @@ begin
     Expect('GET', '/remote/big.bin', HTTP_SUCCESS);
     CheckEqual(crc32cHash(clt.Content), crc32cHash(proxybig), 'remote big again');
     CheckEqual(proxyget, gets + 1, 'remote big cached');
+    // remote URI: the origin ETag is validated when it has no Last-Modified
+    validator := clt.HeaderGetValue('ETAG');
+    CheckEqual(validator, '"big-1"', 'remote big etag');
+    Expect('GET', '/remote/big.bin', HTTP_NOTMODIFIED,
+      'If-None-Match: ' + validator);
+    CheckEqual(proxyget, gets + 1, 'remote big 304 from cache');
     // remote URI: origin errors are returned to the client
     Expect('GET', '/remote/missing', HTTP_NOTFOUND);
     Expect('GET', '/remote/error', HTTP_SERVERERROR);
