@@ -8417,9 +8417,29 @@ begin
     Expect('POST', '/static/hello.txt', HTTP_NOTFOUND, '', 'body');
     Expect('POST', '/remote/small.txt', HTTP_NOTFOUND, '', 'body');
     CheckEqual(proxyevent, 2, 'event not called');
-    // the server can be stopped and started again with the same settings
+    // shutdown while a throttled progressive download is still active
     FreeAndNil(clt);
-    proxy.Stop;
+    proxy.Stop; // complete existing workers before clearing disk cache
+    DirectoryDeleteAll(cacheslow); // force a fresh /slow/big.bin download
+    EnsureDirectoryExists(cacheslow);
+    proxy.Start;
+    gets := proxyget;
+    raw := TCrtSocket.Open('127.0.0.1', '8883', nlTcp, 10000);
+    try
+      raw.SockSend('GET /slow/big.bin HTTP/1.1');
+      raw.SockSend('Host: 127.0.0.1:8883');
+      raw.SockSendCRLF;
+      raw.SockSendFlush;
+      endtix := GetTickCount64 + 5000;
+      while (proxyget = gets) and
+            (GetTickCount64 < endtix) do
+        SleepHiRes(1);
+      CheckEqual(proxyget, gets + 1, 'slow get before stop');
+      proxy.Stop; // must join BackgroundGet before freeing fUrl/fPartials
+    finally
+      raw.Free;
+    end;
+    // restart with the same settings, without leaks or dangling workers
     proxy.Start;
     clt := THttpClientSocket.Open('127.0.0.1', '8883');
     Expect('GET', '/static/hello.txt', HTTP_SUCCESS);

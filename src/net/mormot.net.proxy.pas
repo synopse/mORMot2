@@ -457,6 +457,8 @@ type
     fServer: THttpAsyncServer;
     fGC: TObjectDynArray;
     fPartials: THttpPartials;
+    fBackgroundCount: integer; // detached workers still referencing this proxy
+    procedure BackgroundFinished(Sender: TObject);
     function SetupTls(var tls: TNetTlsContext): boolean; virtual;
     procedure AfterServerStarted; virtual;
     procedure OnIdle(Sender: TObject; NowTix: Int64);
@@ -843,8 +845,14 @@ begin // this method is protected by proxy.fOsSafe.Lock
       background.writestream := stream;
     background.uri := remote.Address;
     Make(['get-', id], head.PurgedHeaders); // already set to OutCustomHeaders
-    TLoggedWorkThread.Create(log, head.PurgedHeaders,
-      background, proxy.BackgroundGet);
+    LockedInc32(@proxy.fOwner.fBackgroundCount);
+    try
+      TLoggedWorkThread.Create(log, head.PurgedHeaders,
+        background, proxy.BackgroundGet, proxy.fOwner.BackgroundFinished);
+    except
+      LockedDec32(@proxy.fOwner.fBackgroundCount);
+      raise;
+    end;
     loginfo := pointer(head.PurgedHeaders);
     result := HTTP_SUCCESS;
   except
@@ -1105,13 +1113,12 @@ destructor THttpProxyServer.Destroy;
 begin
   if fServer <> nil then
     fServer.Shutdown; // set flag ASAP
-  inherited Destroy;
   Stop;
-  FreeAndNil(fPartials);
   if fSettingsOwned in fFlags then
     fSettings.Free;
-  fSettings := nil; // notify background threads and event callbacks
+  fSettings := nil;
   ObjArrayClear(fGC);
+  inherited Destroy;
 end;
 
 procedure THttpProxyServer.Start(const aPrivateKeyPassword: SpiUtf8);
@@ -1193,8 +1200,18 @@ begin
       fServer.Shutdown;
       FreeAndNil(fServer);
     end;
+  // FreeAndNil(fServer) joined the request/idle threads, so the count
+  // cannot grow any more - detached workers may still use fUrl/fPartials
+  while fBackgroundCount <> 0 do
+    SleepHiRes(10);
+  FreeAndNil(fPartials);
   exclude(fFlags, fUrlSet);
   ObjArrayClear(fUrl);
+end;
+
+procedure THttpProxyServer.BackgroundFinished(Sender: TObject);
+begin
+  LockedDec32(@fBackgroundCount); // called from background GET
 end;
 
 function THttpProxyServer.SetupTls(var tls: TNetTlsContext): boolean;
@@ -1360,7 +1377,14 @@ begin
     exit;
   fTempFilesTix := tixmin;
   tmp := nil;
-  TLoggedWorkThread.Create(tmp, 'cacheclean', nil, OnBackgroundDeleteDeprecated);
+  LockedInc32(@fBackgroundCount);
+  try
+    TLoggedWorkThread.Create(tmp, 'cacheclean', nil,
+      OnBackgroundDeleteDeprecated, BackgroundFinished);
+  except
+    LockedDec32(@fBackgroundCount);
+    raise;
+  end;
 end;
 
 procedure THttpProxyServer.OnBackgroundDeleteDeprecated(Sender: TObject);
