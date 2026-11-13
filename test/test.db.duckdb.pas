@@ -737,7 +737,7 @@ begin
     Text(ConnectionId);
   end;
   Field(3);
-  UInt(High(QWord)); // optional client_query_id = -1
+  UInt(QWord(-1)); // optional client_query_id = -1
   EndObject;
 end;
 
@@ -1059,7 +1059,7 @@ begin
   try
     w.Header(QUACK_FETCH_RESPONSE, '');
     w.Field(2);
-    w.UInt(High(QWord));
+    w.UInt(QWord(-1));
     w.EndObject;
     result := w.FlushTo;
   finally
@@ -1115,7 +1115,7 @@ begin
       end
       else
       begin
-        w.Field(2); w.UInt(High(QWord));
+        w.Field(2); w.UInt(QWord(-1));
         w.EndObject;
       end;
     end

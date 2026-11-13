@@ -3000,7 +3000,7 @@ var
     dwFlags: DWord; pszPath: PWideChar): HRESULT; stdcall;
   SHGetKnownFolderPath: function(const rfid: TGuid; dwFlags:DWORD; hToken: THandle;
     out ppszPath: PWideChar): HRESULT; stdcall;
-  CommandLineToArgvW(cmd: PWideChar; var argc: integer): PPointer; stdcall;
+  CommandLineToArgvW: function(cmd: PWideChar; var argc: integer): PPointer; stdcall;
 
 procedure CoTaskMemFree(_para1: pointer); stdcall; external ole32;
 
