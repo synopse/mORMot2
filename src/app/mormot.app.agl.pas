@@ -1783,7 +1783,7 @@ begin
     ESynAngelize.RaiseUtf8('Syntax is % /%able "<servicename>"',
       [Executable.ProgramName, ENDI[disable]]);
   LoadServicesFromSettingsFolder; // raise ESynAngelize on error
-  sn := TrimU(StringToUtf8(paramstr(2)));
+  sn := TrimU(ParamUtf8[2]);
   sas := fSet.FindService(sn);
   if sas = nil then
     ESynAngelize.RaiseUtf8('/%able: unknown service "%"', [ENDI[disable], sn]);
@@ -1820,7 +1820,7 @@ begin
       'Syntax is % /new "<servicename>" "<executable>" [<params>]',
       [Executable.ProgramName]);
   LoadServicesFromSettingsFolder; // raise ESynAngelize on error
-  sn := TrimU(StringToUtf8(paramstr(2)));
+  sn := TrimU(ParamUtf8[2]);
   if sn = '' then
     ESynAngelize.RaiseUtf8('/new: invalid servicename "%"', [sn]);
   if fSet.FindService(sn) <> nil then

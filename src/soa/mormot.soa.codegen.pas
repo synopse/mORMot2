@@ -1120,7 +1120,7 @@ begin
   else
   begin
     for i := firstparam to ParamCount do
-      Append(params, [' ', ParamStr(i)]);
+      Append(params, ' ', ParamUtf8[i]);
     //writeln(params); // for debugging
     call.InBody := method^.ArgsCommandLineToObject(
       pointer(params), {input=}true, {raiseexcep=}true);
@@ -1198,7 +1198,7 @@ begin
   n := 0;
   for i := 1 to ParamCount do
   begin
-    StringToUtf8(ParamStr(i), {%H-}p[n]);
+    p[n] := ParamUtf8[i];
     a := pointer(p[n]);
     if a^ in ['-', '/'] then
     begin

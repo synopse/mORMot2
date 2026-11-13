@@ -190,7 +190,7 @@ begin
   fValues.InitFast(n shr 1, dvObject);
   for i := 1 to n do
   begin
-    StringToUtf8(ParamStr(i), p);
+    p := ParamUtf8[i];
     if p <> '' then
       if p[1] in ['-', '/'] then
       begin

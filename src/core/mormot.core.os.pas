@@ -11097,14 +11097,7 @@ begin
   fSwitch[false] := ShortSwitch;
   fSwitch[true]  := LongSwitch;
   if fRawParams = nil then
-  begin
-    n := ParamCount;
-    if n <= 0 then
-      exit; // may equal -1 e.g. from a .so on MacOS
-    SetLength(fRawParams, n);
-    for i := 0 to n - 1 do
-      _toutf8(ParamStr(i + 1), fRawParams[i]);
-  end;
+    fRawParams := copy(ParamUtf8, 1, 255); // as retrieved at startup
   Finalize(fNames);
   Finalize(fValues);
   Finalize(fRetrieved);

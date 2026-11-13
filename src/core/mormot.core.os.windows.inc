@@ -4006,7 +4006,7 @@ class procedure TServiceController.CheckParameters(
   const ExeFileName: TFileName; const ServiceName, DisplayName,
   Description: RawUtf8; const Dependencies: RawUtf8);
 var
-  param: string;
+  param: RawUtf8;
   i: integer;
 
   procedure ShowError(Msg: RawUtf8);
@@ -4019,10 +4019,10 @@ var
 begin
   for i := 1 to ParamCount do
   begin
-    param := SysUtils.LowerCase(ParamStr(i));
+    param := ParamUtf8[i];
     TService.DoLog(sllInfo,
       'Controling % with command [%]', [ServiceName, param], nil);
-    if param = '/install' then
+    if PropNameEquals(param, '/install') then
       TServiceController.Install(
         ServiceName, DisplayName, Description, true, ExeFileName, Dependencies)
     else
@@ -4030,19 +4030,19 @@ begin
       try
         if State = ssErrorRetrievingState then
           ShowError('State')
-        else if param = '/uninstall' then
+        else if PropNameEquals(param, '/uninstall') then
         begin
           if not Stop then
             ShowError('Stop');
           if not Delete then
             ShowError('Delete');
         end
-        else if param = '/stop' then
+        else if PropNameEquals(param, '/stop') then
         begin
           if not Stop then
             ShowError('Stop');
         end
-        else if param = '/start' then
+        else if PropNameEquals(param, '/start') then
         begin
           if not Start([]) then
             ShowError('Start');
