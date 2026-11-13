@@ -6912,6 +6912,7 @@ begin
       if c = InvertedPathDelim then
         c := PathDelim; // normalize for direct cross-platform support
       AppendShortCharSafe(c, tmp);
+      inc(P);
     end;
   end;
   if IncludeDepth >= DSL_INCLUDE_DEPTH then
@@ -7001,6 +7002,7 @@ type
     W: TTextWriter;
     LineFeed: cardinal;    // e.g. #13#10
     LineFeedLen: cardinal; // e.g. 2
+    function ProcessText(P: PUtf8Char): boolean;
     // TPreprocAbstract OnAppend/OnVerbatim/OnAddDebugComment callbacks
     function TextAppend(P: PUtf8Char): boolean;
     procedure TextVerbatim(P: PUtf8Char; Len: PtrInt);
@@ -7011,8 +7013,7 @@ type
 
 function TPreprocText.TextAppend(P: PUtf8Char): boolean;
 begin
-  W.AddNoJsonEscape(P, StrLen(P));
-  result := true; // not used anyway
+  result := ProcessText(P); // support recursive $include
 end;
 
 procedure TPreprocText.TextVerbatim(P: PUtf8Char; Len: PtrInt);
@@ -7030,10 +7031,51 @@ begin
   inc(W.B, LineFeedLen);
 end;
 
-function TPreprocText.TextPreprocessToWriter(P: PUtf8Char; Dest: TTextWriter): boolean;
+function TPreprocText.ProcessText(P: PUtf8Char): boolean;
 var
   B, v: PUtf8Char;
   l: PtrInt;
+begin
+  result := false;
+  if (P = nil) or
+     (W = nil) then
+    exit;
+  repeat
+    // copy all literal text preceding the next '$'
+    B := P;
+    while (P^ <> #0) and
+          (P^ <> '$') do
+      inc(P);
+    if P > B then
+      W.AddNoJsonEscape(B, P - B);
+    if P^ = #0 then
+      break;
+    if P[1] = '$' then
+      // $$ ... $$ or $$$ ... $$$
+      P := ParseSection(P)
+    else if WasIf(P) then
+      // $if$ / $else$ / $endif$ - WasIf updates P, potentially skipping content
+      continue
+    else if P[1] in ['(', '{'] then
+    begin
+      // $(ident) or ${ident}
+      P := Expand(P, v, l, {KeepMarker=}false);
+      if v <> nil then
+        W.AddNoJsonEscape(v, l);
+    end
+     else
+    begin
+      // '$' is kept verbatim (e.g. $ident$ is not expanded in text mode)
+      W.AddDirect('$');
+      inc(P);
+    end;
+  until false;
+  result := true;
+end;
+
+function TPreprocText.TextPreprocessToWriter(P: PUtf8Char; Dest: TTextWriter): boolean;
+var
+  B: PUtf8Char;
 begin
   result := false;
   if (P = nil) or
@@ -7062,32 +7104,7 @@ begin
     end;
     P := B;
   end;
-  // main loop
-  repeat
-    while (P^ <> #0) and
-          (P^ <> '$') do
-      inc(P);
-    W.AddNoJsonEscape(B, P - B);
-    if P^ = #0 then
-      break;
-    if P[1] = '$' then
-    begin
-      B := ParseSection(P);    // $$ ... $$ DSL section: include + vars
-      continue;
-    end;
-    B := P;
-    if WasIf(B) then           // $if$ $else$ $endif$
-      continue;
-    if P[1] in ['(', '{'] then // only $(ident) ${ident} - not $ident$
-    begin
-      P := Expand(P, v, l, {keepmarker=}false);
-      if v <> nil then
-        W.AddNoJsonEscape(v, l);
-    end
-    else
-      inc(P); // this was not $(ident) -> write verbatim and continue
-  until false;
-  result := true;
+  result := ProcessText(P);
 end;
 
 
