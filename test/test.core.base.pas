@@ -3676,6 +3676,26 @@ begin
   Test('one " two"', ['one', ' two'], [], []);
   Test('" one" two', [' one', 'two'], [], []);
   Test('"one one" two', ['one one', 'two'], [], []);
+  // regression for #764: optional Windows caret escaping
+  // Legacy Windows behavior is preserved
+  Test('grep ^Foo', ['grep', 'Foo'], [], []);
+  Test('grep ^^Foo', ['grep', '^Foo'], [], []);
+  Test('grep ^', [], [pcInvalidCommand, pcHasEndingBackSlash], []);
+  // Interactive input: carets are ordinary characters
+  Test('grep ^Foo', ['grep', '^Foo'], [], [pcoNoCaretEscape]);
+  Test('grep ^^Foo', ['grep', '^^Foo'], [], [pcoNoCaretEscape]);
+  Test('grep ^', ['grep', '^'], [], [pcoNoCaretEscape]);
+  // Apostrophes and Windows paths are preserved
+  Test('open O''Brien C:\dir\', ['open', 'O''Brien', 'C:\dir\'], [],
+    [pcoNoCaretEscape]);
+  // Quoting still works
+  Test('open "some folder" ^Foo', ['open', 'some folder', '^Foo'], [],
+    [pcoNoCaretEscape]);
+  // The option must not alter POSIX parsing
+  Test('grep ^Foo', ['grep', '^Foo'], [], [pcoPosix, pcoNoCaretEscape]);
+  // The ExtractExecutableName wrapper forwards the options
+  CheckEqual(ExtractExecutableName('^tool arg', [pcoNoCaretEscape]), '^tool');
+  CheckEqual(ExtractExecutableName('^tool arg', []), 'tool');
 end;
 
 type

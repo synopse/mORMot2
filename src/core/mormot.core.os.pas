@@ -6348,6 +6348,8 @@ type
   TParseCommandsArgs = array[byte] of PAnsiChar;
   PParseCommandsArgs = ^TParseCommandsArgs;
   /// allow to customize ParseCommandArgs() process
+  // - pcoPosix enables POSIX-style quoting and escaping
+  // - pcoNoCaretEscape disables the Windows cmd.exe ^ caret escape
   TParseCommandOptions = set of (pcoPosix, pcoNoCaretEscape);
 
 const
