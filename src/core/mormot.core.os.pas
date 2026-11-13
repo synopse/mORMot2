@@ -6338,7 +6338,6 @@ type
     pcTooManyArguments,
     pcInvalidCommand,
     pcHasEndingBackSlash);
-
   TParseCommands = set of TParseCommand;
   PParseCommands = ^TParseCommands;
 
@@ -6348,6 +6347,8 @@ type
   // but some Windows versions seemed to limit to 8KB total as a whole
   TParseCommandsArgs = array[byte] of PAnsiChar;
   PParseCommandsArgs = ^TParseCommandsArgs;
+  /// allow to customize ParseCommandArgs() process
+  TParseCommandOptions = set of (pcoPosix, pcoNoCaretEscape);
 
 const
   /// identifies some bash-specific processing
@@ -6360,7 +6361,7 @@ const
 
   /// let ParseCommandArgs/ExtractExecutableName/ExtractCommandArgs follow the
   // current running OS command-line expectations by default
-  PARSCOMMAND_POSIX = {$ifdef OSWINDOWS} false {$else} true {$endif};
+  PARSECOMMAND_OPT = {$ifdef OSWINDOWS} [] {$else} [pcoPosix] {$endif};
 
 /// low-level parsing of a RunCommand() execution command
 // - parse and fill argv^[0 .. argc^ - 1] with corresponding arguments, after
@@ -6376,20 +6377,20 @@ const
 // - warning: argc^ should be a 32-bit "integer" variable, not a PtrInt
 function ParseCommandArgs(const cmd: RawUtf8; argv: PParseCommandsArgs = nil;
   argc: PInteger = nil; temp: PRawUtf8 = nil;
-  posix: boolean = PARSCOMMAND_POSIX): TParseCommands;
+  opt: TParseCommandOptions = PARSECOMMAND_OPT): TParseCommands;
 
 /// high-level extraction of the executable of a RunCommand() execution command
 // - returns the first parameter returned by ParseCommandArgs()
 // - returns '' if cmd is incorrectly formatted
 function ExtractExecutableName(const cmd: RawUtf8;
-  posix: boolean = PARSCOMMAND_POSIX): RawUtf8;
+  opt: TParseCommandOptions = PARSECOMMAND_OPT): RawUtf8;
 
 /// high-level extraction of all parts of a RunCommand() execution command
 // - output param[0] is the executable name, and other param[] are the
 // actual command line arguments, just like the ParamStr() RTL function
 // - param is left nil on error, with result * PARSECOMMAND_ERROR <> []
 function ExtractCommandArgs(const cmd: RawUtf8; out param: TRawUtf8DynArray;
-  posix: boolean = PARSCOMMAND_POSIX): TParseCommands;
+  opt: TParseCommandOptions = PARSECOMMAND_OPT): TParseCommands;
 
 type
   /// callback used by RunRedirect() to notify of console output at runtime
@@ -13563,13 +13564,13 @@ begin
   result := @_SERVICESTATE[st];
 end;
 
-function ExtractExecutableName(const cmd: RawUtf8; posix: boolean): RawUtf8;
+function ExtractExecutableName(const cmd: RawUtf8; opt: TParseCommandOptions): RawUtf8;
 var
   temp: RawUtf8;
   argv: TParseCommandsArgs;
   argc: integer;
 begin
-  if (pcInvalidCommand in ParseCommandArgs(cmd, @argv, @argc, @temp, posix)) or
+  if (pcInvalidCommand in ParseCommandArgs(cmd, @argv, @argc, @temp, opt)) or
      ({%H-}argc = 0) then
     FastAssignNew(result)
   else
@@ -13577,14 +13578,14 @@ begin
 end;
 
 function ExtractCommandArgs(const cmd: RawUtf8; out param: TRawUtf8DynArray;
-  posix: boolean): TParseCommands;
+  opt: TParseCommandOptions): TParseCommands;
 var
   temp: RawUtf8;
   argv: TParseCommandsArgs;
   argc: integer;
   i: PtrInt;
 begin
-  result := ParseCommandArgs(cmd, @argv, @argc, @temp, posix);
+  result := ParseCommandArgs(cmd, @argv, @argc, @temp, opt);
   if result * PARSECOMMAND_ERROR <> [] then
     exit; // failed
   SetLength(param, argc);
@@ -13593,7 +13594,7 @@ begin
 end;
 
 function ParseCommandArgs(const cmd: RawUtf8; argv: PParseCommandsArgs;
-  argc: PInteger; temp: PRawUtf8; posix: boolean): TParseCommands;
+  argc: PInteger; temp: PRawUtf8; opt: TParseCommandOptions): TParseCommands;
 var
   n: PtrInt;
   state: set of (sWhite, sInArg, sInSQ, sInDQ, sSpecial, sBslash);
@@ -13657,7 +13658,7 @@ begin
            continue;
         end;
       '\':
-        if posix and
+        if (pcoPosix in opt) and
            (state * [sInSQ, sBslash] = []) then
           if sInDQ in state then
           begin
@@ -13681,7 +13682,8 @@ begin
             inc(p);
           end;
       '^':
-        if not posix and
+        if (not (pcoNoCaretEscape in opt)) and
+           (not (pcoPosix in opt)) and
            (state * [sInSQ, sInDQ, sBslash] = []) then
           if PWord(p)^ = EOLW then
           begin
@@ -13700,7 +13702,7 @@ begin
             inc(p);
           end;
       '''':
-        if posix and
+        if (pcoPosix in opt) and
            not(sInDQ in state) then
           if sInSQ in state then
           begin
@@ -13749,23 +13751,23 @@ begin
           include(result, pcHasRedirection);
       '&',
       ';':
-        if posix and
+        if (pcoPosix in opt) and
            (state * [sInSQ, sInDQ] = []) then
         begin
           include(state, sSpecial);
           include(result, pcHasJobControl);
         end;
       '`':
-        if posix and
+        if (pcoPosix in opt) and
            (state * [sInSQ, sBslash] = []) then
            include(result, pcHasSubCommand);
       '(',
       ')':
-        if posix and
+        if (pcoPosix in opt) and
            (state * [sInSQ, sInDQ] = []) then
           include(result, pcHasParenthesis);
       '$':
-        if posix and
+        if (pcoPosix in opt) and
            (state * [sInSQ, sBslash] = []) then
           if p^ = '(' then
             include(result, pcHasSubCommand)
@@ -13773,7 +13775,7 @@ begin
             include(result, pcHasShellVariable);
       '*',
       '?':
-        if posix and
+        if (pcoPosix in opt) and
            (state * [sInSQ, sInDQ] = []) then
           include(result, pcHasWildcard);
     end;

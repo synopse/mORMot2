@@ -3600,24 +3600,24 @@ end;
 procedure TTestCoreBase._ParseCommandArgs;
 
   procedure Test(const cmd: RawUtf8; const expected: array of RawUtf8;
-     const flags: TParseCommands = []; posix: boolean = true);
+     const flags: TParseCommands = []; opt: TParseCommandOptions = [pcoPosix]);
   var
     tmp: RawUtf8;
     n, i: integer; // integer, not PtrInt
     a: TParseCommandsArgs;
     p: TRawUtf8DynArray;
   begin
-    if CheckFailed(ParseCommandArgs(cmd, nil, nil, nil, posix) = flags) then
+    if CheckFailed(ParseCommandArgs(cmd, nil, nil, nil, opt) = flags) then
       exit;
     FillcharFast(a, SizeOf(a), 255); // ensure a[n]<>nil
-    Check(ParseCommandArgs(cmd, @a, @n, @tmp, posix) = flags);
+    Check(ParseCommandArgs(cmd, @a, @n, @tmp, opt) = flags);
     if (flags <> []) or
        CheckFailed(n = length(expected)) then
       exit;
     for i := 0 to n - 1 do
       Check(StrComp(pointer(a[i]), pointer(expected[i])) = 0);
     Check(a[n] = nil, 'last param should be nil');
-    Check(ExtractCommandArgs(cmd, p, posix) = flags);
+    Check(ExtractCommandArgs(cmd, p, opt) = flags);
     if Check(n = length(p)) then
       for i := 0 to n - 1 do
         CheckEqual(p[i], expected[i]);
@@ -3667,15 +3667,15 @@ begin
   Test('one\ two', ['one two'], []);
   Test('one\\two', ['one\two'], []);
   Test('one\\\\\\two', ['one\\\two'], []);
-  Test('one|two', [], [pcHasRedirection], {posix=}false);
-  Test('one&two', ['one&two'], [], false);
-  Test(''' one'' two', ['''', 'one''', 'two'], [], false);
-  Test('"one" two', ['one', 'two'], [], false);
-  Test('one "two"', ['one', 'two'], [], false);
-  Test('one     "two"', ['one', 'two'], [], false);
-  Test('one " two"', ['one', ' two'], [], false);
-  Test('" one" two', [' one', 'two'], [], false);
-  Test('"one one" two', ['one one', 'two'], [], false);
+  Test('one|two', [], [pcHasRedirection], []);
+  Test('one&two', ['one&two'], [], []);
+  Test(''' one'' two', ['''', 'one''', 'two'], [], []);
+  Test('"one" two', ['one', 'two'], [], []);
+  Test('one "two"', ['one', 'two'], [], []);
+  Test('one     "two"', ['one', 'two'], [], []);
+  Test('one " two"', ['one', ' two'], [], []);
+  Test('" one" two', [' one', 'two'], [], []);
+  Test('"one one" two', ['one one', 'two'], [], []);
 end;
 
 type
