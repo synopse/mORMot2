@@ -6021,7 +6021,7 @@ begin
       if r <> 0 then
       begin
         if r > 0 then
-          include(fFlags, fZombie);
+          include(fInternalFlags, fZombie); // direct set within fSafe.Lock
         fState := epsExited; // r < 0 e.g. ECHILD if SIGCHLD = SIG_IGN
       end;
     end
@@ -6090,7 +6090,7 @@ begin
     Add(fStderr);
   if n = 0 then
   begin
-    include(fFlags, fOutputEof);
+    SetFlag(fOutputEof);
     exit(-1);
   end;
   if fWakeUpRead >= 0 then
@@ -6126,7 +6126,7 @@ begin
   if (fStdout < 0) and
      (fStderr < 0) then
   begin
-    include(fFlags, fOutputEof);
+    SetFlag(fOutputEof);
     if result = 0 then
       result := -1;
   end;
@@ -6160,10 +6160,10 @@ end;
 
 procedure TExternalProcess.DoClose;
 begin
-  if fZombie in fFlags then
+  if IsSet(fZombie) then
   begin
     // roWinJobCloseChildren: the zombie kept its process group number
-    exclude(fFlags, fZombie);
+    SetFlag(fZombie, false);
     fpkill(-cint(fPid), SIGKILL); // kill any child still running
     repeat
     until (fpWaitPid(fPid, nil, 0) >= 0) or // eventually reap the process
