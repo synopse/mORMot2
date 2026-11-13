@@ -15,15 +15,16 @@ Details are available [on out GitHub repository](https://github.com/synopse/mORM
 - HTTP over TFTP proxy
 - SChannel rewrite with full server-side support
 - DuckDB support (`mormot.db.sql.duckdb.pas`), including ORM integration and a native client of the DuckDB Quack protocol
-### Changed
+### Breaking Changes
 - refactored main units to reduce their size: you may need to explicitly add `mormot.core.fmt`, `mormot.core.datetime` or `mormot.core.search` to your uses clause now
 - extracted the `ICrypt*` / `TCrypt*` high-level factories from `mormot.crypt.secure.pas` into the new `mormot.crypt.factory.pas` unit: add it to your `uses` clause if you call `Rnd()` `Hash()` `Sign()` `Cipher()` `Asym()` `Cert()` `Store()` or use `ICryptCert` / `ICryptStore`
 - extracted `THttpPeerCache` from `mormot.net.server.pas` into the new `mormot.net.peercache.pas` unit: add it to your `uses` clause if you use the peer-to-peer cache
 - extracted `THttpApiServer` and `THttpApiWebSocketServer` from `mormot.net.server.pas` into the new `mormot.net.server.win.pas` unit: add it to your `uses` clause if you use the Windows http.sys servers
 - extracted `THttpProxyServer` from `mormot.net.async.pas` into the new `mormot.net.proxy.pas` unit: add it to your `uses` clause if you use the HTTP proxy cache
-- refactored cross-platform and cross-cpu conditionals (e.g. new internal `ASM*` definitions)
-- breaking change: deprecated GetExecutableVersion and TSynLog format as RawUtf8
-- Lots of bug fixes, optimisations and enhancements
+- deprecated GetExecutableVersion and TSynLog format as RawUtf8
+- refined cross-platform and cross-cpu conditionals (e.g. new internal `ASM*` definitions)
+### Changed
+- Numerous bug fixes, optimisations and enhancements
 
 ## [2.4.stable] - 2026-01-13
 This is the latest stable release of *mORMot* v2.

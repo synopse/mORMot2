@@ -231,12 +231,12 @@ end;
 
 constructor TCommandLine.CreateAsArray(firstParam: PtrInt);
 var
-  n, i: PtrInt;
+  i: PtrInt;
 begin
   inherited Create;
-  n := high(ParamUtf8) - firstParam;
-  fValues.InitFast(n, dvArray);
-  for i := firstParam to n do
+  firstParam := MaxPtrInt(0, firstParam);
+  fValues.InitFast(MaxPtrInt(0, length(ParamUtf8) - firstParam), dvArray);
+  for i := firstParam to high(ParamUtf8) do
     fValues.AddItemText(ParamUtf8[i]);
 end;
 

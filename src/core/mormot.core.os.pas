@@ -11097,7 +11097,7 @@ begin
   fSwitch[false] := ShortSwitch;
   fSwitch[true]  := LongSwitch;
   if fRawParams = nil then
-    fRawParams := copy(ParamUtf8, 1, 255); // as retrieved at startup
+    fRawParams := copy(ParamUtf8, 1, length(ParamUtf8)); // as retrieved at startup
   Finalize(fNames);
   Finalize(fValues);
   Finalize(fRetrieved);

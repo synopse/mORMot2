@@ -79,7 +79,7 @@ Event-Driven Network Classes and Functions
 - Client or Server Asynchronous Process
 - `THttpAsyncServer` Event-Driven HTTP Server
 
-Used e.g. by both `mormot.net.relay` and `mormot.net.rtsphttp` to handle thousands on concurrent streams, with minimal resources, in a cross-platform way.
+Used e.g. by `mormot.net.relay`, `mormot.net.proxy` and `mormot.net.rtsphttp` to handle thousands on concurrent streams, with minimal resources, in a cross-platform way.
 
 ### mormot.net.proxy
 

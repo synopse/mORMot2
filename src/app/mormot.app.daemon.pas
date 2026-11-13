@@ -712,7 +712,8 @@ var
   p: PUtf8Char;
   param: RawUtf8;
 begin
-  param := TrimU(ParamUtf8[1]);
+  if length(ParamUtf8) > 1 then
+    param := TrimU(ParamUtf8[1]);
   cmd := cNone;
   if (param <> '') and
      (param[1] in ['/', '-']) then
