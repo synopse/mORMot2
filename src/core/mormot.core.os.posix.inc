@@ -5970,8 +5970,8 @@ const
 function fpwaitid(idtype, id: cint; info: pointer; options: cint): cint;
 {$ifdef OSLINUX}
 begin
-  result := Do_SysCall(syscall_nr_waitid, idtype, id,
-    TSysParam(@info), options, {rusage*=}0);
+  result := Do_SysCall(syscall_nr_waitid, idtype, id, TSysParam(info), options,
+    {rusage*=}0);
 end;
 {$else}
   cdecl external clib name 'waitid';
