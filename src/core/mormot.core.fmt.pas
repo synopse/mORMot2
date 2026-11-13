@@ -6485,17 +6485,23 @@ var
   m: TPreprocMarker;
 begin
   result := Expand(P, v, l, {KeepMarker=}true);
-  if v = nil then // this $(ident) was not found
+  if (v = nil) or
+     (L <= 0) then // this $(ident) was not found - or void
     exit;
   m := TPreprocMarker(v^);
   if m = pmTemplate then
-    exit;// { } [] not expanded in "string"
-  if m <= high(m) then // skip marker
+    exit; // { } [] not expanded in "string"
+  if byte(m) <= byte(high(m)) then
   begin
     inc(v);
     dec(l);
-  end;
-  W.AddNoJsonEscape(v, l);
+    if m <> pmPlainString then
+    begin
+      W.AddNoJsonEscape(v, l); // no escape for pmConstNum or pmEscapedString
+      exit;
+    end;
+  end; // out of range m would fallback to pmPlainString
+  TJsonWriter(W).AddJsonEscape(v, l); // raw text needs some escape
 end;
 
 procedure TPreproc.DoEndif(var P: PUtf8Char);
@@ -6508,7 +6514,8 @@ begin
        (IfLevel in IfSkip) then
       DoSkip(P); // continue skip as in DoIf()
   end
-  else if Assigned(OnAddDebugComment) then
+  else if (jppDebugComment in Options) and
+          Assigned(OnAddDebugComment) then
     OnAddDebugComment('$endif$ with no prior $if')
 end;
 
@@ -6661,7 +6668,8 @@ begin // P^ = 'id$' or 'id = val$' from '$ifdef id$' or '$if id = val$'
         exit; // no inc(result) after DslSkip()
       end;
     end
-  else if Assigned(OnAddDebugComment) then
+  else if (jppDebugComment in Options) and
+          Assigned(OnAddDebugComment) then
     OnAddDebugComment('too many nested $if$ (15 allowed)');
   if result^ = '$' then
     inc(result);
@@ -6683,7 +6691,8 @@ begin
           include(IfSkip, IfLevel); // skip until $end$
           DoSkip(P);
         end
-      else if Assigned(OnAddDebugComment) then
+      else if (jppDebugComment in Options) and
+              Assigned(OnAddDebugComment) then
         OnAddDebugComment('$else$ with no prior $if');
     piEnd:         // $endif$
       DoEndif(P);
@@ -6721,6 +6730,7 @@ end;
 procedure TPreproc.DoRegister(m: TPreprocMarker; k, v, ve: PUtf8Char; kl: PtrInt);
 var
   beg, val: PUtf8Char;
+  vm: TPreprocMarker;
   l, vallen: PtrInt; // @vallen = PPtrInt
   comment: PShortString;
   tmp: TSynTempAdder;
@@ -6743,27 +6753,42 @@ begin
       else
       begin
         // $ident$ ${ident} $env:NAME$ ${env:NAME}
-        v := Expand(v, val, vallen, {KeepMarker=}false);
+        v := Expand(v, val, vallen, {KeepMarker=}true);
         if val <> nil then
-          tmp.Add(val, vallen); // early evaluation of $(ident) within templates
+        begin
+          vm := pmPlainString; // ExpandTo() into tmp
+          if (vallen > 0) and
+             (byte(val^) <= ord(high(TPreprocMarker))) then
+          begin
+            vm := TPreprocMarker(val^);
+            inc(val);
+            dec(vallen);
+          end;
+          if (m = pmEscapedString) and
+             (vm = pmPlainString) then
+            AdderJsonEscape(tmp, val, val + vallen)
+          else
+            tmp.Add(val, vallen);
+        end;
       end
     else
     begin
       // # comment or // comment
       l := v - beg;
       while (l <> 0) and
-            (v[l - 1] = ' ') do
+            (beg[l - 1] = ' ') do
         dec(l); // trim right
       if l > 0 then
       begin
-        tmp.Add(beg, l);
+        dec(tmp.Store.added, v - beg - l);
         tmp.AddDirect(#10);
       end;
       v := GotoNextLineSmall(v);
     end;
   until v >= ve;
   Vars.Update(k, tmp.Buffer, kl, tmp.Size);
-  if Assigned(OnAddDebugComment) then
+  if (jppDebugComment in Options) and
+     Assigned(OnAddDebugComment) then
   begin
     comment := tmp.Buffer;
     if tmp.Size > 100 then
@@ -6825,7 +6850,8 @@ ok: result := GotoNextNotSpace(result);
         continue;     // comment line
       'i',
       'I':
-        if (IncludeFolder <> '') and
+        if ((IncludeFolder <> '') or
+            (jppIncludeAbsolute in Options)) and
            (result[1] in ['n', 'N']) then
           case IdemPCharSep(result + 2, 'CLUDE |SERT |') of
             0:
@@ -6870,6 +6896,12 @@ ok: result := GotoNextNotSpace(result);
         value := result;
         while not (result^ in [#0 .. #31, '#', '/']) do
         begin
+          // detect real // comments but keep valid http://... content
+          if (result^ = '/') and
+             (result[1] = '/') and
+             ((result = value) or
+              (result[-1] <= ' ')) then
+            break;
           // unquoted value in $$ DSL section = till end of line or comment
           if result^ in ['\', '"'] then
             marker := pmPlainString; // would need W.AddJsonEscape()
@@ -6898,7 +6930,7 @@ begin
   tmp[0] := #0;
   if P^ in ['"', ''''] then
     inc(P); // allow quoted "<filename>", but with no quotes support
-  while not (P^ in [#0, '"', '''', #13, #10]) do
+  while not (P^ in [#0, '"', '''', '#', #13, #10]) do
   begin
     if P^ = '$' then
     begin
@@ -6915,9 +6947,13 @@ begin
       inc(P);
     end;
   end;
+  while (tmp[0] <> #0) and
+        (tmp[ord(tmp[0])] <= ' ') do
+    dec(tmp[0]); // trim right
   if IncludeDepth >= DSL_INCLUDE_DEPTH then
   begin
-    if Assigned(OnAddDebugComment) then
+    if (jppDebugComment in Options) and
+       Assigned(OnAddDebugComment) then
       OnAddDebugComment('include too deep: rejected');
     exit;
   end;
@@ -6926,12 +6962,14 @@ begin
   begin
     if not (jppIncludeAbsolute in Options) then
       exit;
-  end else if SafeFileName(fn) then
+  end else if (IncludeFolder <> '') and
+              SafeFileName(fn) then
     fn := IncludeFolder + fn
   else
     exit;
   txt := RawUtf8FromFile(fn);
-  if Assigned(OnAddDebugComment) then
+  if (jppDebugComment in Options) and
+     Assigned(OnAddDebugComment) then
   begin
     if txt = '' then
       AppendShort(' not found: skipped', tmp)
