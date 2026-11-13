@@ -1787,6 +1787,8 @@ type
     /// set to true to force PDF 1.5 format, which may produce smaller files
     // - set after SaveToStreamDirectBegin, it no longer changes the file's
     // cross-reference format, which follows the header written
+    // - under PDF/A-1 only the header changes: an xref table is written, as
+    // PDF/A-1 forbids an xref stream
     property GeneratePdf15File: boolean
       read GetGeneratePdf15File write SetGeneratePdf15File;
     /// set to true to generate a PDF 2.0 (ISO 32000-2) file
