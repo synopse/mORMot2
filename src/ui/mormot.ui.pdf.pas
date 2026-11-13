@@ -7789,6 +7789,7 @@ end;
 procedure TPdfDocument.SaveToStreamDirectEnd;
 var
   i: PtrInt;
+  xrefstream: boolean;
 begin
   if (self = nil) or
      (fSaveToStreamWriter = nil) then
@@ -7803,8 +7804,11 @@ begin
         if fTrueTypeFontsIndex <> 0 then
           PrepareForSaving;
     // write pending objects - the cross-reference as the header allows:
-    // the format may have been raised after it
-    if fHeaderFileFormat >= pdf15 then
+    // the format may have been raised after it; PDF/A-1 forbids an xref
+    // stream (6.1.4), and with it object streams, whatever the header
+    xrefstream := (fHeaderFileFormat >= pdf15) and
+                  not (fPdfA in [pdfa1A, pdfa1B]);
+    if xrefstream then
       fTrailer.ToCrossReference(self);
     for i := 1 to fXRef.ItemCount - 1 do
       with fXRef.Items[i] do
@@ -7818,7 +7822,7 @@ begin
     if Assigned(fTrailer.fCrossReference) and
       (fTrailer.fCrossReference.ObjectNumber > 0) then
       fXRef.Items[fTrailer.fCrossReference.ObjectNumber].fByteOffset := fTrailer.XrefAddress;
-    if fHeaderFileFormat < pdf15 then
+    if not xrefstream then
       fXRef.WriteTo(fSaveToStreamWriter);
     fTrailer.Attributes.PdfNumberByName('Size').Value := fXRef.ItemCount;
     fTrailer.WriteTo(fSaveToStreamWriter);
