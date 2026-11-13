@@ -1505,6 +1505,9 @@ begin
   req.remote := req.proxy.fRemoteUri;
   if hpoClientLowerCaseUri in req.proxy.Settings.Options then
     CaseBuffer(Uri.Path.Text, Uri.Path.Len, @NormToLowerAnsi7); // normalize
+  if (Uri.Path.Len <> 0) and
+     (req.remote.Address <> '') then
+    AppendIfNone(req.remote.Address, '/'); // Source may have no trailing /
   Append(req.remote.Address, Uri.Path.Text, Uri.Path.Len);
   if not HttpRequestHashBase32(req.remote, nil, nil, @req.remotehash,
            hpoClientNormalizeCaseHash in req.proxy.Settings.Options) then
