@@ -8285,6 +8285,12 @@ begin
     Expect('GET', '/static/missing.txt', HTTP_NOTFOUND);
     Expect('GET', '/static/hidden.secret', HTTP_FORBIDDEN);
     Check(PosEx('secret', clt.Content) = 0, 'static rejected content');
+    // local folder: a query string is ignored, as with a remote URI
+    Expect('GET', '/static/hello.txt?v=2', HTTP_SUCCESS);
+    CheckEqual(clt.Content, HELLO, 'static query');
+    Expect('GET', '/static/sub/inner.txt?v=2', HTTP_SUCCESS);
+    CheckEqual(clt.Content, INNER, 'static sub query');
+    Expect('GET', '/static/hidden.secret?v=2', HTTP_FORBIDDEN);
     Expect('GET', '/static/..%2Fproxyoutside.txt', HTTP_FORBIDDEN);
     Check(PosEx('outside', clt.Content) = 0, 'static outside content');
     Expect('GET', '/static/sub/..%2F..%2Fproxyoutside.txt', HTTP_FORBIDDEN);

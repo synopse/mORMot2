@@ -1425,7 +1425,7 @@ function THttpProxyServer.OnGetHeadLocalFolder(Ctxt: THttpServerRequest;
   const Uri: TUriMatchName): cardinal;
 var
   fn: TFileName;
-  name, html: RawUtf8;
+  path, name, html: RawUtf8;
   siz: Int64;
   one: THttpProxyUrl;
   opt: THttpProxyUrlOptions;
@@ -1438,7 +1438,8 @@ begin
   one := Ctxt.RouteOpaque;
   opt := one.Settings.Options;
   // try to assign a local file to the output Ctxt
-  UrlDecodeVar(Uri.Path.Text, Uri.Path.Len, name, {space=}'+');
+  FastSetString(path, Uri.Path.Text, Uri.Path.Len); // with no ?query
+  UrlDecodeVar(pointer(path), length(path), name, {space=}'+'); // needs #0
   NormalizeFileNameU(name);
   if not SafePathNameU(name) then
     exit;
