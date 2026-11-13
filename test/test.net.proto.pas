@@ -97,6 +97,10 @@ type
     reqfour: Int64;
     // for FileRange
     rangefile, rangesmall: TFileName;
+    // for HttpProxyServer
+    proxysmall, proxybig, proxyfresh: RawByteString;
+    proxyfreshmod: RawUtf8;
+    proxyget, proxyhead, proxyevent: integer;
     // for OutStream
     outdata: RawByteString;
     outkept: TRawByteStringStream; // supplied with aOwned=false
@@ -186,6 +190,12 @@ type
     function DoReadMaxBytesRequest(Ctxt: THttpServerRequestAbstract): cardinal;
     function DoReadMaxBytesDownload(const aUrl, aMethod, aInHeaders,
       aInContentType, aRemoteIP: RawUtf8; aContentLength: Int64): TStream;
+    /// validate THttpProxyServer local folder, remote URI and event sources
+    procedure DoHttpProxyServer(Sender: TObject);
+    function DoProxyOriginRequest(Ctxt: THttpServerRequestAbstract): cardinal;
+    function DoProxyEventRequest(Ctxt: THttpServerRequestAbstract;
+      const Uri: TUriMatchName; Met: TUriRouterMethod;
+      ProxyUrl: THttpProxyUrl): cardinal;
     /// validate clean start/shutdown of several DHCP servers
     procedure DoDhcpServerShutdown(Sender: TObject);
     /// validate that TCrtSocket.Close won't touch a handle closed by Abort
@@ -624,6 +634,7 @@ end;
 procedure TNetworkProtocols.SlowTests;
 begin
   // start some slow tests in background if /multithread is enabled
+  Run(DoHttpProxyServer, self, 'HttpProxyServer', true, false);
   Run(DoHttpBodyDownload, self, 'HttpBodyDownload', true, false);
   Run(DoHttpExpect100, self, 'HttpExpect100', true, false);
   Run(DoHttpFileRange, self, 'HttpFileRange', true, false);
@@ -8104,6 +8115,324 @@ begin
   finally
     TSynLog.Family.ExceptionIgnore.RemoveSeveral([
       EWriteError, EHttpSocketOverflow, ENetSock]);
+  end;
+end;
+
+function TNetworkProtocols.DoProxyOriginRequest(
+  Ctxt: THttpServerRequestAbstract): cardinal;
+begin
+  // a minimal origin server, publishing resources with their own validator
+  if IsHead(Ctxt.Method) then
+    LockedInc32(@proxyhead)
+  else
+    LockedInc32(@proxyget);
+  result := HTTP_SUCCESS;
+  Ctxt.OutContentType := BINARY_CONTENT_TYPE;
+  if Ctxt.Url = '/files/small.txt' then
+  begin
+    Ctxt.OutContent := proxysmall;
+    Ctxt.OutCustomHeaders := 'Last-Modified: Wed, 21 Oct 2015 07:28:00 GMT';
+  end
+  else if Ctxt.Url = '/files/big.bin' then
+  begin
+    Ctxt.OutContent := proxybig;
+    Ctxt.OutCustomHeaders := 'ETag: "big-1"';
+  end
+  else if Ctxt.Url = '/files/fresh.txt' then
+  begin
+    Ctxt.OutContent := proxyfresh;
+    Ctxt.OutCustomHeaders := proxyfreshmod;
+  end
+  else if Ctxt.Url = '/files/error' then
+    result := HTTP_SERVERERROR
+  else
+    result := HTTP_NOTFOUND;
+end;
+
+function TNetworkProtocols.DoProxyEventRequest(Ctxt: THttpServerRequestAbstract;
+  const Uri: TUriMatchName; Met: TUriRouterMethod;
+  ProxyUrl: THttpProxyUrl): cardinal;
+var
+  path: RawUtf8;
+begin
+  LockedInc32(@proxyevent);
+  FastSetString(path, Uri.Path.Text, Uri.Path.Len);
+  Ctxt.OutContent := Join([Ctxt.Method, ' ', path]);
+  Ctxt.OutContentType := TEXT_CONTENT_TYPE;
+  result := HTTP_SUCCESS;
+end;
+
+procedure TNetworkProtocols.DoHttpProxyServer(Sender: TObject);
+const
+  HELLO: RawUtf8 = 'hello proxy';
+  INNER: RawUtf8 = 'inner file';
+  ORIGIN = 'http://127.0.0.1:8882/files/';
+var
+  srv: THttpServer; // the origin server
+  settings: THttpProxyServerSettings;
+  url: THttpProxyUrlSettings;
+  proxy: THttpProxyServer;
+  clt: THttpClientSocket;
+  raw: TCrtSocket;
+  root, cache, cachefresh, cacheslow: TFileName;
+  local, first: RawByteString;
+  validator, line: RawUtf8;
+  len: integer;
+  files: TFindFilesDynArray;
+  gets, i: integer;
+  endtix: Int64;
+  found: boolean;
+
+  procedure Expect(const method, uri: RawUtf8; expected: integer;
+    const header: RawUtf8 = ''; const body: RawByteString = '');
+  var
+    status: integer;
+    mime: RawUtf8;
+  begin
+    if body <> '' then
+      mime := TEXT_CONTENT_TYPE;
+    status := clt.Request(uri, method, 10000, header, body, mime);
+    CheckUtf8(status = expected, '% % returned % but expected %',
+      [method, uri, status, expected]);
+  end;
+
+begin
+  // prepare the origin resources and the local folder to be served
+  proxysmall := RandomWinAnsi(1000);      // below HttpDirectGetKB = blocking GET
+  proxybig := RandomWinAnsi(300 shl 10);  // above = progressive background GET
+  proxyfresh := 'version one';
+  proxyfreshmod := 'Last-Modified: Wed, 21 Oct 2015 07:28:00 GMT';
+  proxyget := 0;
+  proxyhead := 0;
+  proxyevent := 0;
+  check(DirectoryExists(TempDir), 'tempdir proxy');
+  root := EnsureDirectoryExists(TempDir + 'proxyroot');
+  cache := TempDir + 'proxycache';
+  cachefresh := TempDir + 'proxyfresh';
+  cacheslow := TempDir + 'proxyslow';
+  DirectoryDeleteAll(cache);      // from any previous run
+  DirectoryDeleteAll(cachefresh);
+  DirectoryDeleteAll(cacheslow);
+  local := RandomWinAnsi(100 shl 10);     // above MemCache.MaxSizeKB
+  Check(FileFromString('outside', TempDir + 'proxyoutside.txt'), 'outside file');
+  Check(FileFromString(HELLO, root + 'hello.txt'), 'hello file');
+  Check(FileFromString(local, root + 'local.bin'), 'local file');
+  Check(FileFromString('secret', root + 'hidden.secret'), 'secret file');
+  Check(FileFromString(INNER,
+    EnsureDirectoryExists(root + 'sub') + 'inner.txt'), 'inner file');
+  proxy := nil;
+  clt := nil;
+  srv := THttpServer.Create('8882', nil, nil, 'proxyorigin', 2);
+  settings := THttpProxyServerSettings.Create;
+  try
+    srv.OnRequest := DoProxyOriginRequest;
+    srv.WaitStarted(10);
+    // define one URI of each kind of source
+    settings.Server.Port := '8883';
+    settings.Server.ThreadCount := 2;
+    settings.DiskCache.Path := cache;
+    url := settings.AddFolder(root, 'static');
+    url.Options := [hpoPublishMd5, hpoPublishSha256];
+    url.RejectCsv := '*.secret';
+    url := settings.AddFolder(root, 'flat');
+    url.Options := [hpoNoSubFolder, hpoNoFolderHtmlIndex];
+    settings.AddProxy(ORIGIN, 'remote');
+    url := settings.AddProxy(ORIGIN, 'slow');
+    url.HttpLimitPerSecond := 200 shl 10; // big.bin download takes 1.5 second
+    url.DiskCache.Path := cacheslow;
+    url := settings.AddProxy(ORIGIN, 'fresh');
+    url.HttpHeadCacheSec := 0; // always ask the origin for its validator
+    url.DiskCache.Path := cachefresh;
+    url := settings.AddEvent(DoProxyEventRequest, 'event');
+    url.Methods := [urmGet, urmPost];
+    proxy := THttpProxyServer.Create(settings);
+    proxy.Start;
+    clt := THttpClientSocket.Open('127.0.0.1', '8883');
+    // local folder: a small file is returned, then from the memory cache
+    Expect('GET', '/static/hello.txt', HTTP_SUCCESS);
+    CheckEqual(clt.Content, HELLO, 'static');
+    Expect('GET', '/static/hello.txt', HTTP_SUCCESS);
+    CheckEqual(clt.Content, HELLO, 'static again');
+    validator := clt.HeaderGetValue('ETAG');
+    if validator <> '' then
+      validator := 'If-None-Match: ' + validator
+    else
+    begin
+      validator := clt.HeaderGetValue('LAST-MODIFIED');
+      if validator <> '' then
+        validator := 'If-Modified-Since: ' + validator;
+    end;
+    if not CheckFailed(validator <> '', 'static has no validator') then
+    begin
+      Expect('GET', '/static/hello.txt', HTTP_NOTMODIFIED, validator);
+      CheckEqual(clt.Content, '', 'static 304 has no body');
+    end;
+    Expect('HEAD', '/static/hello.txt', HTTP_SUCCESS);
+    CheckEqual(clt.Content, '', 'static head has no body');
+    CheckEqual(clt.ContentLength, length(HELLO), 'static head length');
+    // local folder: a file above MemCache.MaxSizeKB, and a file in a sub-folder
+    Expect('GET', '/static/local.bin', HTTP_SUCCESS);
+    CheckEqual(length(clt.Content), length(local), 'static big length');
+    CheckEqual(crc32cHash(clt.Content), crc32cHash(local), 'static big');
+    Expect('GET', '/static/sub/inner.txt', HTTP_SUCCESS);
+    CheckEqual(clt.Content, INNER, 'static sub');
+    // local folder: HTML index, unknown, rejected and unsafe resources
+    Expect('GET', '/static/', HTTP_SUCCESS);
+    Check(PosEx('hello.txt', clt.Content) > 0, 'static index file');
+    Check(PosEx('sub', clt.Content) > 0, 'static index folder');
+    Expect('GET', '/static/missing.txt', HTTP_NOTFOUND);
+    Expect('GET', '/static/hidden.secret', HTTP_FORBIDDEN);
+    Check(PosEx('secret', clt.Content) = 0, 'static rejected content');
+    Expect('GET', '/static/..%2Fproxyoutside.txt', HTTP_FORBIDDEN);
+    Check(PosEx('outside', clt.Content) = 0, 'static outside content');
+    Expect('GET', '/static/sub/..%2F..%2Fproxyoutside.txt', HTTP_FORBIDDEN);
+    Check(PosEx('outside', clt.Content) = 0, 'static sub outside content');
+    // local folder: published hashes
+    Expect('GET', '/static/hello.txt.sha256', HTTP_SUCCESS);
+    CheckEqual(LowerCase(TrimU(clt.Content)), Sha256(HELLO), 'static sha256');
+    Expect('GET', '/static/hello.txt.md5', HTTP_SUCCESS);
+    CheckEqual(LowerCase(TrimU(clt.Content)), Md5(HELLO), 'static md5');
+    Expect('GET', '/flat/hello.txt.sha256', HTTP_NOTFOUND); // not published
+    // local folder: hpoNoSubFolder and hpoNoFolderHtmlIndex
+    Expect('GET', '/flat/hello.txt', HTTP_SUCCESS);
+    CheckEqual(clt.Content, HELLO, 'flat');
+    Expect('GET', '/flat/sub/inner.txt', HTTP_FORBIDDEN);
+    Expect('GET', '/flat/', HTTP_NOTFOUND);
+    // remote URI: a small resource is retrieved once, then served from cache
+    gets := proxyget;
+    Expect('GET', '/remote/small.txt', HTTP_SUCCESS);
+    CheckEqual(clt.Content, proxysmall, 'remote small');
+    Check(clt.HeaderGetValue('X-PROXY-NAME') <> '', 'remote proxy name');
+    CheckEqual(proxyget, gets + 1, 'remote small get');
+    Expect('GET', '/remote/small.txt', HTTP_SUCCESS);
+    CheckEqual(clt.Content, proxysmall, 'remote small again');
+    CheckEqual(proxyget, gets + 1, 'remote small cached');
+    Expect('HEAD', '/remote/small.txt', HTTP_SUCCESS);
+    CheckEqual(clt.Content, '', 'remote head has no body');
+    CheckEqual(clt.ContentLength, length(proxysmall), 'remote head length');
+    CheckEqual(proxyget, gets + 1, 'remote head cached');
+    // remote URI: a big resource is progressively returned during its download
+    gets := proxyget;
+    Expect('HEAD', '/remote/big.bin', HTTP_SUCCESS);
+    CheckEqual(clt.Content, '', 'remote big head has no body');
+    CheckEqual(clt.ContentLength, length(proxybig), 'remote big head length');
+    CheckEqual(proxyget, gets, 'remote big head makes no get');
+    Expect('GET', '/remote/big.bin', HTTP_SUCCESS);
+    CheckEqual(length(clt.Content), length(proxybig), 'remote big length');
+    CheckEqual(crc32cHash(clt.Content), crc32cHash(proxybig), 'remote big');
+    CheckEqual(proxyget, gets + 1, 'remote big get');
+    endtix := GetTickCount64 + 5000;
+    repeat
+      found := false;
+      files := FindFiles(cache);
+      for i := 0 to high(files) do
+        if files[i].Size = length(proxybig) then
+          found := true;
+      if found then
+        break;
+      SleepHiRes(10);
+    until GetTickCount64 > endtix;
+    Check(found, 'remote big in disk cache');
+    Expect('GET', '/remote/big.bin', HTTP_SUCCESS);
+    CheckEqual(crc32cHash(clt.Content), crc32cHash(proxybig), 'remote big again');
+    CheckEqual(proxyget, gets + 1, 'remote big cached');
+    // remote URI: origin errors are returned to the client
+    Expect('GET', '/remote/missing', HTTP_NOTFOUND);
+    Expect('GET', '/remote/error', HTTP_SERVERERROR);
+    // remote URI: two clients share a single download of the same resource
+    gets := proxyget;
+    raw := TCrtSocket.Open('127.0.0.1', '8883', nlTcp, 10000);
+    try
+      raw.CreateSockIn; // needed for proper SockRecvLn() below
+      raw.SockSend('GET /slow/big.bin HTTP/1.1');
+      raw.SockSend('Host: 127.0.0.1:8883');
+      raw.SockSendCRLF; // void line: end of headers
+      raw.SockSendFlush;
+      // wait for the background download of this first client to be started
+      endtix := GetTickCount64 + 5000;
+      while (proxyget = gets) and
+            (GetTickCount64 < endtix) do
+        SleepHiRes(1);
+      CheckEqual(proxyget, gets + 1, 'slow first get');
+      // the second client is served from the very same partial file
+      Expect('GET', '/slow/big.bin', HTTP_SUCCESS);
+      CheckEqual(length(clt.Content), length(proxybig), 'slow second length');
+      CheckEqual(crc32cHash(clt.Content), crc32cHash(proxybig), 'slow second');
+      CheckEqual(proxyget, gets + 1, 'slow single get');
+      // the first client has received the whole content
+      raw.SockRecvLn(line);
+      CheckUtf8(PosEx(' 200 ', line) > 0, 'slow first status %', [line]);
+      len := -1;
+      repeat
+        line := '';
+        raw.SockRecvLn(line);
+        if IdemPChar(pointer(line), 'CONTENT-LENGTH: ') then
+          len := GetInteger(PUtf8Char(pointer(line)) + 16);
+      until line = ''; // end of response headers
+      CheckEqual(len, length(proxybig), 'slow first length');
+      if len = length(proxybig) then
+      begin
+        first := raw.SockInRead(len);
+        CheckEqual(crc32cHash(first), crc32cHash(proxybig), 'slow first');
+      end;
+    finally
+      raw.Free;
+    end;
+    // remote URI: with no HEAD cache, a new validator means a new content
+    Expect('GET', '/fresh/fresh.txt', HTTP_SUCCESS);
+    CheckEqual(clt.Content, 'version one', 'fresh one');
+    gets := proxyget;
+    Expect('GET', '/fresh/fresh.txt', HTTP_SUCCESS);
+    CheckEqual(clt.Content, 'version one', 'fresh one again');
+    CheckEqual(proxyget, gets, 'fresh one cached');
+    proxyfresh := 'version two';
+    proxyfreshmod := 'Last-Modified: Thu, 22 Oct 2015 07:28:00 GMT';
+    Expect('GET', '/fresh/fresh.txt', HTTP_SUCCESS);
+    CheckEqual(clt.Content, 'version two', 'fresh two');
+    // local folder: URI-encoded name, folder with no ending '/', and range
+    Check(FileFromString('with space', root + 'hello world.txt'), 'space file');
+    Expect('GET', '/static/hello%20world.txt', HTTP_SUCCESS);
+    CheckEqual(clt.Content, 'with space', 'static encoded name');
+    Expect('GET', '/static', HTTP_SUCCESS);
+    Check(PosEx('hello.txt', clt.Content) > 0, 'static index with no slash');
+    Expect('GET', '/static/local.bin', HTTP_PARTIALCONTENT, 'Range: bytes=10-109');
+    Check(EqualBuf(clt.Content, copy(local, 11, 100)), 'static range');
+    // remote URI: range and conditional requests on a cached resource
+    Expect('GET', '/remote/big.bin', HTTP_PARTIALCONTENT, 'Range: bytes=10-109');
+    Check(EqualBuf(clt.Content, copy(proxybig, 11, 100)), 'remote range');
+    Expect('GET', '/remote/small.txt', HTTP_SUCCESS);
+    validator := clt.HeaderGetValue('LAST-MODIFIED');
+    if not CheckFailed(validator <> '', 'remote has no last-modified') then
+      Expect('GET', '/remote/small.txt', HTTP_NOTMODIFIED,
+        'If-Modified-Since: ' + validator);
+    // event: the callback receives the path below its URI prefix
+    Expect('GET', '/event/some/path', HTTP_SUCCESS);
+    CheckEqual(clt.Content, 'GET some/path', 'event get');
+    Expect('POST', '/event/post', HTTP_SUCCESS, '', 'body');
+    CheckEqual(clt.Content, 'POST post', 'event post');
+    CheckEqual(proxyevent, 2, 'event calls');
+    // methods which are not part of Settings.Methods are never executed
+    Expect('PUT', '/event/put', HTTP_NOTFOUND, '', 'body');
+    Expect('POST', '/static/hello.txt', HTTP_NOTFOUND, '', 'body');
+    Expect('POST', '/remote/small.txt', HTTP_NOTFOUND, '', 'body');
+    CheckEqual(proxyevent, 2, 'event not called');
+    // the server can be stopped and started again with the same settings
+    FreeAndNil(clt);
+    proxy.Stop;
+    proxy.Start;
+    clt := THttpClientSocket.Open('127.0.0.1', '8883');
+    Expect('GET', '/static/hello.txt', HTTP_SUCCESS);
+    CheckEqual(clt.Content, HELLO, 'restarted static');
+    // a cached resource is still served when its origin is not reachable
+    Expect('GET', '/remote/big.bin', HTTP_SUCCESS); // refresh the HEAD cache
+    FreeAndNil(srv);
+    Expect('GET', '/remote/big.bin', HTTP_SUCCESS);
+    CheckEqual(crc32cHash(clt.Content), crc32cHash(proxybig), 'origin down');
+  finally
+    clt.Free;
+    proxy.Free;
+    settings.Free;
+    srv.Free;
   end;
 end;
 
