@@ -585,6 +585,10 @@ procedure QuotedStrJson(P: PUtf8Char; PLen: PtrInt; var result: RawUtf8;
 function QuotedStrJson(const aText: RawUtf8): RawUtf8; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// append UTF-8 content as JSON-escaped text into a TSynTempAdder instance
+// - P may contain #0 bytes, which are escaped as \u0000
+procedure AdderJsonEscape(var Dest: TSynTempAdder; P, PEnd: PUtf8Char);
+
 const
   FIELDCOUNT_PATTERN: PUtf8Char = '{"fieldCount":'; // PatternLen = 14 chars
   ROWCOUNT_PATTERN: PUtf8Char   = ',"rowCount":';   // PatternLen = 12 chars
@@ -969,7 +973,8 @@ type
   /// event signature for TPreprocAbstract.OnAddDebugComment callback
   TOnPreprocAddDebugComment = procedure(const info: ShortString) of object;
   /// flags used to identify the $(ident) variables stored by TPreprocAbstract
-  TPreprocMarker = (pmTemplate, pmConstNum, pmEscapedString, pmPlainString);
+  TPreprocMarker = (
+    pmTemplate, pmConstNum, pmEscapedString, pmPlainString);
 
   /// abstract class used for JSON or Text pre-processing as $(ident) and $if$
   // - pre-processing logic is properly implemented in mormot.core.fmt.pas
@@ -5012,6 +5017,39 @@ end;
 function QuotedStrJson(const aText: RawUtf8): RawUtf8;
 begin
   QuotedStrJson(pointer(aText), Length(aText), result, '', '');
+end;
+
+procedure AdderJsonEscape(var Dest: TSynTempAdder; P, PEnd: PUtf8Char);
+var
+  b: PUtf8Char;
+  x: PCardinalArray;
+  esc: byte;
+begin
+  if (P = nil) or
+     (PtrUInt(PEnd) <= PtrUInt(P)) then
+    exit;
+  repeat
+    b := P;
+    while (P < PEnd) and
+          (JSON_ESCAPE[byte(P^)] = JSON_ESCAPE_NONE) do
+      inc(P);
+    Dest.Add(b, P - b); // copy unescaped text at once
+    if P >= PEnd then
+      break;
+    esc := JSON_ESCAPE[byte(P^)];
+    if esc <= JSON_ESCAPE_UNICODEHEX then
+    begin
+      x := Dest.Add(6);
+      x[0] := JSON_UHEXC;
+      x[1] := TwoDigitsHexW[P^];
+    end
+    else
+    begin
+      Dest.Add('\');
+      Dest.AddDirect(AnsiChar(esc));
+    end;
+    inc(P);
+  until false;
 end;
 
 function Expect(var P: PUtf8Char; Pattern: PUtf8Char; PatternLen: PtrInt): boolean;
