@@ -11125,32 +11125,31 @@ begin
   i := 0;
   repeat
     s := fRawParams[i];
-    if s <> '' then
-      if swlen[i] <> 0 then
+    if (s <> '') and (swlen[i] <> 0) then
+    begin
+      delete(s, 1, swlen[i]);
+      if s <> '' then
       begin
-        delete(s, 1, swlen[i]);
-        if s <> '' then
-        begin
-          j := PosExChar('=', s);
-          if j <> 1 then
-            if j <> 0 then
-            begin
-              _addutf8(fNames[clkParam], copy(s, 1, j - 1));
-              _addutf8(fValues, copy(s, j + 1, MaxInt));
-            end
-            else if (i + 1 = n) or
-                    (swlen[i + 1] <> 0) then
-              _addutf8(fNames[clkOption], s)
-            else
-            begin
-              _addutf8(fNames[clkParam], s);
-              inc(i);
-              _addutf8(fValues, fRawParams[i]);
-            end;
+        j := PosExChar('=', s);
+        if j <> 1 then
+          if j <> 0 then
+          begin
+            _addutf8(fNames[clkParam], copy(s, 1, j - 1));
+            _addutf8(fValues, copy(s, j + 1, MaxInt));
+          end
+          else if (i + 1 = n) or
+                  (swlen[i + 1] <> 0) then
+            _addutf8(fNames[clkOption], s)
+          else
+          begin
+            _addutf8(fNames[clkParam], s);
+            inc(i);
+            _addutf8(fValues, fRawParams[i]);
           end;
-      end
-      else
-        _addutf8(fNames[clkArg], s);
+        end;
+    end
+    else
+      _addutf8(fNames[clkArg], s);
     inc(i);
   until i = n;
   SetLength(fRetrieved[clkArg],    length(fNames[clkArg]));

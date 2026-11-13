@@ -1779,7 +1779,7 @@ begin
   // /enable <servicename>   or  /disable <servicename>
   fSettings.LogClass.EnterLocal(log, self, 'ServiceChangeState');
   WriteCopyright;
-  if ParamCount < 2 then
+  if high(ParamUtf8) < 2 then
     ESynAngelize.RaiseUtf8('Syntax is % /%able "<servicename>"',
       [Executable.ProgramName, ENDI[disable]]);
   LoadServicesFromSettingsFolder; // raise ESynAngelize on error
@@ -1815,7 +1815,7 @@ begin
   // mimics nssm install <servicename> <executable> [<params>]
   fSettings.LogClass.EnterLocal(log, self, 'NewService');
   WriteCopyright;
-  if ParamCount < 3 then
+  if high(ParamUtf8) < 3 then
     ESynAngelize.RaiseUtf8(
       'Syntax is % /new "<servicename>" "<executable>" [<params>]',
       [Executable.ProgramName]);
@@ -1825,7 +1825,7 @@ begin
     ESynAngelize.RaiseUtf8('/new: invalid servicename "%"', [sn]);
   if fSet.FindService(sn) <> nil then
     ESynAngelize.RaiseUtf8('/new: duplicated servicename "%"', [sn]);
-  exe := sysutils.Trim(paramstr(3));
+  exe := sysutils.Trim(Utf8ToString(ParamUtf8[3]));
   {$ifdef OSWINDOWS}
   if not HasExt(exe) then
     exe := exe + '.exe';
@@ -1858,8 +1858,8 @@ begin
     new.fName := sn;
     new.fLevel := 10; // default level
     exe := QuoteFileName(exe); // re-quote the executable and parameters
-    for i := 4 to paramcount do
-      exe := exe + ' ' + QuoteFileName(paramstr(i));
+    for i := 4 to high(ParamUtf8) do
+      exe := exe + ' ' + QuoteFileName(Utf8ToString(ParamUtf8[i]));
     new.fRun := StringToUtf8(exe);
     new.SaveIfNeeded;
     if Assigned(log) then

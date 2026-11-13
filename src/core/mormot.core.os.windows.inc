@@ -4007,7 +4007,7 @@ class procedure TServiceController.CheckParameters(
   Description: RawUtf8; const Dependencies: RawUtf8);
 var
   param: RawUtf8;
-  i: integer;
+  i: PtrInt;
 
   procedure ShowError(Msg: RawUtf8);
   begin
@@ -4017,7 +4017,7 @@ var
   end;
 
 begin
-  for i := 1 to ParamCount do
+  for i := 1 to high(ParamUtf8) do
   begin
     param := ParamUtf8[i];
     TService.DoLog(sllInfo,

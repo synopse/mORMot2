@@ -1119,7 +1119,7 @@ begin
     call.InBody := ConsoleReadBody
   else
   begin
-    for i := firstparam to ParamCount do
+    for i := firstparam to high(ParamUtf8) do
       Append(params, ' ', ParamUtf8[i]);
     //writeln(params); // for debugging
     call.InBody := method^.ArgsCommandLineToObject(
@@ -1196,7 +1196,7 @@ var
 begin
   first := 3;
   n := 0;
-  for i := 1 to ParamCount do
+  for i := 1 to high(ParamUtf8) do
   begin
     p[n] := ParamUtf8[i];
     a := pointer(p[n]);

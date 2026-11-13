@@ -1911,7 +1911,7 @@ begin
     tests.Free;
   end;
   {$ifndef OSPOSIX}
-  if ParamCount = 0 then // Executable.Command.Option('noenter') not needed
+  if length(ParamUtf8) > 1 then // Executable.Command.Option('noenter') not needed
   begin
     // direct exit if an external file was generated
     ConsoleWrite(CRLF + 'Done - Press ENTER to Exit');
