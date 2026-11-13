@@ -1717,6 +1717,12 @@ var
   // want to populate all Version text fields like CompanyName or LegalCopyright
   Executable: TExecutable;
 
+  /// equivalency of ParamStr() as UTF-8 strings, retrieved at startup
+  // - on Windows, calls CommandLineToArgvW() official API to be consistent
+  // between Delphi and FPC - whereas ParamStr() is not
+  // - ParamUtf8[0] is set from Executable.ProgramFileName including full path
+  ParamUtf8: TRawUtf8DynArray;
+
 {$ifndef PUREMORMOT2}
   /// deprecated global: use Executable variable instead
   ExeVersion: TExecutable absolute Executable;
@@ -10426,7 +10432,7 @@ begin
 end;
 {$endif OSANDROID}
 
-procedure InitializeProcessInfo; // called once at startup
+procedure InitializeProcessInfo; // called once after InitializeSpecificUnit
 var
   dt: TDateTime;
   rnd: PBlock128;
@@ -10496,6 +10502,7 @@ begin
   with Executable do            // retrieve Executable + Host/User info
   begin
     ProgramFileName := ExpandFileName(ParamStr(0)); // main executable from RTL
+    _toutf8(ProgramFileName, ParamUtf8[0]);
     ProgramFilePath := ExtractFilePath(ProgramFileName);
     ProgramName := GetFileNameWithoutExtOrPath(ProgramFileName);
     dt := 0;

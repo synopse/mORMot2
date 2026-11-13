@@ -5573,6 +5573,9 @@ function GetVersionEx(var lpVersionInformation: TOSVersionInfoEx): BOOL;
   stdcall; external kernel32 name 'GetVersionExA';
 {$endif UNICODE}
 
+function CommandLineToArgvW(cmd: PWideChar; var argc: integer): PPointer;
+  stdcall; external shell32;
+
 function GetLocalTimeOffset: integer; // not defined in oldest Delphi
 var
   tzi: TTimeZoneInformation;
@@ -5618,6 +5621,8 @@ var
   proc: array of TSystemLogicalProcessorInformation;
   pi: ^TSystemLogicalProcessorInformation;
   n: PtrInt;
+  argv, a: PPointer;
+  argc: integer; // not PtrInt
   siz: DWord;
 begin
   // 1. minimal fallback to support of very old 32-bit CPU without SSE2
@@ -5931,6 +5936,16 @@ begin
   crc32c128(rnd, @mem, SizeOf(mem));
   crc32c128(rnd, @OSVersionInfo, SizeOf(OSVersionInfo));
   // CpuCache, Executable.Hash, CpuFeatures will be added in main mormot.core.os
+  // 6. fill ParamUtf8[] using the proper Windows API
+  argv := CommandLineToArgvW(Windows.GetCommandLineW, argc);
+  SetLength(ParamUtf8, argc);
+  a := argv;
+  for n := 1 to argc - 1 do
+  begin
+    inc(a); // ParamUtf8[0] is set later from Executable.ProgramFileName
+    Win32PWideCharToUtf8(a^, ParamUtf8[n]);
+  end;
+  LocalFree(argv);
 end;
 
 procedure FinalizeSpecificUnit;

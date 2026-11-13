@@ -6568,7 +6568,9 @@ procedure crc32blocksarm64(crc128, data128: PBlock128; count: integer); external
 
 procedure InitializeSpecificUnit;
 var
+  i: PtrInt;
   P: PAnsiChar;
+  a: PPointer;
   modname: PUtf8Char;
   uts: UtsName;
   {$ifndef NODIRECTTHREADMANAGER}
@@ -6593,6 +6595,14 @@ var
   {$endif OSLINUX}
   {$endif OSBSDDARWIN}
 begin
+  // retrieve command line args into ParamUtf8[]
+  SetLength(ParamUtf8, {$ifdef FPC} argc {$else} ArgCount {$endif});
+  a := pointer({$ifdef FPC} argv {$else} ArgValues {$endif});
+  for i := 1 to length(ParamUtf8) - 1 do
+  begin
+    inc(a); // ParamUtf8[0] is set later from Executable.ProgramFileName
+    FastSetString(ParamUtf8[i], a^, StrLen(a^));
+  end;
   // some ARM/AARCH64 specific initialization
   {$ifdef CPUARM3264}
   StrLen := @StrLenLibc; // libc version is faster than plain pascal or RTL code
