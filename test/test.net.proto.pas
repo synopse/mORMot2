@@ -8238,6 +8238,7 @@ begin
     url := settings.AddFolder(root, 'flat');
     url.Options := [hpoNoSubFolder, hpoNoFolderHtmlIndex];
     settings.AddProxy(ORIGIN, 'remote');
+    settings.AddProxy('http://127.0.0.1:8882/files', 'noslash');
     url := settings.AddProxy(ORIGIN, 'slow');
     url.HttpLimitPerSecond := 200 shl 10; // big.bin download takes 1.5 second
     url.DiskCache.Path := cacheslow;
@@ -8284,6 +8285,12 @@ begin
     Expect('GET', '/static/missing.txt', HTTP_NOTFOUND);
     Expect('GET', '/static/hidden.secret', HTTP_FORBIDDEN);
     Check(PosEx('secret', clt.Content) = 0, 'static rejected content');
+    // local folder: a query string is ignored, as with a remote URI
+    Expect('GET', '/static/hello.txt?v=2', HTTP_SUCCESS);
+    CheckEqual(clt.Content, HELLO, 'static query');
+    Expect('GET', '/static/sub/inner.txt?v=2', HTTP_SUCCESS);
+    CheckEqual(clt.Content, INNER, 'static sub query');
+    Expect('GET', '/static/hidden.secret?v=2', HTTP_FORBIDDEN);
     Expect('GET', '/static/..%2Fproxyoutside.txt', HTTP_FORBIDDEN);
     Check(PosEx('outside', clt.Content) = 0, 'static outside content');
     Expect('GET', '/static/sub/..%2F..%2Fproxyoutside.txt', HTTP_FORBIDDEN);
@@ -8337,9 +8344,18 @@ begin
     Expect('GET', '/remote/big.bin', HTTP_SUCCESS);
     CheckEqual(crc32cHash(clt.Content), crc32cHash(proxybig), 'remote big again');
     CheckEqual(proxyget, gets + 1, 'remote big cached');
+    // remote URI: the origin ETag is validated when it has no Last-Modified
+    validator := clt.HeaderGetValue('ETAG');
+    CheckEqual(validator, '"big-1"', 'remote big etag');
+    Expect('GET', '/remote/big.bin', HTTP_NOTMODIFIED,
+      'If-None-Match: ' + validator);
+    CheckEqual(proxyget, gets + 1, 'remote big 304 from cache');
     // remote URI: origin errors are returned to the client
     Expect('GET', '/remote/missing', HTTP_NOTFOUND);
     Expect('GET', '/remote/error', HTTP_SERVERERROR);
+    // remote URI: a Source with no trailing / is the very same origin folder
+    Expect('GET', '/noslash/small.txt', HTTP_SUCCESS);
+    CheckEqual(clt.Content, proxysmall, 'remote source with no trailing /');
     // remote URI: two clients share a single download of the same resource
     gets := proxyget;
     raw := TCrtSocket.Open('127.0.0.1', '8883', nlTcp, 10000);

@@ -954,13 +954,13 @@ var
 begin
   // prepare file streaming as response
   with304 := not (hpoDisable304 in fSettings.Options);
-  if lastmod = 0 then
+  if fSource <> hpsRemoteUri then
     // from hpsLocalFolder: check local file size+date attributes
     result := ctxt.SetOutFile(filename, with304, '',
       fSettings.CacheControlMaxAgeSec, @size)
   else
   begin
-    // from hpsRemoteUri: we have the resource size+date attributes
+    // from hpsRemoteUri: we have the resource size+date/etag attributes
     result := ctxt.SetOutFile(filename, with304,
       size, lastmod, fSettings.CacheControlMaxAgeSec);
     if (result = HTTP_SUCCESS) or
@@ -1425,7 +1425,7 @@ function THttpProxyServer.OnGetHeadLocalFolder(Ctxt: THttpServerRequest;
   const Uri: TUriMatchName): cardinal;
 var
   fn: TFileName;
-  name, html: RawUtf8;
+  path, name, html: RawUtf8;
   siz: Int64;
   one: THttpProxyUrl;
   opt: THttpProxyUrlOptions;
@@ -1438,7 +1438,8 @@ begin
   one := Ctxt.RouteOpaque;
   opt := one.Settings.Options;
   // try to assign a local file to the output Ctxt
-  UrlDecodeVar(Uri.Path.Text, Uri.Path.Len, name, {space=}'+');
+  FastSetString(path, Uri.Path.Text, Uri.Path.Len); // with no ?query
+  UrlDecodeVar(pointer(path), length(path), name, {space=}'+'); // needs #0
   NormalizeFileNameU(name);
   if not SafePathNameU(name) then
     exit;
@@ -1505,6 +1506,9 @@ begin
   req.remote := req.proxy.fRemoteUri;
   if hpoClientLowerCaseUri in req.proxy.Settings.Options then
     CaseBuffer(Uri.Path.Text, Uri.Path.Len, @NormToLowerAnsi7); // normalize
+  if (Uri.Path.Len <> 0) and
+     (req.remote.Address <> '') then
+    AppendIfNone(req.remote.Address, '/'); // Source may have no trailing /
   Append(req.remote.Address, Uri.Path.Text, Uri.Path.Len);
   if not HttpRequestHashBase32(req.remote, nil, nil, @req.remotehash,
            hpoClientNormalizeCaseHash in req.proxy.Settings.Options) then
