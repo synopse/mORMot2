@@ -7,7 +7,7 @@ Details are available [on out GitHub repository](https://github.com/synopse/mORM
 ### Added 
 - Preliminary compatibility with Delphi 13.1+ Linux MacOS Android iOS
 - Native CNG support on Windows via `mormot.crypt.win.pas`
-- new `mormot.core.fmt.pas` `mormot.crypt.factory.pas` `mormot.net.peercache.pas` `mormot.net.server.win.pas` extracted units
+- new `mormot.core.fmt.pas` `mormot.crypt.factory.pas` `mormot.net.peercache.pas` `mormot.net.server.win.pas` `mormot.net.proxy.pas` extracted units
 - Text resources translation via the new `mormot.core.i18n.pas` unit
 - XML pull/SAX/DOM Parser
 - YAML 1.2 Read and Write Support
@@ -20,6 +20,7 @@ Details are available [on out GitHub repository](https://github.com/synopse/mORM
 - extracted the `ICrypt*` / `TCrypt*` high-level factories from `mormot.crypt.secure.pas` into the new `mormot.crypt.factory.pas` unit: add it to your `uses` clause if you call `Rnd()` `Hash()` `Sign()` `Cipher()` `Asym()` `Cert()` `Store()` or use `ICryptCert` / `ICryptStore`
 - extracted `THttpPeerCache` from `mormot.net.server.pas` into the new `mormot.net.peercache.pas` unit: add it to your `uses` clause if you use the peer-to-peer cache
 - extracted `THttpApiServer` and `THttpApiWebSocketServer` from `mormot.net.server.pas` into the new `mormot.net.server.win.pas` unit: add it to your `uses` clause if you use the Windows http.sys servers
+- extracted `THttpProxyServer` from `mormot.net.async.pas` into the new `mormot.net.proxy.pas` unit: add it to your `uses` clause if you use the HTTP proxy cache
 - refactored cross-platform and cross-cpu conditionals (e.g. new internal `ASM*` definitions)
 - breaking change: deprecated GetExecutableVersion and TSynLog format as RawUtf8
 - Lots of bug fixes, optimisations and enhancements

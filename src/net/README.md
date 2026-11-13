@@ -78,9 +78,15 @@ Event-Driven Network Classes and Functions
 - Low-Level Non-blocking Connections
 - Client or Server Asynchronous Process
 - `THttpAsyncServer` Event-Driven HTTP Server
-- `THttpProxyServer` HTTP Server With Proxy and Cache
 
 Used e.g. by both `mormot.net.relay` and `mormot.net.rtsphttp` to handle thousands on concurrent streams, with minimal resources, in a cross-platform way.
+
+### mormot.net.proxy
+
+HTTP Server With Proxy and Cache
+- `THttpProxyServer` HTTP Server With Proxy and Cache
+
+Serves local folders, remote URIs with memory and disk cache, or custom events, over a `THttpAsyncServer`.
 
 ### mormot.net.ws.core
 

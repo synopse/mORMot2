@@ -65,8 +65,10 @@ The `mormot.net.*` units provide the complete network communication layer for th
   - Uses IOCP on Windows, epoll on Linux, kqueue on BSD/macOS
   - Handles thousands of concurrent connections efficiently
 - `THttpAsyncServer` - Async HTTP/1.1 server
-- `THttpProxyServer` - HTTP proxy with caching
 - Used by relay and RTSP modules for scalability
+
+**mormot.net.proxy** - HTTP server with proxy and cache
+- `THttpProxyServer` - Serves local folders, remote URIs with caching, or custom events over `THttpAsyncServer`
 
 ### WebSockets Layer
 
