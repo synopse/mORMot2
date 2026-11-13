@@ -11037,10 +11037,18 @@ begin
     for i := 0 to length(fRetrieved[clk]) - 1 do
       if not fRetrieved[clk][i] then
         if clk = clkArg then
-          if i >= length(fDescArg) then
-            result := Join([result, 'Unexpected "', fNames[clkArg][i], '" argument', fLineFeed])
+        begin
+          if i < length(fNames[clkArg]) then
+            result := Join([result, 'Unexpected "',
+              fNames[clkArg][i], '" argument', fLineFeed])
+          else if (i < length(fDescArg)) and
+                  (fDescArg[i] <> '') then
+            result := Join([result, 'Missing <',
+              fDescArg[i], '> argument', fLineFeed])
           else
-            result := Join([result, 'Missing <', fDescArg[i], '> argument', fLineFeed])
+            result := Join([result, 'Missing <',
+              _fmt('arg%d', [i + 1]), '> argument', fLineFeed]);
+        end
         else
         begin
           result := Join([result, 'Unexpected ', SwitchAsText(fNames[clk][i]), ' ']);

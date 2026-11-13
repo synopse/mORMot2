@@ -4653,6 +4653,46 @@ begin
       'Unexpected "/=v" parameter'#10 +
       'Unexpected "/" parameter'#10);
     {$endif OSWINDOWS}
+    // regression for #762: missing required argument without description
+    c.Clear;
+    c.RawParams := CsvToRawUtf8DynArray('watch', ' ');
+    Check(c.Parse(#10, '-', '--'));
+    Check(c.Arg(0, '', true));
+    Check(not c.Arg(1, '', false));
+    CheckEqual(c.DetectUnknown,
+      'Missing <arg2> argument'#10);
+    // missing required argument with an explicit description
+    c.Clear;
+    c.RawParams := CsvToRawUtf8DynArray('watch', ' ');
+    Check(c.Parse(#10, '-', '--'));
+    Check(c.Arg(0, '', true));
+    Check(not c.Arg(1, '#folder folder to watch', false));
+    CheckEqual(c.DetectUnknown,
+      'Missing <folder> argument'#10);
+    // an unclaimed supplied argument must still be unexpected,
+    // even when a subsequent missing argument has a description
+    c.Clear;
+    c.RawParams := CsvToRawUtf8DynArray('watch', ' ');
+    Check(c.Parse(#10, '-', '--'));
+    Check(not c.Arg(1, '#folder folder to watch', false));
+    CheckEqual(c.DetectUnknown,
+      'Unexpected "watch" argument'#10 +
+      'Missing <folder> argument'#10);
+    // no positional argument supplied: generic first argument name
+    c.Clear;
+    c.RawParams := CsvToRawUtf8DynArray('--verbose', ' ');
+    Check(c.Parse(#10, '-', '--'));
+    Check(c.Option('verbose'));
+    Check(not c.Arg(0, '', false));
+    CheckEqual(c.DetectUnknown,
+      'Missing <arg1> argument'#10);
+    // optional missing argument must not trigger an error
+    c.Clear;
+    c.RawParams := CsvToRawUtf8DynArray('watch', ' ');
+    Check(c.Parse(#10, '-', '--'));
+    Check(c.Arg(0));
+    Check(not c.Arg(1, '', true));
+    CheckEqual(c.DetectUnknown, '');
     // regression for #763: preserve empty values when requested
     c.Clear;
     c.RawParams := CsvToRawUtf8DynArray(
