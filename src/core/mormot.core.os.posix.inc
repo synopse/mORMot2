@@ -5929,7 +5929,7 @@ begin
   begin
     // execve() or a previous call failed: reap the child, and abort
     repeat
-    until (FpWaitPid(pid, nil, 0) >= 0) or
+    until (fpWaitPid(pid, nil, 0) >= 0) or
           (fpgeterrno <> ESysEINTR);
     CloseAll;
     exit;
@@ -5967,10 +5967,15 @@ const
   SIGINFO_STATUS = {$if defined(OSLINUX) and defined(CPU64)} 6 {$else} 5 {$ifend};
 
 {$ifdef FPC}
-{$ifndef FPCLINUX}
-function waitid(idtype, id: cint; info: pointer; options: cint): cint;
+function fpwaitid(idtype, id: cint; info: pointer; options: cint): cint;
+{$ifdef OSLINUX}
+begin
+  result := Do_SysCall(syscall_nr_waitid, idtype, id,
+    TSysParam(@info), options, {rusage*=}0);
+end;
+{$else}
   cdecl external clib name 'waitid';
-{$endif FPCLINUX}
+{$endif OSLINUX}
 {$endif FPC}
 
 // get the exit code of an ended child with no reaping: its zombie keeps
@@ -5982,18 +5987,8 @@ var
 begin
   FillCharFast(info, SizeOf(info), 0);
   repeat
-    {$ifdef FPC}
-      {$ifdef FPCLINUX}
-    result := Do_SysCall(syscall_nr_waitid, WAITID_P_PID, pid,
-      TSysParam(@info), WNOHANG or WAITID_WEXITED or WAITID_WNOWAIT, 0);
-      {$else}
-    result := waitid(WAITID_P_PID, pid, @info,
-      WNOHANG or WAITID_WEXITED or WAITID_WNOWAIT);
-      {$endif FPCLINUX}
-    {$else}
-    result := fpwaitid(pid, @info,
-      WNOHANG or WAITID_WEXITED or WAITID_WNOWAIT);
-    {$endif FPC}
+    result := fpwaitid({$ifdef FPC} WAITID_P_PID, {$endif}
+      pid, @info, WNOHANG or WAITID_WEXITED or WAITID_WNOWAIT);
   until (result >= 0) or
         (fpgeterrno <> ESysEINTR);
   if result < 0 then
@@ -6025,7 +6020,8 @@ begin
       r := ChildEndedNoReap(fPid, fExitCode);
       if r <> 0 then
       begin
-        fZombie := r > 0;
+        if r > 0 then
+          include(fFlags, fZombie);
         fState := epsExited; // r < 0 e.g. ECHILD if SIGCHLD = SIG_IGN
       end;
     end
@@ -6034,7 +6030,7 @@ begin
     if fState = epsRunning then
     begin
       repeat
-        r := FpWaitPid(fPid, @status, WNOHANG); // 0 = no state change
+        r := fpWaitPid(fPid, @status, WNOHANG); // 0 = no state change
       until (r >= 0) or
             (fpgeterrno <> ESysEINTR);
       if r = cint(fPid) then
@@ -6094,9 +6090,8 @@ begin
     Add(fStderr);
   if n = 0 then
   begin
-    fOutputEof := true;
-    result := -1;
-    exit;
+    include(fFlags, fOutputEof);
+    exit(-1);
   end;
   if fWakeUpRead >= 0 then
     Add(fWakeUpRead);
@@ -6131,7 +6126,7 @@ begin
   if (fStdout < 0) and
      (fStderr < 0) then
   begin
-    fOutputEof := true;
+    include(fFlags, fOutputEof);
     if result = 0 then
       result := -1;
   end;
@@ -6165,13 +6160,13 @@ end;
 
 procedure TExternalProcess.DoClose;
 begin
-  if fZombie then
+  if fZombie in fFlags then
   begin
     // roWinJobCloseChildren: the zombie kept its process group number
-    fZombie := false;
+    exclude(fFlags, fZombie);
     fpkill(-cint(fPid), SIGKILL); // kill any child still running
     repeat
-    until (FpWaitPid(fPid, nil, 0) >= 0) or // eventually reap the process
+    until (fpWaitPid(fPid, nil, 0) >= 0) or // eventually reap the process
           (fpgeterrno <> ESysEINTR);
   end;
   CloseValid(fStdin);

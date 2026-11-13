@@ -6573,13 +6573,12 @@ type
   protected
     fSafe: TLightLock; // protect fState/fExitCode against concurrent reaping
     fState: TExternalProcessState;
-    fOutputEof, fTerminated, fAborted, fKilling, fThreaded: boolean;
-    fZombie: boolean; // POSIX: ended but not reaped, to keep its group
-    fKeepOutput, fKeepError: boolean; // append to fOutput/fError
+    fFlags: set of (fOutputEof, fTerminated, fAborted, fKilling,
+      fThreaded, fZombie, fKeepOutput, fKeepError);
+    fOptions: TRunOptions;
     fThreadDone: integer; // set by the background thread when done
     fPid: cardinal;
     fExitCode: integer;
-    fOptions: TRunOptions;
     fOnOutput, fOnError: TOnRedirect;
     fOutputSafe: TLightLock; // protect fOutput/fError
     fOutput, fError: RawUtf8;
@@ -13810,13 +13809,10 @@ begin
   try
     fOwner.Pump;
   finally
-    fOwner.fOutputEof := true; // e.g. on OnOutput exception: don't WaitFor EOF
+    include(fOwner.fFlags, fOutputEof); // e.g. on OnOutput exception: don't WaitFor EOF
     LockedInc32(@fOwner.fThreadDone); // with a barrier: last access to fOwner
   end;
 end;
-
-const
-  NO_HANDLE = {$ifdef OSPOSIX} -1 {$else} 0 {$endif};
 
 function Deadline(waitms: cardinal): Int64;
 begin
@@ -13830,11 +13826,13 @@ constructor TExternalProcess.Create;
 begin
   inherited Create;
   fExitCode := -1;
-  fStdin := NO_HANDLE;
-  fStdout := NO_HANDLE;
-  fStderr := NO_HANDLE;
-  fWakeUpRead := NO_HANDLE;
-  fWakeUpWrite := NO_HANDLE;
+  {$ifdef OSPOSIX}
+  fStdin := -1;
+  fStdout := -1;
+  fStderr := -1;
+  fWakeUpRead := -1;
+  fWakeUpWrite := -1;
+  {$endif OSPOSIX}
   fStdinSafe.Init;
 end;
 
@@ -13842,9 +13840,9 @@ destructor TExternalProcess.Destroy;
 begin
   if fState = epsRunning then
     Terminate(RunAbortTimeoutSecs * 1000);
-  if fThreaded then
+  if fThreaded in fFlags then
   begin
-    fTerminated := true;
+    include(fFlags, fTerminated);
     DoWakeUp;
     while fThreadDone = 0 do // wait for the background thread to finish
       SleepHiRes(1);
@@ -13857,18 +13855,20 @@ end;
 function TExternalProcess.StartThread: boolean;
 begin
   result := true;
-  fKeepOutput := not Assigned(fOnOutput);
-  fKeepError := not Assigned(fOnError);
-  if fOutputEof then
+  if not Assigned(fOnOutput) then
+    include(fFlags, fKeepOutput);
+  if not not Assigned(fOnError) then
+    include(fFlags, fKeepError);
+  if fOutputEof in fFlags then
     exit; // nothing to read
-  fThreaded := true;
+  include(fFlags, fThreaded);
   try
     TExternalProcessThread.Create(self); // with FreeOnTerminate = true
   except
     // the thread could not be created, e.g. out of resources: nothing would
     // read the output of this process, and Destroy would wait for ever
     Terminate(0);       // hard kill - fThreaded: WaitExit() only reaps
-    fThreaded := false; // Destroy has no thread to wait for
+    exclude(fFlags, fThreaded); // Destroy has no thread to wait for
     DoClose;
     fState := epsFailed;
     result := false;
@@ -13894,7 +13894,7 @@ end;
 
 procedure TExternalProcess.Pump;
 begin
-  while not fTerminated and
+  while not (fTerminated in fFlags) and
         (DoPump(-1) >= 0) do
     ; // DoPump() calls DoOutput() until EOF or DoWakeUp
 end;
@@ -13908,8 +13908,8 @@ begin
     cb := fOnError
   else
     cb := fOnOutput;
-  if (iserror and fKeepError) or
-     (not iserror and fKeepOutput) then
+  if (iserror and (fKeepError in fFlags)) or
+     (not iserror and (fKeepOutput in fFlags)) then
   begin
     fOutputSafe.Lock;
     try
@@ -13925,8 +13925,8 @@ begin
   begin
     FastSetString(u, p, len);
     if cb(u, fPid) and
-       not fKilling then
-      fAborted := true; // only used by Redirect()
+       not (fKilling in fFlags) then
+      include(fFlags, fAborted); // only used by Redirect()
   end;
 end;
 
@@ -13941,7 +13941,7 @@ begin
        ((endtix <> 0) and
         (GetTickCount64 >= endtix)) then
       exit;
-    if fThreaded or
+    if (fThreaded in fFlags) or
        (DoPump(ms) < 0) then // no background thread: read output meanwhile
       SleepHiRes(ms);
     if ms < 10 then
@@ -13956,7 +13956,10 @@ var
   endtix: Int64;
 begin
   FastAssignNew(result);
-  fKeepOutput := setresult;
+  if setresult then
+    include(fFlags, fKeepOutput)
+  else
+    exclude(fFlags, fKeepOutput);
   if Assigned(fOnOutput) then
     fOnOutput('', fPid); // notify the process start, ignoring its result
   wait := 200;
@@ -13974,15 +13977,14 @@ begin
       0:
         if Assigned(fOnOutput) and // idle
            fOnOutput('', fPid) then
-          fAborted := true;
+          include(fFlags, fAborted);
     end;
-    if fAborted or
+    if (fAborted in fFlags) or
        ((endtix <> 0) and
         (GetTickCount64 > endtix)) then
     begin
       // abort process execution after timeout or onoutput()=true
-      fAborted := true;
-      fKilling := true;
+      fFlags := fFlags + [fAborted, fKilling];
       if (RunAbortTimeoutSecs > 0)
          {$ifdef OSPOSIX} and (ramSigTerm in RunAbortMethods) {$endif} then
       begin
@@ -13996,7 +13998,7 @@ begin
   WaitExit(0); // reap the zombie (immediate after SIGKILL)
   DoClose;
   if (exitcode <> nil) and
-     not fAborted then
+     not (fAborted in fFlags) then
     exitcode^ := fExitCode;
   pointer(result) := pointer(fOutput); // transfer ownership
   pointer(fOutput) := nil;
@@ -14071,7 +14073,7 @@ begin
   result := true;
   if not Running then
     exit;
-  fKilling := true;
+  include(fFlags, fKilling);
   if waitms <> 0 then
   begin
     DoSignal({hard=}false);
@@ -14100,11 +14102,11 @@ begin
   endtix := Deadline(waitms);
   if not WaitExit(endtix) then
     exit;
-  while not fOutputEof do // wait for the end of the output
+  while not (fOutputEof in fFlags) do // wait for the end of the output
     if (endtix <> 0) and
        (GetTickCount64 >= endtix) then
       exit
-    else if fThreaded then
+    else if (fThreaded in fFlags) then
       SleepHiRes(1)
     else if DoPump(10) < 0 then
       break;

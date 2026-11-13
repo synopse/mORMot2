@@ -5461,13 +5461,13 @@ begin
     if (fStdout = 0) and
        (fStderr = 0) then
     begin
-      fOutputEof := true;
+      include(fFlags, fOutputEof);
       if result = 0 then
         result := -1;
       exit;
     end;
     if (result > 0) or
-       fTerminated or
+       (fTerminated in fFlags) or
        (timeoutms = 0) or
        ((endtix <> 0) and
         (GetTickCount64 >= endtix)) then
