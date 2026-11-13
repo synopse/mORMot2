@@ -3000,6 +3000,7 @@ var
     dwFlags: DWord; pszPath: PWideChar): HRESULT; stdcall;
   SHGetKnownFolderPath: function(const rfid: TGuid; dwFlags:DWORD; hToken: THandle;
     out ppszPath: PWideChar): HRESULT; stdcall;
+  CommandLineToArgvW(cmd: PWideChar; var argc: integer): PPointer; stdcall;
 
 procedure CoTaskMemFree(_para1: pointer); stdcall; external ole32;
 
@@ -3069,7 +3070,7 @@ begin
         CoTaskMemFree(pw);
       end
       else
-        result := GetSystemPath(spUserDocuments); // fallback on XP
+        result := GetSystemPath(spUserDocuments); // fallback on XP or WinPE
   else
     if (CSIDL[kind] <> 0) and
        DelayedProc(SHGetFolderPathW, Shell32Dll, shell32,
@@ -3079,7 +3080,7 @@ begin
       Win32PWideCharToFileName(@tmp, result)
     else
     begin
-      // fallback to environment variables (very unlikely)
+      // fallback to environment variables (very unlikely - possible on WinPE)
       result := GetSystemEnvString(_ENV[kind]);
       if result = '' then
       begin
@@ -5573,9 +5574,6 @@ function GetVersionEx(var lpVersionInformation: TOSVersionInfoEx): BOOL;
   stdcall; external kernel32 name 'GetVersionExA';
 {$endif UNICODE}
 
-function CommandLineToArgvW(cmd: PWideChar; var argc: integer): PPointer;
-  stdcall; external shell32;
-
 function GetLocalTimeOffset: integer; // not defined in oldest Delphi
 var
   tzi: TTimeZoneInformation;
@@ -5937,15 +5935,32 @@ begin
   crc32c128(rnd, @OSVersionInfo, SizeOf(OSVersionInfo));
   // CpuCache, Executable.Hash, CpuFeatures will be added in main mormot.core.os
   // 6. fill ParamUtf8[] using the proper Windows API
-  argv := CommandLineToArgvW(Windows.GetCommandLineW, argc);
-  SetLength(ParamUtf8, argc);
-  a := argv;
-  for n := 1 to argc - 1 do
+  argv := nil;
+  if DelayedProc(CommandLineToArgvW, Shell32Dll, shell32,
+       'CommandLineToArgvW') then
+    argv := CommandLineToArgvW(Windows.GetCommandLineW, argc);
+  if argv <> nil then
   begin
-    inc(a); // ParamUtf8[0] is set later from Executable.ProgramFileName
-    Win32PWideCharToUtf8(a^, ParamUtf8[n]);
+    // use standard OS parser, consistent between Delphi and FPC
+    SetLength(ParamUtf8, argc);
+    a := argv;
+    for n := 1 to argc - 1 do
+    begin
+      inc(a); // ParamUtf8[0] is set later
+      Win32PWideCharToUtf8(a^, ParamUtf8[n]);
+    end;
+    LocalFree(argv);
+  end
+  else
+  begin
+    // fallback for WinPE without shell32.dll
+    n := ParamCount;
+    if n < 0 then
+      n := 0;
+    SetLength(ParamUtf8, n + 1);
+    for n := 1 to high(ParamUtf8) do
+      _toutf8(ParamStr(n), ParamUtf8[n]);
   end;
-  LocalFree(argv);
 end;
 
 procedure FinalizeSpecificUnit;
