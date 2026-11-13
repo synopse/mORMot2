@@ -12,6 +12,7 @@ Details are available [on out GitHub repository](https://github.com/synopse/mORM
 - XML pull/SAX/DOM Parser
 - YAML 1.2 Read and Write Support
 - HTTP Proxy Cache
+- FastCGI asynchronous client, as `fcgi://` source of the HTTP Proxy
 - HTTP over TFTP proxy
 - SChannel rewrite with full server-side support
 - DuckDB support (`mormot.db.sql.duckdb.pas`), including ORM integration and a native client of the DuckDB Quack protocol

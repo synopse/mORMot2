@@ -68,7 +68,8 @@ The `mormot.net.*` units provide the complete network communication layer for th
 - Used by relay and RTSP modules for scalability
 
 **mormot.net.proxy** - HTTP server with proxy and cache
-- `THttpProxyServer` - Serves local folders, remote URIs with caching, or custom events over `THttpAsyncServer`
+- `THttpProxyServer` - Serves local folders, remote URIs with caching, FastCGI applications, or custom events over `THttpAsyncServer`
+- `TFastCgiAsyncConnections` - Asynchronous client connections to a FastCGI application, e.g. php-fpm
 
 ### WebSockets Layer
 

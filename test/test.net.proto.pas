@@ -102,6 +102,9 @@ type
     proxysmall, proxybig, proxyfresh: RawByteString;
     proxyfreshmod: RawUtf8;
     proxyget, proxyhead, proxyevent: integer;
+    // for HttpFastCgi
+    fcgibig: RawByteString;
+    fcgirequests: integer;
     // for OutStream
     outdata: RawByteString;
     outkept: TRawByteStringStream; // supplied with aOwned=false
@@ -193,6 +196,8 @@ type
       aInContentType, aRemoteIP: RawUtf8; aContentLength: Int64): TStream;
     /// validate THttpProxyServer local folder, remote URI and event sources
     procedure DoHttpProxyServer(Sender: TObject);
+    procedure DoHttpFastCgi(Sender: TObject);
+    procedure DoFastCgiApp(Sender: TObject);
     function DoProxyOriginRequest(Ctxt: THttpServerRequestAbstract): cardinal;
     function DoProxyEventRequest(Ctxt: THttpServerRequestAbstract;
       const Uri: TUriMatchName; Met: TUriRouterMethod;
@@ -636,6 +641,7 @@ procedure TNetworkProtocols.SlowTests;
 begin
   // start some slow tests in background if /multithread is enabled
   Run(DoHttpProxyServer, self, 'HttpProxyServer', true, false);
+  Run(DoHttpFastCgi, self, 'HttpFastCgi', true, false);
   Run(DoHttpBodyDownload, self, 'HttpBodyDownload', true, false);
   Run(DoHttpExpect100, self, 'HttpExpect100', true, false);
   Run(DoHttpFileRange, self, 'HttpFileRange', true, false);
@@ -8470,6 +8476,443 @@ begin
     proxy.Free;
     settings.Free;
     srv.Free;
+  end;
+end;
+
+procedure TNetworkProtocols.DoFastCgiApp(Sender: TObject);
+var
+  srv, cli, slow: TCrtSocket;
+  h: TFastCgiHeader;
+  content, params, stdin: RawByteString;
+  script, text: RawUtf8;
+  resp: TRawByteStringBuffer;
+  len, stdinrecs, appstatus, protstatus: integer;
+  pad: array[byte] of byte;
+  endreq: array[0..15] of byte;
+
+  function Param(const name: RawUtf8): RawUtf8;
+  var
+    p, e: PAnsiChar;
+    nl, vl: cardinal;
+
+    function NextLen: cardinal;
+    begin
+      if ord(p^) < 128 then
+      begin
+        result := ord(p^);
+        inc(p);
+      end
+      else
+      begin
+        result := bswap32(PCardinal(p)^) and $7fffffff;
+        inc(p, 4);
+      end;
+    end;
+
+  begin
+    result := '<none>';
+    p := pointer(params);
+    e := p + length(params);
+    while p < e do
+    begin
+      nl := NextLen;
+      vl := NextLen;
+      if (nl = cardinal(length(name))) and
+         CompareMem(p, pointer(name), nl) then
+      begin
+        FastSetString(result, p + nl, vl);
+        exit;
+      end;
+      inc(p, nl + vl);
+    end;
+  end;
+
+begin
+  // a minimal FastCGI responder application, with one request per connection
+  srv := Sender as TCrtSocket;
+  slow := nil;
+  try
+    repeat
+      cli := srv.AcceptIncoming(nil, {async=}false);
+      if cli = nil then
+        break; // the listening socket has been closed
+      try
+        try
+          // read the whole request
+          params := '';
+          stdin := '';
+          stdinrecs := 0;
+          repeat
+            cli.SockRecv(@h, SizeOf(h));
+            len := bswap16(h.ContentLen);
+            FastNewRawByteString(content, len);
+            if len <> 0 then
+              cli.SockRecv(pointer(content), len);
+            if h.PaddingLen <> 0 then
+              cli.SockRecv(@pad, h.PaddingLen);
+            case h.RecType of
+              ord(frtParams):
+                Append(params, content);
+              ord(frtStdIn):
+                if len = 0 then
+                  break // a void record ends the request
+                else
+                begin
+                  Append(stdin, content);
+                  inc(stdinrecs);
+                end;
+            end;
+          until false;
+          LockedInc32(@fcgirequests);
+          // compute the response from the script name
+          script := Param('SCRIPT_NAME');
+          appstatus := 0;
+          protstatus := 0;
+          resp.Reset;
+          if script = '/slow/x.php' then
+          begin
+            slow.Free;
+            slow := cli; // never answer: closed when this application ends
+            cli := nil;
+            continue;
+          end
+          else if script = '/app/close.php' then
+            continue // close with no response at all
+          else if script = '/app/proto.php' then
+            protstatus := 1 // FCGI_CANT_MPX_CONN with no output
+          else if script = '/app/lf.php' then
+            text := 'Status: 201 Created'#10'Content-Type: text/x-lf'#10 +
+                    'X-Lf: yes'#10#10'lf body'
+          else if script = '/app/redir.php' then
+            text := 'Location: /other'#13#10#13#10
+          else if script = '/app/nohead.php' then
+            text := 'no header at all'
+          else if script = '/app/big.php' then
+          begin
+            text := 'Content-Type: application/octet-stream'#13#10#13#10;
+            Append(text, pointer(fcgibig), length(fcgibig)); // no conversion
+          end
+          else
+          begin
+            if script = '/app/exit.php' then
+              appstatus := 3
+            else if script = '/app/stderr.php' then
+              FastCgiAppendStream(resp, frtStdErr, 'warning', 7);
+            Join(['Status: 200 OK'#13#10'Content-Type: text/plain'#13#10 +
+                  'X-App: one'#13#10'Set-Cookie: a=b'#13#10#13#10,
+                  Param('REQUEST_METHOD'), '|', Param('SCRIPT_FILENAME'), '|',
+                  Param('PATH_INFO'), '|', Param('QUERY_STRING'), '|',
+                  Param('HTTP_X_TEST'), '|', Param('HTTP_PROXY'), '|',
+                  Param('HTTP_BAD_NAME'), '|', Param('CONTENT_LENGTH'), '|',
+                  Param('CONTENT_TYPE'), '|',
+                  UInt32ToUtf8(stdinrecs), '|',
+                  CardinalToHexShort(crc32cHash(stdin)), '|',
+                  UInt32ToUtf8(length(Param('HTTP_X_LONG'))), '|',
+                  Param('DOCUMENT_ROOT'), '|', Param('REQUEST_URI'), '|',
+                  Param('SERVER_PORT'), '|', Param('GATEWAY_INTERFACE')], text);
+          end;
+          if protstatus = 0 then
+            FastCgiAppendStream(resp, frtStdOut, pointer(text), length(text));
+          FillCharFast(endreq, SizeOf(endreq), 0);
+          endreq[0] := FCGI_VERSION_1;
+          endreq[1] := ord(frtEndRequest);
+          endreq[3] := 1;  // RequestID = 1
+          endreq[5] := 8;  // ContentLen = 8
+          endreq[11] := appstatus;
+          endreq[12] := protstatus;
+          resp.Append(@endreq, SizeOf(endreq));
+          cli.SndLow(resp.Buffer, resp.Len);
+        except
+          // e.g. on connection closed by the client: accept the next one
+        end;
+      finally
+        cli.Free;
+      end;
+    until false;
+  finally
+    slow.Free;
+  end;
+end;
+
+procedure TNetworkProtocols.DoHttpFastCgi(Sender: TObject);
+var
+  app, raw: TCrtSocket;
+  th: TLoggedWorkThread;
+  settings: THttpProxyServerSettings;
+  url: THttpProxyUrlSettings;
+  proxy: THttpProxyServer;
+  clt: THttpClientSocket;
+  buf, par: TRawByteStringBuffer;
+  resp: TFastCgiResponse;
+  s, ctype, headers: RawUtf8;
+  body, bin: RawByteString;
+  status, i, n: integer;
+  start: Int64;
+
+  procedure Expect(const method, uri: RawUtf8; expected: integer;
+    const header: RawUtf8 = ''; const content: RawByteString = '');
+  var
+    status: integer;
+    mime: RawUtf8;
+  begin
+    if content <> '' then
+      mime := 'application/x-test';
+    status := clt.Request(uri, method, 10000, header, content, mime);
+    CheckUtf8(status = expected, '% % returned % but expected %',
+      [method, uri, status, expected]);
+  end;
+
+  function Field(index: integer): RawUtf8;
+  begin
+    result := GetCsvItem(pointer(clt.Content), index, '|');
+  end;
+
+  procedure ParseOutput(const output: RawUtf8; expected: boolean);
+  begin
+    ctype := '';
+    body := '';
+    CheckUtf8(FastCgiParseOutput(pointer(output), length(output), status,
+      ctype, headers, body) = expected, 'output %', [output]);
+  end;
+
+begin
+  // FastCGI name/value pairs: lengths up to 127 use a single byte
+  buf.Reset;
+  s := RawUtf8OfChar('n', 127);
+  FastCgiAppendParam(buf, s, s);
+  CheckEqual(buf.Len, 2 + 127 * 2, '127');
+  Check(PWord(buf.Buffer)^ = $7f7f, '127 as bytes');
+  buf.Reset;
+  s := RawUtf8OfChar('n', 128);
+  FastCgiAppendParam(buf, s, s);
+  CheckEqual(buf.Len, 8 + 128 * 2, '128');
+  Check(PCardinal(buf.Buffer)^ = $80000080, '128 name as 31-bit');
+  Check(PCardinalArray(buf.Buffer)^[1] = $80000080, '128 value as 31-bit');
+  // FastCGI streams: records of 65535 bytes at most, then a void record
+  buf.Reset;
+  FastCgiAppendStream(buf, frtStdIn, nil, 0);
+  CheckEqual(buf.Len, 8, 'void stream');
+  bin := RandomWinAnsi(65536);
+  buf.Reset;
+  FastCgiAppendStream(buf, frtStdIn, pointer(bin), 65535);
+  CheckEqual(buf.Len, 8 + 65535 + 8, '65535 as one record');
+  Check(PFastCgiHeader(buf.Buffer)^.ContentLen = $ffff, '65535 len');
+  buf.Reset;
+  FastCgiAppendStream(buf, frtStdIn, pointer(bin), 65536);
+  CheckEqual(buf.Len, 8 + 65535 + 8 + 1 + 8, '65536 as two records');
+  // a whole request: begin, params stream, stdin stream
+  par.Reset;
+  FastCgiAppendParam(par, 'A', 'b');
+  buf.Reset;
+  FastCgiAppendRequest(buf, par, 'body');
+  CheckEqual(buf.Len, (8 + 8) + (8 + 4 + 8) + (8 + 4 + 8), 'request');
+  CheckEqual(PFastCgiHeader(buf.Buffer)^.RecType, ord(frtBeginRequest), 'begin');
+  Check(PFastCgiHeader(buf.Buffer)^.RequestID = $0100, 'request id 1');
+  // decode a response sent byte by byte, with padding and an unknown record
+  buf.Reset;
+  buf.Append(#1#6#0#1#0#5#3#0'hello'#0#0#0);                // stdout + padding
+  buf.Append(#1#11#0#1#0#2#0#0'??');                        // unknown type
+  buf.Append(#1#7#0#1#0#3#0#0'err');                        // stderr
+  buf.Append(#1#6#0#1#0#0#0#0);                             // end of stdout
+  buf.Append(#1#3#0#1#0#8#0#0#1#2#3#4#0#0#0#0);             // end request
+  buf.Append('trailing');                                   // never consumed
+  resp.Init;
+  s := '';
+  n := 0;
+  for i := 0 to buf.Len - 1 do
+  begin
+    Append(s, @PAnsiChar(buf.Buffer)[i], 1);
+    status := resp.Parse(pointer(s), length(s));
+    if not CheckFailed(status >= 0, 'parse') then
+    begin
+      delete(s, 1, status);
+      inc(n, status);
+    end;
+  end;
+  Check(resp.Done, 'done');
+  CheckEqual(n, buf.Len - 8, 'whole records consumed');
+  CheckEqual(resp.Output.Len, 5, 'stdout len');
+  Check(CompareMem(resp.Output.Buffer, PAnsiChar('hello'), 5), 'stdout');
+  CheckEqual(resp.Error.Len, 3, 'stderr len');
+  Check(resp.AppStatus = $01020304, 'app status');
+  CheckEqual(resp.ProtocolStatus, 0, 'protocol status');
+  resp.Init;
+  CheckEqual(resp.Parse(#2#6#0#1#0#0#0#0, 8), -1, 'unknown version');
+  resp.Init;
+  CheckEqual(resp.Parse(#1#3#0#1#0#4#0#0#0#0#0#0, 12), -1, 'short end request');
+  resp.Init;
+  CheckEqual(resp.Parse(#1#6#0#1#0#5#0#0'hel', 11), 0, 'incomplete record');
+  Check(not resp.Done, 'not done');
+  // CGI output: headers ended by LF or CRLF, then the body
+  ParseOutput('Content-Type: text/plain'#13#10'X-One: 1'#13#10#13#10'body', true);
+  CheckEqual(status, HTTP_SUCCESS, 'default status');
+  CheckEqual(ctype, 'text/plain', 'crlf type');
+  CheckEqual(headers, 'X-One: 1', 'crlf headers');
+  CheckEqual(RawUtf8(body), 'body', 'crlf body');
+  ParseOutput('Status: 404 Not Found'#10'content-type:text/html'#10 +
+    'X-One: 1'#10'X-Two: 2'#10'Content-Length: 99'#10#10'b'#10#10'c', true);
+  CheckEqual(status, HTTP_NOTFOUND, 'lf status');
+  CheckEqual(ctype, 'text/html', 'lf type');
+  CheckEqual(headers, 'X-One: 1'#13#10'X-Two: 2', 'lf headers');
+  CheckEqual(RawUtf8(body), 'b'#10#10'c', 'lf body');
+  ParseOutput('Location: /other'#13#10#13#10, true);
+  CheckEqual(status, HTTP_FOUND, 'location status');
+  CheckEqual(headers, 'Location: /other', 'location header');
+  CheckEqual(RawUtf8(body), '', 'location body');
+  ParseOutput('Status: 301'#10'Location: /moved'#10#10, true);
+  CheckEqual(status, HTTP_MOVEDPERMANENTLY, 'explicit status');
+  ParseOutput(#10'only a body', true);
+  CheckEqual(RawUtf8(body), 'only a body', 'no header');
+  ParseOutput('', false);
+  ParseOutput('Content-Type: text/plain'#13#10'body', false); // no void line
+  ParseOutput('not a header'#10#10'body', false);
+  ParseOutput(': no name'#10#10'body', false);
+  ParseOutput('Status: 99'#10#10'body', false);
+  ParseOutput('Status: 600'#10#10'body', false);
+  // end-to-end: a FastCGI application behind a THttpProxyServer
+  fcgibig := RandomWinAnsi(200 shl 10); // sent back as several records
+  fcgirequests := 0;
+  clt := nil;
+  proxy := nil;
+  th := nil;
+  settings := THttpProxyServerSettings.Create;
+  app := TCrtSocket.Bind('127.0.0.1:8880');
+  try
+    th := TLoggedWorkThread.Create(TSynLog, 'fcgiapp', app,
+      DoFastCgiApp, {suspended=}false, {ManualWaitForAndFree=}true);
+    settings.Server.Port := '8881';
+    settings.Server.ThreadCount := 2;
+    settings.AddFastCgi('fcgi://127.0.0.1:8880/var/www', 'app');
+    url := settings.AddFastCgi('fcgi://127.0.0.1:8880/var/www', 'slow');
+    url.FastCgiTimeoutSec := 1;
+    url := settings.AddFastCgi('fcgi://127.0.0.1:8880/var/www', 'getonly');
+    url.Methods := [urmGet];
+    proxy := THttpProxyServer.Create(settings);
+    proxy.Start;
+    clt := THttpClientSocket.Open('127.0.0.1', '8881');
+    // the CGI variables, with the script located before the PATH_INFO
+    Expect('GET', '/app/echo.php/extra/info?x=1&y=2', HTTP_SUCCESS,
+      'X-Test: hello'#13#10'Proxy: evil'#13#10'Bad_Name: v');
+    CheckEqual(Field(0), 'GET', 'method');
+    CheckEqual(Field(1), '/var/www/echo.php', 'script filename');
+    CheckEqual(Field(2), '/extra/info', 'path info');
+    CheckEqual(Field(3), 'x=1&y=2', 'query string');
+    CheckEqual(Field(4), 'hello', 'header');
+    CheckEqual(Field(5), '<none>', 'no HTTP_PROXY');
+    CheckEqual(Field(6), '<none>', 'no header with underscore');
+    CheckEqual(Field(7), '<none>', 'no content length');
+    CheckEqual(Field(9), '0', 'no stdin record');
+    CheckEqual(Field(12), '/var/www', 'document root');
+    CheckEqual(Field(13), '/app/echo.php/extra/info?x=1&y=2', 'request uri');
+    CheckEqual(Field(14), '8881', 'server port');
+    CheckEqual(Field(15), 'CGI/1.1', 'gateway');
+    CheckEqual(clt.ContentType, 'text/plain', 'content type');
+    CheckEqual(clt.HeaderGetValue('X-APP'), 'one', 'custom header');
+    CheckEqual(clt.HeaderGetValue('SET-COOKIE'), 'a=b', 'cookie');
+    Expect('GET', '/app/sub/echo.php', HTTP_SUCCESS);
+    CheckEqual(Field(1), '/var/www/sub/echo.php', 'sub folder');
+    CheckEqual(Field(2), '<none>', 'no path info');
+    CheckEqual(Field(3), '', 'void query string');
+    Expect('HEAD', '/app/echo.php', HTTP_SUCCESS);
+    CheckEqual(clt.Content, '', 'head has no body');
+    // header value lengths around the 127 / 128 encoding limit
+    Expect('GET', '/app/echo.php', HTTP_SUCCESS,
+      'X-Long: ' + RawUtf8OfChar('v', 127));
+    CheckEqual(Field(11), '127', '127 bytes value');
+    Expect('GET', '/app/echo.php', HTTP_SUCCESS,
+      'X-Long: ' + RawUtf8OfChar('v', 128));
+    CheckEqual(Field(11), '128', '128 bytes value');
+    // request body: void, then around the 65535 bytes record limit
+    Expect('POST', '/app/echo.php', HTTP_SUCCESS);
+    CheckEqual(Field(0), 'POST', 'post');
+    CheckEqual(Field(7), '<none>', 'void body length');
+    CheckEqual(Field(9), '0', 'void body record');
+    SetLength(bin, 65535);
+    Expect('POST', '/app/echo.php', HTTP_SUCCESS, '', bin);
+    CheckEqual(Field(7), '65535', '65535 length');
+    CheckEqual(Field(8), 'application/x-test', 'body type');
+    CheckEqual(Field(9), '1', '65535 as one record');
+    CheckEqual(Field(10), CardinalToHexShort(crc32cHash(bin)), '65535 body');
+    bin := RandomWinAnsi(65536);
+    Expect('PUT', '/app/echo.php', HTTP_SUCCESS, '', bin);
+    CheckEqual(Field(0), 'PUT', 'put');
+    CheckEqual(Field(7), '65536', '65536 length');
+    CheckEqual(Field(9), '2', '65536 as two records');
+    CheckEqual(Field(10), CardinalToHexShort(crc32cHash(bin)), '65536 body');
+    // CGI headers ended by LF, explicit status, redirection
+    Expect('GET', '/app/lf.php', HTTP_CREATED);
+    CheckEqual(clt.Content, 'lf body', 'lf body');
+    CheckEqual(clt.ContentType, 'text/x-lf', 'lf type');
+    CheckEqual(clt.HeaderGetValue('X-LF'), 'yes', 'lf header');
+    Expect('GET', '/app/redir.php', HTTP_FOUND);
+    CheckEqual(clt.HeaderGetValue('LOCATION'), '/other', 'location');
+    // a response sent as several records
+    Expect('GET', '/app/big.php', HTTP_SUCCESS);
+    CheckEqual(length(clt.Content), length(fcgibig), 'big length');
+    CheckEqual(crc32cHash(clt.Content), crc32cHash(fcgibig), 'big');
+    // the output is sent back whatever the application exit code or stderr is
+    Expect('GET', '/app/exit.php', HTTP_SUCCESS);
+    CheckEqual(Field(0), 'GET', 'exit code');
+    Expect('GET', '/app/stderr.php', HTTP_SUCCESS);
+    CheckEqual(Field(0), 'GET', 'stderr');
+    // invalid responses from the application
+    Expect('GET', '/app/proto.php', HTTP_BADGATEWAY);
+    Expect('GET', '/app/nohead.php', HTTP_BADGATEWAY);
+    Expect('GET', '/app/close.php', HTTP_BADGATEWAY);
+    // no script or unsafe path: the application is not even called
+    n := fcgirequests;
+    Expect('GET', '/app/noscript', HTTP_NOTFOUND);
+    Expect('GET', '/app/', HTTP_NOTFOUND);
+    Expect('GET', '/app/a%2F..%2F..%2Fecho.php', HTTP_NOTFOUND);
+    Expect('GET', '/app/echo.php%00.txt', HTTP_NOTFOUND);
+    Expect('POST', '/getonly/echo.php', HTTP_NOTFOUND, '', 'body');
+    CheckEqual(fcgirequests, n, 'application not called');
+    Expect('GET', '/getonly/echo.php', HTTP_SUCCESS);
+    CheckEqual(Field(1), '/var/www/echo.php', 'get only');
+    // an application which never answers
+    start := GetTickCount64;
+    Expect('GET', '/slow/x.php', HTTP_GATEWAYTIMEOUT);
+    Check(GetTickCount64 - start >= 900, 'timeout delay');
+    Expect('GET', '/app/echo.php', HTTP_SUCCESS); // the other requests still work
+    CheckEqual(Field(0), 'GET', 'after timeout');
+    // stop the proxy while a request is still waiting for its application
+    FreeAndNil(clt);
+    n := fcgirequests;
+    raw := TCrtSocket.Open('127.0.0.1', '8881', nlTcp, 10000);
+    try
+      raw.SockSend('GET /slow/x.php HTTP/1.1');
+      raw.SockSend('Host: 127.0.0.1:8881');
+      raw.SockSendCRLF;
+      raw.SockSendFlush;
+      start := GetTickCount64 + 5000;
+      while (fcgirequests = n) and
+            (GetTickCount64 < start) do
+        SleepHiRes(1);
+      CheckEqual(fcgirequests, n + 1, 'pending request');
+      proxy.Stop;
+    finally
+      raw.Free;
+    end;
+    // restart with the same settings
+    proxy.Start;
+    clt := THttpClientSocket.Open('127.0.0.1', '8881');
+    Expect('GET', '/app/echo.php', HTTP_SUCCESS);
+    CheckEqual(Field(0), 'GET', 'restarted');
+    // an application which is not reachable any more
+    app.Close;
+    th.WaitFor;
+    Expect('GET', '/app/echo.php', HTTP_BADGATEWAY);
+  finally
+    clt.Free;
+    proxy.Free;
+    settings.Free;
+    app.Close;
+    if th <> nil then
+    begin
+      th.WaitFor;
+      th.Free;
+    end;
+    app.Free;
   end;
 end;
 

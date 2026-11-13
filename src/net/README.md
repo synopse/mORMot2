@@ -84,9 +84,10 @@ Used e.g. by `mormot.net.relay`, `mormot.net.proxy` and `mormot.net.rtsphttp` to
 ### mormot.net.proxy
 
 HTTP Server With Proxy and Cache
+- FastCGI Asynchronous Client Connections
 - `THttpProxyServer` HTTP Server With Proxy and Cache
 
-Serves local folders, remote URIs with memory and disk cache, or custom events, over a `THttpAsyncServer`.
+Serves local folders, remote URIs with memory and disk cache, FastCGI applications (e.g. php-fpm), or custom events, over a `THttpAsyncServer`.
 
 ### mormot.net.ws.core
 
