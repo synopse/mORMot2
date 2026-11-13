@@ -155,6 +155,8 @@ type
     procedure I18nIniAndFiles;
     /// the FPC resourcestring table rewriting channel
     procedure I18nResourceStrings;
+    /// validate JOP like processing
+    procedure TestJopProcess;
   public
     /// SAX-level tokens over elements, attributes, text and CData
     procedure XmlSaxTokens;
@@ -1188,6 +1190,317 @@ begin
     Result := FormatVariant('a=%,b=%', [U['a'], i['b']]);
 end;
 
+procedure TTestCoreProcess.TestJopProcess;
+
+  procedure TestJop(const src, exp: RawUtf8; nest: boolean = true);
+  var
+    j, k: RawUtf8;
+    s: TTextWriterJsonFormat;
+  begin
+    j := JsonPreprocess(src, jsonUnquotedPropNameCompact);
+    Check(j <> '');
+    CheckEqual(j, exp, src);
+    if nest then
+      for s := low(s) to high(s) do
+      begin
+        k := JsonPreprocess(src, s);
+        if s = jsonCompact then
+          Check(IsValidJson(k, {strict=}true), 'valid');
+        if s = jsonUnquotedPropNameCompact then
+          CheckEqual(k, j)
+        else
+          CheckEqual(JsonReformat(k, jsonUnquotedPropNameCompact), j);
+      end;
+  end;
+
+  procedure TestJopText;
+  var
+    mainFile, outerFile, innerFile: TFileName;
+    insertFile, rawFile: TFileName;
+    src: RawUtf8;
+  begin
+    // P0 #1: basic text processing and pointer handling
+    CheckEqual(TextPreprocess('hello world'), 'hello world');
+    CheckEqual(TextPreprocess('a$b'), 'a$b');
+    CheckEqual(TextPreprocess('a$ident$b'), 'a$ident$b');
+    CheckEqual(TextPreprocess('a$(missing)b'), 'ab');
+    CheckEqual(TextPreprocess(
+      '$$'#10 +
+      'name = world'#10 +
+      '$$'#10 +
+      'Hello $(name)!'),
+      'Hello world!');
+    CheckEqual(TextPreprocess(
+      '$$'#10 +
+      'value = 42'#10 +
+      '$$'#10 +
+      'before $(value) middle $(value) after'),
+      'before 42 middle 42 after');
+    CheckEqual(TextPreprocess(
+      '$$'#10 +
+      'enabled = true'#10 +
+      '$$'#10 +
+      'A$if enabled$B$else$C$endif$D'),
+      'ABD');
+    // Verbatim $$$ ... $$$ sections
+    CheckEqual(TextPreprocess(
+      '$$'#10 +
+      'answer = 42'#10 +
+      '$$'#10 +
+      '$$$'#10 +
+      'raw $(answer)'#10 +
+      '$$$'#10 +
+      'done=$(answer)'),
+      'raw $(answer)'#10 +
+      'done=42');
+    // P0 #2: recursive includes
+    mainFile   := WorkDir + 'jop-test-main.jop';
+    outerFile  := WorkDir + 'jop-test-outer.jop';
+    innerFile  := WorkDir + 'jop-test-inner.jop';
+    insertFile := WorkDir + 'jop-test-insert.jop';
+    rawFile    := WorkDir + 'jop-test-raw.jop';
+    try
+      // inner.jop: defines a variable, then uses it
+      Check(FileFromString(
+        '$$'#10 +
+        'answer = 42'#10 +
+        '$$'#10 +
+        '$if answer = 42$inner=$(answer)$endif$'#10,
+        innerFile));
+      // outer.jop: recursively includes inner.jop
+      Check(FileFromString(
+        '$$'#10 +
+        'include "jop-test-inner.jop"'#10 +
+        '$$'#10 +
+        'outer=$(answer)'#10,
+        outerFile));
+      // main.jop: recursively includes outer.jop
+      Check(FileFromString(
+        '$$'#10 +
+        'include "jop-test-outer.jop"'#10 +
+        '$$'#10 +
+        'result=$(answer)',
+        mainFile));
+      src := RawUtf8FromFile(mainFile);
+      CheckEqual(
+        TextPreprocess(src, [], WorkDir),
+        'inner=42'#10 +
+        'outer=42'#10 +
+        'result=42',
+        'recursive include');
+      // insert: file contents must NOT be preprocessed
+      Check(FileFromString(
+        'raw=$(answer)'#10 +
+        '$if answer$verbatim$endif$'#10,
+        rawFile));
+
+      Check(FileFromString(
+        '$$'#10 +
+        'answer = 42'#10 +
+        'insert "jop-test-raw.jop"'#10 +
+        '$$'#10 +
+        'after=$(answer)',
+        insertFile));
+      src := RawUtf8FromFile(insertFile);
+      CheckEqual(
+        TextPreprocess(src, [], WorkDir),
+        'raw=$(answer)'#10 +
+        '$if answer$verbatim$endif$'#10 +
+        'after=42',
+        'verbatim insert');
+    finally
+      DeleteFile(mainFile);
+      DeleteFile(outerFile);
+      DeleteFile(innerFile);
+      DeleteFile(insertFile);
+      DeleteFile(rawFile);
+    end;
+  end;
+
+var
+  J: RawUtf8;
+begin
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'{a:$a$}',
+    '{a:1}');
+  TestJop(
+    '$$'#10'a= 1'#10'$$'#10'{a:$(a)}',
+    '{a:1}');
+  TestJop(
+    '$$'#10'a =1'#10'$$'#10'{a:$a$}',
+    '{a:1}');
+  TestJop(
+    '$$'#10' a = 1 '#10'$$'#10'{a:$a$}',
+    '{a:1}');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'{a:$(os:name)}',
+    Join(['{a:"', OSVersionShort,'"}']));
+  J := GlobalInfoFind('net:mac');
+  if J <> '' then
+    TestJop(
+      '$$'#10'a=1'#10'$$'#10'{a:$net:mac$}',
+      Join(['{a:"', J,'"}']));
+  TestJop(
+    '$$'#10'a=b'#10'$$'#10'{a:$a$,b:$net:none$,c:$"$a$ ${os:nope|$a$}+"}',
+    '{a:"b",b:null,c:"b b+"}');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'{a:$a|0$,b:$b|2$}',
+    '{a:1,b:2}');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'{a:$(a|b),b:$b|a$}',
+    '{a:1,b:"a"}');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'{a:$(a|b),b:$b|$(a)$}',
+    '{a:1,b:1}');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'{a:$(a|b),b:$b|$(c|a)$}',
+    '{a:1,b:"a"}');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'{a:$(a|b),b:$(b|$(c|a))}',
+    '{a:1,b:"a"}');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'{a:$a$,b:$"$a$"}',
+    '{a:1,b:"1"}');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'{a:$a$,b:"$a$",c{d:$(a)}}',
+    '{a:1,b:"$a$",c:{d:1}}');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'{a:$none|$a$$,b:$"$a$"}',
+    '{a:1,b:"1"}');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'{a:$none|"1"$,b:$"$a$"}',
+    '{a:"1",b:"1"}');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'{a:$no|$ne|$a$$$,b:$"$a$"}',
+    '{a:1,b:"1"}');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'{a:${no|${ne|${a}}},b:$"$a$"}',
+    '{a:1,b:"1"}');
+  J := '# comment'#10'$$'#10'# comment'#10'var=1'#10'a=number $var$'#10'$$'#10;
+  TestJop(
+    J + '[ 1 2 ]',
+    '[1,2]');
+  TestJop(
+    J + '[ $if a$ 1 $endif$ 2 ]',
+    '[1,2]');
+  TestJop(
+    J + '[ $if a$ 1 $if var$ 2 $endif$ $endif$ 3 ]',
+    '[1,2,3]');
+  TestJop(
+    J + '[ $if a$ 1 $if var$ 2 $else$ 3 $endif$ $else$ 4 $endif$5]',
+    '[1,2,5]');
+  TestJop(
+    J + '[ $if a$ 1 $if no$ 2 $else$ 3 $endif$ $else$ 4 $endif$ 5 ]',
+    '[1,3,5]');
+  TestJop(
+    J + '[ $if b$ 1 $if var$ 2 $else$ 3 $endif$ $else$ 4 $endif$ 5 ]',
+    '[4,5]');
+  J := '$$'#10'var=1'#10'a="number $var$" '#10'$$'#10;
+  TestJop(
+    J + '{a:$a$,b:$"$a$",c:$var$,d: $"$var$" ,e:"$var$",f:$"5432$var$0"}',
+    '{a:"number 1",b:"number 1",c:1,d:"1",e:"$var$",f:"543210"}');
+  TestJop(
+    J + '{$a$:0,b:$exe:arch$,c:$"http://toto/$exe:arch$",d:$os:none$,e:$"a$os:no$s"}',
+    '{"number 1":0,b:"' + CPU_ARCH_TEXT + '",c:"http://toto/' + CPU_ARCH_TEXT +
+     '",d:null,e:"as"}');
+  TestJop(
+    J + '# comment 2'#10'$$ section 2'#10'$ifdef a$ b=10'#10'$endif$'#10'$$'#10 +
+    '[$ifdef b$ 99 $else$ 0 $endif$ $(b) $(a) 100]',
+    '[99,10,"number 1",100]');
+  TestJop(
+    J + '$$ section 2'#10'$ifdef a$ b=1'#10'a=2'#10'$endif$'#10'$$'#10 +
+    '[$ifdef b$ $(b) $else$ 0 $endif$ $(b) $(a) 10]',
+    '[1,1,2,10]');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'{ $if a$ a:$a$ $endif$, b:$"$a$"}',
+    '{a:1,b:"1"}');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'{$if b$a:$a$$endif$b:$"$a$"}',
+    '{b:"1"}');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'{$ifdef a$ $else$ a:$a$ $endif$, b:$"$a$"}',
+    '{b:"1"}');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'{$ifdef a$$else$a:$a$$endif$b:$"$a$"}',
+    '{b:"1"}');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'{ $if a = 1$ a:$a$ $endif$, b:$"$a$"}',
+    '{a:1,b:"1"}');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'{ $if a = x$ a:$a$ $endif$, b:$"$a$"}',
+    '{b:"1"}');
+  TestJop(
+    '$$'#10'a=x'#10'$$'#10'{ $if a = x$ a:$a$ $endif$, b:$"$a$"}',
+    '{a:"x",b:"x"}');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'{ $if a = $a$$ a:$a$ $endif$, b:$"$a$"}',
+    '{a:1,b:"1"}');
+  TestJop(
+    '$$'#10'a=xy'#10'$$'#10'{ $if a = $a$ $ a:$a$ $endif$, $a$:$"$a$"}',
+    '{a:"xy","xy":"xy"}', {nest=}false);
+  TestJop(
+    '$$'#10'a=xy'#10'$$'#10'{ $if yz > $a$ $ a:$a$ $endif$, $a$:$"$a$"}',
+    '{"xy":"xy"}', {nest=}false);
+  TestJop(
+    '$$'#10'a=xy'#10'$$'#10'{ $if a < yz $ a:$a$ $endif$, $a$:$"$a$"}',
+    '{a:"xy","xy":"xy"}', {nest=}false);
+  TestJop(
+    '$$'#10'a =1'#10'$$'#10'{ $if a <> 0 $ a:$a$ $endif$, b:$"$a$"}',
+    '{a:1,b:"1"}');
+  TestJop(
+    '$$'#10'a=10'#10'$$'#10'{ $if a > 5 $ a:$a$ $endif$, b:$"$a$"}',
+    '{a:10,b:"10"}');
+  TestJop(
+    '$$'#10'a=10'#10'five=5'#10'$$'#10'{ $if a > $five$ $ a:$a$ $endif$, b:$"$a$"}',
+    '{a:10,b:"10"}');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'{$if a=1$a:$a$$endif$b:$"$a$"}',
+    '{a:1,b:"1"}');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'{ $if a = 0$ a:$a$ $endif$, b:$"$a$"}',
+    '{b:"1"}');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'{ $if a = 10$ a:$a$ $endif$, b:$"$a$"}',
+    '{b:"1"}');
+  TestJop(
+    '$$'#10'a=1'#10'b=$a$'#10'$$'#10'{ $if a = $b$$ a:$a$ $endif$, b:$"$a$"}',
+    '{a:1,b:"1"}');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'[ $ifdef a$ 1 $else$ 2 $endif$ ]', '[1]');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'[ $if a>0$ 1 $else$ 2 $endif$ ]', '[1]');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'[ $if a<10$ 1 $else$ 2 $endif$ ]', '[1]');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'[ $if a > 01 $ 1 $else$ 2 $endif$ ]', '[2]');
+  TestJop(
+    '$$'#10'a=10'#10'$$'#10'[ $if a > 9 $ 1 $else$ 2 $endif$ ]', '[1]');
+  TestJop(
+    '$$'#10'a=10'#10'$$'#10'[ $if a > 9 $ $else$ 2 $endif$ ]', '[]');
+  TestJop(
+    '[ $if cpu:threads > 0 $ 1 $else$ 2 $endif$ ]', '[1]');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'[ $ifdef a$ 1 $else$ 2 $endif$ ]', '[1]');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'[ $if a$ 1 $if no$ 2 $endif$ 4 $else$ 5 $endif$ 6 ]',
+    '[1,4,6]');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'[ $if a$ 1 $if no$ 2 $else$ 3 $endif$ 4 $else$ 5 $endif$ 6 ]',
+    '[1,3,4,6]');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'[ $if no$ 1 $if a$ 2 $else$ 3 $endif$ 4 $else$ 5 $endif$ 6 ]',
+    '[5,6]');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'[ $if no$ 1 $if a$ 2 $else$ 3 $endif$ 4 $else$ 5 $else$ 6 $else$ 7 $endif$ 8 ]',
+    '[5,7,8]'); // $else$ is just a non-recursive toggle ;)
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'[ $if a$ 1 $if no$ 2 $endif$ 4 $else$ 5 $else$ 6 $endif$ 7 ]',
+    '[1,4,6,7]');
+  TestJop(
+    '[ $if no$ 1 $if no$ 2 $else$ 3 $endif$ 4 $else$ 5 $endif$ 6 ]',
+    '[5,6]');
+  TestJopText;
+end;
 
 
 { TCollTestsI }
@@ -2175,7 +2488,6 @@ var
   O, O2: TPersistentToJson;
   E: TSynBackgroundThreadProcessStep;
   EndOfObject: AnsiChar;
-var
   Va, Vb: Variant;
   c: currency;
 
@@ -2981,30 +3293,10 @@ var
     end;
   end;
 
-  procedure TestJop(const src, exp: RawUtf8; nest: boolean = true);
-  var
-    j, k: RawUtf8;
-    s: TTextWriterJsonFormat;
-  begin
-    j := JsonPreprocess(src, jsonUnquotedPropNameCompact);
-    Check(j <> '');
-    CheckEqual(j, exp, src);
-    if nest then
-      for s := low(s) to high(s) do
-      begin
-        k := JsonPreprocess(src, s);
-        if s = jsonCompact then
-          Check(IsValidJson(k, {strict=}true), 'valid');
-        if s = jsonUnquotedPropNameCompact then
-          CheckEqual(k, j)
-        else
-          CheckEqual(JsonReformat(k, jsonUnquotedPropNameCompact), j);
-      end;
-  end;
-
 begin
   JsonConstants;
   TestSimpleEnum;
+  TestJopProcess;
   TestJsonArrayAsCsv('', '');
   TestJsonArrayAsCsv('123', '');
   TestJsonArrayAsCsv('[1]', '1');
@@ -3502,185 +3794,6 @@ begin
   CheckEqual(JsonReformat(
     #10' // test'#10' # ignored'#10'one: 1'#10'"two": 2'#10, jsonCompact),
     '{"one":1,"two":2}');
-  TestJop(
-    '$$'#10'a=1'#10'$$'#10'{a:$a$}',
-    '{a:1}');
-  TestJop(
-    '$$'#10'a= 1'#10'$$'#10'{a:$(a)}',
-    '{a:1}');
-  TestJop(
-    '$$'#10'a =1'#10'$$'#10'{a:$a$}',
-    '{a:1}');
-  TestJop(
-    '$$'#10' a = 1 '#10'$$'#10'{a:$a$}',
-    '{a:1}');
-  TestJop(
-    '$$'#10'a=1'#10'$$'#10'{a:$(os:name)}',
-    Join(['{a:"', OSVersionShort,'"}']));
-  J := GlobalInfoFind('net:mac');
-  if J <> '' then
-    TestJop(
-      '$$'#10'a=1'#10'$$'#10'{a:$net:mac$}',
-      Join(['{a:"', J,'"}']));
-  TestJop(
-    '$$'#10'a=b'#10'$$'#10'{a:$a$,b:$net:none$,c:$"$a$ ${os:nope|$a$}+"}',
-    '{a:"b",b:null,c:"b b+"}');
-  TestJop(
-    '$$'#10'a=1'#10'$$'#10'{a:$a|0$,b:$b|2$}',
-    '{a:1,b:2}');
-  TestJop(
-    '$$'#10'a=1'#10'$$'#10'{a:$(a|b),b:$b|a$}',
-    '{a:1,b:"a"}');
-  TestJop(
-    '$$'#10'a=1'#10'$$'#10'{a:$(a|b),b:$b|$(a)$}',
-    '{a:1,b:1}');
-  TestJop(
-    '$$'#10'a=1'#10'$$'#10'{a:$(a|b),b:$b|$(c|a)$}',
-    '{a:1,b:"a"}');
-  TestJop(
-    '$$'#10'a=1'#10'$$'#10'{a:$(a|b),b:$(b|$(c|a))}',
-    '{a:1,b:"a"}');
-  TestJop(
-    '$$'#10'a=1'#10'$$'#10'{a:$a$,b:$"$a$"}',
-    '{a:1,b:"1"}');
-  TestJop(
-    '$$'#10'a=1'#10'$$'#10'{a:$a$,b:"$a$",c{d:$(a)}}',
-    '{a:1,b:"$a$",c:{d:1}}');
-  TestJop(
-    '$$'#10'a=1'#10'$$'#10'{a:$none|$a$$,b:$"$a$"}',
-    '{a:1,b:"1"}');
-  TestJop(
-    '$$'#10'a=1'#10'$$'#10'{a:$none|"1"$,b:$"$a$"}',
-    '{a:"1",b:"1"}');
-  TestJop(
-    '$$'#10'a=1'#10'$$'#10'{a:$no|$ne|$a$$$,b:$"$a$"}',
-    '{a:1,b:"1"}');
-  TestJop(
-    '$$'#10'a=1'#10'$$'#10'{a:${no|${ne|${a}}},b:$"$a$"}',
-    '{a:1,b:"1"}');
-  J := '# comment'#10'$$'#10'# comment'#10'var=1'#10'a=number $var$'#10'$$'#10;
-  TestJop(
-    J + '[ 1 2 ]',
-    '[1,2]');
-  TestJop(
-    J + '[ $if a$ 1 $endif$ 2 ]',
-    '[1,2]');
-  TestJop(
-    J + '[ $if a$ 1 $if var$ 2 $endif$ $endif$ 3 ]',
-    '[1,2,3]');
-  TestJop(
-    J + '[ $if a$ 1 $if var$ 2 $else$ 3 $endif$ $else$ 4 $endif$5]',
-    '[1,2,5]');
-  TestJop(
-    J + '[ $if a$ 1 $if no$ 2 $else$ 3 $endif$ $else$ 4 $endif$ 5 ]',
-    '[1,3,5]');
-  TestJop(
-    J + '[ $if b$ 1 $if var$ 2 $else$ 3 $endif$ $else$ 4 $endif$ 5 ]',
-    '[4,5]');
-  J := '$$'#10'var=1'#10'a="number $var$" '#10'$$'#10;
-  TestJop(
-    J + '{a:$a$,b:$"$a$",c:$var$,d: $"$var$" ,e:"$var$",f:$"5432$var$0"}',
-    '{a:"number 1",b:"number 1",c:1,d:"1",e:"$var$",f:"543210"}');
-  TestJop(
-    J + '{$a$:0,b:$exe:arch$,c:$"http://toto/$exe:arch$",d:$os:none$,e:$"a$os:no$s"}',
-    '{"number 1":0,b:"' + CPU_ARCH_TEXT + '",c:"http://toto/' + CPU_ARCH_TEXT +
-     '",d:null,e:"as"}');
-  TestJop(
-    J + '# comment 2'#10'$$ section 2'#10'$ifdef a$ b=10'#10'$endif$'#10'$$'#10 +
-    '[$ifdef b$ 99 $else$ 0 $endif$ $(b) $(a) 100]',
-    '[99,10,"number 1",100]');
-  TestJop(
-    J + '$$ section 2'#10'$ifdef a$ b=1'#10'a=2'#10'$endif$'#10'$$'#10 +
-    '[$ifdef b$ $(b) $else$ 0 $endif$ $(b) $(a) 10]',
-    '[1,1,2,10]');
-  TestJop(
-    '$$'#10'a=1'#10'$$'#10'{ $if a$ a:$a$ $endif$, b:$"$a$"}',
-    '{a:1,b:"1"}');
-  TestJop(
-    '$$'#10'a=1'#10'$$'#10'{$if b$a:$a$$endif$b:$"$a$"}',
-    '{b:"1"}');
-  TestJop(
-    '$$'#10'a=1'#10'$$'#10'{$ifdef a$ $else$ a:$a$ $endif$, b:$"$a$"}',
-    '{b:"1"}');
-  TestJop(
-    '$$'#10'a=1'#10'$$'#10'{$ifdef a$$else$a:$a$$endif$b:$"$a$"}',
-    '{b:"1"}');
-  TestJop(
-    '$$'#10'a=1'#10'$$'#10'{ $if a = 1$ a:$a$ $endif$, b:$"$a$"}',
-    '{a:1,b:"1"}');
-  TestJop(
-    '$$'#10'a=1'#10'$$'#10'{ $if a = x$ a:$a$ $endif$, b:$"$a$"}',
-    '{b:"1"}');
-  TestJop(
-    '$$'#10'a=x'#10'$$'#10'{ $if a = x$ a:$a$ $endif$, b:$"$a$"}',
-    '{a:"x",b:"x"}');
-  TestJop(
-    '$$'#10'a=1'#10'$$'#10'{ $if a = $a$$ a:$a$ $endif$, b:$"$a$"}',
-    '{a:1,b:"1"}');
-  TestJop(
-    '$$'#10'a=xy'#10'$$'#10'{ $if a = $a$ $ a:$a$ $endif$, $a$:$"$a$"}',
-    '{a:"xy","xy":"xy"}', {nest=}false);
-  TestJop(
-    '$$'#10'a=xy'#10'$$'#10'{ $if yz > $a$ $ a:$a$ $endif$, $a$:$"$a$"}',
-    '{"xy":"xy"}', {nest=}false);
-  TestJop(
-    '$$'#10'a=xy'#10'$$'#10'{ $if a < yz $ a:$a$ $endif$, $a$:$"$a$"}',
-    '{a:"xy","xy":"xy"}', {nest=}false);
-  TestJop(
-    '$$'#10'a =1'#10'$$'#10'{ $if a <> 0 $ a:$a$ $endif$, b:$"$a$"}',
-    '{a:1,b:"1"}');
-  TestJop(
-    '$$'#10'a=10'#10'$$'#10'{ $if a > 5 $ a:$a$ $endif$, b:$"$a$"}',
-    '{a:10,b:"10"}');
-  TestJop(
-    '$$'#10'a=10'#10'five=5'#10'$$'#10'{ $if a > $five$ $ a:$a$ $endif$, b:$"$a$"}',
-    '{a:10,b:"10"}');
-  TestJop(
-    '$$'#10'a=1'#10'$$'#10'{$if a=1$a:$a$$endif$b:$"$a$"}',
-    '{a:1,b:"1"}');
-  TestJop(
-    '$$'#10'a=1'#10'$$'#10'{ $if a = 0$ a:$a$ $endif$, b:$"$a$"}',
-    '{b:"1"}');
-  TestJop(
-    '$$'#10'a=1'#10'$$'#10'{ $if a = 10$ a:$a$ $endif$, b:$"$a$"}',
-    '{b:"1"}');
-  TestJop(
-    '$$'#10'a=1'#10'b=$a$'#10'$$'#10'{ $if a = $b$$ a:$a$ $endif$, b:$"$a$"}',
-    '{a:1,b:"1"}');
-  TestJop(
-    '$$'#10'a=1'#10'$$'#10'[ $ifdef a$ 1 $else$ 2 $endif$ ]', '[1]');
-  TestJop(
-    '$$'#10'a=1'#10'$$'#10'[ $if a>0$ 1 $else$ 2 $endif$ ]', '[1]');
-  TestJop(
-    '$$'#10'a=1'#10'$$'#10'[ $if a<10$ 1 $else$ 2 $endif$ ]', '[1]');
-  TestJop(
-    '$$'#10'a=1'#10'$$'#10'[ $if a > 01 $ 1 $else$ 2 $endif$ ]', '[2]');
-  TestJop(
-    '$$'#10'a=10'#10'$$'#10'[ $if a > 9 $ 1 $else$ 2 $endif$ ]', '[1]');
-  TestJop(
-    '$$'#10'a=10'#10'$$'#10'[ $if a > 9 $ $else$ 2 $endif$ ]', '[]');
-  TestJop(
-    '[ $if cpu:threads > 0 $ 1 $else$ 2 $endif$ ]', '[1]');
-  TestJop(
-    '$$'#10'a=1'#10'$$'#10'[ $ifdef a$ 1 $else$ 2 $endif$ ]', '[1]');
-  TestJop(
-    '$$'#10'a=1'#10'$$'#10'[ $if a$ 1 $if no$ 2 $endif$ 4 $else$ 5 $endif$ 6 ]',
-    '[1,4,6]');
-  TestJop(
-    '$$'#10'a=1'#10'$$'#10'[ $if a$ 1 $if no$ 2 $else$ 3 $endif$ 4 $else$ 5 $endif$ 6 ]',
-    '[1,3,4,6]');
-  TestJop(
-    '$$'#10'a=1'#10'$$'#10'[ $if no$ 1 $if a$ 2 $else$ 3 $endif$ 4 $else$ 5 $endif$ 6 ]',
-    '[5,6]');
-  TestJop(
-    '$$'#10'a=1'#10'$$'#10'[ $if no$ 1 $if a$ 2 $else$ 3 $endif$ 4 $else$ 5 $else$ 6 $else$ 7 $endif$ 8 ]',
-    '[5,7,8]'); // $else$ is just a non-recursive toggle ;)
-  TestJop(
-    '$$'#10'a=1'#10'$$'#10'[ $if a$ 1 $if no$ 2 $endif$ 4 $else$ 5 $else$ 6 $endif$ 7 ]',
-    '[1,4,6,7]');
-  TestJop(
-    '[ $if no$ 1 $if no$ 2 $else$ 3 $endif$ 4 $else$ 5 $endif$ 6 ]',
-    '[5,6]');
   J := '{"RowID":  210 ,"Name":"Alice","Role":"User","Last Login":null, ' +
     '// comment'#13#10'"First Login" : /* to be ignored */  null  ,  "Department"' +
     ' :    "{\"relPath\":\"317\\\\\",\"revision\":1}" } ]';
