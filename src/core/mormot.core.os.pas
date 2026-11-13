@@ -1452,21 +1452,21 @@ type
       const description: RawUtf8 = ''; const default: RawUtf8 = ''): boolean; overload;
     /// search for "-parametername" and return all RawUtf8 "parametervalue" occurrences
     function Get(const name: array of RawUtf8; out value: TRawUtf8DynArray;
-      const description: RawUtf8 = ''): boolean; overload;
+      const description: RawUtf8 = ''; includeempty: boolean = false): boolean; overload;
     /// search for "-parametername" and return its plain string "parametervalue"
     // - if name contains a & character, will also register the following char
     function Get(const name: RawUtf8; out value: string;
       const description: RawUtf8 = ''; const default: string = ''): boolean; overload;
     /// search for "-parametername" and return all string "parametervalue" occurrences
     function Get(const name: array of RawUtf8; out value: TStringDynArray;
-      const description: RawUtf8 = ''): boolean; overload;
+      const description: RawUtf8 = ''; includeempty: boolean = false): boolean; overload;
     /// search for "-parametername" and return its plain string "parametervalue"
     function Get(const name: array of RawUtf8; out value: string;
       const description: RawUtf8 = ''; const default: string = ''): boolean; overload;
     /// search for "-parametername" and return all string "parametervalue" occurrences
     // - if name contains a & character, will also register the following char
     function Get(const name: RawUtf8; out value: TStringDynArray;
-      const description: RawUtf8 = ''): boolean; overload;
+      const description: RawUtf8 = ''; includeempty: boolean = false): boolean; overload;
     /// search for "-parametername" and return its integer "parametervalue"
     // - if name contains a & character, will also register the following char
     function Get(const name: RawUtf8; out value: integer;
@@ -10821,7 +10821,7 @@ begin
 end;
 
 function TExecutableCommandLine.Get(const name: array of RawUtf8;
-  out value: TRawUtf8DynArray; const description: RawUtf8): boolean;
+  out value: TRawUtf8DynArray; const description: RawUtf8; includeempty: boolean): boolean;
 var
   first, i: PtrInt;
 begin
@@ -10834,7 +10834,8 @@ begin
     i := Find(name, clkParam, '', '', first);
     if i < 0 then
       break; // no more occurence
-    if fValues[i] <> '' then
+    if includeempty or
+       (fValues[i] <> '') then
     begin
       _addutf8(value, fValues[i]);
       result := true;
@@ -10884,18 +10885,18 @@ begin
 end;
 
 function TExecutableCommandLine.Get(const name: RawUtf8;
-  out value: TStringDynarray; const description: RawUtf8): boolean;
+  out value: TStringDynarray; const description: RawUtf8; includeempty: boolean): boolean;
 begin
-  result := Get(UnAmp(name), value, description);
+  result := Get(UnAmp(name), value, description, includeempty);
 end;
 
 function TExecutableCommandLine.Get(const name: array of RawUtf8;
-  out value: TStringDynarray; const description: RawUtf8): boolean;
+  out value: TStringDynarray; const description: RawUtf8; includeempty: boolean): boolean;
 var
   tmp: TRawUtf8DynArray;
   i: PtrInt;
 begin
-  result := Get(name, tmp, description);
+  result := Get(name, tmp, description, includeempty);
   SetLength(value, length(tmp));
   for i := 0 to length(tmp) - 1 do
     value[i] := string(tmp[i]);

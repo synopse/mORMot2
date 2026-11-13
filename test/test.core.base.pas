@@ -4504,7 +4504,8 @@ var
   c: TExecutableCommandLine;
   f: RawUtf8;
   t: integer;
-  raw: TRawUtf8DynArray;
+  raw, values: TRawUtf8DynArray;
+  strvalues: TStringDynArray;
 begin
   Run(DoRunRedirect, self, 'RunRedirect', true, false);
   Run(DoTExternalProcess, self, 'TExternalProcess', true, false);
@@ -4652,6 +4653,60 @@ begin
       'Unexpected "/=v" parameter'#10 +
       'Unexpected "/" parameter'#10);
     {$endif OSWINDOWS}
+    // regression for #763: preserve empty values when requested
+    c.Clear;
+    c.RawParams := CsvToRawUtf8DynArray(
+      '--param= --param=b --param= --param=c', ' ');
+    Check(c.Parse(#10, '-', '--'));
+    // default behavior is unchanged
+    values := nil;
+    Check(c.Get(['param'], values));
+    CheckEqual(length(values), 2);
+    CheckEqual(values[0], 'b');
+    CheckEqual(values[1], 'c');
+    CheckEqual(c.DetectUnknown, '');
+    // opt-in: preserve all values and their order
+    values := nil;
+    Check(c.Get(['param'], values, '', true));
+    CheckEqual(length(values), 4);
+    CheckEqual(values[0], '');
+    CheckEqual(values[1], 'b');
+    CheckEqual(values[2], '');
+    CheckEqual(values[3], 'c');
+    CheckEqual(c.DetectUnknown, '');
+    // TStringDynArray should have identical semantics
+    Check(c.Get(['param'], strvalues, '', true));
+    CheckEqual(length(strvalues), 4);
+    Check(strvalues[0] = '');
+    Check(strvalues[1] = 'b');
+    Check(strvalues[2] = '');
+    Check(strvalues[3] = 'c');
+    // only empty values: result should be true when included
+    c.RawParams := CsvToRawUtf8DynArray('--param=', ' ');
+    Check(c.Parse(#10, '-', '--'));
+    values := nil;
+    Check(not c.Get(['param'], values));
+    CheckEqual(length(values), 0);
+    CheckEqual(c.DetectUnknown, '');
+    Check(c.Get(['param'], values, '', true));
+    CheckEqual(length(values), 1);
+    CheckEqual(values[0], '');
+    CheckEqual(c.DetectUnknown, '');
+    // empty value supplied as a separate raw argument
+    c.Clear;
+    SetLength(raw, 4);
+    raw[0] := '--param';
+    raw[1] := '';
+    raw[2] := '--param';
+    raw[3] := 'b';
+    c.RawParams := raw;
+    Check(c.Parse(#10, '-', '--'));
+    values := nil;
+    Check(c.Get(['param'], values, '', true));
+    CheckEqual(length(values), 2);
+    CheckEqual(values[0], '');
+    CheckEqual(values[1], 'b');
+    CheckEqual(c.DetectUnknown, '');
   finally
     c.Free;
   end;
