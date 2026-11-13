@@ -62,6 +62,7 @@ uses
   {$endif USEHTTPSYS}
   mormot.net.peercache,
   mormot.net.async,
+  mormot.net.proxy,
   mormot.net.ws.core,
   mormot.net.ws.async,
   mormot.net.openapi,

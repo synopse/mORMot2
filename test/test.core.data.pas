@@ -117,7 +117,7 @@ uses
   mormot.rest.server,
   mormot.net.client,
   mormot.net.server,
-  mormot.net.async,
+  mormot.net.proxy,
   mormot.net.ldap,
   test.core.base;
 
