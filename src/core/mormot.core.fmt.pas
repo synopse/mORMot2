@@ -6651,11 +6651,13 @@ begin // P^ = 'id$' or 'id = val$' from '$ifdef id$' or '$if id = val$'
        inc(exp.NameStart); // trim marker after raw DoFind()
        dec(exp.NameLen);
       end;
-      if exp.ValueLen < 0 then
-        match := exp.NameStart <> nil // $ifdef id$ just need DoFind() <> nil
+      if exp.ValueLen < 0 then // $ifdef id$ just need DoFind() <> nil
+        match := (exp.NameStart <> nil) and
+                 (exp.NameLen > 0)
       else if (exp.ValueStart = nil) or
               (exp.ValueLen = 0) then
-        match := (exp.NameStart = nil) or (exp.NameLen = 0) // both void
+        match := (exp.NameStart = nil) or
+                 (exp.NameLen = 0) // both void
       else
         match := EvaluateTextExpression(exp); // non-void = < > <= >= ~ ~~ * **
       inc(IfLevel);
@@ -6826,6 +6828,8 @@ begin // called with P^ = '$$'
     P := result; // P^ = line just after '$$$' = verbatim start
     repeat
       result := GotoNextNotSpace(GotoNextLineSmall(result));
+      if result^ = #0 then
+        exit; // unterminated $$$ block
     until (result^ = '$') and
           (cardinal(PWord(result + 1)^) = DOLLAR_16);
     if Assigned(OnVerbatim) then
@@ -7004,7 +7008,8 @@ var
 begin
   preproc := TPreProc.Create(Flags, IncludeRoot);
   try
-    JsonBufferReformat(pointer(Json), result, Format, preproc);
+    if not JsonBufferReformat(pointer(Json), result, Format, preproc) then
+      FastAssignNew(result);
   finally
     preproc.Free;
   end;
@@ -7044,9 +7049,8 @@ type
   TPreprocText = class(TPreproc)
   protected
     W: TTextWriter;
-    LineFeed: cardinal;    // e.g. #13#10
+    LineFeed: cardinal;    // e.g. #13#10 encoded as 32-bit constant
     LineFeedLen: cardinal; // e.g. 2
-    function ProcessText(P: PUtf8Char): boolean;
     // TPreprocAbstract OnAppend/OnVerbatim/OnAddDebugComment callbacks
     function TextAppend(P: PUtf8Char): boolean;
     procedure TextVerbatim(P: PUtf8Char; Len: PtrInt);
@@ -7055,11 +7059,6 @@ type
     function TextPreprocessToWriter(P: PUtf8Char; Dest: TTextWriter): boolean;
   end;
 
-function TPreprocText.TextAppend(P: PUtf8Char): boolean;
-begin
-  result := ProcessText(P); // support recursive $include
-end;
-
 procedure TPreprocText.TextVerbatim(P: PUtf8Char; Len: PtrInt);
 begin
   W.AddNoJsonEscape(P, Len);
@@ -7067,15 +7066,14 @@ end;
 
 procedure TPreprocText.TextComment(const info: ShortString);
 begin
-  PCardinal(W.B + 1)^ := LineFeed;
-  inc(W.B, LineFeedLen);
+  W.AddShort4(LineFeed, LineFeedLen);
   W.AddShort('# debug: ');
   W.AddShort(info);
   PCardinal(W.B + 1)^ := LineFeed;
   inc(W.B, LineFeedLen);
 end;
 
-function TPreprocText.ProcessText(P: PUtf8Char): boolean;
+function TPreprocText.TextAppend(P: PUtf8Char): boolean;
 var
   B, v: PUtf8Char;
   l: PtrInt;
@@ -7148,7 +7146,7 @@ begin
     end;
     P := B;
   end;
-  result := ProcessText(P);
+  result := TextAppend(P);
 end;
 
 

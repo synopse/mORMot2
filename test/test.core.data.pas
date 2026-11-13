@@ -1221,6 +1221,7 @@ procedure TTestCoreProcess.TestJopProcess;
   begin
     // P0 #1: basic text processing and pointer handling
     CheckEqual(TextPreprocess('hello world'), 'hello world');
+    CheckEqual(JsonPreprocess('{a:"unterminated', jsonCompact), '');
     CheckEqual(TextPreprocess('a$b'), 'a$b');
     CheckEqual(TextPreprocess('a$ident$b'), 'a$ident$b');
     CheckEqual(TextPreprocess('a$(missing)b'), 'ab');
@@ -1474,6 +1475,18 @@ procedure TTestCoreProcess.TestJopProcess;
       '$$'#10 +
       '{data:{$(obj)}}',
       '{data:{a:123}}');
+    TestJop(
+      '$$'#10'empty=""'#10'$$'#10 +
+      '[ $if empty$ 1 $else$ 2 $endif$ ]',
+      '[2]');
+    TestJop(
+      '$$'#10'empty=""'#10'$$'#10 +
+      '[ $ifdef empty$ 1 $else$ 2 $endif$ ]',
+      '[2]');
+    TestJop(
+      '$$'#10'filled="yes"'#10'$$'#10 +
+      '[ $ifdef filled$ 1 $else$ 2 $endif$ ]',
+      '[1]');
   end;
 
 var
