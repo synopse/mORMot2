@@ -1440,6 +1440,40 @@ procedure TTestCoreProcess.TestJopProcess;
     finally
       DeleteFile(fn);
     end;
+    // URL should not be truncated at //
+    TestJop(
+      '$$'#10 +
+      'url = https://example.org/api'#10 +
+      '$$'#10 +
+      '{url:$(url)}',
+      '{url:"https://example.org/api"}');
+    // A real trailing // comment must still be ignored
+    TestJop(
+      '$$'#10 +
+      'url = https://example.org/api // comment'#10 +
+      '$$'#10 +
+      '{url:$(url)}',
+      '{url:"https://example.org/api"}');
+    // Preserve # and // inside quoted definitions
+    TestJop(
+      '$$'#10 +
+      'url = "https://example.org/api#section"'#10 +
+      '$$'#10 +
+      '{url:$(url)}',
+      '{url:"https://example.org/api#section"}');
+    // Preserve URLs inside object templates
+    TestJop(
+      '$$'#10 +
+      'obj = {url:"https://example.org/api"}'#10 +
+      '$$'#10 +
+      '{data:{$(obj)}}',
+      '{data:{url:"https://example.org/api"}}');
+    TestJop(
+      '$$'#10 +
+      'obj = {a:123}'#10 +
+      '$$'#10 +
+      '{data:{$(obj)}}',
+      '{data:{a:123}}');
   end;
 
 var

@@ -6739,10 +6739,13 @@ begin
   tmp.AddDirect(AnsiChar(m)); // type: #0=template #1="string" #2=const/num
   repeat
     beg := v;
-    while (v < ve) and
-          (cardinal(PWord(v)^) <> SLASH_16) and
-          not (v^ in ['$', '#']) do
-      inc(v);
+    while (v < ve) and (v^ <> '$') do
+      if ((v^ = '#') or
+          (cardinal(PWord(v)^) = SLASH_16)) and
+         ((v = beg) or (v[-1] <= ' ')) then
+        break
+      else
+        inc(v);
     tmp.Add(beg, v - beg);
     if v >= ve then
       break;
@@ -6886,7 +6889,7 @@ ok: result := GotoNextNotSpace(result);
       '[': // value = whole {..}/[..] text block
         begin
           result := GotoTemplateEnding(result);
-          DoRegister(pmTemplate, key, value, result - 1, keylen);
+          DoRegister(pmTemplate, key, value, result, keylen);
           continue; // has been expanded and processed for any nested $if$
         end;
       '"':
@@ -6896,7 +6899,7 @@ ok: result := GotoNextNotSpace(result);
     else
       begin
         value := result;
-        while not (result^ in [#0 .. #31, '#', '/']) do
+        while not (result^ in [#0 .. #31, '#']) do
         begin
           // detect real // comments but keep valid http://... content
           if (result^ = '/') and
@@ -6909,7 +6912,8 @@ ok: result := GotoNextNotSpace(result);
             marker := pmPlainString; // would need W.AddJsonEscape()
           inc(result);
         end;
-        while result[-1] = ' ' do
+        while (result > value) and
+              (result[-1] = ' ') do
           dec(result); // trim right
         if IsConstantOrNumberJson(value, result - value) then
           marker := pmConstNum;
