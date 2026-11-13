@@ -215,6 +215,8 @@ type
     procedure TSynUniqueIdentifierSlow(Sender: TObject);
     /// test RunRedirect() function
     procedure DoRunRedirect(Dummy: TObject);
+    /// test TExternalProcess class
+    procedure DoTExternalProcess(Sender: TObject);
   published
     /// test RecordCopy(), TRttiMap and TRttiFilter
     procedure _Records;
@@ -240,8 +242,6 @@ type
     procedure _GUID;
     /// test ParseCommandArgs() functions
     procedure _ParseCommandArgs;
-    /// test TExternalProcess class
-    procedure _TExternalProcess;
     /// test TExecutableCommandLine class
     procedure _TExecutableCommandLine;
     /// test IsMatch() function
@@ -3888,7 +3888,7 @@ begin
   CheckUtf8(GetTickCount64 - start < 5000, 'timeout delay');
 end;
 
-procedure TTestCoreBase._TExternalProcess;
+procedure TTestCoreBase.DoTExternalProcess(Sender: TObject);
 var
   p, b: TExternalProcess;
   r: TRunRedirectTest;
@@ -4277,7 +4277,7 @@ begin
   CheckEqual(exitcode, 3, 'exitcode');
 end;
 
-procedure TTestCoreBase._TExternalProcess;
+procedure TTestCoreBase.DoTExternalProcess(Sender: TObject);
 var
   p, b: TExternalProcess;
   r: TRunRedirectTest;
@@ -4504,8 +4504,10 @@ var
   c: TExecutableCommandLine;
   f: RawUtf8;
   t: integer;
+  raw: TRawUtf8DynArray;
 begin
   Run(DoRunRedirect, self, 'RunRedirect', true, false);
+  Run(DoTExternalProcess, self, 'TExternalProcess', true, false);
   c := TExecutableCommandLine.Create;
   try
     c.RawParams := CsvToRawUtf8DynArray('one two three', ' ');
@@ -4577,6 +4579,79 @@ begin
     CheckEqual(f, '/config');
     CheckEqual(c.Args[0], '/opt/porter/x.config');
     CheckEqual(c.DetectUnknown, 'Unexpected "/opt/porter/x.config" argument'#10);
+    // regression for #761: malformed switches should not disappear
+    c.Clear;
+    c.RawParams := CsvToRawUtf8DynArray('x --=v -- - -v', ' ');
+    Check(c.Parse(#10, '-', '--'));
+    CheckEqual(length(c.Args), 1);
+    CheckEqual(length(c.Options), 1);
+    CheckEqual(length(c.Names), 0);
+    CheckEqual(length(c.Values), 0);
+    Check(c.Arg(0, '#first first argument'));
+    Check(c.Option('v'));
+    CheckEqual(c.DetectUnknown,
+      'Unexpected "--=v" parameter'#10 +
+      'Unexpected "--" parameter'#10 +
+      'Unexpected "-" parameter'#10);
+    // parsing again should reset previous errors
+    c.RawParams := CsvToRawUtf8DynArray('x --name=value -v', ' ');
+    Check(c.Parse(#10, '-', '--'));
+    CheckEqual(length(c.Args), 1);
+    CheckEqual(length(c.Options), 1);
+    CheckEqual(length(c.Names), 1);
+    CheckEqual(length(c.Values), 1);
+    Check(c.Arg(0));
+    Check(c.Option('v'));
+    Check(c.Get('name', f));
+    CheckEqual(f, 'value');
+    CheckEqual(c.DetectUnknown, '');
+    // an empty raw argument is already a positional argument
+    c.Clear;
+    SetLength(raw, 2);
+    raw[0] := 'x';
+    raw[1] := '';
+    c.RawParams := raw;
+    Check(c.Parse(#10, '-', '--'));
+    CheckEqual(length(c.Args), 2);
+    CheckEqual(c.Args[0], 'x');
+    CheckEqual(c.Args[1], '');
+    Check(c.Arg(0));
+    CheckEqual(c.DetectUnknown, 'Unexpected "" argument'#10);
+    // an empty parameter value should remain valid
+    c.Clear;
+    raw[0] := '-n';
+    raw[1] := '';
+    c.RawParams := raw;
+    Check(c.Parse(#10, '-', '--'));
+    CheckEqual(length(c.Args), 0);
+    CheckEqual(length(c.Names), 1);
+    CheckEqual(length(c.Values), 1);
+    Check(c.Get('n', f));
+    CheckEqual(f, '');
+    CheckEqual(c.DetectUnknown, '');
+    // same with the name=value syntax
+    c.RawParams := CsvToRawUtf8DynArray('--name= -v', ' ');
+    Check(c.Parse(#10, '-', '--'));
+    CheckEqual(length(c.Args), 0);
+    CheckEqual(length(c.Names), 1);
+    CheckEqual(length(c.Options), 1);
+    Check(c.Get('name', f));
+    CheckEqual(f, '');
+    Check(c.Option('v'));
+    CheckEqual(c.DetectUnknown, '');
+    {$ifdef OSWINDOWS}
+    // native Windows / switches should behave identically
+    c.Clear;
+    c.RawParams := CsvToRawUtf8DynArray('x /=v /', ' ');
+    Check(c.Parse(#10));
+    CheckEqual(length(c.Args), 1);
+    CheckEqual(length(c.Options), 0);
+    CheckEqual(length(c.Names), 0);
+    Check(c.Arg(0));
+    CheckEqual(c.DetectUnknown,
+      'Unexpected "/=v" parameter'#10 +
+      'Unexpected "/" parameter'#10);
+    {$endif OSWINDOWS}
   finally
     c.Free;
   end;
