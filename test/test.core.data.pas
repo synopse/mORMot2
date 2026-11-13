@@ -1317,6 +1317,131 @@ procedure TTestCoreProcess.TestJopProcess;
     end;
   end;
 
+  procedure TestJopP1;
+  var
+    tmp: TSynTempAdder;
+    src, actual: RawUtf8;
+    fn: TFileName;
+  begin
+    TestJop(
+      '$$'#10 +
+      'message = "a\"b"'#10 +
+      '$$'#10 +
+      '{value:$(message)}',
+      '{value:"a\"b"}');
+    TestJop(
+      '$$'#10 +
+      'message = "a\"b"'#10 +
+      '$$'#10 +
+      '{value:$"$(message)"}',
+      '{value:"a\"b"}');
+    // P1.2: remove comments without duplicating preceding content
+    TestJop(
+      '$$'#10 +
+      'obj = {'#10 +
+      '  a: 1  # comment'#10 +
+      '  b: 2'#10 +
+      '}'#10 +
+      '$$'#10 +
+      '{data: {$(obj)}}',
+      '{data:{a:1,b:2}}');
+    // P1.3: debug comments should be explicitly enabled
+    src := '$$'#10'a=1'#10'$$'#10'{a:$(a)}';
+    Check(PosEx('debug:', JsonPreprocess(src, json5)) = 0);
+    Check(PosEx('debug:', JsonPreprocess(src, json5, [jppDebugComment])) > 0);
+    // P1.4A: raw fallback content must be JSON-escaped
+    TestJop('{value:$"$(missing|a"b\c)"}', '{value:"a\"b\\c"}');
+    // P1.4A: numeric constants must not be modified
+    TestJop(
+      '$$'#10 +
+      'number = 42'#10 +
+      '$$'#10 +
+      '{value:$"$(number)"}',
+      '{value:"42"}');
+    // P1.4A: already-escaped strings must not be escaped twice
+    TestJop(
+      '$$'#10 +
+      'message = "a\"b"'#10 +
+      '$$'#10 +
+      '{value:$"$(message)"}',
+      '{value:"a\"b"}');
+    // P1.4B: escape raw values when registering a quoted definition
+    TestJop(
+      '$$'#10 +
+      'name = He said "hello"'#10 +
+      'message = "User: $(name)"'#10 +
+      '$$'#10 +
+      '{value:$(message)}',
+      '{value:"User: He said \"hello\""}');
+    // P1.4B: escape backslashes during early expansion
+    TestJop(
+      '$$'#10 +
+      'path = C:\work\test'#10 +
+      'message = "Path: $(path)"'#10 +
+      '$$'#10 +
+      '{value:$(message)}',
+      '{value:"Path: C:\\work\\test"}');
+    // P1.4B: constant values inside quoted definitions
+    TestJop(
+      '$$'#10 +
+      'number = 42'#10 +
+      'message = "number=$(number)"'#10 +
+      '$$'#10 +
+      '{value:$(message)}',
+      '{value:"number=42"}');
+    // Direct unit test for AdderJsonEscape()
+    // Covers quotes, backslashes, LF, TAB, #1 and embedded #0.
+    src := 'a'#0'"\'#10#9#1;
+    tmp.Init;
+    tmp.Add('[');
+    AdderJsonEscape(tmp, pointer(src), PUtf8Char(pointer(src)) + length(src));
+    tmp.Add(']');
+    tmp.Done(actual);
+    CheckEqual(actual, '[a\u0000\"\\\n\t\u0001]',
+      'AdderJsonEscape');
+    // Fast path: content without escaping
+    tmp.Init;
+    src := 'hello';
+    AdderJsonEscape(tmp, pointer(src), PUtf8Char(pointer(src)) + 5);
+    tmp.Done(actual);
+    CheckEqual(actual, 'hello', 'AdderJsonEscape plain');
+    // P1.1 / P1.5: include filename parsing and absolute paths
+    fn := ExpandFileName(WorkDir + 'jop-p1-include.txt');
+    Check(FileFromString('included'#10, fn));
+    try
+      // P1.1: unquoted filename followed by spaces and comment
+      CheckEqual(TextPreprocess(
+        '$$'#10 +
+        'include jop-p1-include.txt   # comment'#10 +
+        '$$'#10 +
+        'done', [], WorkDir),
+        'included'#10'done',
+        'include with comment');
+      // P1.1: trim trailing whitespace without a comment
+      CheckEqual(TextPreprocess(
+        '$$'#10 +
+        'include jop-p1-include.txt   '#10 +
+        '$$'#10 +
+        'done', [], WorkDir),
+        'included'#10'done',
+        'include trailing spaces');
+      // P1.5: absolute include without an IncludeRoot
+      src := '$$'#10 +
+        'include "' + StringToUtf8(fn) + '"'#10 +
+        '$$'#10 +
+        'done';
+      CheckEqual(TextPreprocess(src, [jppIncludeAbsolute]),
+        'included'#10'done',
+        'absolute include');
+      // P1.5: absolute include rejected without its flag
+      CheckEqual(TextPreprocess(src),
+        'done',
+        'absolute include rejected');
+    finally
+      DeleteFile(fn);
+    end;
+  end;
+
 var
   J: RawUtf8;
 begin
@@ -1500,6 +1625,7 @@ begin
     '[ $if no$ 1 $if no$ 2 $else$ 3 $endif$ 4 $else$ 5 $endif$ 6 ]',
     '[5,6]');
   TestJopText;
+  TestJopP1;
 end;
 
 

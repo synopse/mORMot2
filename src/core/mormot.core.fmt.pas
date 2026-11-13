@@ -6752,18 +6752,19 @@ begin
         continue
       else
       begin
-        // $ident$ ${ident} $env:NAME$ ${env:NAME}
+        // $ident$ ${ident} $env:NAME$ ${env:NAME} ExpandTo() into tmp
         v := Expand(v, val, vallen, {KeepMarker=}true);
         if val <> nil then
         begin
-          vm := pmPlainString; // ExpandTo() into tmp
+          vm := TPreprocMarker(val^);
           if (vallen > 0) and
-             (byte(val^) <= ord(high(TPreprocMarker))) then
+             (byte(vm) <= byte(high(vm))) then
           begin
-            vm := TPreprocMarker(val^);
             inc(val);
             dec(vallen);
-          end;
+          end
+          else
+            vm := pmPlainString;
           if (m = pmEscapedString) and
              (vm = pmPlainString) then
             AdderJsonEscape(tmp, val, val + vallen)
@@ -6888,7 +6889,8 @@ ok: result := GotoNextNotSpace(result);
           DoRegister(pmTemplate, key, value, result - 1, keylen);
           continue; // has been expanded and processed for any nested $if$
         end;
-      '"',
+      '"':
+        result := GotoEndOfJsonString(result);   // handles \" the JSON way
       '''':
         result := GotoEndOfQuotedString(result); // ignore double quotes within
     else
