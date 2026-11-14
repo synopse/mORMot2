@@ -6452,9 +6452,10 @@ begin
         Len := keylen;
       end;
       while (result^ <> ending) and
-            (result^ in [#0 .. #31]) do
+            (result^ > ' ') do
         inc(result);
-      inc(result); // skip trailing $ or }
+      if result^ = ending then
+        inc(result); // skip trailing $ or }
       exit;
     end;
     key := result;

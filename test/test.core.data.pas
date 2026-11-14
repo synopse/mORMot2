@@ -1262,6 +1262,14 @@ procedure TTestCoreProcess.TestJopProcess;
     CheckEqual(TextPreprocess(
       'before $if missing$skipped$else$kept$endif$ after'),
       'before kept after');
+    // Valid nested fallback
+    CheckEqual(TextPreprocess(
+      'before $(missing|$(also|yes))'),
+      'before yes');
+    // Missing outer closing parenthesis: no out-of-bounds scan
+    CheckEqual(TextPreprocess(
+      'before $(missing|$(also)'),
+      'before ');
     // P0 #2: recursive includes
     mainFile   := WorkDir + 'jop-test-main.jop';
     outerFile  := WorkDir + 'jop-test-outer.jop';
