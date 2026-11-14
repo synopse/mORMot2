@@ -5005,7 +5005,7 @@ begin
     flags := (flags or CREATE_NEW_CONSOLE) and not DETACHED_PROCESS;
     exclude(ram, ramCtrlC); // not compatible with stand-alone console
   end;
-  if roWinJobCloseChildren in options then
+  if roCloseChildren in options then
     flags := flags or CREATE_BREAKAWAY_FROM_JOB; // child process in a new job
   // actually create the new process
   created := CreateProcessW(nil, pointer(wcmd), @procsec, @procsec, true,
@@ -5026,7 +5026,7 @@ begin
     // setup the newly created process
     if flags and CREATE_BREAKAWAY_FROM_JOB <> 0 then
     begin
-      // roWinJobCloseChildren = run the new process in its own Job
+      // roCloseChildren = run the new process in its own Job
       job := CreateJobToClose(processinfo.dwProcessID, 'CloseChildren',
         {allowSilentBreakaway:}true);
       if (job <> 0) and
@@ -5275,7 +5275,7 @@ begin
     flags := flags or DETACHED_PROCESS;
   if roWinNewConsole in options then
     flags := (flags or CREATE_NEW_CONSOLE) and not DETACHED_PROCESS;
-  if roWinJobCloseChildren in options then
+  if roCloseChildren in options then
     flags := flags or CREATE_BREAKAWAY_FROM_JOB;
   FillCharFast(si, SizeOf(si), 0);
   si.StartupInfo.cb := SizeOf(si.StartupInfo);
@@ -5348,7 +5348,7 @@ begin
     exit;
   end;
   // put the process in its own job, to terminate it with its children
-  if roWinJobCloseChildren in options then
+  if roCloseChildren in options then
     
     fJob := CreateJobToClose(pi.dwProcessId, 'ExternalProcess',
       {allowSilentBreakaway=}false) // false: children should stay in the job
@@ -5509,7 +5509,7 @@ begin
   CloseValid(fStderr);
   CloseValid(fWakeUpRead);
   CloseValid(fProcess);
-  CloseValid(fJob); // with roWinJobCloseChildren, kill any remaining child
+  CloseValid(fJob); // with roCloseChildren, kill any remaining child
 end;
 
 procedure TExternalProcess.DoWakeUp;

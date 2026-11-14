@@ -4121,12 +4121,12 @@ begin
   fpkill(bg, SIGKILL);
   Check(ProcessEnded(bg), 'background');
   {$if defined(OSLINUX) or defined(OSDARWIN) or defined(OSFREEBSD)}
-  // roWinJobCloseChildren closes at Destroy a child left by an ended process
+  // roCloseChildren closes at Destroy a child left by an ended process
   bg := 0;
   p := TExternalProcess.Create;
   try
     Check(p.Start('sleep 30 >/dev/null 2>&1 & echo $!; exit 3', '', '',
-      RUN_PROCESS + [roWinJobCloseChildren]), 'closechildren');
+      RUN_PROCESS + [roCloseChildren]), 'closechildren');
     bg := ReadFirstLinePid(p);
     CheckEqual(p.WaitFor(5000), 3, 'closechildren exitcode');
     Check(ProcessExists(bg), 'closechildren alive');
@@ -4141,7 +4141,7 @@ begin
   p := TExternalProcess.Create;
   try
     Check(p.Start('kill -9 $$', '', '',
-      RUN_PROCESS + [roWinJobCloseChildren]), 'closechildren9');
+      RUN_PROCESS + [roCloseChildren]), 'closechildren9');
     CheckEqual(p.WaitFor(10000), -SIGKILL, 'closechildren signal');
     pid := p.Pid;
     Check(ProcessExists(pid), 'closechildren zombie'); // not reaped yet
@@ -4442,12 +4442,12 @@ begin
     finally
       p.Free;
     end;
-    // roWinJobCloseChildren closes at Destroy a child left by an ended process
+    // roCloseChildren closes at Destroy a child left by an ended process
     fn := WorkDir + 'closechildren.tmp';
     p := TExternalProcess.Create;
     try
       Check(p.Start('cmd /c start /b ping -n 30 127.0.0.1 >"' + fn + '"',
-        '', '', RUN_PROCESS + [roWinJobCloseChildren]), 'closechildren');
+        '', '', RUN_PROCESS + [roCloseChildren]), 'closechildren');
       for i := 1 to 500 do
         if p.Running then
           SleepHiRes(10)

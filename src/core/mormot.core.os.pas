@@ -6411,10 +6411,12 @@ type
   /// define how RunCommand() and RunRedirect() run their sub-process
   // - roEnvAddExisting is used when the env pairs should be added to the
   // existing system environment variable
-  // - roWinJobCloseChildren will use the CREATE_BREAKAWAY_FROM_JOB flag and
+  // - roCloseChildren will use the CREATE_BREAKAWAY_FROM_JOB flag and
   // run CreateJobToClose(allowSilentBreakaway=true) and AssignJobToProcess()
   // on the new process so that any of its future children would be
-  // synchronized and closed with their father, in a relaxed way
+  // synchronized and closed with their father, in a relaxed way - on Windows
+  // only for RunCommand() and RunRedirect(), but also on POSIX and in a
+  // strict way for TExternalProcess
   // - on Windows, will create its own console and its own execution group, unless
   // roWinNoProcessDetach is defined - e.g. as RUN_CMD for RunCommand/RunRedirect
   // - roWinNewConsole won't inherit the parent console, but have its own console
@@ -6427,7 +6429,7 @@ type
   // - RunRedirect() ignores roStdinPipe and roStderrPipe
   TRunOptions = set of (
     roEnvAddExisting,
-    roWinJobCloseChildren,
+    roCloseChildren,
     roWinNoProcessDetach,
     roWinNewConsole,
     roWinKeepProcessOnTimeout,
@@ -6446,6 +6448,12 @@ const
   /// the default options for TExternalProcess.Start
   // - with the same behavior on all systems: no stdin, and stderr in stdout
   RUN_PROCESS = [roWinNoProcessDetach, roStdinNull, roStderrMerge];
+
+{$ifndef PUREMORMOT2}
+  /// deprecated name: use roCloseChildren instead
+  roWinJobCloseChildren = roCloseChildren;
+{$endif PUREMORMOT2}
+
 type
   /// the low-level OS API type for executing processes arguments
   TRunArg = {$ifdef OSPOSIX} RawUtf8 {$else} TFileName {$endif};
@@ -6564,7 +6572,7 @@ type
   // - on Windows, the command line is given to CreateProcessW() as such - so use
   // e.g. 'cmd /c ...' for a shell built-in - and the process is created in its
   // own process group and job, so that Terminate/Kill also stop its children
-  // - roWinJobCloseChildren also kills any child still running when this
+  // - roCloseChildren also kills any child still running when this
   // instance is released - and on Windows, when the current process ends:
   // on Linux, FreeBSD and MacOS, the ended process is then not reaped
   // before this instance is released, so that its process group is kept

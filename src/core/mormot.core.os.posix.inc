@@ -6025,7 +6025,7 @@ begin
   try
     {$ifdef HASWAITID}
     if (fState = epsRunning) and
-       (roWinJobCloseChildren in fOptions) then
+       (roCloseChildren in fOptions) then
     begin
       // don't reap yet: DoClose will kill the process group of this zombie
       r := ChildEndedNoReap(fPid, fExitCode);
@@ -6173,7 +6173,7 @@ procedure TExternalProcess.DoClose;
 begin
   if IsSet(fZombie) then
   begin
-    // roWinJobCloseChildren: the zombie kept its process group number
+    // roCloseChildren: the zombie kept its process group number
     SetFlag(fZombie, false);
     fpkill(-cint(fPid), SIGKILL); // kill any child still running
     repeat
@@ -6209,7 +6209,7 @@ begin
   try
     p.fOnOutput := onoutput;
     if p.DoStart(cmd, [], env, wrkdir,
-         options - [roStdinPipe, roStderrPipe, roWinJobCloseChildren],
+         options - [roStdinPipe, roStderrPipe, roCloseChildren],
          {withthread=}false) then
       result := p.Redirect(waitfordelayms, setresult, exitcode);
   finally
