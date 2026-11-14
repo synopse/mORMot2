@@ -1795,6 +1795,9 @@ function UrlDecodeNextValue(U: PUtf8Char; out Value: RawUtf8): PUtf8Char;
 // - returns nil if there was no name=... pattern in U
 function UrlDecodeNextName(U: PUtf8Char; out Name: RawUtf8): PUtf8Char;
 
+/// internal low-level conversion of most UrlDecode*() functions
+function DoUrlDecode(P, U: PByte; replace: AnsiChar): PUtf8Char;
+
 /// checks if the supplied UTF-8 text don't need URI encoding
 // - returns TRUE if all its chars are non-void plain ASCII-7 RFC compatible
 // identifiers (0..9a..zA..Z-_.) - the tilde (~) character is part of RFC 3986
