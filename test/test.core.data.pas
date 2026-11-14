@@ -1297,6 +1297,15 @@ procedure TTestCoreProcess.TestJopProcess;
       '$$'#10 +
       '{data:{$(obj)}}',
       '{data:{text:"a}b",count:2}}');
+    // Unterminated strings inside a template must not read past #0
+    CheckEqual(TextPreprocess(
+      '$$'#10 +
+      'obj = {text:"unterminated'),
+      '');
+    CheckEqual(TextPreprocess(
+      '$$'#10 +
+      'obj = {text:''unterminated'),
+      '');
     // P0 #2: recursive includes
     mainFile   := WorkDir + 'jop-test-main.jop';
     outerFile  := WorkDir + 'jop-test-outer.jop';

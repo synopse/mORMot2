@@ -6734,6 +6734,8 @@ begin
       '''':
         result := GotoEndOfQuotedString(result);
     end;
+    if result^ = #0 then
+      exit; // unterminated quoted string
     inc(result);
   until false;
 end;
