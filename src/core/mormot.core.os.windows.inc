@@ -2327,14 +2327,12 @@ begin
     exit;
   FillCharFast(e, SizeOf(e), 0);
   e.dwSize := SizeOf(e);
-  result := true;
   if Process32FirstW(snap, e) then // loop over all processes of the system
     repeat
-      if e.th32ProcessID = pid then
-        exit;
-    until not Process32NextW(snap, e);
+      result := e.th32ProcessID = pid;
+    until result or
+          not Process32NextW(snap, e);
   CloseHandle(snap);
-  result := false;
 end;
 
 function GetParentProcess(PID: cardinal): cardinal;
