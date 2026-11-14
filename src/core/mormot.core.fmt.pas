@@ -6749,7 +6749,8 @@ begin
   repeat
     beg := v;
     while (v < ve) and (v^ <> '$') do
-      if ((v^ = '#') or
+      if (m = pmTemplate) and
+         ((v^ = '#') or
           (cardinal(PWord(v)^) = SLASH_16)) and
          ((v = beg) or (v[-1] <= ' ')) then
         break

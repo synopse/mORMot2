@@ -1270,6 +1270,26 @@ procedure TTestCoreProcess.TestJopProcess;
     CheckEqual(TextPreprocess(
       'before $(missing|$(also)'),
       'before ');
+    // # and // inside quoted DSL values are not treated as comments
+    TestJop(
+      '$$'#10 +
+      'message = "hello # world"'#10 +
+      '$$'#10 +
+      '{value:$(message)}',
+      '{value:"hello # world"}');
+    TestJop(
+      '$$'#10 +
+      'message = "hello // world"'#10 +
+      '$$'#10 +
+      '{value:$(message)}',
+      '{value:"hello // world"}');
+    TestJop(
+      '$$'#10 +
+      'name = "hello"'#10 +
+      'message = "$(name)#tag"'#10 +
+      '$$'#10 +
+      '{value:$(message)}',
+      '{value:"hello#tag"}');
     // P0 #2: recursive includes
     mainFile   := WorkDir + 'jop-test-main.jop';
     outerFile  := WorkDir + 'jop-test-outer.jop';
