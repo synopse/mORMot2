@@ -6555,35 +6555,41 @@ procedure TPreproc.DoSkip(var P: PUtf8Char);
 begin
   repeat
     P := PosChar(P, '$'); // use SSE2 on x86_64
-    case ParseIfDollar(P) of
-      piNone:
-        inc(P);
-      piIf:
-        begin
-          dec(P, 4); // caller should detect and execute DslIf()
-          exit;
-        end;
-      piIfDef:
-        begin
-          dec(P, 7);
-          exit;
-        end;
-      piEnd:
-        begin
-          DoEndif(P);
-          exit;
-        end;
-      piElse:
-        if IfLevel = 0 then // paranoid
-          exit
-        else if IfLevel in IfSkip then
-        begin
-          exclude(IfSkip, IfLevel); // include until $end$
-          exit;
-        end
-        else
-          include(IfSkip, IfLevel);  // and continue skip loop
-    end;
+    if P <> nil then
+      case ParseIfDollar(P) of
+        piNone:
+          inc(P);
+        piIf:
+          begin
+            dec(P, 4); // caller should detect and execute DslIf()
+            exit;
+          end;
+        piIfDef:
+          begin
+            dec(P, 7);
+            exit;
+          end;
+        piEnd:
+          begin
+            DoEndif(P);
+            exit;
+          end;
+        piElse:
+          if IfLevel = 0 then // paranoid
+            exit
+          else if IfLevel in IfSkip then
+          begin
+            exclude(IfSkip, IfLevel); // include until $end$
+            exit;
+          end
+          else
+            include(IfSkip, IfLevel);  // and continue skip loop
+      end
+      else
+      begin
+        P := @NULCHAR; // missing ending $
+        break;
+      end;
   until false;
 end;
 

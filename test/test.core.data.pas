@@ -1254,6 +1254,14 @@ procedure TTestCoreProcess.TestJopProcess;
       'done=$(answer)'),
       'raw $(answer)'#10 +
       'done=42');
+    // Missing $endif$ must not cause an access violation
+    CheckEqual(TextPreprocess(
+      'before $if missing$skipped'),
+      'before ');
+    // Normal conditional skipping remains unchanged
+    CheckEqual(TextPreprocess(
+      'before $if missing$skipped$else$kept$endif$ after'),
+      'before kept after');
     // P0 #2: recursive includes
     mainFile   := WorkDir + 'jop-test-main.jop';
     outerFile  := WorkDir + 'jop-test-outer.jop';
