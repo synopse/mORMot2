@@ -1290,6 +1290,13 @@ procedure TTestCoreProcess.TestJopProcess;
       '$$'#10 +
       '{value:$(message)}',
       '{value:"hello#tag"}');
+    // } or ] inside single-quoted template strings
+    TestJop(
+      '$$'#10 +
+      'obj = {text:''a}b'', count:2}'#10 +
+      '$$'#10 +
+      '{data:{$(obj)}}',
+      '{data:{text:"a}b",count:2}}');
     // P0 #2: recursive includes
     mainFile   := WorkDir + 'jop-test-main.jop';
     outerFile  := WorkDir + 'jop-test-outer.jop';

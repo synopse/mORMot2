@@ -6731,6 +6731,8 @@ begin
           dec(level);
       '"':
         result := GotoEndOfJsonString(result);
+      '''':
+        result := GotoEndOfQuotedString(result);
     end;
     inc(result);
   until false;
