@@ -4514,6 +4514,11 @@ begin
     end;
   end;
   CheckUtf8(OpenedHandles - files < 20, 'handles=% %', [files, OpenedHandles]);
+  // GetParentProcess() closes its snapshot handle
+  files := OpenedHandles;
+  for i := 1 to 30 do
+    Check(GetParentProcess <> 0, 'ppid');
+  CheckUtf8(OpenedHandles - files < 20, 'ppid=% %', [files, OpenedHandles]);
 end;
 
 {$endif OSWINDOWS}
