@@ -1368,6 +1368,7 @@ procedure TTestCoreProcess.TestJopProcess;
       DeleteFile(insertFile);
       DeleteFile(rawFile);
     end;
+    Check(not TextPreprocessToFile('', mainFile));
   end;
 
   procedure TestJopP1;
@@ -1521,6 +1522,18 @@ procedure TTestCoreProcess.TestJopProcess;
       '$$'#10 +
       '{data:{$(obj)}}',
       '{data:{url:"https://example.org/api"}}');
+    TestJop(
+      '$$'#10 +
+      'url = https://example.org/api#section'#10 +
+      '$$'#10 +
+      '{url:$(url)}',
+      '{url:"https://example.org/api#section"}');
+    TestJop(
+      '$$'#10 +
+      'url = https://example.org/api # comment'#10 +
+      '$$'#10 +
+      '{url:$(url)}',
+      '{url:"https://example.org/api"}');
     TestJop(
       '$$'#10 +
       'obj = {a:123}'#10 +

@@ -6915,13 +6915,12 @@ ok: result := GotoNextNotSpace(result);
     else
       begin
         value := result;
-        while not (result^ in [#0 .. #31, '#']) do
+        while not (result^ in [#0 .. #31]) do
         begin
           // detect real // comments but keep valid http://... content
-          if (result^ = '/') and
-             (result[1] = '/') and
-             ((result = value) or
-              (result[-1] <= ' ')) then
+          if ((result^ = '#') or
+              ((result^ = '/') and (result[1] = '/'))) and
+             ((result = value) or (result[-1] <= ' ')) then
             break;
           // unquoted value in $$ DSL section = till end of line or comment
           if result^ in ['\', '"'] then
@@ -7209,8 +7208,7 @@ begin
   try
     F := TFileStreamEx.Create(Dest, fmCreate);
     try
-      TextPreprocessToStream(Text, F, Flags, IncludeRoot);
-      result := true;
+      result := TextPreprocessToStream(Text, F, Flags, IncludeRoot);
     finally
       F.Free;
     end;
