@@ -6572,23 +6572,23 @@ type
   // thread, but still uses RunCommandWin() on Windows
   TExternalProcess = class(TSynPersistent)
   protected
-    fSafe: TLightLock; // protect fState/fExitCode/fInternalFlags
+    fSafe: TLightLock;                // protect fState/fExitCode/fInternalFlags
+    fOutputSafe: TLightLock;          // protect fOutput/fError
     fState: TExternalProcessState;               // 8-bit
     fInternalFlags: set of TExternalProcessFlag; // 8-bit
     fOptions: TRunOptions;                       // 16-bit
-    fThreadDone: integer; // set by the background thread when done
+    fThreadDone: integer;             // set by the background thread when done
     fPid: cardinal;
     fExitCode: integer;
-    fOnOutput, fOnError: TOnRedirect;
-    fOutputSafe: TLightLock; // protect fOutput/fError
-    fOutput, fError: RawUtf8;
-    fStdinSafe: TOSLightLock; // Write() may block: use an OS lock
     // POSIX descriptors are signed, but THandle is unsigned on Delphi POSIX
-    fStdin, fStdout, fStderr, fWakeUpRead, fWakeUpWrite:
-      {$ifdef OSWINDOWS} THandle {$else} integer {$endif OSWINDOWS};
     {$ifdef OSWINDOWS}
-    fProcess, fJob: THandle;
+    fStdin, fStdout, fStderr, fWakeUpRead, fWakeUpWrite, fProcess, fJob: THandle;
+    {$else}
+    fStdin, fStdout, fStderr, fWakeUpRead, fWakeUpWrite: integer;
     {$endif OSWINDOWS}
+    fOnOutput, fOnError: TOnRedirect;
+    fOutput, fError: RawUtf8;
+    fStdinSafe: TOSLightLock;         // Write() may block: use an OS lock
     procedure SetFlag(f: TExternalProcessFlag; v: boolean = true);
     function IsSet(f: TExternalProcessFlag): boolean;
     // OS-specific methods

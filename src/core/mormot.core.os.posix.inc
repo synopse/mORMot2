@@ -5662,7 +5662,7 @@ end;
 function OpenNull: cint;
 begin
   result := EnsureCloseOnExec(FpOpen('/dev/null',
-    O_RDONLY {$ifdef OSLINUX} or O_CLOEXEC {$endif}));
+              O_RDONLY {$ifdef OSLINUX} or O_CLOEXEC {$endif}));
 end;
 
 // close all descriptors >= lowfd, in the child process
