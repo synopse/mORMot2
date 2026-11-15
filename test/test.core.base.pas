@@ -4302,7 +4302,7 @@ var
   p, b: TExternalProcess;
   r: TRunRedirectTest;
   data, s: RawUtf8;
-  dir: TFileName;
+  dir, fn: TFileName;
   start: Int64;
   pid: cardinal;
   files, i, timeout: integer;
@@ -4442,6 +4442,28 @@ begin
     finally
       p.Free;
     end;
+    // roWinJobCloseChildren closes at Destroy a child left by an ended process
+    fn := WorkDir + 'closechildren.tmp';
+    p := TExternalProcess.Create;
+    try
+      Check(p.Start('cmd /c start /b ping -n 30 127.0.0.1 >"' + fn + '"',
+        '', '', RUN_PROCESS + [roWinJobCloseChildren]), 'closechildren');
+      for i := 1 to 500 do
+        if p.Running then
+          SleepHiRes(10)
+        else
+          break;
+      Check(not p.Running, 'closechildren ended'); // cmd ended
+      Check(not DeleteFile(fn), 'closechildren alive'); // ping keeps it open
+    finally
+      p.Free;
+    end;
+    for i := 1 to 200 do
+      if DeleteFile(fn) then
+        break
+      else
+        SleepHiRes(10);
+    Check(not FileExists(fn), 'closechildren');
   end;
   // WaitFor() timeout, then Kill()
   p := TExternalProcess.Create;
