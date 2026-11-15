@@ -5576,11 +5576,22 @@ end;
 
 { TExternalProcess }
 
-{$ifdef FPCLINUX} // Delphi has no syscall, and libc close_range() is glibc 2.34+
+{$ifdef FPCLINUX} // direct syscall: no glibc 2.34 dependency
   {$if defined(CPUINTEL) or defined(CPUARM) or defined(CPUAARCH64)}
 const
-  syscall_nr_close_range = 436; // same number for all those CPUs
   {$define HASCLOSERANGE}
+  {$ifdef CPUARM}
+  syscall_nr_close_range = syscall_nr_base + 436; // older ARM OABI support
+  {$else}
+  syscall_nr_close_range = 436;
+  {$endif}
+  // not defined by all FPC RTL versions/architectures
+  {$if not declared(syscall_nr_pipe2)}
+    {$ifdef CPUX64}     syscall_nr_pipe2 = 293;                   {$endif}
+    {$ifdef CPUX86}     syscall_nr_pipe2 = 331;                   {$endif}
+    {$ifdef CPUARM}     syscall_nr_pipe2 = syscall_nr_base + 359; {$endif}
+    {$ifdef CPUAARCH64} syscall_nr_pipe2 = 59;                    {$endif}
+  {$ifend}
   {$ifend}
 {$endif FPCLINUX}
 
