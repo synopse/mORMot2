@@ -6945,14 +6945,21 @@ var
   v: PUtf8Char;
   vlen: PtrInt;     // @vlen = PPtrInt
   c: AnsiChar;
+  quoted: boolean;
   txt: RawUtf8;     // UTF-8 file name
   fn: TFileName;    // RTL file name
 begin
   tmp[0] := #0;
-  if P^ in ['"', ''''] then
-    inc(P); // allow quoted "<filename>", but with no quotes support
+  quoted := P^ in ['"', ''''];
+  if quoted then
+    inc(P); // allow quoted "<filename>"
   while not (P^ in [#0, '"', '''', '#', #13, #10]) do
   begin
+    if (not quoted) and
+       (P^ = '/') and
+       (P[1] = '/') and
+       (P[-1] <= ' ') then
+      break;
     if P^ = '$' then
     begin
       P := Expand(P, v, vlen, {KeepMarker=}false);

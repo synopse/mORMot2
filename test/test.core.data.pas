@@ -1346,7 +1346,6 @@ procedure TTestCoreProcess.TestJopProcess;
         'raw=$(answer)'#10 +
         '$if answer$verbatim$endif$'#10,
         rawFile));
-
       Check(FileFromString(
         '$$'#10 +
         'answer = 42'#10 +
@@ -1491,6 +1490,14 @@ procedure TTestCoreProcess.TestJopProcess;
       CheckEqual(TextPreprocess(src),
         'done',
         'absolute include rejected');
+      // Recognize // comments after unquoted include filenames
+      CheckEqual(TextPreprocess(
+        '$$'#10 +
+        'include jop-p1-include.txt // comment'#10 +
+        '$$'#10 +
+        'done', [], WorkDir),
+        'included'#10'done',
+        'include with // comment');
     finally
       DeleteFile(fn);
     end;
