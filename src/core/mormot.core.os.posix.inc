@@ -5994,7 +5994,7 @@ end;
 // - returns 1 if ended, 0 if still running, -1 on error
 function ChildEndedNoReap(pid: cint; var exitcode: integer): integer;
 var
-  info: array[0..31] of cint; // siginfo_t is up to 128 bytes
+  info: array[0 .. 31] of cint; // siginfo_t is up to 128 bytes
 begin
   FillCharFast(info, SizeOf(info), 0);
   repeat
@@ -6079,7 +6079,7 @@ end;
 
 function TExternalProcess.DoPump(timeoutms: integer): integer;
 var
-  p: array[0..2] of TPollFD;
+  p: array[0 .. 2] of TPollFD;
   n, i: PtrInt;
   r: ssize_t;
   fd: cint;

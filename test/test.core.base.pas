@@ -3728,7 +3728,7 @@ end;
 
 type
   // send SIGUSR1 to a given thread every 20 ms
-  TSignalSender = class(TThread)
+  TSignalSender = class(TThreadAbstract)
   protected
     fTarget: TThreadID;
     procedure Execute; override;
@@ -3752,7 +3752,7 @@ begin
   begin
     if pthread_kill(fTarget, SIGUSR1) = 0 then
       inc(Sent);
-    SleepHiRes(20);
+    SleepHiRes(10);
   end;
 end;
 

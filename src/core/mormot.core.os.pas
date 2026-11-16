@@ -5684,10 +5684,9 @@ var
   // the full thread name as set via mormot.core.log's SetThreadName()
   GetCurrentThreadName: function: RawUtf8;
   /// to be called when a thread is ended, if SetThreadName() was also made
-  // - default implementation does nothing, unless mormot.core.log is included,
-  // to redirect to TSynLog.NotifyThreadEnded and release its thread number
-  // - e.g. for a TThread of this unit, which can't inherit from TThreadAbstract
-  NotifyThreadEnded: procedure;
+  // - default implementation is nil, mormot.core.log set TSynLog.NotifyThreadEnded
+  // - it is easier to inherit from TThreadAbstract instead of plain TThread
+  NotifyThreadEnded: TThreadMethod;
 
 /// low-level access to the thread name, as set by SetThreadName()
 // - since threadvar can't contain managed strings, it is defined as TShort31,
@@ -13515,11 +13514,6 @@ begin
   // do nothing - properly implemented in mormot.core.log using FormatUtf8()
 end;
 
-procedure _NotifyThreadEnded;
-begin
-  // do nothing - properly implemented in mormot.core.log
-end;
-
 procedure SetCurrentThreadName(const Format: RawUtf8; const Args: array of const);
 begin
   SetThreadName(GetCurrentThreadId, Format, Args);
@@ -13813,7 +13807,7 @@ type
   TExternalProcessThread = class(TThread)
   protected
     fOwner: TExternalProcess;
-    procedure Execute; override;
+    procedure Execute; override; // redirect to fOwner.Pump
   public
     constructor Create(owner: TExternalProcess); reintroduce;
   end;
@@ -13834,7 +13828,8 @@ begin
       SetCurrentThreadName('process %', [fOwner.fPid]); // may raise
       fOwner.Pump;
     finally
-      NotifyThreadEnded; // release the TSynLog thread number
+      if Assigned(NotifyThreadEnded) then
+        NotifyThreadEnded(); // release the TSynLog thread number
     end;
   finally
     fOwner.SetFlag(fOutputEof); // e.g. on OnOutput exception: don't WaitFor EOF
@@ -14188,7 +14183,6 @@ begin
   GetExecutableLocation := _GetExecutableLocation; // mormot.core.log
   SetThreadName         := _SetThreadName;
   GetCurrentThreadName  := _GetCurrentThreadName;
-  NotifyThreadEnded     := _NotifyThreadEnded;
 end;
 
 procedure FinalizeUnit;
