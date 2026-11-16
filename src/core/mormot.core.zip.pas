@@ -3782,9 +3782,12 @@ begin
       result := UnZipStream(aIndex, info, FS); // use libdeflate if possible
     finally
       FS.Free;
+      if not result then
+        DeleteFile(Dest);
     end;
   end;
-  FileSetDateFromWindowsTime(Dest, info.f32.zlastMod);
+  if result then
+    FileSetDateFromWindowsTime(Dest, info.f32.zlastMod);
 end;
 
 function TZipRead.UnZipAll(DestDir: TFileName): integer;
