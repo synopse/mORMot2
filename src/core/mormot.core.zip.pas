@@ -2280,12 +2280,19 @@ begin
   begin
     e^.aes.id := AES_EXTRA_ID;
     e^.aes.size := SizeOf(e^.aes) - 4;
-    e^.aes.version := 2; // AE-2: no crc32 stored, rely on the HMAC-SHA1
+    if e^.h64.zfullSize >= 20 then
+      // follow WinZip 11: use AE-1 for files >= 20 bytes
+      e^.aes.version := 1
+    else
+    begin
+      // AE-2 prevents CRC-based plaintext disclosure on tiny files
+      e^.aes.version := 2;
+      e^.h32.fileInfo.zcrc32 := 0;
+    end;
     e^.aes.vendor := AES_VENDOR;
     e^.aes.strength := c.AesStrength;
     e^.aes.method := e^.h32.fileInfo.zzipMethod;
     e^.h32.fileInfo.zzipMethod := Z_AES;
-    e^.h32.fileInfo.zcrc32 := 0;
     include(e^.flags, zweAes);
   end;
   WriteHeader(zipName);
@@ -2507,7 +2514,10 @@ begin
           begin
             WriteTrailer(dest);
             if zweAes in flags then
-              h32.fileInfo.zcrc32 := 0 // AE-2
+            begin
+              if aes.version = 2 then // default AE-1 retains the computed CRC32
+                h32.fileInfo.zcrc32 := 0;
+            end
             else if h32.fileInfo.zcrc32 <> crc then
               ESynZip.RaiseUtf8('%.AddDeflated: % modified during process',
                 [self, aFileName]);
@@ -2565,7 +2575,19 @@ begin
       h32.fileInfo.zfullSize := fSizeIn; // zip64 store ZIP32_MAXSIZE here
       h32.fileInfo.zzipSize  := fSizeOut;
     end;
-    if not (zweAes in flags) then // AE-2 stores no crc32
+    if zweAes in flags then
+      // follow WinZip 11 behavior: favor AE-1 with crc
+      if fSizeIn >= 20 then
+      begin
+        aes.version := 1; // AE-1
+        h32.fileInfo.zcrc32 := fCrc;
+      end
+      else
+      begin
+        aes.version := 2; // AE-2 for smallest files
+        h32.fileInfo.zcrc32 := 0;
+      end
+    else
       h32.fileInfo.zcrc32 := fCrc;
     h64.zfullSize := fSizeIn; // h64 is always set
     h64.zzipSize := fSizeOut;
@@ -3783,7 +3805,7 @@ begin
     finally
       FS.Free;
       if not result then
-        DeleteFile(Dest);
+        DeleteFile(Dest); // remove incomplete/invalid files
     end;
   end;
   if result then

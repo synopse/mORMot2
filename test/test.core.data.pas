@@ -12108,6 +12108,80 @@ var
     end;
   end;
 
+  procedure CheckAesWritePolicy(const Plain: RawByteString;
+    Mode: integer);
+  var
+    s: TRawByteStringStream;
+    w: TZipWrite;
+    z: TZipRead;
+    st: TStream;
+    zip: RawByteString;
+    fn: TFileName;
+    expected: integer;
+    crc: cardinal;
+  begin
+    fn := WorkDir + 'zip-ae-test-input.bin';
+    s := TRawByteStringStream.Create;
+    try
+      w := TZipWrite.Create(s);
+      try
+        w.Password := 'mORMot';
+        case Mode of
+          0:
+            w.AddStored('data', pointer(Plain), length(Plain));
+          1:
+            begin
+              Check(FileFromString(Plain, fn));
+              w.AddStored(fn, true, 'data');
+            end;
+          2:
+            begin
+              st := w.AddDeflatedStream('data', 0, 0);
+              try
+                st.WriteBuffer(pointer(Plain)^, length(Plain));
+              finally
+                st.Free;
+              end;
+            end;
+          3:
+            w.AddDeflated('data', pointer(Plain), length(Plain));
+        end;
+      finally
+        w.Free;
+      end;
+      zip := s.DataString;
+    finally
+      s.Free;
+      if Mode = 1 then
+        DeleteFile(fn);
+    end;
+    z := TZipRead.Create(pointer(zip), length(zip));
+    try
+      CheckEqual(z.Count, 1, 'AE count');
+      Check(z.Entry[0].aes <> nil, 'AE extra');
+      if length(Plain) < 20 then
+        expected := 2
+      else
+        expected := 1;
+      CheckEqual(z.Entry[0].aes^.version, expected,
+        'AE version');
+      crc := 0;
+      if expected = 1 then
+        crc := mormot.lib.z.crc32(0, pointer(Plain), length(Plain));
+      CheckEqual(z.Entry[0].dir^.fileInfo.zcrc32, crc, 'AE CRC');
+      z.Password := 'mORMot';
+      CheckEqual(z.UnZip(0), Plain, 'AE roundtrip');
+      // Verify that the reader actually checks AE-1 CRC.
+      if expected = 1 then
+      begin
+        z.Entry[0].dir^.fileInfo.zcrc32 := z.Entry[0].dir^.fileInfo.zcrc32 xor 1;
+        Check(not z.TestAll, 'AE-1 CRC mismatch');
+      end;
+    finally
+      z.Free;
+    end;
+  end;
+
   procedure ZipEncryption;
   const
     INFOZIP: array[0..151] of byte = (
@@ -12141,6 +12215,7 @@ var
   var
     z: TZipRead;
     w: TZipWrite;
+    mode: integer;
     zip: RawByteString;
     zipfn: TFileName;
     S: TRawByteStringStream;
@@ -12278,6 +12353,12 @@ var
       TSynLog.Family.ExceptionIgnoreCurrentThread := false;
     end;
     Check(DeleteFile(zipfn));
+    for mode := 0 to 3 do
+    begin
+      CheckAesWritePolicy(RawUtf8OfChar('x', 19), mode);
+      CheckAesWritePolicy(RawUtf8OfChar('x', 20), mode);
+      CheckAesWritePolicy(RawUtf8OfChar('x', 300), mode);
+    end;
   end;
 
 var
