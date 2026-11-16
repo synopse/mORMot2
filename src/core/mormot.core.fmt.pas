@@ -6452,9 +6452,10 @@ begin
         Len := keylen;
       end;
       while (result^ <> ending) and
-            (result^ in [#0 .. #31]) do
+            (result^ > ' ') do
         inc(result);
-      inc(result); // skip trailing $ or }
+      if result^ = ending then
+        inc(result); // skip trailing $ or }
       exit;
     end;
     key := result;
@@ -6555,35 +6556,41 @@ procedure TPreproc.DoSkip(var P: PUtf8Char);
 begin
   repeat
     P := PosChar(P, '$'); // use SSE2 on x86_64
-    case ParseIfDollar(P) of
-      piNone:
-        inc(P);
-      piIf:
-        begin
-          dec(P, 4); // caller should detect and execute DslIf()
-          exit;
-        end;
-      piIfDef:
-        begin
-          dec(P, 7);
-          exit;
-        end;
-      piEnd:
-        begin
-          DoEndif(P);
-          exit;
-        end;
-      piElse:
-        if IfLevel = 0 then // paranoid
-          exit
-        else if IfLevel in IfSkip then
-        begin
-          exclude(IfSkip, IfLevel); // include until $end$
-          exit;
-        end
-        else
-          include(IfSkip, IfLevel);  // and continue skip loop
-    end;
+    if P <> nil then
+      case ParseIfDollar(P) of
+        piNone:
+          inc(P);
+        piIf:
+          begin
+            dec(P, 4); // caller should detect and execute DslIf()
+            exit;
+          end;
+        piIfDef:
+          begin
+            dec(P, 7);
+            exit;
+          end;
+        piEnd:
+          begin
+            DoEndif(P);
+            exit;
+          end;
+        piElse:
+          if IfLevel = 0 then // paranoid
+            exit
+          else if IfLevel in IfSkip then
+          begin
+            exclude(IfSkip, IfLevel); // include until $end$
+            exit;
+          end
+          else
+            include(IfSkip, IfLevel);  // and continue skip loop
+      end
+      else
+      begin
+        P := @NULCHAR; // missing ending $
+        break;
+      end;
   until false;
 end;
 
@@ -6724,7 +6731,11 @@ begin
           dec(level);
       '"':
         result := GotoEndOfJsonString(result);
+      '''':
+        result := GotoEndOfQuotedString(result);
     end;
+    if result^ = #0 then
+      exit; // unterminated quoted string
     inc(result);
   until false;
 end;
@@ -6742,7 +6753,8 @@ begin
   repeat
     beg := v;
     while (v < ve) and (v^ <> '$') do
-      if ((v^ = '#') or
+      if (m = pmTemplate) and
+         ((v^ = '#') or
           (cardinal(PWord(v)^) = SLASH_16)) and
          ((v = beg) or (v[-1] <= ' ')) then
         break
@@ -6903,13 +6915,12 @@ ok: result := GotoNextNotSpace(result);
     else
       begin
         value := result;
-        while not (result^ in [#0 .. #31, '#']) do
+        while not (result^ in [#0 .. #31]) do
         begin
           // detect real // comments but keep valid http://... content
-          if (result^ = '/') and
-             (result[1] = '/') and
-             ((result = value) or
-              (result[-1] <= ' ')) then
+          if ((result^ = '#') or
+              ((result^ = '/') and (result[1] = '/'))) and
+             ((result = value) or (result[-1] <= ' ')) then
             break;
           // unquoted value in $$ DSL section = till end of line or comment
           if result^ in ['\', '"'] then
@@ -6934,14 +6945,21 @@ var
   v: PUtf8Char;
   vlen: PtrInt;     // @vlen = PPtrInt
   c: AnsiChar;
+  quoted: boolean;
   txt: RawUtf8;     // UTF-8 file name
   fn: TFileName;    // RTL file name
 begin
   tmp[0] := #0;
-  if P^ in ['"', ''''] then
-    inc(P); // allow quoted "<filename>", but with no quotes support
+  quoted := P^ in ['"', ''''];
+  if quoted then
+    inc(P); // allow quoted "<filename>"
   while not (P^ in [#0, '"', '''', '#', #13, #10]) do
   begin
+    if (not quoted) and
+       (P^ = '/') and
+       (P[1] = '/') and
+       (P[-1] <= ' ') then
+      break;
     if P^ = '$' then
     begin
       P := Expand(P, v, vlen, {KeepMarker=}false);
@@ -7197,8 +7215,7 @@ begin
   try
     F := TFileStreamEx.Create(Dest, fmCreate);
     try
-      TextPreprocessToStream(Text, F, Flags, IncludeRoot);
-      result := true;
+      result := TextPreprocessToStream(Text, F, Flags, IncludeRoot);
     finally
       F.Free;
     end;

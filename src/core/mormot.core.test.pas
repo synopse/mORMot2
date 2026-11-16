@@ -1050,7 +1050,9 @@ function TSynTestCase.CheckRaised(const Method: TOnTestCheck;
   const Params: array of const; Raised: ExceptionClass; const Context: RawUtf8): boolean;
 var
   msg: string;
+  bak: boolean;
 begin
+  bak := TSynLog.Family.ExceptionIgnoreCurrentThread;
   TSynLog.Family.ExceptionIgnoreCurrentThread := true;
   try
     Method(Params);
@@ -1069,7 +1071,7 @@ begin
         FormatString('% instead of %%', [E, Raised, Context], msg);
     end;
   end;
-  TSynLog.Family.ExceptionIgnoreCurrentThread := false;
+  TSynLog.Family.ExceptionIgnoreCurrentThread := bak;
   Check(result, msg);
 end;
 

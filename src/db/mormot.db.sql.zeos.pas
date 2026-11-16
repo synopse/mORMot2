@@ -108,6 +108,7 @@ uses
   mormot.core.data,
   mormot.core.perf,
   mormot.core.rtti,
+  mormot.core.json,
   mormot.core.log,
   mormot.db.core,
   mormot.db.sql;

@@ -3706,6 +3706,7 @@ type
     Calls: integer;
     FirstCallEmpty, AbortOnText: boolean;
     SeenPid: cardinal;
+    ThreadIndex: PtrInt;
     function OnOutput(const text: RawByteString; pid: cardinal): boolean;
   end;
 
@@ -3715,6 +3716,7 @@ begin
     FirstCallEmpty := text = '';
   inc(Calls);
   SeenPid := pid;
+  ThreadIndex := TSynLog.ThreadIndex;
   Output := Output + text;
   result := AbortOnText and
             (text <> '');
@@ -3726,7 +3728,7 @@ end;
 
 type
   // send SIGUSR1 to a given thread every 20 ms
-  TSignalSender = class(TThread)
+  TSignalSender = class(TThreadAbstract)
   protected
     fTarget: TThreadID;
     procedure Execute; override;
@@ -3750,7 +3752,7 @@ begin
   begin
     if pthread_kill(fTarget, SIGUSR1) = 0 then
       inc(Sent);
-    SleepHiRes(20);
+    SleepHiRes(10);
   end;
 end;
 
@@ -3918,6 +3920,7 @@ var
   bg, pid, hfd: cint;
   fds: TFilDes;
   files, i: integer;
+  ndx: PtrInt;
 begin
   // basic execution with stdout and exit code
   p := TExternalProcess.Create;
@@ -4007,6 +4010,27 @@ begin
     Check(r.SeenPid = p.Pid, 'onoutput pid');
   finally
     p.Free;
+    r.Free;
+  end;
+  // the background thread releases its TSynLog thread number when it ends
+  r := TRunRedirectTest.Create;
+  try
+    ndx := 0;
+    for i := 0 to 19 do
+    begin
+      p := TExternalProcess.Create;
+      try
+        p.OnOutput := r.OnOutput;
+        Check(p.Start('echo hi'), 'threadnumber');
+        CheckEqual(p.WaitFor(10000), 0, 'threadnumber');
+      finally
+        p.Free;
+      end;
+      if i = 0 then
+        ndx := r.ThreadIndex;
+    end;
+    Check(r.ThreadIndex < ndx + 10, 'threadnumber reused');
+  finally
     r.Free;
   end;
   // explicit arguments are neither parsed nor given to the shell
@@ -4121,12 +4145,12 @@ begin
   fpkill(bg, SIGKILL);
   Check(ProcessEnded(bg), 'background');
   {$if defined(OSLINUX) or defined(OSDARWIN) or defined(OSFREEBSD)}
-  // roWinJobCloseChildren closes at Destroy a child left by an ended process
+  // roCloseChildren closes at Destroy a child left by an ended process
   bg := 0;
   p := TExternalProcess.Create;
   try
     Check(p.Start('sleep 30 >/dev/null 2>&1 & echo $!; exit 3', '', '',
-      RUN_PROCESS + [roWinJobCloseChildren]), 'closechildren');
+      RUN_PROCESS + [roCloseChildren]), 'closechildren');
     bg := ReadFirstLinePid(p);
     CheckEqual(p.WaitFor(5000), 3, 'closechildren exitcode');
     Check(ProcessExists(bg), 'closechildren alive');
@@ -4141,7 +4165,7 @@ begin
   p := TExternalProcess.Create;
   try
     Check(p.Start('kill -9 $$', '', '',
-      RUN_PROCESS + [roWinJobCloseChildren]), 'closechildren9');
+      RUN_PROCESS + [roCloseChildren]), 'closechildren9');
     CheckEqual(p.WaitFor(10000), -SIGKILL, 'closechildren signal');
     pid := p.Pid;
     Check(ProcessExists(pid), 'closechildren zombie'); // not reaped yet
@@ -4302,10 +4326,11 @@ var
   p, b: TExternalProcess;
   r: TRunRedirectTest;
   data, s: RawUtf8;
-  dir: TFileName;
+  dir, fn: TFileName;
   start: Int64;
   pid: cardinal;
   files, i, timeout: integer;
+  ndx: PtrInt;
   sec: TPipeSecurity;
   rd, wr: THandle;
 begin
@@ -4387,6 +4412,27 @@ begin
     p.Free;
     r.Free;
   end;
+  // the background thread releases its TSynLog thread number when it ends
+  r := TRunRedirectTest.Create;
+  try
+    ndx := 0;
+    for i := 0 to 19 do
+    begin
+      p := TExternalProcess.Create;
+      try
+        p.OnOutput := r.OnOutput;
+        Check(p.Start('cmd /c echo hi'), 'threadnumber');
+        CheckEqual(p.WaitFor(10000), 0, 'threadnumber');
+      finally
+        p.Free;
+      end;
+      if i = 0 then
+        ndx := r.ThreadIndex;
+    end;
+    Check(r.ThreadIndex < ndx + 10, 'threadnumber reused');
+  finally
+    r.Free;
+  end;
   // explicit arguments are quoted as CommandLineToArgvW() expects: cmd
   // "echo" shows the command line as it was received
   p := TExternalProcess.Create;
@@ -4442,6 +4488,28 @@ begin
     finally
       p.Free;
     end;
+    // roCloseChildren closes at Destroy a child left by an ended process
+    fn := WorkDir + 'closechildren.tmp';
+    p := TExternalProcess.Create;
+    try
+      Check(p.Start('cmd /c start /b ping -n 30 127.0.0.1 >"' + fn + '"',
+        '', '', RUN_PROCESS + [roCloseChildren]), 'closechildren');
+      for i := 1 to 500 do
+        if p.Running then
+          SleepHiRes(10)
+        else
+          break;
+      Check(not p.Running, 'closechildren ended'); // cmd ended
+      Check(not DeleteFile(fn), 'closechildren alive'); // ping keeps it open
+    finally
+      p.Free;
+    end;
+    for i := 1 to 200 do
+      if DeleteFile(fn) then
+        break
+      else
+        SleepHiRes(10);
+    Check(not FileExists(fn), 'closechildren');
   end;
   // WaitFor() timeout, then Kill()
   p := TExternalProcess.Create;
@@ -4514,6 +4582,11 @@ begin
     end;
   end;
   CheckUtf8(OpenedHandles - files < 20, 'handles=% %', [files, OpenedHandles]);
+  // GetParentProcess() closes its snapshot handle
+  files := OpenedHandles;
+  for i := 1 to 30 do
+    Check(GetParentProcess <> 0, 'ppid');
+  CheckUtf8(OpenedHandles - files < 20, 'ppid=% %', [files, OpenedHandles]);
 end;
 
 {$endif OSWINDOWS}

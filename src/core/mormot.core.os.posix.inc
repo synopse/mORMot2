@@ -5576,11 +5576,22 @@ end;
 
 { TExternalProcess }
 
-{$ifdef FPCLINUX} // Delphi has no syscall, and libc close_range() is glibc 2.34+
+{$ifdef FPCLINUX} // direct syscall: no glibc 2.34 dependency
   {$if defined(CPUINTEL) or defined(CPUARM) or defined(CPUAARCH64)}
 const
-  syscall_nr_close_range = 436; // same number for all those CPUs
   {$define HASCLOSERANGE}
+  {$ifdef CPUARM}
+  syscall_nr_close_range = syscall_nr_base + 436; // older ARM OABI support
+  {$else}
+  syscall_nr_close_range = 436;
+  {$endif}
+  // not defined by all FPC RTL versions/architectures
+  {$if not declared(syscall_nr_pipe2)}
+    {$ifdef CPUX64}     syscall_nr_pipe2 = 293;                   {$endif}
+    {$ifdef CPUX86}     syscall_nr_pipe2 = 331;                   {$endif}
+    {$ifdef CPUARM}     syscall_nr_pipe2 = syscall_nr_base + 359; {$endif}
+    {$ifdef CPUAARCH64} syscall_nr_pipe2 = 59;                    {$endif}
+  {$ifend}
   {$ifend}
 {$endif FPCLINUX}
 
@@ -5651,7 +5662,7 @@ end;
 function OpenNull: cint;
 begin
   result := EnsureCloseOnExec(FpOpen('/dev/null',
-    O_RDONLY {$ifdef OSLINUX} or O_CLOEXEC {$endif}));
+              O_RDONLY {$ifdef OSLINUX} or O_CLOEXEC {$endif}));
 end;
 
 // close all descriptors >= lowfd, in the child process
@@ -5983,7 +5994,7 @@ end;
 // - returns 1 if ended, 0 if still running, -1 on error
 function ChildEndedNoReap(pid: cint; var exitcode: integer): integer;
 var
-  info: array[0..31] of cint; // siginfo_t is up to 128 bytes
+  info: array[0 .. 31] of cint; // siginfo_t is up to 128 bytes
 begin
   FillCharFast(info, SizeOf(info), 0);
   repeat
@@ -6014,7 +6025,7 @@ begin
   try
     {$ifdef HASWAITID}
     if (fState = epsRunning) and
-       (roWinJobCloseChildren in fOptions) then
+       (roCloseChildren in fOptions) then
     begin
       // don't reap yet: DoClose will kill the process group of this zombie
       r := ChildEndedNoReap(fPid, fExitCode);
@@ -6068,7 +6079,7 @@ end;
 
 function TExternalProcess.DoPump(timeoutms: integer): integer;
 var
-  p: array[0..2] of TPollFD;
+  p: array[0 .. 2] of TPollFD;
   n, i: PtrInt;
   r: ssize_t;
   fd: cint;
@@ -6162,7 +6173,7 @@ procedure TExternalProcess.DoClose;
 begin
   if IsSet(fZombie) then
   begin
-    // roWinJobCloseChildren: the zombie kept its process group number
+    // roCloseChildren: the zombie kept its process group number
     SetFlag(fZombie, false);
     fpkill(-cint(fPid), SIGKILL); // kill any child still running
     repeat
@@ -6198,7 +6209,7 @@ begin
   try
     p.fOnOutput := onoutput;
     if p.DoStart(cmd, [], env, wrkdir,
-         options - [roStdinPipe, roStderrPipe, roWinJobCloseChildren],
+         options - [roStdinPipe, roStderrPipe, roCloseChildren],
          {withthread=}false) then
       result := p.Redirect(waitfordelayms, setresult, exitcode);
   finally

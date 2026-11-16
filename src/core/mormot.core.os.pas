@@ -5683,6 +5683,10 @@ var
   // - will return the CurrentThreadNameShort^ threadvar 31 chars value or
   // the full thread name as set via mormot.core.log's SetThreadName()
   GetCurrentThreadName: function: RawUtf8;
+  /// to be called when a thread is ended, if SetThreadName() was also made
+  // - default implementation is nil, mormot.core.log set TSynLog.NotifyThreadEnded
+  // - it is easier to inherit from TThreadAbstract instead of plain TThread
+  NotifyThreadEnded: TThreadMethod;
 
 /// low-level access to the thread name, as set by SetThreadName()
 // - since threadvar can't contain managed strings, it is defined as TShort31,
@@ -6411,10 +6415,12 @@ type
   /// define how RunCommand() and RunRedirect() run their sub-process
   // - roEnvAddExisting is used when the env pairs should be added to the
   // existing system environment variable
-  // - roWinJobCloseChildren will use the CREATE_BREAKAWAY_FROM_JOB flag and
+  // - roCloseChildren will use the CREATE_BREAKAWAY_FROM_JOB flag and
   // run CreateJobToClose(allowSilentBreakaway=true) and AssignJobToProcess()
   // on the new process so that any of its future children would be
-  // synchronized and closed with their father, in a relaxed way
+  // synchronized and closed with their father, in a relaxed way - on Windows
+  // only for RunCommand() and RunRedirect(), but also on POSIX and in a
+  // strict way for TExternalProcess
   // - on Windows, will create its own console and its own execution group, unless
   // roWinNoProcessDetach is defined - e.g. as RUN_CMD for RunCommand/RunRedirect
   // - roWinNewConsole won't inherit the parent console, but have its own console
@@ -6427,7 +6433,7 @@ type
   // - RunRedirect() ignores roStdinPipe and roStderrPipe
   TRunOptions = set of (
     roEnvAddExisting,
-    roWinJobCloseChildren,
+    roCloseChildren,
     roWinNoProcessDetach,
     roWinNewConsole,
     roWinKeepProcessOnTimeout,
@@ -6446,6 +6452,12 @@ const
   /// the default options for TExternalProcess.Start
   // - with the same behavior on all systems: no stdin, and stderr in stdout
   RUN_PROCESS = [roWinNoProcessDetach, roStdinNull, roStderrMerge];
+
+{$ifndef PUREMORMOT2}
+  /// deprecated name: use roCloseChildren instead
+  roWinJobCloseChildren = roCloseChildren;
+{$endif PUREMORMOT2}
+
 type
   /// the low-level OS API type for executing processes arguments
   TRunArg = {$ifdef OSPOSIX} RawUtf8 {$else} TFileName {$endif};
@@ -6564,7 +6576,7 @@ type
   // - on Windows, the command line is given to CreateProcessW() as such - so use
   // e.g. 'cmd /c ...' for a shell built-in - and the process is created in its
   // own process group and job, so that Terminate/Kill also stop its children
-  // - roWinJobCloseChildren also kills any child still running when this
+  // - roCloseChildren also kills any child still running when this
   // instance is released - and on Windows, when the current process ends:
   // on Linux, FreeBSD and MacOS, the ended process is then not reaped
   // before this instance is released, so that its process group is kept
@@ -6572,23 +6584,23 @@ type
   // thread, but still uses RunCommandWin() on Windows
   TExternalProcess = class(TSynPersistent)
   protected
-    fSafe: TLightLock; // protect fState/fExitCode/fInternalFlags
+    fSafe: TLightLock;                // protect fState/fExitCode/fInternalFlags
+    fOutputSafe: TLightLock;          // protect fOutput/fError
     fState: TExternalProcessState;               // 8-bit
     fInternalFlags: set of TExternalProcessFlag; // 8-bit
     fOptions: TRunOptions;                       // 16-bit
-    fThreadDone: integer; // set by the background thread when done
+    fThreadDone: integer;             // set by the background thread when done
     fPid: cardinal;
     fExitCode: integer;
-    fOnOutput, fOnError: TOnRedirect;
-    fOutputSafe: TLightLock; // protect fOutput/fError
-    fOutput, fError: RawUtf8;
-    fStdinSafe: TOSLightLock; // Write() may block: use an OS lock
     // POSIX descriptors are signed, but THandle is unsigned on Delphi POSIX
-    fStdin, fStdout, fStderr, fWakeUpRead, fWakeUpWrite:
-      {$ifdef OSWINDOWS} THandle {$else} integer {$endif OSWINDOWS};
     {$ifdef OSWINDOWS}
-    fProcess, fJob: THandle;
+    fStdin, fStdout, fStderr, fWakeUpRead, fWakeUpWrite, fProcess, fJob: THandle;
+    {$else}
+    fStdin, fStdout, fStderr, fWakeUpRead, fWakeUpWrite: integer;
     {$endif OSWINDOWS}
+    fOnOutput, fOnError: TOnRedirect;
+    fOutput, fError: RawUtf8;
+    fStdinSafe: TOSLightLock;         // Write() may block: use an OS lock
     procedure SetFlag(f: TExternalProcessFlag; v: boolean = true);
     function IsSet(f: TExternalProcessFlag): boolean;
     // OS-specific methods
@@ -13803,7 +13815,7 @@ type
   TExternalProcessThread = class(TThread)
   protected
     fOwner: TExternalProcess;
-    procedure Execute; override;
+    procedure Execute; override; // redirect to fOwner.Pump
   public
     constructor Create(owner: TExternalProcess); reintroduce;
   end;
@@ -13819,9 +13831,14 @@ end;
 
 procedure TExternalProcessThread.Execute;
 begin
-  SetCurrentThreadName('process %', [fOwner.fPid]);
   try
-    fOwner.Pump;
+    try
+      SetCurrentThreadName('process %', [fOwner.fPid]); // may raise
+      fOwner.Pump;
+    finally
+      if Assigned(NotifyThreadEnded) then
+        NotifyThreadEnded(); // release the TSynLog thread number
+    end;
   finally
     fOwner.SetFlag(fOutputEof); // e.g. on OnOutput exception: don't WaitFor EOF
     LockedInc32(@fOwner.fThreadDone); // with a barrier: last access to fOwner

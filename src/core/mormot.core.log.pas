@@ -1375,7 +1375,7 @@ type
     // in a situation where no other logging may occur from this thread any more
     // - it will release all thread-specific resource used by this TSynLog
     // - called e.g. by TRest.EndCurrentThread, via TSynLogFamily.OnThreadEnded
-    class procedure NotifyThreadEnded; {$ifdef HASINLINE} static; {$endif}
+    class procedure NotifyThreadEnded;
     /// handle generic method enter / auto-leave tracing
     // - returning a ISynLog interface will allow you to have an automated
     // sllLeave log created when the method is left (thanks to the hidden
@@ -9328,6 +9328,7 @@ begin
   GetEnumTrimmedNames(TypeInfo(TAppLogLevel), @_LogAppText);
   SetThreadName := _SetThreadName;
   GetCurrentThreadName := _GetCurrentThreadName;
+  NotifyThreadEnded := TSynLog.NotifyThreadEnded;
   SetCurrentThreadName('MainThread');
   GetExecutableLocation := _GetExecutableLocation; // use FindLocationShort()
   LogCompressAlgo := AlgoSynLZ; // very fast and efficient on logs

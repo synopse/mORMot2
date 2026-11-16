@@ -5437,6 +5437,13 @@ begin
     hps.Port := 8008; // don't use default 8099
     hps.Options := [pcoHttpDirect, pcoCacheTempNoCheckSize,
       pcoVerboseLog, pcoHttpReprDigest {}, pcoSelfSignedHttps{}];
+    {$ifdef OSWINDOWS}
+    if wsPrism in WindowsSpecs then
+    begin
+      hps.Options := hps.Options - [pcoSelfSignedHttps];
+      AddConsole('Peer cache: HTTP instead of HTTPS on PRISM');
+    end;
+    {$endif OSWINDOWS}
     err := hps.GuessInterface(mac);
     if err <> '' then
     begin
