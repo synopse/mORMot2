@@ -538,7 +538,8 @@ type
     function DecryptInit(const Password: RawByteString; const Info: TFileInfo;
       Header: PByteArray): boolean; virtual; abstract;
     /// in-place decryption of some entry data
-    procedure Decrypt(Data: PByteArray; Len: PtrInt); virtual; abstract;
+    procedure Decrypt(Data: PByteArray; Len: PtrInt;
+      AuthOnly: boolean = false); virtual; abstract;
     /// validate the TrailerLen bytes stored after the entry data
     // - this default implementation returns true
     function DecryptDone(Trailer: PByteArray): boolean; virtual;
@@ -3492,7 +3493,6 @@ begin
     result := nil;
 end;
 
-
 function TZipRead.CryptAuthenticate(c: TZipCrypt;
   e: PZipReadEntry; const info: TFileInfoFull): boolean;
 var
@@ -3518,7 +3518,7 @@ begin
     if remaining < n then
       n := remaining;
     fSource.ReadBuffer(tmp, n);
-    c.Decrypt(@tmp, n);
+    c.Decrypt(@tmp, n, {AuthOnly=}true);
     dec(remaining, n);
   end;
   if c.TrailerLen <> 0 then

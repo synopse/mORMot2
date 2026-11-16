@@ -47,7 +47,7 @@ type
     procedure Encrypt(Data: PByteArray; Len: PtrInt); override;
     function DecryptInit(const Password: RawByteString; const Info: TFileInfo;
       Header: PByteArray): boolean; override;
-    procedure Decrypt(Data: PByteArray; Len: PtrInt); override;
+    procedure Decrypt(Data: PByteArray; Len: PtrInt; AuthOnly: boolean); override;
   end;
 
 
@@ -85,7 +85,7 @@ type
     function DecryptInit(const Password: RawByteString; const Info: TFileInfo;
       Header: PByteArray): boolean; override;
     /// in-place AES-CTR decryption with HMAC-SHA1 authentication
-    procedure Decrypt(Data: PByteArray; Len: PtrInt); override;
+    procedure Decrypt(Data: PByteArray; Len: PtrInt; AuthOnly: boolean); override;
     /// validate the 80-bit HMAC-SHA1 authentication code
     function DecryptDone(Trailer: PByteArray): boolean; override;
   end;
@@ -154,11 +154,15 @@ end;
 
 procedure TZipCryptPkware.EncryptInit(const Password: RawByteString;
   Crc: cardinal; Header: PByteArray);
+var
+  rnd: TAesBlock;
 begin
   Init(Password);
   // appnote: 11 random bytes, then the high byte of the crc32 as check byte
-  RandomBytes(Header, ZIP_CRYPTHEAD - 1);
-  Header[ZIP_CRYPTHEAD - 1] := Crc shr 24;
+  Random128(@rnd);
+  MoveFast(rnd, Header^, ZIP_CRYPTHEAD - 1);
+  FillZero(rnd);
+  Header^[ZIP_CRYPTHEAD - 1] := Crc shr 24;
   Encrypt(Header, ZIP_CRYPTHEAD);
 end;
 
@@ -175,7 +179,7 @@ var
 begin
   Init(Password);
   MoveFast(Header^, h, ZIP_CRYPTHEAD);
-  Decrypt(@h, ZIP_CRYPTHEAD);
+  Decrypt(@h, ZIP_CRYPTHEAD, {AuthOnly=}false);
   // appnote: high byte of the crc32, or of the DOS time with a data descriptor
   if Info.flags and FLAG_DATADESCRIPTOR <> 0 then
     check := (cardinal(Info.zlastMod) shr 8) and $ff
@@ -184,7 +188,7 @@ begin
   result := h[ZIP_CRYPTHEAD - 1] = check;
 end;
 
-procedure TZipCryptPkware.Decrypt(Data: PByteArray; Len: PtrInt);
+procedure TZipCryptPkware.Decrypt(Data: PByteArray; Len: PtrInt; AuthOnly: boolean);
 begin
   Crypt(Data, Len, {decrypting=}true);
 end;
@@ -200,7 +204,7 @@ const
 constructor TZipCryptAes.Create(AesStrength: integer);
 begin
   inherited Create(AesStrength);
-  fKeyLen := 8 + AesStrength * 8;            // 16/24/32 bytes
+  fKeyLen := 8 + AesStrength shl 3;          // 16/24/32 bytes
   fHeaderLen := fKeyLen shr 1 + AES_PWV;     // salt is 8/12/16 bytes
   fTrailerLen := AES_MAC;
 end;
@@ -216,16 +220,17 @@ end;
 function TZipCryptAes.Setup(const Password: RawByteString;
   Salt: PByteArray): cardinal;
 var
-  s: RawUtf8;
-  k: RawByteString;
+  klen: PtrInt;
+  s, k: RawByteString;
 begin
   // derivate AES key + HMAC key + password verification value from the salt
-  FastSetString(s, Salt, fHeaderLen - AES_PWV);
-  k := fHmac.Pbkdf2(saSha1, RawUtf8(Password), s, AES_ROUNDS,
-    fKeyLen * 2 + AES_PWV);
-  if length(k) <> fKeyLen * 2 + AES_PWV then
+  FastSetRawByteString(s, Salt, fHeaderLen - AES_PWV);
+  klen := fKeyLen * 2 + AES_PWV;
+  k := fHmac.Pbkdf2(saSha1, Password, s, AES_ROUNDS, klen);
+  FillZero(s);
+  if length(k) <> klen then
     ESynZip.RaiseUtf8('%.Setup: PBKDF2 failed', [self]);
-  fAes.EncryptInit(pointer(k)^, fKeyLen * 8);
+  fAes.EncryptInit(pointer(k)^, {bits=}fKeyLen shl 3);
   fHmac.Init(saSha1, @PByteArray(k)[fKeyLen], fKeyLen);
   result := PWord(@PByteArray(k)[fKeyLen * 2])^;
   FillZero(k);
@@ -263,9 +268,17 @@ end;
 
 procedure TZipCryptAes.EncryptInit(const Password: RawByteString;
   Crc: cardinal; Header: PByteArray);
+var
+  rnd: TAesBlock;
+  saltlen: PtrInt;
 begin
-  TAesPrng.Fill(Header, fHeaderLen - AES_PWV); // cryptographic random salt
-  PWord(@Header[fHeaderLen - AES_PWV])^ := Setup(Password, Header);
+  Random128(@rnd);
+  saltlen := fHeaderLen - AES_PWV;
+  if saltlen > SizeOf(rnd) then
+    ESynZip.RaiseUtf8('%.EncryptInit: saltlen=%', [self, saltlen]);
+  MoveFast(rnd, Header^, saltlen); // cryptographic random salt
+  FillZero(rnd);
+  PWord(@Header[saltlen])^ := Setup(Password, Header);
 end;
 
 procedure TZipCryptAes.Encrypt(Data: PByteArray; Len: PtrInt);
@@ -288,10 +301,11 @@ begin
   result := Setup(Password, Header) = PWord(@Header[fHeaderLen - AES_PWV])^;
 end;
 
-procedure TZipCryptAes.Decrypt(Data: PByteArray; Len: PtrInt);
+procedure TZipCryptAes.Decrypt(Data: PByteArray; Len: PtrInt; AuthOnly: boolean);
 begin
   fHmac.Update(Data, Len); // authenticate the encrypted data
-  Crypt(Data, Len);
+  if not AuthOnly then
+    Crypt(Data, Len);
 end;
 
 function TZipCryptAes.DecryptDone(Trailer: PByteArray): boolean;
@@ -304,7 +318,7 @@ end;
 
 
 initialization
-  ZipCryptClass[zeAes256] := TZipCryptAes;
+  ZipCryptClass[zeAes256]    := TZipCryptAes;
   ZipCryptClass[zeZipCrypto] := TZipCryptPkware;
 
 end.
