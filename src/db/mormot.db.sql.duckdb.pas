@@ -780,7 +780,7 @@ begin
       for f := 0 to high(FieldNames) do
       begin
         v := @FieldValues[f, r]; // values are SQL literals, BLOB are decoded
-        if (v^ = 'null') or
+        if IsNullJson(v^) or
            (FieldTypes[f] = ftNull) then
           app.AddNull
         else

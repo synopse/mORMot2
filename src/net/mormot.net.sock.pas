@@ -382,6 +382,19 @@ type
     function RecvFrom(Buf: pointer; len: integer; out addr: TNetAddr): integer; overload;
     /// low-level UDP receiving from an address of some data into a RawByteString
     function RecvFrom(out addr: TNetAddr): RawByteString; overload;
+    /// enable UDP packet information for RecvFromIf()
+    // - supported on Linux, macOS and NetBSD; nrNotImplemented elsewhere
+    function SetPacketInfo(enable: boolean): TNetResult;
+    /// low-level UDP receiving of some data, with its receiving interface
+    // - ifindex is the TMacAddress.IfIndex of the network interface which
+    // received this frame, or 0 if unknown, e.g. with no SetPacketInfo(true)
+    function RecvFromIf(Buf: pointer; len: integer; out addr: TNetAddr;
+      out ifindex: integer): integer;
+    /// low-level UDP sending of some data through a given network interface
+    // - e.g. a 255.255.255.255 broadcast follows the default route otherwise
+    // - ifindex = 0 just calls SendTo(), i.e. let the routing table decide
+    function SendToIf(Buf: pointer; len: integer; const addr: TNetAddr;
+      ifindex: integer): TNetResult;
     /// wait for the socket to a given set of receiving/sending state
     // - using poll() on POSIX (as required), and select() on Windows
     // - ms < 0 means an infinite timeout (blocking until events happen)
@@ -1236,6 +1249,11 @@ type
     // - caller should ensure there is no concurrent Receive/Send
     // - returns the amount of memory released, if known
     function ReleaseBuffers: PtrInt;
+    /// notify that the socket was already closed at OS level
+    // - e.g. by TCrtSocket.Abort on Windows to release a blocking recv()
+    // - the TLS layer should not access this socket handle any more, which
+    // may have been reused by the OS, e.g. to send a final close_notify alert
+    procedure SocketClosed;
   end;
 
 /// initialize a stack-allocated TNetTlsContext instance
@@ -2087,6 +2105,7 @@ type
 
   TCrtSocketFlags = set of (
     fAborted,
+    fAbortClosed,
     fWasBind,
     fBodyRetrieved,
     fServerTlsEnabled,
@@ -3784,6 +3803,35 @@ begin
     len := 0; // return '' on error
   FastSetRawByteString(result, @tmp, len);
 end;
+
+{$ifndef HAS_IP_PKTINFO}
+// - Windows UDP socket bound to a particular local IPv4 receives broadcasts
+// - see mormot.net.sock.posix.inc for the Linux version
+// - macOS and NetBSD can easily follow the IP_PKTINFO socket option
+// - FreeBSD has a specific IP_ONESBCAST option and OpenBSD seems out of reach
+
+function TNetSocketWrap.SetPacketInfo(enable: boolean): TNetResult;
+begin
+  result := nrNotImplemented;
+end;
+
+function TNetSocketWrap.RecvFromIf(Buf: pointer; len: integer;
+  out addr: TNetAddr; out ifindex: integer): integer;
+begin
+  ifindex := 0; // unknown
+  result := RecvFrom(Buf, len, addr);
+end;
+
+function TNetSocketWrap.SendToIf(Buf: pointer; len: integer;
+  const addr: TNetAddr; ifindex: integer): TNetResult;
+begin
+  if ifindex = 0 then
+    result := SendTo(Buf, len, addr)
+  else
+    result := nrNotImplemented;
+end;
+
+{$endif HAS_IP_PKTINFO}
 
 function TNetSocketWrap.RecvPending(out pending: integer): TNetResult;
 begin
@@ -7608,12 +7656,18 @@ begin
   if not SockIsDefined then
     exit; // no opened connection, or Close already executed
   // perform the TLS shutdown on socket and release the TLS execution interface
+  if fAbortClosed in fFlags then
+    if fSecure <> nil then
+      fSecure.SocketClosed; // no close_notify over a closed/reused handle
   fSecure := nil; // will depend on the actual implementation class
   // note: ResetNetTlsContext(TLS) is done in OpenBind()
   // actually close the socket and mark it as not SockIsDefined (<0)
   {$ifdef SYNCRTDEBUGLOW2}
   QueryPerformanceMicroSeconds(start);
   {$endif SYNCRTDEBUGLOW2}
+  if fAbortClosed in fFlags then
+    exclude(fFlags, fAbortClosed) // Abort did already call closesocket()
+  else
   {$ifdef OSLINUX}
   if not (fWasBind in fFlags) or
      (fPort <> '') then // no explicit shutdown necessary on Linux server side
@@ -7634,6 +7688,10 @@ begin
 end;
 
 procedure TCrtSocket.Abort;
+{$ifdef OSWINDOWS}
+var
+  sock: TNetSocket;
+{$endif OSWINDOWS}
 begin
   if (self = nil) or
      (fAborted in fFlags) then
@@ -7643,8 +7701,14 @@ begin
     OnLog(sllTrace, 'Abort socket=%', [fSock.Socket], self);
   if SockIsDefined then
     {$ifdef OSWINDOWS}
-    // closing will abort any pending Windows recv/send call in another thread
-    fSock.Close;
+    begin
+      sock := fSock; // a concurrent Close may reset fSock but skip closesocket
+      // flag BEFORE closing, since the woken up thread may call Close at once
+      include(fFlags, fAbortClosed); // this handle may then be reused by the OS
+      // closing will abort any pending Windows recv/send call in another thread
+      // (shutdown() does not release a blocking recv() on Windows)
+      sock.Close;
+    end;
     {$else}
     // shutdown should do the trick on Linux, without messing the file descriptor
     shutdown(fSock.Socket, SHUT_RDWR);

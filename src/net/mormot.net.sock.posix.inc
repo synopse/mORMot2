@@ -433,6 +433,93 @@ function getpeername(s: integer; name: PSockAddr; var namelen: TSockLen): intege
 
 {$endif SOCKDIRECTSYSCALL}
 
+{$ifdef HAS_IP_PKTINFO}
+
+const
+  {$ifdef OSLINUX}
+  IP_PKTINFO = 8;
+  PKTINFO_RECV_OPT = IP_PKTINFO;
+  PKTINFO_MSG_CTRUNC = $08;
+  {$endif OSLINUX}
+
+  {$ifdef OSDARWIN}
+  IP_PKTINFO = 26;
+  PKTINFO_RECV_OPT = IP_PKTINFO;
+  PKTINFO_MSG_CTRUNC = $20;
+  {$endif OSDARWIN}
+
+  {$ifdef OSNETBSD}
+  IP_PKTINFO = 25;
+  PKTINFO_RECV_OPT = 26; // IP_RECVPKTINFO
+  PKTINFO_MSG_CTRUNC = $20;
+  {$endif OSNETBSD}
+
+type
+  TSockIoVec = record
+    iov_base: pointer;
+    iov_len: size_t;
+  end;
+
+  // Native POSIX msghdr ABI
+  TSockMsgHdr = record
+    msg_name: pointer;
+    msg_namelen: cint; // 32-bit socklen_t
+    msg_iov: ^TSockIoVec;
+    {$ifdef OSLINUX}
+    msg_iovlen: size_t;
+    {$else}
+    msg_iovlen: cint;
+    {$endif OSLINUX}
+    msg_control: pointer;
+    {$ifdef OSLINUX}
+    msg_controllen: size_t;
+    {$else}
+    msg_controllen: cuint; // 32-bit socklen_t
+    {$endif OSLINUX}
+    msg_flags: cint;
+  end;
+
+  // cmsghdr followed by native in_pktinfo
+  TSockPktInfo = record
+    {$ifdef OSLINUX}
+    cmsg_len: size_t;
+    {$else}
+    cmsg_len: cuint; // 32-bit socklen_t
+    {$endif OSLINUX}
+    cmsg_level: cint;
+    cmsg_type: cint;
+    {$ifdef OSNETBSD}
+    // NetBSD aligns CMSG_DATA to the machine word size
+    {$ifdef CPU64}
+    cmsg_pad: cuint;
+    {$endif CPU64}
+    ipi_addr: TNetIP4;
+    ipi_ifindex: cuint;
+    {$else}
+    // Linux and Darwin share the same in_pktinfo layout
+    ipi_ifindex: cint;
+    ipi_spec_dst: TNetIP4;
+    ipi_addr: TNetIP4;
+    {$endif OSNETBSD}
+  end;
+
+const
+  {$ifdef OSLINUX}
+  // Linux 64-bit: cmsg_len=28, CMSG_SPACE=32
+  PKTINFO_LEN = SizeOf(size_t) + 5 * SizeOf(cint);
+  {$else}
+  // Darwin: 24; NetBSD: 20 (32-bit) or 24 (64-bit)
+  PKTINFO_LEN = SizeOf(TSockPktInfo);
+  {$endif OSLINUX}
+
+function recvmsg(s: integer; var msg: TSockMsgHdr; flags: integer): ssize_t; cdecl;
+  external clib name 'recvmsg' + LIBC_SUFFIX;
+
+function sendmsg(s: integer; var msg: TSockMsgHdr; flags: integer): ssize_t; cdecl;
+  external clib name 'sendmsg' + LIBC_SUFFIX;
+
+{$endif HAS_IP_PKTINFO}
+
 {$ifdef OSDARWIN2}
 // circumvent linking issue on Mac OSX
 function poll(fds: PPollFD; nfds, timeout: integer): integer; inline;
@@ -734,6 +821,97 @@ begin
     until (result >= 0) or
           (cerrno <> ESysEINTR); // retry on SIG received
 end;
+
+{$ifdef HAS_IP_PKTINFO}
+
+function TNetSocketWrap.SetPacketInfo(enable: boolean): TNetResult;
+var
+  v: integer;
+begin
+  v := ord(enable);
+  if @self = nil then
+    result := nrNoSocket
+  else if setsockopt(TSocket(@self), IPPROTO_IP, PKTINFO_RECV_OPT,
+            @v, SizeOf(v)) = NO_ERROR then
+    result := nrOk
+  else
+    result := NetLastError;
+end;
+
+function TNetSocketWrap.RecvFromIf(Buf: pointer; len: integer;
+  out addr: TNetAddr; out ifindex: integer): integer;
+var
+  iov: TSockIoVec;
+  msg: TSockMsgHdr;
+  info: TSockPktInfo;
+begin
+  ifindex := 0;
+  result := -1;
+  if @self = nil then
+    exit;
+  iov.iov_base := Buf;
+  iov.iov_len := len;
+  repeat
+    msg.msg_name       := @addr;
+    msg.msg_namelen    := SizeOf(addr);
+    msg.msg_iov        := @iov;
+    msg.msg_iovlen     := 1;
+    msg.msg_control    := @info;
+    msg.msg_controllen := SizeOf(info);
+    msg.msg_flags := 0;
+    result := recvmsg(TSocket(@self), msg, 0);
+  until (result >= 0) or
+        (cerrno <> ESysEINTR); // retry on SIG received
+  if (result >= 0) and
+     ((msg.msg_flags and PKTINFO_MSG_CTRUNC) = 0) and
+     (msg.msg_controllen >= PKTINFO_LEN) and
+     (info.cmsg_len >= PKTINFO_LEN) and
+     (info.cmsg_len <= msg.msg_controllen) and
+     (info.cmsg_level = IPPROTO_IP) and
+     (info.cmsg_type = IP_PKTINFO) then
+    ifindex := info.ipi_ifindex;
+end;
+
+function TNetSocketWrap.SendToIf(Buf: pointer; len: integer;
+  const addr: TNetAddr; ifindex: integer): TNetResult;
+var
+  iov: TSockIoVec;
+  msg: TSockMsgHdr;
+  info: TSockPktInfo;
+  sent: integer;
+begin
+  if ifindex = 0 then
+    result := SendTo(Buf, len, addr)
+  else if @self = nil then
+    result := nrNoSocket
+  else
+  begin
+    iov.iov_base := Buf;
+    iov.iov_len := len;
+    FillCharFast(info, SizeOf(info), 0); // ipi_spec_dst=0 for the interface IP
+    info.cmsg_len      := PKTINFO_LEN;
+    info.cmsg_level    := IPPROTO_IP;
+    info.cmsg_type     := IP_PKTINFO;
+    info.ipi_ifindex   := ifindex;
+    msg.msg_name       := @addr;
+    msg.msg_namelen    := addr.Size;
+    msg.msg_iov        := @iov;
+    msg.msg_iovlen     := 1;
+    msg.msg_control    := @info;
+    msg.msg_controllen := SizeOf(info);
+    msg.msg_flags      := 0;
+    repeat
+      sent := sendmsg(TSocket(@self), msg, 0);
+    until (sent >= 0) or
+          (cerrno <> ESysEINTR); // retry on SIG received
+    if sent < 0 then
+      result := NetLastError
+    else
+      result := nrOk;
+  end;
+end;
+
+{$endif HAS_IP_PKTINFO}
 
 procedure SetTimeVal(ms: PtrUInt; out tv: TTimeVal);
 var

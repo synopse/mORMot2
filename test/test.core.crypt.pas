@@ -22,6 +22,7 @@ uses
   mormot.crypt.other,
   mormot.crypt.openssl,
   mormot.crypt.secure,
+  mormot.crypt.factory,
   mormot.crypt.ecc256r1,
   mormot.core.perf,
   mormot.core.test,
@@ -1994,6 +1995,7 @@ var
   buf: RawByteString;
   u, pw, nfo, nfo2, exp, db, proof, mech, sec, pin: RawUtf8;
   iv: Int64;
+  t: TUnixTime;
   P: PAnsiChar;
   unalign: PtrInt;
   n, rnd, dig: integer;
@@ -2424,18 +2426,27 @@ begin
       pin := TotpGenerate(sec, dig, s);
       Check(pin <> '', 'TotpGenerate');
       CheckEqual(length(pin), dig);
-      Check(TotpValidate(sec, pin, 1, s), 'TotpValidate with current time');
-      Check(TotpValidate(Base32ToBin(sec), pin, 1, s, -1, true), 'Totp bin');
-      Check(TotpValidate(sec, pin, 0, s, 123) =
+      Check(TotpValidate(sec, pin, dig, 1, s), 'TotpValidate with current time');
+      Check(TotpValidate(Base32ToBin(sec), pin, dig, 1, s, -1, nil, true), 'Totp bin');
+      Check(TotpValidate(sec, pin, dig, 0, s, 123) =
             (TotpGenerate(sec, dig, s, false, 123) = pin),
             'TotpValidate with time=123');
       CheckEqual(TotpGenerate('', 6, s), '', 'no sec');
       CheckEqual(TotpGenerate(sec, 3, s), '', 'dig=3<4');
       CheckEqual(TotpGenerate(sec, 9, s), '', 'dig=9>8');
-      Check(not TotpValidate(sec, '', 1, s));
-      Check(not TotpValidate(sec, '123', 1, s));
-      Check(not TotpValidate(sec, '123456789', 1, s));
+      Check(not TotpValidate(sec, '', dig, 1, s));
+      Check(not TotpValidate(sec, '123', dig, 1, s));
+      Check(not TotpValidate(sec, '123456789', dig, 1, s));
     end;
+  sec := 'GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ';
+  t := 0;
+  Check(TotpValidate(sec, '287082', 6, 0, saSha1, 1, @t));
+  CheckEqual(t, 1);
+  Check(not TotpValidate(sec, '7082', 6, 0, saSha1, 1, @t));
+  Check(TotpValidate(sec, '94287082', 8, 0, saSha1, 1, @t));
+  CheckEqual(t, 1);
+  Check(not TotpValidate(sec, '123456', 6, 0, saSha1, 1, @t));
+  CheckEqual(t, 1);
   CheckEqual(TotpUrl('Google', 'alice@google.com', 'JBSWY3DPEHPK3PXP'),
     'otpauth://totp/Google:alice%40google.com?secret=JBSWY3DPEHPK3PXP&issuer=' +
     'Google&digits=6&period=30');
@@ -3756,6 +3767,37 @@ var
   dig: TDigestAuthServerFile;
   users, pwds, users2: TRawUtf8DynArray;
   bak: RawByteString;
+
+  function ValueOf(const resp, name: RawUtf8): RawUtf8;
+  var
+    i, j: PtrInt;
+  begin
+    result := '';
+    i := PosEx(name, resp);
+    if i = 0 then
+      exit;
+    inc(i, length(name));
+    j := PosEx('"', resp, i);
+    if j > i then
+      result := copy(resp, i, j - i);
+  end;
+
+  procedure CheckVoidValue(const challenge, aRealm, aNonce: RawUtf8);
+  var
+    resp, expected: RawUtf8;
+  begin
+    CheckEqual(DigestRealm(challenge), aRealm, 'void realm');
+    resp := DigestClient(daMD5, challenge, 'POST', '/onvif/device_service',
+      'admin', 'pass');
+    CheckUtf8(resp <> '', 'void value in %', [challenge]);
+    CheckEqual(ValueOf(resp, ',nonce="'), aNonce, 'void nonce');
+    // RFC 7616 3.4.1 with qop=auth
+    expected := Md5(Join([Md5(Join(['admin:', aRealm, ':pass'])), ':', aNonce,
+      ':00000001:', ValueOf(resp, ',cnonce="'), ':auth:',
+      Md5('POST:/onvif/device_service')]));
+    CheckEqual(ValueOf(resp, ',response="'), expected, 'void response');
+  end;
+
 begin
   // validate raw client-server Digest access authentication
   Check(DigestServerInit(daUndefined, '', '', '', 0) = '');
@@ -3791,6 +3833,18 @@ begin
     end;
   end;
   Check(DigestServerInit(daUndefined, realm, '', '', opaque) = '');
+  // a parameter value may be void (RFC 9110 5.6.4 quoted-string), e.g. the
+  // opaque="" of the WWW-Authenticate header sent by some IP cameras - with
+  // their exact layout, but anonymized realm and nonce values
+  CheckVoidValue('realm="Login to 0123456789ABCDEF",qop="auth",' +
+    'nonce="A4C123B1612DD272D1371C17149D439536B3216FDAEEB975729FAE923D5A4FD", ' +
+    'opaque="", stale="false"', 'Login to 0123456789ABCDEF',
+    'A4C123B1612DD272D1371C17149D439536B3216FDAEEB975729FAE923D5A4FD');
+  CheckVoidValue('realm="Login to 0123456789abcdef0123456789abcdef",qop="auth", ' +
+    'algorithm="MD5", nonce="b252aWYtZGlnZXN0OjEyMzQ1Njc4OTAx", opaque="", ' +
+    'stale="false"', 'Login to 0123456789abcdef0123456789abcdef',
+    'b252aWYtZGlnZXN0OjEyMzQ1Njc4OTAx');
+  CheckVoidValue('realm="r",opaque="",nonce="n"', 'r', 'n');
   // validate TDigestAuthServerFile
   SetLength(users, 100);
   SetLength(pwds, length(users));
@@ -4156,7 +4210,7 @@ var
   n, s: RawByteString;
   timer: TPrecisionTimer;
 begin
-  Check(mormot.crypt.secure.Asym(asy.AlgoName) = asy);
+  Check(mormot.crypt.factory.Asym(asy.AlgoName) = asy);
   if (asy.KeyAlgo in CKA_RSA) and
      not fCatalogAllGenerate then
   begin
@@ -4742,7 +4796,7 @@ begin
   begin
     rnd := alg[a] as TCryptRandom;
     NotifyProgress([rnd.AlgoName]);
-    Check(mormot.crypt.secure.Rnd(rnd.AlgoName) = rnd);
+    Check(mormot.crypt.factory.Rnd(rnd.AlgoName) = rnd);
     timer.Start;
     cprev := 0;
     dprev := 0;
@@ -4780,7 +4834,7 @@ begin
   begin
     hsh := alg[a] as TCryptHasher;
     NotifyProgress([hsh.AlgoName]);
-    Check(mormot.crypt.secure.Hasher(hsh.AlgoName) = hsh);
+    Check(mormot.crypt.factory.Hasher(hsh.AlgoName) = hsh);
     h := hsh.Full(n);
     for i := 1 to length(n) do
     begin
@@ -4796,7 +4850,7 @@ begin
   begin
     sig := alg[a] as TCryptSigner;
     NotifyProgress([sig.AlgoName]);
-    Check(mormot.crypt.secure.Signer(sig.AlgoName) = sig);
+    Check(mormot.crypt.factory.Signer(sig.AlgoName) = sig);
     h := sig.Full('key', n);
     for i := 1 to length(n) do
     begin
@@ -4819,7 +4873,7 @@ begin
   begin
     cip := alg[a] as TCryptCipherAlgo;
     NotifyProgress([cip.AlgoName]);
-    Check(mormot.crypt.secure.CipherAlgo(cip.AlgoName) = cip);
+    Check(mormot.crypt.factory.CipherAlgo(cip.AlgoName) = cip);
     if cip.IsAead then
       aead := cip.AlgoName
     else

@@ -52,6 +52,7 @@ uses
   mormot.crypt.core,
   mormot.crypt.ecc256r1,
   mormot.crypt.secure,
+  mormot.crypt.factory,
   mormot.crypt.jwt,
   // those two units are defined here to complete their implementation
   mormot.crypt.ecc,

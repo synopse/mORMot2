@@ -35,6 +35,7 @@ uses
   mormot.core.log,
   mormot.crypt.core,
   mormot.crypt.secure,
+  mormot.crypt.factory,
   mormot.crypt.rsa,
   mormot.crypt.x509,
   mormot.lib.sspi;
@@ -184,16 +185,14 @@ type
     function WinContext: PCCERT_CONTEXT;
   end;
 
-  /// store several Windows CNG Certificate interface instances
+  /// store several Windows Certificate interface instances
   ICryptCertCngs = array of ICryptCertCng;
 
   TCryptCertCng = class;
 
-  /// catalog of CNG-backed certificates from Windows system stores
+  /// catalog of certificates from Windows system stores
   // - Create() immediately enumerates the requested store and location(s),
   // by default CurrentUser\MY and LocalMachine\MY
-  // - only certificates associated with a CNG Key Storage Provider are exposed,
-  // including smart cards and hardware tokens with a Windows CNG KSP
   // - use Cert(), Find() or FindOne() to retrieve CNG-backed ICryptCertCng
   // - this class is a store catalog, not a generic certificate factory:
   // New/Load/Generate operations inherited from TCryptCertAlgo are unsupported
@@ -205,11 +204,12 @@ type
     fCert: ICryptCertCngs;
     procedure LoadStore(Location: TWinCertStoreLocation);
   public
-    /// enumerate CNG-backed identities from the supplied Windows system store
+    /// enumerate identities from the supplied Windows system store
+    // - legacy certificates would also be included
     constructor Create(aCertStore: TSystemCertificateStore = scsMY;
       aLocations: TWinCertStoreLocations = [wcslCurrentUser, wcslLocalMachine];
       aLog: TSynLogClass = nil); reintroduce;
-    /// refresh the list of available CNG-backed certificates
+    /// refresh the list of available certificates
     // - existing ICryptCertCng references remain valid because each instance
     // owns a duplicated PCCERT_CONTEXT
     procedure Refresh;
@@ -220,7 +220,7 @@ type
     /// return the first certificate matching a given attribute
     function FindOne(const Value: RawByteString;
       Method: TCryptCertComparer = ccmSerialNumber): ICryptCertCng;
-    /// access all currently recognized Windows CNG certificates
+    /// raw access to all currently recognized Windows certificates
     function Cert: ICryptCertCngs;
       {$ifdef HASINLINE} inline; {$endif}
     /// logging class used by this provider
@@ -235,11 +235,12 @@ type
       read fLocations;
   end;
 
-  /// ICryptCert implementation backed by a Windows CNG private key
+  /// ICryptCert implementation backed by a Windows private key via the CNG API
   // - instances are normally obtained from TCryptCertAlgoCng.Cert/Find/FindOne
   // for Windows-store identities, or LoadPkcs12() for a transient PFX identity
   // - TCryptCertX509Abstract/TX509 handle certificate parsing and verification
   // whereas signing and other private operations are delegated to Windows CNG
+  // - some legacy CSP key may fail when accessed through the CNG API
   // - private key material is never exposed through this class
   TCryptCertCng = class(TCryptCertX509Abstract, ICryptCertCng)
   protected
@@ -310,7 +311,8 @@ const
 { ***************** Windows CNG Private Key Integration }
 
 type
-  /// non-exportable private key redirecting operations to Windows CNG
+  /// non-exportable private key redirecting operations to Windows CNG API
+  // - some legacy CSP key may fail when accessed through the CNG API
   TCryptPrivateKeyCng = class(TCryptPrivateKey)
   protected
     fCert: TCryptCertCng;
@@ -700,8 +702,7 @@ begin
     if store.Handle <> nil then
       while store.Next do
       begin
-        if WinCertCtxtKeyProvider(store.Context, info) and
-           (info.ProviderType = 0) then // no private key or legacy CryptoAPI CSP
+        if WinCertCtxtKeyProvider(store.Context, info) then
         try
           cert := TCryptCertCng.Create(self, fLog, store.Context,
             Location, [wckCompareKey], @info);
@@ -795,8 +796,6 @@ begin
     fStoreLocation := aLocation;
     if aInfo = nil then
       ECryptCertCng.RaiseU('TCryptCertCng.Create: missing provider info');
-    if aInfo^.ProviderType <> 0 then
-      RaiseError('Create: certificate is not backed by a CNG KSP');
     fKeyProvider := aInfo^.Provider;
     fKeyContainer := aInfo^.Container;
   end;
@@ -890,13 +889,13 @@ begin
         exit; // Schannel cannot reopen this key in its own process
       end;
     if ForSChannel then
-      if (info.ProviderType <> 0) or
+      if (info.ProviderType <> 0) or // LoadPKCS12() is CNG-only
          (info.Provider = '') or
          (info.Container = '') then
       begin
         if Assigned(log) then
           log.Log(sllTrace,
-            '%.LoadPkcs12: WinCertCtxtKeyProvider returned type=% prov=% cont=%',
+            '%.LoadPkcs12: unsupported type=% prov=% cont=% for SChannel',
             [self, info.ProviderType, info.Provider, info.Container], nil);
         exit; // Schannel cannot reopen this key in its own process
       end;

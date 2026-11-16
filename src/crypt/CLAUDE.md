@@ -36,7 +36,7 @@ The mORMot2 cryptographic units (`/mnt/w/mORMot2/src/crypt`) provide a comprehen
 - AES-GCM: ~20% slower than OpenSSL (but faster than OpenSSL 3.0)
 - SHA-256/SHA-512: Comparable to OpenSSL with SSE4
 
-### Layer 2: High-Level Abstractions (`mormot.crypt.secure.pas`)
+### Layer 2: High-Level Abstractions (`mormot.crypt.secure.pas` and `mormot.crypt.factory.pas`)
 
 **Purpose**: Authentication, key management, and **factory functions**
 
@@ -104,7 +104,7 @@ function Store(name: RawUtf8): ICryptStore;
 ### Using High-Level Factories (Recommended)
 
 ```pascal
-uses mormot.crypt.secure;
+uses mormot.crypt.secure, mormot.crypt.factory;
 
 // Random number generation
 var rnd := Rnd('rnd-default');
@@ -213,7 +213,8 @@ As stated in LICENSE.md: **Ensure compliance with cryptographic software restric
 | File | Purpose | Performance |
 |------|---------|-------------|
 | `mormot.crypt.core.pas` | Low-level AES, SHA, HMAC | Faster than OpenSSL (most) |
-| `mormot.crypt.secure.pas` | Factories, auth, key mgmt | N/A (abstraction) |
+| `mormot.crypt.secure.pas` | Authentication, signers, PEM/DER | N/A (abstraction) |
+| `mormot.crypt.factory.pas` | Factories, certificates, key mgmt | N/A (abstraction) |
 | `mormot.crypt.ecc256r1.pas` | Native ECC secp256r1 | Slower than OpenSSL |
 | `mormot.crypt.ecc.pas` | High-level ECC | Uses ecc256r1 |
 | `mormot.crypt.rsa.pas` | Native RSA | Slower than OpenSSL |

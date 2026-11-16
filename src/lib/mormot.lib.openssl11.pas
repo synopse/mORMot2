@@ -11396,6 +11396,7 @@ type
     function ReceivePending: integer;
     function Send(Buffer: pointer; var Length: integer): TNetResult;
     function ReleaseBuffers: PtrInt;
+    procedure SocketClosed;
   end;
 
 threadvar // do not publish for compilation within Delphi packages
@@ -12234,6 +12235,11 @@ function TOpenSslNetTls.ReleaseBuffers: PtrInt;
 begin
   result := 0; // SSL_MODE_RELEASE_BUFFERS already handles this safely
   // existing SSL_free_buffers() API is unsafe with several CVE security issues
+end;
+
+procedure TOpenSslNetTls.SocketClosed;
+begin
+  fDoSslShutdown := false; // Destroy won't call SSL_shutdown() on this handle
 end;
 
 

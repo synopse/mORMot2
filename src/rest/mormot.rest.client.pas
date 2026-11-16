@@ -2317,15 +2317,19 @@ begin
         on E: Exception do
         begin
           InternalClose;
-          if (started = 0) or
-             (isDestroying in fInternalState) then
+          if isDestroying in fInternalState then
             exit;
+          exc := PPointer(E)^; // no SetLastException() which calls OnFailed()
+          fLastErrorCode := HTTP_CLIENTERROR;
+          fLastErrorException := exc;
+          ObjectToJson(E, fLastErrorMessage, TEXTWRITEROPTIONS_DEBUG);
           if Assigned(fOnConnectionFailed) then
             try
               fOnConnectionFailed(self, E, nil);
             except
             end;
-          exc := PPointer(E)^;
+          if started = 0 then
+            exit;
         end;
       end;
       if InternalIsOpen then
@@ -2358,6 +2362,9 @@ begin
   finally
     fSafe.Leave;
   end;
+  fLastErrorCode := HTTP_SUCCESS;
+  fLastErrorMessage := '';
+  fLastErrorException := nil;
   if Assigned(fOnConnected) then
     try
       with fLogClass.Enter(self, 'IsOpen: call OnConnected') do
@@ -2740,10 +2747,11 @@ begin
           exit;
       end;
       StatusCodeToReason(Call.OutStatus, StatusMsg);
-      if Call.OutBody = '' then
-        fLastErrorMessage := StatusMsg
-      else
-        fLastErrorMessage := Call.OutBody;
+      if Call.OutBody <> '' then
+        fLastErrorMessage := Call.OutBody
+      else if (Call.OutStatus <> HTTP_CLIENTERROR) or
+              (fLastErrorException = nil) then
+        fLastErrorMessage := StatusMsg;
       InternalLog('% % returned % (%) with message %',
         [method, url, Call.OutStatus, StatusMsg, fLastErrorMessage],
         LOG_TRACEERROR[Call.OutStatus <> HTTP_NOTFOUND]); // 404 is not fatal

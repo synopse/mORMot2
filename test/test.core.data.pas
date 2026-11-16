@@ -118,7 +118,7 @@ uses
   mormot.rest.server,
   mormot.net.client,
   mormot.net.server,
-  mormot.net.async,
+  mormot.net.proxy,
   mormot.net.ldap,
   test.core.base;
 
@@ -156,6 +156,8 @@ type
     procedure I18nIniAndFiles;
     /// the FPC resourcestring table rewriting channel
     procedure I18nResourceStrings;
+    /// validate JOP like processing
+    procedure TestJopProcess;
   public
     /// SAX-level tokens over elements, attributes, text and CData
     procedure XmlSaxTokens;
@@ -507,6 +509,7 @@ end;
 procedure TTestCoreProcess.Variants;
 var
   v: Variant;
+  c: currency;
   u: SynUnicode;
   i64: Int64;
   d: double;
@@ -808,6 +811,57 @@ begin
   CheckEqual(i64, 12);
   Check(AnyVariantToDouble(v, d));
   Check(d = 12.0, '12');
+  // VariantSaveJson: Boolean and TDateTime regression (#766)
+  v := true;
+  CheckEqual(vd.VType, varBoolean);
+  CheckEqual(VariantSaveJson(v), 'true');
+  CheckEqual(VariantSaveJson(v, twNone), 'true');
+  v := false;
+  CheckEqual(vd.VType, varBoolean);
+  CheckEqual(VariantSaveJson(v), 'false');
+  CheckEqual(VariantSaveJson(v, twNone), 'false');
+  // Date and time
+  dt := EncodeDate(2030, 1, 1) + EncodeTime(8, 30, 45, 0);
+  v := VarAsType(dt, varDate);
+  CheckEqual(vd.VType, varDate);
+  CheckEqual(VariantSaveJson(v), '"2030-01-01T08:30:45"');
+  CheckEqual(VariantSaveJson(v, twNone), '2030-01-01T08:30:45');
+  // Date only
+  v := VarAsType(EncodeDate(2030, 1, 1), varDate);
+  CheckEqual(VariantSaveJson(v), '"2030-01-01"');
+  CheckEqual(VariantSaveJson(v, twNone), '2030-01-01');
+  // Time only
+  v := VarAsType(EncodeTime(8, 30, 45, 0), varDate);
+  CheckEqual(VariantSaveJson(v), '"T08:30:45"');
+  CheckEqual(VariantSaveJson(v, twNone), 'T08:30:45');
+  // Milliseconds are not serialized
+  dt := EncodeDate(2030, 1, 1) + EncodeTime(8, 30, 45, 123);
+  v := VarAsType(dt, varDate);
+  CheckEqual(VariantSaveJson(v), '"2030-01-01T08:30:45"');
+  // Zero TDateTime
+  v := VarAsType(0, varDate);
+  CheckEqual(vd.VType, varDate);
+  CheckEqual(VariantSaveJson(v), 'null');
+  CheckEqual(VariantSaveJson(v, twNone), 'null');
+  // Reusing the same destination RawUtf8
+  s := 'previous value';
+  v := true;
+  VariantSaveJson(v, twJsonEscape, s);
+  CheckEqual(s, 'true');
+  v := false;
+  VariantSaveJson(v, twJsonEscape, s);
+  CheckEqual(s, 'false');
+  v := VarAsType(EncodeDate(2030, 1, 1), varDate);
+  VariantSaveJson(v, twJsonEscape, s);
+  CheckEqual(s, '"2030-01-01"');
+  v := VarAsType(0, varDate);
+  VariantSaveJson(v, twJsonEscape, s);
+  CheckEqual(s, 'null');
+  // Currency serialization remains unchanged
+  c := 1.5;
+  v := c;
+  CheckEqual(vd.VType, varCurrency);
+  CheckEqual(VariantSaveJson(v), '1.50');
 end;
 
 type
@@ -1137,6 +1191,562 @@ begin
     Result := FormatVariant('a=%,b=%', [U['a'], i['b']]);
 end;
 
+procedure TTestCoreProcess.TestJopProcess;
+
+  procedure TestJop(const src, exp: RawUtf8; nest: boolean = true);
+  var
+    j, k: RawUtf8;
+    s: TTextWriterJsonFormat;
+  begin
+    j := JsonPreprocess(src, jsonUnquotedPropNameCompact);
+    Check(j <> '');
+    CheckEqual(j, exp, src);
+    if nest then
+      for s := low(s) to high(s) do
+      begin
+        k := JsonPreprocess(src, s);
+        if s = jsonCompact then
+          Check(IsValidJson(k, {strict=}true), 'valid');
+        if s = jsonUnquotedPropNameCompact then
+          CheckEqual(k, j)
+        else
+          CheckEqual(JsonReformat(k, jsonUnquotedPropNameCompact), j);
+      end;
+  end;
+
+  procedure TestJopText;
+  var
+    mainFile, outerFile, innerFile: TFileName;
+    insertFile, rawFile: TFileName;
+    src: RawUtf8;
+  begin
+    // P0 #1: basic text processing and pointer handling
+    CheckEqual(TextPreprocess('hello world'), 'hello world');
+    CheckEqual(JsonPreprocess('{a:"unterminated', jsonCompact), '');
+    CheckEqual(TextPreprocess('a$b'), 'a$b');
+    CheckEqual(TextPreprocess('a$ident$b'), 'a$ident$b');
+    CheckEqual(TextPreprocess('a$(missing)b'), 'ab');
+    CheckEqual(TextPreprocess(
+      '$$'#10 +
+      'name = world'#10 +
+      '$$'#10 +
+      'Hello $(name)!'),
+      'Hello world!');
+    CheckEqual(TextPreprocess(
+      '$$'#10 +
+      'value = 42'#10 +
+      '$$'#10 +
+      'before $(value) middle $(value) after'),
+      'before 42 middle 42 after');
+    CheckEqual(TextPreprocess(
+      '$$'#10 +
+      'enabled = true'#10 +
+      '$$'#10 +
+      'A$if enabled$B$else$C$endif$D'),
+      'ABD');
+    // Verbatim $$$ ... $$$ sections
+    CheckEqual(TextPreprocess(
+      '$$'#10 +
+      'answer = 42'#10 +
+      '$$'#10 +
+      '$$$'#10 +
+      'raw $(answer)'#10 +
+      '$$$'#10 +
+      'done=$(answer)'),
+      'raw $(answer)'#10 +
+      'done=42');
+    // Missing $endif$ must not cause an access violation
+    CheckEqual(TextPreprocess(
+      'before $if missing$skipped'),
+      'before ');
+    // Normal conditional skipping remains unchanged
+    CheckEqual(TextPreprocess(
+      'before $if missing$skipped$else$kept$endif$ after'),
+      'before kept after');
+    // Valid nested fallback
+    CheckEqual(TextPreprocess(
+      'before $(missing|$(also|yes))'),
+      'before yes');
+    // Missing outer closing parenthesis: no out-of-bounds scan
+    CheckEqual(TextPreprocess(
+      'before $(missing|$(also)'),
+      'before ');
+    // # and // inside quoted DSL values are not treated as comments
+    TestJop(
+      '$$'#10 +
+      'message = "hello # world"'#10 +
+      '$$'#10 +
+      '{value:$(message)}',
+      '{value:"hello # world"}');
+    TestJop(
+      '$$'#10 +
+      'message = "hello // world"'#10 +
+      '$$'#10 +
+      '{value:$(message)}',
+      '{value:"hello // world"}');
+    TestJop(
+      '$$'#10 +
+      'name = "hello"'#10 +
+      'message = "$(name)#tag"'#10 +
+      '$$'#10 +
+      '{value:$(message)}',
+      '{value:"hello#tag"}');
+    // } or ] inside single-quoted template strings
+    TestJop(
+      '$$'#10 +
+      'obj = {text:''a}b'', count:2}'#10 +
+      '$$'#10 +
+      '{data:{$(obj)}}',
+      '{data:{text:"a}b",count:2}}');
+    // Unterminated strings inside a template must not read past #0
+    CheckEqual(TextPreprocess(
+      '$$'#10 +
+      'obj = {text:"unterminated'),
+      '');
+    CheckEqual(TextPreprocess(
+      '$$'#10 +
+      'obj = {text:''unterminated'),
+      '');
+    // P0 #2: recursive includes
+    mainFile   := WorkDir + 'jop-test-main.jop';
+    outerFile  := WorkDir + 'jop-test-outer.jop';
+    innerFile  := WorkDir + 'jop-test-inner.jop';
+    insertFile := WorkDir + 'jop-test-insert.jop';
+    rawFile    := WorkDir + 'jop-test-raw.jop';
+    try
+      // inner.jop: defines a variable, then uses it
+      Check(FileFromString(
+        '$$'#10 +
+        'answer = 42'#10 +
+        '$$'#10 +
+        '$if answer = 42$inner=$(answer)$endif$'#10,
+        innerFile));
+      // outer.jop: recursively includes inner.jop
+      Check(FileFromString(
+        '$$'#10 +
+        'include "jop-test-inner.jop"'#10 +
+        '$$'#10 +
+        'outer=$(answer)'#10,
+        outerFile));
+      // main.jop: recursively includes outer.jop
+      Check(FileFromString(
+        '$$'#10 +
+        'include "jop-test-outer.jop"'#10 +
+        '$$'#10 +
+        'result=$(answer)',
+        mainFile));
+      src := RawUtf8FromFile(mainFile);
+      CheckEqual(
+        TextPreprocess(src, [], WorkDir),
+        'inner=42'#10 +
+        'outer=42'#10 +
+        'result=42',
+        'recursive include');
+      // insert: file contents must NOT be preprocessed
+      Check(FileFromString(
+        'raw=$(answer)'#10 +
+        '$if answer$verbatim$endif$'#10,
+        rawFile));
+      Check(FileFromString(
+        '$$'#10 +
+        'answer = 42'#10 +
+        'insert "jop-test-raw.jop"'#10 +
+        '$$'#10 +
+        'after=$(answer)',
+        insertFile));
+      src := RawUtf8FromFile(insertFile);
+      CheckEqual(
+        TextPreprocess(src, [], WorkDir),
+        'raw=$(answer)'#10 +
+        '$if answer$verbatim$endif$'#10 +
+        'after=42',
+        'verbatim insert');
+    finally
+      DeleteFile(mainFile);
+      DeleteFile(outerFile);
+      DeleteFile(innerFile);
+      DeleteFile(insertFile);
+      DeleteFile(rawFile);
+    end;
+    Check(not TextPreprocessToFile('', mainFile));
+  end;
+
+  procedure TestJopP1;
+  var
+    tmp: TSynTempAdder;
+    src, actual: RawUtf8;
+    fn: TFileName;
+  begin
+    TestJop(
+      '$$'#10 +
+      'message = "a\"b"'#10 +
+      '$$'#10 +
+      '{value:$(message)}',
+      '{value:"a\"b"}');
+    TestJop(
+      '$$'#10 +
+      'message = "a\"b"'#10 +
+      '$$'#10 +
+      '{value:$"$(message)"}',
+      '{value:"a\"b"}');
+    // P1.2: remove comments without duplicating preceding content
+    TestJop(
+      '$$'#10 +
+      'obj = {'#10 +
+      '  a: 1  # comment'#10 +
+      '  b: 2'#10 +
+      '}'#10 +
+      '$$'#10 +
+      '{data: {$(obj)}}',
+      '{data:{a:1,b:2}}');
+    // P1.3: debug comments should be explicitly enabled
+    src := '$$'#10'a=1'#10'$$'#10'{a:$(a)}';
+    Check(PosEx('debug:', JsonPreprocess(src, json5)) = 0);
+    Check(PosEx('debug:', JsonPreprocess(src, json5, [jppDebugComment])) > 0);
+    // P1.4A: raw fallback content must be JSON-escaped
+    TestJop('{value:$"$(missing|a"b\c)"}', '{value:"a\"b\\c"}');
+    // P1.4A: numeric constants must not be modified
+    TestJop(
+      '$$'#10 +
+      'number = 42'#10 +
+      '$$'#10 +
+      '{value:$"$(number)"}',
+      '{value:"42"}');
+    // P1.4A: already-escaped strings must not be escaped twice
+    TestJop(
+      '$$'#10 +
+      'message = "a\"b"'#10 +
+      '$$'#10 +
+      '{value:$"$(message)"}',
+      '{value:"a\"b"}');
+    // P1.4B: escape raw values when registering a quoted definition
+    TestJop(
+      '$$'#10 +
+      'name = He said "hello"'#10 +
+      'message = "User: $(name)"'#10 +
+      '$$'#10 +
+      '{value:$(message)}',
+      '{value:"User: He said \"hello\""}');
+    // P1.4B: escape backslashes during early expansion
+    TestJop(
+      '$$'#10 +
+      'path = C:\work\test'#10 +
+      'message = "Path: $(path)"'#10 +
+      '$$'#10 +
+      '{value:$(message)}',
+      '{value:"Path: C:\\work\\test"}');
+    // P1.4B: constant values inside quoted definitions
+    TestJop(
+      '$$'#10 +
+      'number = 42'#10 +
+      'message = "number=$(number)"'#10 +
+      '$$'#10 +
+      '{value:$(message)}',
+      '{value:"number=42"}');
+    // Direct unit test for AdderJsonEscape()
+    // Covers quotes, backslashes, LF, TAB, #1 and embedded #0.
+    src := 'a'#0'"\'#10#9#1;
+    tmp.Init;
+    tmp.Add('[');
+    AdderJsonEscape(tmp, pointer(src), PUtf8Char(pointer(src)) + length(src));
+    tmp.Add(']');
+    tmp.Done(actual);
+    CheckEqual(actual, '[a\u0000\"\\\n\t\u0001]',
+      'AdderJsonEscape');
+    // Fast path: content without escaping
+    tmp.Init;
+    src := 'hello';
+    AdderJsonEscape(tmp, pointer(src), PUtf8Char(pointer(src)) + 5);
+    tmp.Done(actual);
+    CheckEqual(actual, 'hello', 'AdderJsonEscape plain');
+    // P1.1 / P1.5: include filename parsing and absolute paths
+    fn := ExpandFileName(WorkDir + 'jop-p1-include.txt');
+    Check(FileFromString('included'#10, fn));
+    try
+      // P1.1: unquoted filename followed by spaces and comment
+      CheckEqual(TextPreprocess(
+        '$$'#10 +
+        'include jop-p1-include.txt   # comment'#10 +
+        '$$'#10 +
+        'done', [], WorkDir),
+        'included'#10'done',
+        'include with comment');
+      // P1.1: trim trailing whitespace without a comment
+      CheckEqual(TextPreprocess(
+        '$$'#10 +
+        'include jop-p1-include.txt   '#10 +
+        '$$'#10 +
+        'done', [], WorkDir),
+        'included'#10'done',
+        'include trailing spaces');
+      // P1.5: absolute include without an IncludeRoot
+      src := '$$'#10 +
+        'include "' + StringToUtf8(fn) + '"'#10 +
+        '$$'#10 +
+        'done';
+      CheckEqual(TextPreprocess(src, [jppIncludeAbsolute]),
+        'included'#10'done',
+        'absolute include');
+      // P1.5: absolute include rejected without its flag
+      CheckEqual(TextPreprocess(src),
+        'done',
+        'absolute include rejected');
+      // Recognize // comments after unquoted include filenames
+      CheckEqual(TextPreprocess(
+        '$$'#10 +
+        'include jop-p1-include.txt // comment'#10 +
+        '$$'#10 +
+        'done', [], WorkDir),
+        'included'#10'done',
+        'include with // comment');
+    finally
+      DeleteFile(fn);
+    end;
+    // URL should not be truncated at //
+    TestJop(
+      '$$'#10 +
+      'url = https://example.org/api'#10 +
+      '$$'#10 +
+      '{url:$(url)}',
+      '{url:"https://example.org/api"}');
+    // A real trailing // comment must still be ignored
+    TestJop(
+      '$$'#10 +
+      'url = https://example.org/api // comment'#10 +
+      '$$'#10 +
+      '{url:$(url)}',
+      '{url:"https://example.org/api"}');
+    // Preserve # and // inside quoted definitions
+    TestJop(
+      '$$'#10 +
+      'url = "https://example.org/api#section"'#10 +
+      '$$'#10 +
+      '{url:$(url)}',
+      '{url:"https://example.org/api#section"}');
+    // Preserve URLs inside object templates
+    TestJop(
+      '$$'#10 +
+      'obj = {url:"https://example.org/api"}'#10 +
+      '$$'#10 +
+      '{data:{$(obj)}}',
+      '{data:{url:"https://example.org/api"}}');
+    TestJop(
+      '$$'#10 +
+      'url = https://example.org/api#section'#10 +
+      '$$'#10 +
+      '{url:$(url)}',
+      '{url:"https://example.org/api#section"}');
+    TestJop(
+      '$$'#10 +
+      'url = https://example.org/api # comment'#10 +
+      '$$'#10 +
+      '{url:$(url)}',
+      '{url:"https://example.org/api"}');
+    TestJop(
+      '$$'#10 +
+      'obj = {a:123}'#10 +
+      '$$'#10 +
+      '{data:{$(obj)}}',
+      '{data:{a:123}}');
+    TestJop(
+      '$$'#10'empty=""'#10'$$'#10 +
+      '[ $if empty$ 1 $else$ 2 $endif$ ]',
+      '[2]');
+    TestJop(
+      '$$'#10'empty=""'#10'$$'#10 +
+      '[ $ifdef empty$ 1 $else$ 2 $endif$ ]',
+      '[2]');
+    TestJop(
+      '$$'#10'filled="yes"'#10'$$'#10 +
+      '[ $ifdef filled$ 1 $else$ 2 $endif$ ]',
+      '[1]');
+  end;
+
+var
+  J: RawUtf8;
+begin
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'{a:$a$}',
+    '{a:1}');
+  TestJop(
+    '$$'#10'a= 1'#10'$$'#10'{a:$(a)}',
+    '{a:1}');
+  TestJop(
+    '$$'#10'a =1'#10'$$'#10'{a:$a$}',
+    '{a:1}');
+  TestJop(
+    '$$'#10' a = 1 '#10'$$'#10'{a:$a$}',
+    '{a:1}');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'{a:$(os:name)}',
+    Join(['{a:"', OSVersionShort,'"}']));
+  J := GlobalInfoFind('net:mac');
+  if J <> '' then
+    TestJop(
+      '$$'#10'a=1'#10'$$'#10'{a:$net:mac$}',
+      Join(['{a:"', J,'"}']));
+  TestJop(
+    '$$'#10'a=b'#10'$$'#10'{a:$a$,b:$net:none$,c:$"$a$ ${os:nope|$a$}+"}',
+    '{a:"b",b:null,c:"b b+"}');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'{a:$a|0$,b:$b|2$}',
+    '{a:1,b:2}');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'{a:$(a|b),b:$b|a$}',
+    '{a:1,b:"a"}');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'{a:$(a|b),b:$b|$(a)$}',
+    '{a:1,b:1}');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'{a:$(a|b),b:$b|$(c|a)$}',
+    '{a:1,b:"a"}');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'{a:$(a|b),b:$(b|$(c|a))}',
+    '{a:1,b:"a"}');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'{a:$a$,b:$"$a$"}',
+    '{a:1,b:"1"}');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'{a:$a$,b:"$a$",c{d:$(a)}}',
+    '{a:1,b:"$a$",c:{d:1}}');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'{a:$none|$a$$,b:$"$a$"}',
+    '{a:1,b:"1"}');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'{a:$none|"1"$,b:$"$a$"}',
+    '{a:"1",b:"1"}');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'{a:$no|$ne|$a$$$,b:$"$a$"}',
+    '{a:1,b:"1"}');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'{a:${no|${ne|${a}}},b:$"$a$"}',
+    '{a:1,b:"1"}');
+  J := '# comment'#10'$$'#10'# comment'#10'var=1'#10'a=number $var$'#10'$$'#10;
+  TestJop(
+    J + '[ 1 2 ]',
+    '[1,2]');
+  TestJop(
+    J + '[ $if a$ 1 $endif$ 2 ]',
+    '[1,2]');
+  TestJop(
+    J + '[ $if a$ 1 $if var$ 2 $endif$ $endif$ 3 ]',
+    '[1,2,3]');
+  TestJop(
+    J + '[ $if a$ 1 $if var$ 2 $else$ 3 $endif$ $else$ 4 $endif$5]',
+    '[1,2,5]');
+  TestJop(
+    J + '[ $if a$ 1 $if no$ 2 $else$ 3 $endif$ $else$ 4 $endif$ 5 ]',
+    '[1,3,5]');
+  TestJop(
+    J + '[ $if b$ 1 $if var$ 2 $else$ 3 $endif$ $else$ 4 $endif$ 5 ]',
+    '[4,5]');
+  J := '$$'#10'var=1'#10'a="number $var$" '#10'$$'#10;
+  TestJop(
+    J + '{a:$a$,b:$"$a$",c:$var$,d: $"$var$" ,e:"$var$",f:$"5432$var$0"}',
+    '{a:"number 1",b:"number 1",c:1,d:"1",e:"$var$",f:"543210"}');
+  TestJop(
+    J + '{$a$:0,b:$exe:arch$,c:$"http://toto/$exe:arch$",d:$os:none$,e:$"a$os:no$s"}',
+    '{"number 1":0,b:"' + CPU_ARCH_TEXT + '",c:"http://toto/' + CPU_ARCH_TEXT +
+     '",d:null,e:"as"}');
+  TestJop(
+    J + '# comment 2'#10'$$ section 2'#10'$ifdef a$ b=10'#10'$endif$'#10'$$'#10 +
+    '[$ifdef b$ 99 $else$ 0 $endif$ $(b) $(a) 100]',
+    '[99,10,"number 1",100]');
+  TestJop(
+    J + '$$ section 2'#10'$ifdef a$ b=1'#10'a=2'#10'$endif$'#10'$$'#10 +
+    '[$ifdef b$ $(b) $else$ 0 $endif$ $(b) $(a) 10]',
+    '[1,1,2,10]');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'{ $if a$ a:$a$ $endif$, b:$"$a$"}',
+    '{a:1,b:"1"}');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'{$if b$a:$a$$endif$b:$"$a$"}',
+    '{b:"1"}');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'{$ifdef a$ $else$ a:$a$ $endif$, b:$"$a$"}',
+    '{b:"1"}');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'{$ifdef a$$else$a:$a$$endif$b:$"$a$"}',
+    '{b:"1"}');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'{ $if a = 1$ a:$a$ $endif$, b:$"$a$"}',
+    '{a:1,b:"1"}');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'{ $if a = x$ a:$a$ $endif$, b:$"$a$"}',
+    '{b:"1"}');
+  TestJop(
+    '$$'#10'a=x'#10'$$'#10'{ $if a = x$ a:$a$ $endif$, b:$"$a$"}',
+    '{a:"x",b:"x"}');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'{ $if a = $a$$ a:$a$ $endif$, b:$"$a$"}',
+    '{a:1,b:"1"}');
+  TestJop(
+    '$$'#10'a=xy'#10'$$'#10'{ $if a = $a$ $ a:$a$ $endif$, $a$:$"$a$"}',
+    '{a:"xy","xy":"xy"}', {nest=}false);
+  TestJop(
+    '$$'#10'a=xy'#10'$$'#10'{ $if yz > $a$ $ a:$a$ $endif$, $a$:$"$a$"}',
+    '{"xy":"xy"}', {nest=}false);
+  TestJop(
+    '$$'#10'a=xy'#10'$$'#10'{ $if a < yz $ a:$a$ $endif$, $a$:$"$a$"}',
+    '{a:"xy","xy":"xy"}', {nest=}false);
+  TestJop(
+    '$$'#10'a =1'#10'$$'#10'{ $if a <> 0 $ a:$a$ $endif$, b:$"$a$"}',
+    '{a:1,b:"1"}');
+  TestJop(
+    '$$'#10'a=10'#10'$$'#10'{ $if a > 5 $ a:$a$ $endif$, b:$"$a$"}',
+    '{a:10,b:"10"}');
+  TestJop(
+    '$$'#10'a=10'#10'five=5'#10'$$'#10'{ $if a > $five$ $ a:$a$ $endif$, b:$"$a$"}',
+    '{a:10,b:"10"}');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'{$if a=1$a:$a$$endif$b:$"$a$"}',
+    '{a:1,b:"1"}');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'{ $if a = 0$ a:$a$ $endif$, b:$"$a$"}',
+    '{b:"1"}');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'{ $if a = 10$ a:$a$ $endif$, b:$"$a$"}',
+    '{b:"1"}');
+  TestJop(
+    '$$'#10'a=1'#10'b=$a$'#10'$$'#10'{ $if a = $b$$ a:$a$ $endif$, b:$"$a$"}',
+    '{a:1,b:"1"}');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'[ $ifdef a$ 1 $else$ 2 $endif$ ]', '[1]');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'[ $if a>0$ 1 $else$ 2 $endif$ ]', '[1]');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'[ $if a<10$ 1 $else$ 2 $endif$ ]', '[1]');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'[ $if a > 01 $ 1 $else$ 2 $endif$ ]', '[2]');
+  TestJop(
+    '$$'#10'a=10'#10'$$'#10'[ $if a > 9 $ 1 $else$ 2 $endif$ ]', '[1]');
+  TestJop(
+    '$$'#10'a=10'#10'$$'#10'[ $if a > 9 $ $else$ 2 $endif$ ]', '[]');
+  TestJop(
+    '[ $if cpu:threads > 0 $ 1 $else$ 2 $endif$ ]', '[1]');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'[ $ifdef a$ 1 $else$ 2 $endif$ ]', '[1]');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'[ $if a$ 1 $if no$ 2 $endif$ 4 $else$ 5 $endif$ 6 ]',
+    '[1,4,6]');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'[ $if a$ 1 $if no$ 2 $else$ 3 $endif$ 4 $else$ 5 $endif$ 6 ]',
+    '[1,3,4,6]');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'[ $if no$ 1 $if a$ 2 $else$ 3 $endif$ 4 $else$ 5 $endif$ 6 ]',
+    '[5,6]');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'[ $if no$ 1 $if a$ 2 $else$ 3 $endif$ 4 $else$ 5 $else$ 6 $else$ 7 $endif$ 8 ]',
+    '[5,7,8]'); // $else$ is just a non-recursive toggle ;)
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'[ $if a$ 1 $if no$ 2 $endif$ 4 $else$ 5 $else$ 6 $endif$ 7 ]',
+    '[1,4,6,7]');
+  TestJop(
+    '[ $if no$ 1 $if no$ 2 $else$ 3 $endif$ 4 $else$ 5 $endif$ 6 ]',
+    '[5,6]');
+  TestJopText;
+  TestJopP1;
+end;
 
 
 { TCollTestsI }
@@ -2124,7 +2734,6 @@ var
   O, O2: TPersistentToJson;
   E: TSynBackgroundThreadProcessStep;
   EndOfObject: AnsiChar;
-var
   Va, Vb: Variant;
   c: currency;
 
@@ -2930,30 +3539,10 @@ var
     end;
   end;
 
-  procedure TestJop(const src, exp: RawUtf8; nest: boolean = true);
-  var
-    j, k: RawUtf8;
-    s: TTextWriterJsonFormat;
-  begin
-    j := JsonPreprocess(src, jsonUnquotedPropNameCompact);
-    Check(j <> '');
-    CheckEqual(j, exp, src);
-    if nest then
-      for s := low(s) to high(s) do
-      begin
-        k := JsonPreprocess(src, s);
-        if s = jsonCompact then
-          Check(IsValidJson(k, {strict=}true), 'valid');
-        if s = jsonUnquotedPropNameCompact then
-          CheckEqual(k, j)
-        else
-          CheckEqual(JsonReformat(k, jsonUnquotedPropNameCompact), j);
-      end;
-  end;
-
 begin
   JsonConstants;
   TestSimpleEnum;
+  TestJopProcess;
   TestJsonArrayAsCsv('', '');
   TestJsonArrayAsCsv('123', '');
   TestJsonArrayAsCsv('[1]', '1');
@@ -3436,188 +4025,21 @@ begin
   TestReformat(
     'one:{a:1,b:2}'#10'two:2',
     '{one:{a:1,b:2},two:2}');
+  // content bigger than the TTextWriterStackBuffer (was a stack overflow)
+  U2 := RawUtf8OfChar('1', 70000);
+  TestReformat('[' + U2 + ']', '[' + U2 + ']', jsonCompact);
+  U2 := StringReplaceAll(RawUtf8OfChar('x', 5000), 'x', '[],');
+  TestReformat('[' + U2 + '1]', '[' + U2 + '1]', jsonCompact);
+  U2 := StringReplaceAll(RawUtf8OfChar('x', 5000), 'x', '{},');
+  TestReformat('[' + U2 + '{}]', '[' + U2 + '{}]', jsonCompact);
+  K := RawUtf8OfChar('k', 20000);
+  J2 := '{"' + K + '":1,"b":2}';
+  CheckEqual(JsonObjectAsJsonArrays(pointer(J2), y, U2), 2);
+  CheckEqual(y, '["' + K + '","b"]');
+  CheckEqual(U2, '[1,2]');
   CheckEqual(JsonReformat(
     #10' // test'#10' # ignored'#10'one: 1'#10'"two": 2'#10, jsonCompact),
     '{"one":1,"two":2}');
-  TestJop(
-    '$$'#10'a=1'#10'$$'#10'{a:$a$}',
-    '{a:1}');
-  TestJop(
-    '$$'#10'a= 1'#10'$$'#10'{a:$(a)}',
-    '{a:1}');
-  TestJop(
-    '$$'#10'a =1'#10'$$'#10'{a:$a$}',
-    '{a:1}');
-  TestJop(
-    '$$'#10' a = 1 '#10'$$'#10'{a:$a$}',
-    '{a:1}');
-  TestJop(
-    '$$'#10'a=1'#10'$$'#10'{a:$(os:name)}',
-    Join(['{a:"', OSVersionShort,'"}']));
-  J := GlobalInfoFind('net:mac');
-  if J <> '' then
-    TestJop(
-      '$$'#10'a=1'#10'$$'#10'{a:$net:mac$}',
-      Join(['{a:"', J,'"}']));
-  TestJop(
-    '$$'#10'a=b'#10'$$'#10'{a:$a$,b:$net:none$,c:$"$a$ ${os:nope|$a$}+"}',
-    '{a:"b",b:null,c:"b b+"}');
-  TestJop(
-    '$$'#10'a=1'#10'$$'#10'{a:$a|0$,b:$b|2$}',
-    '{a:1,b:2}');
-  TestJop(
-    '$$'#10'a=1'#10'$$'#10'{a:$(a|b),b:$b|a$}',
-    '{a:1,b:"a"}');
-  TestJop(
-    '$$'#10'a=1'#10'$$'#10'{a:$(a|b),b:$b|$(a)$}',
-    '{a:1,b:1}');
-  TestJop(
-    '$$'#10'a=1'#10'$$'#10'{a:$(a|b),b:$b|$(c|a)$}',
-    '{a:1,b:"a"}');
-  TestJop(
-    '$$'#10'a=1'#10'$$'#10'{a:$(a|b),b:$(b|$(c|a))}',
-    '{a:1,b:"a"}');
-  TestJop(
-    '$$'#10'a=1'#10'$$'#10'{a:$a$,b:$"$a$"}',
-    '{a:1,b:"1"}');
-  TestJop(
-    '$$'#10'a=1'#10'$$'#10'{a:$a$,b:"$a$",c{d:$(a)}}',
-    '{a:1,b:"$a$",c:{d:1}}');
-  TestJop(
-    '$$'#10'a=1'#10'$$'#10'{a:$none|$a$$,b:$"$a$"}',
-    '{a:1,b:"1"}');
-  TestJop(
-    '$$'#10'a=1'#10'$$'#10'{a:$none|"1"$,b:$"$a$"}',
-    '{a:"1",b:"1"}');
-  TestJop(
-    '$$'#10'a=1'#10'$$'#10'{a:$no|$ne|$a$$$,b:$"$a$"}',
-    '{a:1,b:"1"}');
-  TestJop(
-    '$$'#10'a=1'#10'$$'#10'{a:${no|${ne|${a}}},b:$"$a$"}',
-    '{a:1,b:"1"}');
-  J := '# comment'#10'$$'#10'# comment'#10'var=1'#10'a=number $var$'#10'$$'#10;
-  TestJop(
-    J + '[ 1 2 ]',
-    '[1,2]');
-  TestJop(
-    J + '[ $if a$ 1 $endif$ 2 ]',
-    '[1,2]');
-  TestJop(
-    J + '[ $if a$ 1 $if var$ 2 $endif$ $endif$ 3 ]',
-    '[1,2,3]');
-  TestJop(
-    J + '[ $if a$ 1 $if var$ 2 $else$ 3 $endif$ $else$ 4 $endif$5]',
-    '[1,2,5]');
-  TestJop(
-    J + '[ $if a$ 1 $if no$ 2 $else$ 3 $endif$ $else$ 4 $endif$ 5 ]',
-    '[1,3,5]');
-  TestJop(
-    J + '[ $if b$ 1 $if var$ 2 $else$ 3 $endif$ $else$ 4 $endif$ 5 ]',
-    '[4,5]');
-  J := '$$'#10'var=1'#10'a="number $var$" '#10'$$'#10;
-  TestJop(
-    J + '{a:$a$,b:$"$a$",c:$var$,d: $"$var$" ,e:"$var$",f:$"5432$var$0"}',
-    '{a:"number 1",b:"number 1",c:1,d:"1",e:"$var$",f:"543210"}');
-  TestJop(
-    J + '{$a$:0,b:$exe:arch$,c:$"http://toto/$exe:arch$",d:$os:none$,e:$"a$os:no$s"}',
-    '{"number 1":0,b:"' + CPU_ARCH_TEXT + '",c:"http://toto/' + CPU_ARCH_TEXT +
-     '",d:null,e:"as"}');
-  TestJop(
-    J + '# comment 2'#10'$$ section 2'#10'$ifdef a$ b=10'#10'$endif$'#10'$$'#10 +
-    '[$ifdef b$ 99 $else$ 0 $endif$ $(b) $(a) 100]',
-    '[99,10,"number 1",100]');
-  TestJop(
-    J + '$$ section 2'#10'$ifdef a$ b=1'#10'a=2'#10'$endif$'#10'$$'#10 +
-    '[$ifdef b$ $(b) $else$ 0 $endif$ $(b) $(a) 10]',
-    '[1,1,2,10]');
-  TestJop(
-    '$$'#10'a=1'#10'$$'#10'{ $if a$ a:$a$ $endif$, b:$"$a$"}',
-    '{a:1,b:"1"}');
-  TestJop(
-    '$$'#10'a=1'#10'$$'#10'{$if b$a:$a$$endif$b:$"$a$"}',
-    '{b:"1"}');
-  TestJop(
-    '$$'#10'a=1'#10'$$'#10'{$ifdef a$ $else$ a:$a$ $endif$, b:$"$a$"}',
-    '{b:"1"}');
-  TestJop(
-    '$$'#10'a=1'#10'$$'#10'{$ifdef a$$else$a:$a$$endif$b:$"$a$"}',
-    '{b:"1"}');
-  TestJop(
-    '$$'#10'a=1'#10'$$'#10'{ $if a = 1$ a:$a$ $endif$, b:$"$a$"}',
-    '{a:1,b:"1"}');
-  TestJop(
-    '$$'#10'a=1'#10'$$'#10'{ $if a = x$ a:$a$ $endif$, b:$"$a$"}',
-    '{b:"1"}');
-  TestJop(
-    '$$'#10'a=x'#10'$$'#10'{ $if a = x$ a:$a$ $endif$, b:$"$a$"}',
-    '{a:"x",b:"x"}');
-  TestJop(
-    '$$'#10'a=1'#10'$$'#10'{ $if a = $a$$ a:$a$ $endif$, b:$"$a$"}',
-    '{a:1,b:"1"}');
-  TestJop(
-    '$$'#10'a=xy'#10'$$'#10'{ $if a = $a$ $ a:$a$ $endif$, $a$:$"$a$"}',
-    '{a:"xy","xy":"xy"}', {nest=}false);
-  TestJop(
-    '$$'#10'a=xy'#10'$$'#10'{ $if yz > $a$ $ a:$a$ $endif$, $a$:$"$a$"}',
-    '{"xy":"xy"}', {nest=}false);
-  TestJop(
-    '$$'#10'a=xy'#10'$$'#10'{ $if a < yz $ a:$a$ $endif$, $a$:$"$a$"}',
-    '{a:"xy","xy":"xy"}', {nest=}false);
-  TestJop(
-    '$$'#10'a =1'#10'$$'#10'{ $if a <> 0 $ a:$a$ $endif$, b:$"$a$"}',
-    '{a:1,b:"1"}');
-  TestJop(
-    '$$'#10'a=10'#10'$$'#10'{ $if a > 5 $ a:$a$ $endif$, b:$"$a$"}',
-    '{a:10,b:"10"}');
-  TestJop(
-    '$$'#10'a=10'#10'five=5'#10'$$'#10'{ $if a > $five$ $ a:$a$ $endif$, b:$"$a$"}',
-    '{a:10,b:"10"}');
-  TestJop(
-    '$$'#10'a=1'#10'$$'#10'{$if a=1$a:$a$$endif$b:$"$a$"}',
-    '{a:1,b:"1"}');
-  TestJop(
-    '$$'#10'a=1'#10'$$'#10'{ $if a = 0$ a:$a$ $endif$, b:$"$a$"}',
-    '{b:"1"}');
-  TestJop(
-    '$$'#10'a=1'#10'$$'#10'{ $if a = 10$ a:$a$ $endif$, b:$"$a$"}',
-    '{b:"1"}');
-  TestJop(
-    '$$'#10'a=1'#10'b=$a$'#10'$$'#10'{ $if a = $b$$ a:$a$ $endif$, b:$"$a$"}',
-    '{a:1,b:"1"}');
-  TestJop(
-    '$$'#10'a=1'#10'$$'#10'[ $ifdef a$ 1 $else$ 2 $endif$ ]', '[1]');
-  TestJop(
-    '$$'#10'a=1'#10'$$'#10'[ $if a>0$ 1 $else$ 2 $endif$ ]', '[1]');
-  TestJop(
-    '$$'#10'a=1'#10'$$'#10'[ $if a<10$ 1 $else$ 2 $endif$ ]', '[1]');
-  TestJop(
-    '$$'#10'a=1'#10'$$'#10'[ $if a > 01 $ 1 $else$ 2 $endif$ ]', '[2]');
-  TestJop(
-    '$$'#10'a=10'#10'$$'#10'[ $if a > 9 $ 1 $else$ 2 $endif$ ]', '[1]');
-  TestJop(
-    '$$'#10'a=10'#10'$$'#10'[ $if a > 9 $ $else$ 2 $endif$ ]', '[]');
-  TestJop(
-    '[ $if cpu:threads > 0 $ 1 $else$ 2 $endif$ ]', '[1]');
-  TestJop(
-    '$$'#10'a=1'#10'$$'#10'[ $ifdef a$ 1 $else$ 2 $endif$ ]', '[1]');
-  TestJop(
-    '$$'#10'a=1'#10'$$'#10'[ $if a$ 1 $if no$ 2 $endif$ 4 $else$ 5 $endif$ 6 ]',
-    '[1,4,6]');
-  TestJop(
-    '$$'#10'a=1'#10'$$'#10'[ $if a$ 1 $if no$ 2 $else$ 3 $endif$ 4 $else$ 5 $endif$ 6 ]',
-    '[1,3,4,6]');
-  TestJop(
-    '$$'#10'a=1'#10'$$'#10'[ $if no$ 1 $if a$ 2 $else$ 3 $endif$ 4 $else$ 5 $endif$ 6 ]',
-    '[5,6]');
-  TestJop(
-    '$$'#10'a=1'#10'$$'#10'[ $if no$ 1 $if a$ 2 $else$ 3 $endif$ 4 $else$ 5 $else$ 6 $else$ 7 $endif$ 8 ]',
-    '[5,7,8]'); // $else$ is just a non-recursive toggle ;)
-  TestJop(
-    '$$'#10'a=1'#10'$$'#10'[ $if a$ 1 $if no$ 2 $endif$ 4 $else$ 5 $else$ 6 $endif$ 7 ]',
-    '[1,4,6,7]');
-  TestJop(
-    '[ $if no$ 1 $if no$ 2 $else$ 3 $endif$ 4 $else$ 5 $endif$ 6 ]',
-    '[5,6]');
   J := '{"RowID":  210 ,"Name":"Alice","Role":"User","Last Login":null, ' +
     '// comment'#13#10'"First Login" : /* to be ignored */  null  ,  "Department"' +
     ' :    "{\"relPath\":\"317\\\\\",\"revision\":1}" } ]';
@@ -6130,8 +6552,9 @@ end;
 procedure TTestCoreProcess._BSON;
 const
   BSONAWESOME = '{"BSON":["awesome",5.05,1986]}';
-  BSONAWESOMEBIN = #$31#0#0#0#4'BSON'#0#$26#0#0#0#2'0'#0#8#0#0#0'awesome'#0 +
-    #1'1'#0'333333'#$14#$40#$10'2'#0#$c2#7#0#0#0#0;
+  BSONAWESOMEHEX = // BSONAWESOME as BSON binary, in hexadecimal for Delphi
+    '310000000442534f4e002600000002300008000000617765736f6d6500' +
+    '0131003333333333331440103200c20700000000';
   BSONID = '507F191E810C19729DE860EA';
   REGEX = '{"$regex":"acme.*corp","$options":"i"}';
   REGEX2 = '{name:"John",field:/acme.*corp/i}';
@@ -6155,7 +6578,7 @@ var
   d, d2: TDateTime;
   oid, oid2: TBsonObjectID;
   oids: array of TBsonObjectID;
-  bsonDat, temp, bin: RawByteString;
+  bsonDat, temp, bin, awesomeBin: RawByteString;
   i, j: integer;
   b: PByte;
   elem, item: TBsonElement;
@@ -6192,6 +6615,7 @@ var
   end;
 
 begin
+  awesomeBin := HexToBin(BSONAWESOMEHEX);
   if CheckFailed(BsonVariantType <> nil, 'no BsonVariantType') then
     exit;
   if CheckFailed(BsonVariantVType <> 0, 'no BsonVariantVType') then
@@ -6318,7 +6742,7 @@ begin
   o := _Json('{"BSON": ["awesome", 5.05, 1986]}');
   bsonDat := Bson(TDocVariantData(o));
   Check(length(bsonDat) = $31);
-  Check(bsonDat = BSONAWESOMEBIN);
+  Check(bsonDat = awesomeBin);
   b := pointer(bsonDat);
   Check(BsonParseLength(b, $31) = length(bsonDat));
   Check(elem.FromNext(b));
@@ -6417,16 +6841,16 @@ begin
   Check(VariantSaveJson(_Json('{BSON:["awesome",5.05,1986]}')) = BSONAWESOME);
   Check(VariantSaveJson(_JsonFast('{ BSON : ["awesome", 5.05, 1986] }')) = BSONAWESOME);
   Check(VariantSaveJson(_JsonFast('{ ''BSON'' : ["awesome", 5.05, 1986] } ')) = BSONAWESOME);
-  Check(Bson('{BSON:["awesome",5.05,1986]}', [], []) = BSONAWESOMEBIN);
-  Check(Bson('{ BSON : ["awesome", 5.05, 1986] }', [], []) = BSONAWESOMEBIN);
-  Check(Bson('{ ''BSON'' : ["awesome", 5.05, 1986] } ', [], []) = BSONAWESOMEBIN);
-  Check(Bson('{%:[?,?,?]}', ['BSON'], ['awesome', 5.05, 1986]) = BSONAWESOMEBIN);
-  Check(Bson('{%:?}', ['BSON'], [_Arr(['awesome', 5.05, 1986])]) = BSONAWESOMEBIN);
-  Check(Bson(['BSON', '[', 'awesome', 5.05, 1986, ']']) = BSONAWESOMEBIN);
+  Check(Bson('{BSON:["awesome",5.05,1986]}', [], []) = awesomeBin);
+  Check(Bson('{ BSON : ["awesome", 5.05, 1986] }', [], []) = awesomeBin);
+  Check(Bson('{ ''BSON'' : ["awesome", 5.05, 1986] } ', [], []) = awesomeBin);
+  Check(Bson('{%:[?,?,?]}', ['BSON'], ['awesome', 5.05, 1986]) = awesomeBin);
+  Check(Bson('{%:?}', ['BSON'], [_Arr(['awesome', 5.05, 1986])]) = awesomeBin);
+  Check(Bson(['BSON', '[', 'awesome', 5.05, 1986, ']']) = awesomeBin);
   temp := Bson(['BSON', '[', 'awesome', 5.05, 1986]);
-  Check(temp = BSONAWESOMEBIN);
+  Check(temp = awesomeBin);
   temp := Bson(['BSON', '[', 'awesome', 5.05, 1986]);
-  Check(temp = BSONAWESOMEBIN);
+  Check(temp = awesomeBin);
   o2 := BsonVariantType[bsonDat];
   Check(VariantSaveJson(o2) = u);
   _Json('{BSON: ["test", 5.05, 1986]}', o);
@@ -6460,7 +6884,7 @@ begin
   u := VariantSaveMongoJson(o, modMongoStrict);
   CheckEqual(u, FormatUtf8('{"id":{"$oid":"%"},"name":"John","date":{"$date":"%"}}',
     [BSONID, st]));
-  Check(u3 = u);
+  CheckEqual(u3, u);
   _Json(u, o2);
   u := VariantSaveMongoJson(o2, modMongoShell);
   CheckEqual(u, FormatUtf8('{id:ObjectId("%"),name:"John",date:ISODate("%")}',
@@ -9097,7 +9521,7 @@ type
 
 const
   // golden cases, covering the I/O matrix of spec-yaml-support.md
-  GOLDEN: array[0..31] of TYamlGoldenCase = (
+  GOLDEN: array[0..36] of TYamlGoldenCase = (
     (Name: 'empty-flow-map';
      Yaml: '{}';
      ExpectedJson: '{}'),
@@ -9240,10 +9664,34 @@ const
      // that depth continue the inner seq. Discovered via GitHub REST spec
      // line 223996 (sort_by: [[123, asc], [456, desc]]).
      Yaml: 'k:'#10'- - 1'#10'  - 2'#10'- - 3'#10'  - 4';
-     ExpectedJson: '{"k":[[1,2],[3,4]]}')
+     ExpectedJson: '{"k":[[1,2],[3,4]]}'),
+    (Name: 'flow-quoted-double-seq';
+     // regression: SkipQuoted() already advances past the ending quote
+     Yaml: 'k: ["a", "b"]';
+     ExpectedJson: '{"k":["a","b"]}'),
+    (Name: 'flow-quoted-map-value';
+     Yaml: '{k: "a", j: 1}';
+     ExpectedJson: '{"k":"a","j":1}'),
+    (Name: 'flow-quoted-embedded-comma';
+     // commas within quotes must not split a flow value
+     Yaml: 'k: [''a,b'', "c,d"]';
+     ExpectedJson: '{"k":["a,b","c,d"]}'),
+    (Name: 'flow-quoted-nested-map';
+     Yaml: 'k: ["a", {j: "b"}, ''c'']';
+     ExpectedJson: '{"k":["a",{"j":"b"},"c"]}'),
+    (Name: 'flow-plain-mid-scalar-quotes';
+     // quotes inside a plain scalar are literal characters
+     Yaml: 'k: [it''s, x"y]';
+     ExpectedJson: '{"k":["it''s","x\"y"]}')
   );
 
-  ERRORS: array[0..8] of TYamlGoldenCase = (
+  ERRORS: array[0..21] of TYamlGoldenCase = (
+    (Name: 'quoted-double-json-injection';
+     Yaml: 'user: "x","admin":true,"y":"z"';
+     ExpectedJson: ''),
+    (Name: 'quoted-single-json-injection';
+     Yaml: 'user: ''x'',"admin":true';
+     ExpectedJson: ''),
     (Name: 'anchor';
      Yaml: 'a: &ref 1'#10'b: *ref';
      ExpectedJson: ''),
@@ -9271,6 +9719,43 @@ const
     (Name: 'explicit-indent-zero';
      // YAML 1.2 §8.1.1.1 forbids 0 as an explicit indent indicator
      Yaml: 'k: |0'#10'  x';
+     ExpectedJson: ''),
+    // Embedded #0 is forbidden anywhere in the YAML input buffer
+    (Name: 'nul-float';
+     Yaml: 'a: 1.2'#0'.3'#10'b: 2';
+     ExpectedJson: ''),
+    (Name: 'nul-boolean';
+     Yaml: 'b: true'#0#10'i: 3';
+     ExpectedJson: ''),
+    (Name: 'nul-exponent';
+     Yaml: 'c: 1e3'#0#10'admin: false';
+     ExpectedJson: ''),
+    (Name: 'nul-after-newline';
+     // regression: old FillLines() stopped at lineStart^ = #0
+     Yaml: 'a: 1'#10#0'admin: true';
+     ExpectedJson: ''),
+    (Name: 'nul-trailing-byte';
+     // #0 is within length(Yaml), not the implicit terminator
+     Yaml: 'a: 1'#0;
+     ExpectedJson: ''),
+    (Name: 'nul-inside-quoted-scalar';
+     Yaml: 'a: "ab'#0'cd"';
+     ExpectedJson: ''),
+    (Name: 'nul-inside-literal-block';
+     Yaml: 'k: |'#10'  ab'#0'cd';
+     ExpectedJson: ''),
+    (Name: 'nul-after-crlf';
+     Yaml: 'a: 1'#13#10#0'b: 2';
+     ExpectedJson: ''),
+     // Quoted flow scalars must have a valid separator afterwards
+    (Name: 'flow-quoted-missing-comma';
+     Yaml: 'k: ["a" "b"]';
+     ExpectedJson: ''),
+    (Name: 'flow-map-quoted-missing-comma';
+     Yaml: '{k: "a" j: 1}';
+     ExpectedJson: ''),
+    (Name: 'flow-quoted-trailing-text';
+     Yaml: 'k: ["a"junk, "b"]';
      ExpectedJson: '')
   );
 
@@ -9346,9 +9831,25 @@ end;
 procedure TTestCoreProcess.YamlErrorCases;
 var
   i: PtrInt;
+  json: RawUtf8;
 begin
   for i := low(ERRORS) to high(ERRORS) do
-    YamlExpectRaise(Join([' for ', ERRORS[i].Name]), ERRORS[i].Yaml);
+  with ERRORS[i] do
+  begin
+    TSynLog.Family.ExceptionIgnoreCurrentThread := true;
+    try
+      YamlExpectRaise(Join([' for ', Name]), Yaml);
+      if not IdemPChar(pointer(Name), 'NUL-') then
+        continue;
+      CheckNotEqual(StrLen(pointer(Yaml)), length(Yaml), Name);
+      json := SmallUInt32Utf8[i];
+      CheckUtf8(not TryYamlToJson(Yaml, json), // specific call to detect #0
+        'YamlToJson should reject %', [Name]);
+      CheckEqual(json, '');
+    finally
+      TSynLog.Family.ExceptionIgnoreCurrentThread := false;
+    end;
+  end;
 end;
 
 procedure TTestCoreProcess.YamlFileApi;
@@ -9404,6 +9905,13 @@ begin
     YamlMaxDepth := 100;
     YamlToVariant(yaml, doc);
     Check(doc.Count <> 0,  'depth 20 must parse when YamlMaxDepth=100');
+    // Compact one-line nested sequences must use the same depth limit.
+    yaml := '';
+    for i := 1 to 100 do
+      Append(yaml, '- ');
+    Append(yaml, 'x');
+    YamlMaxDepth := 8;
+    YamlExpectRaise('compact nested sequence must respect YamlMaxDepth', yaml);
   finally
     YamlMaxDepth := saved;
   end;

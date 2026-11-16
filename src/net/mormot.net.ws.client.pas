@@ -250,13 +250,16 @@ type
     fLocals: TSocketIOLocalNamespaces;
     fWaitEvent: TSynEvent;
     fOptions: TSocketsIOClientOptions;
-    fDefaultWaitTimeoutSec: cardinal;
+    fReconnectClosing: boolean;
     fWaitEventPrepared: TSocketsIOWaitEventPacket;
+    fDefaultWaitTimeoutSec: cardinal;
     fWaitEventAckID: TSocketIOAckID;
     fWaitEventData: PDocVariantData;
     fRemoteNames, fLocalNames: TRawUtf8DynArray;
     fWaitEventParam: RawUtf8;
     fLocalNamespaceClass: TSocketIOLocalNamespaceClass; // customizable
+    fReconnectThreads: TThreads;
+    fLog: TSynLogClass;
     procedure WaitEventPrepare(Event: TSocketsIOWaitEventPacket);
     procedure WaitEventDone(Event: TSocketsIOWaitEventPacket);
     procedure WaitEventAck(const Message: TSocketIOMessage);
@@ -282,6 +285,10 @@ type
     // - is also triggered during automated re-connection
     OnNamespaceConnected: procedure(Sender: TSocketsIOClient;
       NameSpace: TSocketIORemoteNamespace) of object;
+    /// callback called when Connect() did fail
+    // - you can use Response.NameSpaceGet/DataRaw to get some server-side info
+    OnNamespaceConnectError: procedure(Sender: TSocketsIOClient;
+      const Response: TSocketIOMessage) of object;
     /// callback called when an event has been received
     // - should return false to process the event as usual (i.e. from registration)
     // - could return true if this event requires no further processing
@@ -291,11 +298,11 @@ type
     OnLostConnection: TOnSocketsIOClient;
     /// callback called during re-connection, just before WebSocketsUpgrade()
     // - to change e.g. Protocol.UpgradeUri/UpgradeBearerToken
-    OnBeforeReconnectUpgrade: procedure (Sender: TSocketsIOClient;
+    OnBeforeReconnectUpgrade: procedure(Sender: TSocketsIOClient;
       Protocol: TWebSocketSocketIOClientProtocol) of object;
     /// callback called during re-connection, just before Connect()
     // - to change e.g. Connection.HandhsakeData with a refreshed token
-    OnBeforeReconnectConnect: procedure (Sender: TSocketsIOClient;
+    OnBeforeReconnectConnect: procedure(Sender: TSocketsIOClient;
       var Connection: TSocketIORemoteNamespace) of object;
     /// low-level client WebSockets connection factory for host and port
     // - calls THttpClientWebSockets.WebSocketsConnect for the Socket.IO protocol
@@ -892,6 +899,7 @@ begin
   proto.fClient := Create;
   proto.fClient.fDefaultWaitTimeoutSec := 2;
   proto.fClient.fOptions := aOptions;
+  proto.fClient.fLog := aLog;
   c := THttpClientWebSockets.WebSocketsConnect(aHost, aPort, proto,
     aLog, 'TSocketsIOClient.Open', EngineIOHandshakeUri(aRoot),
     aCustomHeaders, aTls, aTLSContext);
@@ -917,7 +925,17 @@ begin
 end;
 
 destructor TSocketsIOClient.Destroy;
+var
+  log: ISynLog;
 begin
+  fLog.EnterLocal(log, self, 'Destroy');
+  fReconnectThreads.Safe.Lock;
+  try
+    fReconnectClosing := true;
+  finally
+    fReconnectThreads.Safe.UnLock;
+  end;
+  fReconnectThreads.TerminateAndWait(60, self, fLog);
   ObjArrayClear(fRemotes);
   ObjArrayClear(fLocals);
   fOwnedClient.Free;
@@ -971,22 +989,33 @@ begin
     OnAfterOpen(self);
 end;
 
-procedure TSocketsIOClient.AfterNamespaceConnect(const Response: TSocketIOMessage);
+procedure TSocketsIOClient.AfterNamespaceConnect(
+  const Response: TSocketIOMessage);
 var
   ns: TSocketIORemoteNamespace;
 begin
-  fRemoteNames := nil; // to be reallocated on need
-  if Response.PacketType = sioConnect then
-  begin
-    ns := TSocketIORemoteNamespace.CreateFromConnectMessage(
-      Response, fWaitEventParam, self);
-    ObjArrayAdd(fRemotes, ns);
-    if Assigned(OnNamespaceConnected) then
-      OnNamespaceConnected(self, ns);
+  fRemoteNames := nil;
+  case Response.PacketType of
+    sioConnect:
+      begin
+        ns := TSocketIORemoteNamespace.CreateFromConnectMessage(
+          Response, fWaitEventParam, self);
+        ObjArrayAdd(fRemotes, ns);
+        WaitEventDone(wepConnect);
+        if Assigned(OnNamespaceConnected) then
+          OnNamespaceConnected(self, ns);
+      end;
+    sioConnectError:
+      begin
+        // wake the synchronous Connect() caller, if any
+        WaitEventDone(wepConnect);
+        fLog.Add.Log(sllWarning, 'Socket.IO namespace % rejected: %',
+          [Response.NameSpaceShort, Response.DataRaw], self);
+        // notify the application without killing the WS thread
+        if Assigned(OnNamespaceConnectError) then
+          OnNamespaceConnectError(self, Response);
+      end;
   end;
-  WaitEventDone(wepConnect); // notify any waiting acknowledgement
-  if Response.PacketType = sioConnectError then
-    Response.RaiseESockIO('Connect() failed with');
 end;
 
 procedure TSocketsIOClient.OnEvent(const aMessage: TSocketIOMessage);
@@ -1059,18 +1088,25 @@ constructor TWebSocketReconnectClientThread.Create(aClient: TSocketsIOClient);
 begin
   fClient := aClient;
   FreeOnTerminate := true;
-  inherited Create({suspended=}false, nil, nil, TSynLog, 'Reconnect');
+  inherited Create({suspended=}true, nil, nil, TSynLog, 'Reconnect');
 end;
 
 procedure TWebSocketReconnectClientThread.DoExecute;
 begin
-  // let the main ProcessLoop be reached
-  fClient.fOwnedClient.fProcess.WaitThreadStarted;
-  // re-Connect() to all previous remote namespaces
-  fClient.RegisterAgainAfterReconnect;
+  try
+    // let the main ProcessLoop be reached
+    fClient.fOwnedClient.fProcess.WaitThreadStarted;
+    // re-Connect() to all previous remote namespaces
+    if not Terminated then
+      fClient.RegisterAgainAfterReconnect;
+  finally
+    fClient.fReconnectThreads.Terminated(self);
+  end;
 end;
 
 function TSocketsIOClient.OnReconnect(Process: TWebSocketProcessClient): string;
+var
+  t: TWebSocketReconnectClientThread;
 begin
   result := '';
   if Process = nil then // was a reconnection failure
@@ -1090,9 +1126,20 @@ begin
     result := string(fOwnedClient.WebSocketsUpgrade(
       Process.Protocol.UpgradeUri, '', {ajax=}false, [],
       Process.Protocol, Process.Protocol.UpgradeBearerToken, {reconnect=}true));
-    if result = '' then
-      // all the registration should take place in another thread
-      TWebSocketReconnectClientThread.Create(self);
+    if result <> '' then
+      exit; // abort on error
+    // all the registration should take place in another thread
+    fReconnectThreads.Safe.Lock;
+    try
+      if not fReconnectClosing then
+      begin
+        t := TWebSocketReconnectClientThread.Create(self); // suspended
+        PtrArrayAdd(fReconnectThreads.List, t);
+        t.Start;
+      end;
+    finally
+      fReconnectThreads.Safe.UnLock;
+    end;
   except
     on E: Exception do
       result := E.Message;

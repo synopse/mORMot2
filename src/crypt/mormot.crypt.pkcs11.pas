@@ -28,6 +28,7 @@ uses
   mormot.core.os.security,
   mormot.crypt.core,
   mormot.crypt.secure,
+  mormot.crypt.factory,
   mormot.crypt.ecc256r1,
   mormot.crypt.ecc,
   mormot.crypt.rsa,

@@ -875,9 +875,10 @@ type
     Provider: RawUtf8;
     /// binary SHA1 fingerprint as 40 hexadecimal chars
     Hash: RawUtf8;
-    /// provider type
-    // - 0 identifies a CNG Key Storage Provider
+    /// provider type as legacy CryptoAPI CSP identifier
+    // - equals 0 for CNG Key Storage as identified by Provider/Container fields
     // - high(cardinal) means no provider information was available
+    // - any other value (e.g. 1 or 24) identifies a legacy CryptoAPI provider
     ProviderType: cardinal;
     /// CRYPT_KEY_PROV_INFO.dwFlags
     Flags: cardinal;
@@ -1103,7 +1104,7 @@ function NetUserAdd(servername: PWideChar; level: cardinal;
 function NetUserEnum(servername: PWideChar; level, filter: cardinal;
   var bufptr: pointer; prefmaxlen: cardinal;
   entriesread, totalentries: PCardinal;
-  resumehandle: PPCardinal = nil): TNetApiStatus; stdcall;
+  resumehandle: PCardinal = nil): TNetApiStatus; stdcall;
 
 function NetUserGetInfo(servername, username: PWideChar; level: cardinal;
   var bufptr: pointer): TNetApiStatus; stdcall;
@@ -1136,7 +1137,7 @@ function NetUserChangePassword(domainname, username,
 
 function NetGroupEnum(servername: PWideChar; level: cardinal;
   var bufptr: pointer; prefmaxlen: cardinal; entriesread, totalentries: PCardinal;
-  resume_handle: PPCardinal = nil): TNetApiStatus; stdcall;
+  resume_handle: PPtrUInt = nil): TNetApiStatus; stdcall;
 
 
 function NetLocalGroupAdd(servername: PWideChar; level: cardinal;
@@ -1147,7 +1148,7 @@ function NetLocalGroupAddMember(servername, groupname: PWideChar;
 
 function NetLocalGroupEnum(servername: PWideChar; level: cardinal;
   var bufptr: pointer; prefmaxlen: cardinal; entriesread, totalentries: PCardinal;
-  resumehandle: PPCardinal = nil): TNetApiStatus; stdcall;
+  resumehandle: PPtrUInt = nil): TNetApiStatus; stdcall;
 
 function NetLocalGroupGetInfo(servername, groupname: PWideChar;
   level: cardinal; var bufptr: pointer): TNetApiStatus; stdcall;
@@ -1163,7 +1164,7 @@ function NetLocalGroupDelMember(servername: PWideChar;
 
 function NetLocalGroupGetMembers(servername, localgroupname: PWideChar;
   level: cardinal; var bufptr: pointer; prefmaxlen: cardinal;
-  entriesread, totalentries: PCardinal; resumehandle: PPCardinal): TNetApiStatus; stdcall;
+  entriesread, totalentries: PCardinal; resumehandle: PPtrUInt): TNetApiStatus; stdcall;
 
 function NetLocalGroupSetMembers(servername, groupname: PWideChar;
   level: cardinal; buf: pointer; totalentries: cardinal): TNetApiStatus; stdcall;
@@ -1242,7 +1243,7 @@ function MsiOpenProductW(szProduct: PWideChar; out hProduct: TMsiHandle): cardin
 function MsiGetProductPropertyW(hProduct: TMsiHandle; szProperty, lpValueBuf: PWideChar;
   pcchValueBuf: PCardinal): cardinal; stdcall;
 function MsiSetInternalUI(dwUILevel: cardinal; var phWnd: HWND): cardinal; stdcall;
-function MsiEnumProductA(iProductIndex: cardinal; lpProductBuf: PAnsiChar): cardinal; stdcall;
+function MsiEnumProductsA(iProductIndex: cardinal; lpProductBuf: PAnsiChar): cardinal; stdcall;
 function MsiOpenDatabaseW(DatabasePath, Persist: PWideChar;
   out hDb: TMsiHandle): cardinal; stdcall;
 function MsiDatabaseOpenViewW(hdb: TMsiHandle; query: PWideChar;
@@ -2254,7 +2255,7 @@ begin
       if ctxt = nil then
         break;
       if not WinCertCtxtKeyProvider(ctxt, info) or
-         (info.ProviderType <> 0) or
+         (info.ProviderType <> 0) or // LoadPKCS12() is CNG-only
          (info.Container = '') or
          (info.Provider = '') then
         continue;
@@ -2785,7 +2786,7 @@ const
 function MsiOpenProductW;        external msidll;
 function MsiGetProductPropertyW; external msidll;
 function MsiSetInternalUI;       external msidll;
-function MsiEnumProductA;        external msidll;
+function MsiEnumProductsA;       external msidll;
 function MsiOpenDatabaseW;       external msidll;
 function MsiDatabaseOpenViewW;   external msidll;
 function MsiViewExecute;         external msidll;

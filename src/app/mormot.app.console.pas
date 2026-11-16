@@ -101,7 +101,7 @@ type
     /// initialize the internal storage from the command line
     // - will set paramstr(firstParam)..paramstr(paramcount) in fValues as array
     // - may be used e.g. for "val1 val2 val3" command line layout
-    constructor CreateAsArray(firstParam: integer);
+    constructor CreateAsArray(firstParam: PtrInt);
     /// initialize the internal storage with some ready-to-use switches
     // - will also set the NoPrompt option, and set the supplied NoConsole value
     // - may be used e.g. from a graphical interface instead of console mode
@@ -180,17 +180,15 @@ implementation
 
 constructor TCommandLine.Create;
 var
-  n, i: integer;
+  n, i: PtrInt;
   p, sw: RawUtf8;
 begin
   inherited Create;
-  n := ParamCount;
-  if n < 0 then
-    n := 0; // may equal -1 e.g. from a .so on MacOS
+  n := high(ParamUtf8);
   fValues.InitFast(n shr 1, dvObject);
   for i := 1 to n do
   begin
-    StringToUtf8(ParamStr(i), p);
+    p := ParamUtf8[i];
     if p <> '' then
       if p[1] in ['-', '/'] then
       begin
@@ -231,17 +229,15 @@ begin
   fNoConsole := aNoConsole;
 end;
 
-constructor TCommandLine.CreateAsArray(firstParam: integer);
+constructor TCommandLine.CreateAsArray(firstParam: PtrInt);
 var
-  n, i: integer;
+  i: PtrInt;
 begin
   inherited Create;
-  n := ParamCount;
-  if n < 0 then
-    n := 0; // may equal -1 e.g. from a .so on MacOS
-  fValues.InitFast(n, dvArray);
-  for i := firstParam to n do
-    fValues.AddItem(ParamStr(i));
+  firstParam := MaxPtrInt(0, firstParam);
+  fValues.InitFast(MaxPtrInt(0, length(ParamUtf8) - firstParam), dvArray);
+  for i := firstParam to high(ParamUtf8) do
+    fValues.AddItemText(ParamUtf8[i]);
 end;
 
 function TCommandLine.NoPrompt: boolean;

@@ -3417,7 +3417,7 @@ begin
     else
       if (p.Value = '') and
          not p.WasString then
-        Values[i] := 'null'
+        Values[i] := NULL_STR_VAR
       else
         FastSetString(Values[i], p.Value, p.ValueLen);
     end;
@@ -5364,7 +5364,7 @@ var
                 W.AddDirect('i');
                 inc(p);
                 W.AddU(p);
-                if FieldValues[f, r] = 'null' then
+                if IsNullJson(FieldValues[f, r]) then
                   W.AddShorter(' CHAR(1)')
                 else
                   case FieldTypes[f] of
@@ -5618,7 +5618,7 @@ begin
         begin
           v := FieldValues[f, r]; // includes single quotes (#39)
           if (v = '') or
-             (v = 'null') then
+             IsNullJson(v) then
             W.AddNull
           else if FieldTypes[f] = ftDate then
             if v = #39#39 then
@@ -5902,7 +5902,7 @@ var
   tmp: RawUtf8;
 begin
   if not ValueAlreadyUnquoted and
-     (Value = 'null') then
+     IsNullJson(Value) then
     // bind null (ftUtf8 should be '"null"')
     BindNull(Param, IO)
   else
@@ -8377,7 +8377,7 @@ begin
     for i := 0 to high(Values) do
       if StoreVoidStringAsNull and
          (Values[i] = '') then
-        VArray[i] := 'null'
+        VArray[i] := NULL_STR_VAR
       else
         QuotedStr(Values[i], '''', VArray[i]);
 end;
@@ -8440,7 +8440,7 @@ begin
           ftUtf8:
             if StoreVoidStringAsNull and
                (V^ = '') then
-              V^ := 'null'
+              V^ := NULL_STR_VAR
             else
               QuotedStr(V^, '''', V^);
           ftDate:
@@ -8468,11 +8468,11 @@ begin
             SetLength(VArray, NextGrow(fParamsArrayCount));
           V := @VArray[fParamsArrayCount];
           if Rows.ColumnNull(F) then
-            V^ := 'null'
+            V^ := NULL_STR_VAR
           else
             case Rows.ColumnType(F) of
               ftNull:
-                V^ := 'null';
+                V^ := NULL_STR_VAR;
               ftInt64:
                 Int64ToUtf8(Rows.ColumnInt(F), V^);
               ftDouble:
@@ -8487,7 +8487,7 @@ begin
                   if (U = '') and
                      (fConnection <> nil) and
                      fConnection.Properties.StoreVoidStringAsNull then
-                    V^ := 'null'
+                    V^ := NULL_STR_VAR
                   else
                     QuotedStr(U, '''', V^);
                 end;

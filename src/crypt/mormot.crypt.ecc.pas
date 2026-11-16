@@ -40,6 +40,7 @@ uses
   mormot.core.search, // for EccKeyFileFind()
   mormot.crypt.core,
   mormot.crypt.secure,
+  mormot.crypt.factory,
   mormot.crypt.ecc256r1;
 
 
@@ -2328,8 +2329,8 @@ begin
      (jwk.CompareText('crv', 'P-256') <> 0) or
      not jwk.GetAsRawUtf8('x', x) or
      not jwk.GetAsRawUtf8('y', y) or
-     not Base64uriToBin(x, @xy.Lo, SizeOf(xy.Lo)) or
-     not Base64uriToBin(y, @xy.Hi, SizeOf(xy.Hi)) then
+     not Base64uriToBin(x{%H-}, @xy.Lo, SizeOf(xy.Lo)) or
+     not Base64uriToBin(y{%H-}, @xy.Hi, SizeOf(xy.Hi)) then
     exit;
   _bswap256(@key.Lo, @xy.Lo);
   _bswap256(@key.Hi, @xy.Hi);

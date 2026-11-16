@@ -431,10 +431,11 @@ begin
       exit; // already prepared -> we will just give the statement name to PQ
     end;
   end;
-  result := fPrepared.Add(aSql);
-  aName := Int64ToHexLower(result);
+  result := fPrepared.Count;
+  aName := Int64ToHexLower(result); // 00,01,...,09,0a,0b,...
   PQ.Check(fPGConn, 'Prepare',
     PQ.Prepare(fPGConn, pointer(aName), pointer(aSql), aParamCount, nil));
+  fPrepared.Add(aSql);
 end;
 
 procedure TSqlDBPostgresConnection.DirectExecSql(const SQL: RawUtf8);
@@ -553,7 +554,8 @@ end;
 
 function TSqlDBPostgresConnection.IsConnected: boolean;
 begin
-  result := (fPGConn <> nil);
+  result := (fPGConn <> nil) and
+            (PQ.Status(fPGConn) = CONNECTION_OK); // very fast API field lookup
 end;
 
 function TSqlDBPostgresConnection.NewStatement: TSqlDBStatement;
@@ -1398,11 +1400,11 @@ begin
         W.Add((v <> nil) and (PUtf8Char(v)^ = 't'))
       else
         // note: StrLen slightly faster than PQ.GetLength for small content
-        W.AddShort(v, mormot.core.base.StrLen(v));
+        W.AddNoJsonEscape(v, mormot.core.base.StrLen(v));
     ftUtf8:
       if (p^.ColumnAttr = JSONOID) or
          (p^.ColumnAttr = JSONBOID) then
-        W.AddShort(v, PQ.GetLength(fRes, fCurrentRow, Col))
+        W.AddNoJsonEscape(v, PQ.GetLength(fRes, fCurrentRow, Col))
       else
       begin
         W.Add('"');

@@ -667,12 +667,12 @@ begin
           begin
             if fBatchExecute then
               for i := 0 to fParamsArrayCount-1 do
-                if VArray[i] = 'null' then
+                if IsNullJson(VArray[i]) then
                   P.Values[i].Clear
                 else
                   P.Values[i].AsLargeInt := GetInt64(pointer(VArray[i]))
             else if aArrayIndex >= 0 then
-              if VArray[aArrayIndex] = 'null' then
+              if IsNullJson(VArray[aArrayIndex]) then
                 P.Clear
               else
                 P.AsLargeInt := GetInt64(pointer(VArray[aArrayIndex]))
@@ -682,12 +682,12 @@ begin
         mormot.db.core.ftDouble:
           if fBatchExecute then
             for i := 0 to fParamsArrayCount - 1 do
-              if VArray[i] = 'null' then
+              if IsNullJson(VArray[i]) then
                 P.Values[i].Clear
               else
                 P.Values[i].AsFloat := GetExtended(pointer(VArray[i]))
           else if aArrayIndex >= 0 then
-            if VArray[aArrayIndex] = 'null' then
+            if IsNullJson(VArray[aArrayIndex]) then
               P.Clear
             else
               P.AsFloat := GetExtended(pointer(VArray[aArrayIndex]))
@@ -696,12 +696,12 @@ begin
         mormot.db.core.ftCurrency:
           if fBatchExecute then
             for i := 0 to fParamsArrayCount - 1 do
-              if VArray[i] = 'null' then
+              if IsNullJson(VArray[i]) then
                 P.Values[i].Clear
               else
                 P.Values[i].AsCurrency := StrToCurrency(pointer(VArray[i]))
           else if aArrayIndex >= 0 then
-            if VArray[aArrayIndex] = 'null' then
+            if IsNullJson(VArray[aArrayIndex]) then
               P.Clear
             else
               P.AsCurrency := StrToCurrency(pointer(VArray[aArrayIndex]))
@@ -710,7 +710,7 @@ begin
         mormot.db.core.ftDate:
           if fBatchExecute then
             for i := 0 to fParamsArrayCount - 1 do
-            if VArray[i] = 'null' then
+            if IsNullJson(VArray[i]) then
               P.Values[i].Clear
             else
             begin
@@ -718,7 +718,7 @@ begin
               P.Values[i].AsDateTime := Iso8601ToDateTime(tmp);
             end
           else if aArrayIndex >= 0 then
-            if VArray[aArrayIndex] = 'null' then
+            if IsNullJson(VArray[aArrayIndex]) then
               P.Clear
             else
             begin
@@ -732,7 +732,7 @@ begin
           begin
             StoreVoidStringAsNull := fConnection.Properties.StoreVoidStringAsNull;
             for i := 0 to fParamsArrayCount - 1 do
-              if (VArray[i] = 'null') or
+              if (IsNullJson(VArray[i])) or
                  (StoreVoidStringAsNull and
                   (VArray[i] = #39#39)) then
                 P.Values[i].Clear
@@ -750,7 +750,7 @@ begin
               end
           end
           else if aArrayIndex >= 0 then
-            if (VArray[aArrayIndex] = 'null') or
+            if (IsNullJson(VArray[aArrayIndex])) or
                (fConnection.Properties.StoreVoidStringAsNull and
                 (VArray[aArrayIndex] = #39#39)) then
               P.Clear
@@ -781,7 +781,7 @@ begin
         mormot.db.core.ftBlob:
           if fBatchExecute then
             for i := 0 to fParamsArrayCount - 1 do
-              if VArray[i] = 'null' then
+              if IsNullJson(VArray[i]) then
                 P.Values[i].Clear
               else
               {$ifdef UNICODE}
@@ -795,7 +795,7 @@ begin
               {$endif UNICODE}
           else
           if aArrayIndex >= 0 then
-            if VArray[aArrayIndex] = 'null' then
+            if IsNullJson(VArray[aArrayIndex]) then
               P.Clear
             else
           {$ifdef UNICODE}

@@ -865,7 +865,9 @@ type
     procedure AddStrings(const Text: RawUtf8; count: PtrInt); overload;
     /// append a ShortString - and ensure has space for 255 chars (including Text)
     procedure AddShort(const Text: ShortString); overload;
-    /// append a ShortString - or at least a small buffer typically < 256 chars
+    /// append a ShortString - or at least a small buffer < 256 chars
+    // - security warning: the caller should ensure TextLen is <= 255 bytes (in
+    // fact < fTempBufSize - 16) - otherwise, use AddNoJsonEscape()
     procedure AddShort(Text: PUtf8Char; TextLen: PtrInt); overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// append a TShort8 - Text should be not '', and up to 8 chars long
@@ -5292,7 +5294,7 @@ begin
     if i = HighValues then
       break;
     if Sep <> '' then
-      AddShort(pointer(Sep), PStrLen(PtruInt(Sep) - _STRLEN)^);
+      AddNoJsonEscape(pointer(Sep), PStrLen(PtruInt(Sep) - _STRLEN)^);
     if Reverse then
       dec(i)
     else

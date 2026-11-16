@@ -838,7 +838,7 @@
         <PackageName Value="LCL"/>
       </Item3>
     </RequiredPackages>
-    <Units Count="101">
+    <Units Count="105">
       <Unit0>
         <Filename Value="mormot2tests.dpr"/>
         <IsPartOfProject Value="True"/>
@@ -1243,6 +1243,22 @@
         <Filename Value="test.db.quack.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit100>
+      <Unit101>
+        <Filename Value="..\src\crypt\mormot.crypt.factory.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit101>
+      <Unit102>
+        <Filename Value="..\src\net\mormot.net.peercache.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit102>
+      <Unit103>
+        <Filename Value="..\src\net\mormot.net.server.win.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit103>
+      <Unit104>
+        <Filename Value="..\src\net\mormot.net.proxy.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit104>
     </Units>
   </ProjectOptions>
   <CompilerOptions>

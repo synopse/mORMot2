@@ -3197,7 +3197,7 @@ begin
       AddShort(',"values":["');
       // first row is FieldNames in non-expanded format
     end;
-    AddShort(aColName, len);
+    AddNoJsonEscape(aColName, len); // may be > 255 bytes
     if aColIndex = aColCount - 1 then
     begin
       // last AddColumn() call would finalize the non-expanded header
@@ -3376,7 +3376,7 @@ var
         exit; // end of string before end quote -> incorrect
       RawUtf8ToVariant(Where.Value, Where.ValueVariant);
     end
-    else if (PInteger(P)^ and $DFDFDFDF = NULL_HI) and
+    else if (PInteger(P)^ and $DFDFDFDF = NULL_HI) and // case-insentive
             (P[4] in [#0..' ', ';']) then
     begin
       // NULL statement

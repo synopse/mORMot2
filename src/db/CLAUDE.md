@@ -94,16 +94,23 @@ Props := TSqlDBZeosConnectionProperties.Create(
 ### Executing Queries
 
 ```pascal
-Stmt := Conn.NewStatementPrepared('SELECT * FROM users WHERE id=?', True);
-try
+procedure ListUser(Conn: TSqlDBConnection);
+var
+  Stmt: ISqlDBStatement; // an interface: released by reference counting
+begin
+  Stmt := Conn.NewStatementPrepared('SELECT * FROM users WHERE id=?',
+    {ExpectResults=}true, {RaiseExceptionOnError=}true);
   Stmt.Bind(1, 42);
   Stmt.ExecutePrepared;
   while Stmt.Step do
     WriteLn(Stmt.ColumnUtf8(0));
-finally
-  Stmt.Free;
-end;
+end; // Stmt - and any hidden temporary - is released here, even on exception
 ```
+
+`ISqlDBStatement` and `ISqlDBRows` (e.g. from `Props.Execute()`) are interfaces: never
+call `Free` on them, and do not wrap them in `try..finally Free`. Keep them in a method
+or nested procedure of their own, called before the properties are freed - see "Release
+Order" below.
 
 ### Database-Specific Behavior
 
@@ -140,7 +147,8 @@ Use `TSqlDBConnectionProperties.AdaptSqlLimitForEngineList()` for automatic conv
 ## Important Notes
 
 - **Thread Safety:** Use `TSqlDBConnectionThreadSafe` or `Props.ThreadSafeConnection` for multi-threaded access. Base `TSqlDBConnection` is NOT thread-safe.
-- **Statement Caching:** Prepared statements are cached by connection. Use `NewStatementPrepared(..., True)` to enable caching.
+- **Statement Caching:** with `Props.UseCache` true (the default), `NewStatementPrepared()` caches eligible statements per connection: `SELECT`/`INSERT`/`UPDATE`/`DELETE` with `?` parameters, or a `SELECT` with no WHERE clause (`IsCacheableDML()`). Some providers do no client-side caching at all (e.g. Oracle, the remote proxy). Its second parameter is `ExpectResults`, not a cache switch.
+- **Release Order:** every `ISqlDBStatement`/`ISqlDBRows` must be released before its `TSqlDBConnectionProperties` (and connection), otherwise its release accesses freed memory: a random GPF. Setting the variable to `nil` is not enough: an interface function result may also live in a hidden temporary, which is only released at the end of the method - after a `Props.Free` in its `finally` block. Run the statements in a separate method or nested procedure, and free the properties in the caller (see `TTestExternalDatabase.BatchFromOtherThread`: `rows := nil` was there, the GPF remained until 5df7dc803 moved the queries into `DoTests`).
 - **Parameter Binding:** Always use `?` placeholders and `Bind()` methods. Framework handles conversion to engine-specific syntax (`:AA`, `$1`, etc.).
 - **JSON Integration:** Use `FetchAllAsJson()`, `ColumnBlob()` with JSON, or `TResultsWriter` for direct JSON export.
 - **Logging:** Define `SYNDB_SILENCE` to disable statement execution logging.

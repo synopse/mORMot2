@@ -25,7 +25,7 @@ unit mormot.net.dhcp;
    Scale up to 100k leases per subnet with minimal RAM/CPU consumption.
    No memory allocation is performed during the response computation.
    Prevent most client abuse with configurable rate limiting.
-   Cross-Platform on Windows, Linux and MacOS, running in a single thread/core.
+   Cross-Platform Windows, Linux and MacOS/BSD, running in a single thread/core.
    Meaningful and customizable logging of the actual process (as text or syslog).
    Optional verbose debug of all input/output frames as usable JSON objects.
    Generate detailed JSON and CSV metrics as local files, global and per scope.
@@ -1679,12 +1679,42 @@ type
 
   TDhcpServer = class;
 
+  {$ifdef HAS_IP_PKTINFO}
+  /// if HAS_IP_PKTINFO is enabled, define a TDhcpServerThread network interface
+  // - on Windows, a UDP socket bound to a particular local IPv4 address still
+  // receives broadcasts for that interface so no IfIndex tracking is needed
+  // - on Linux/MacOS/NetBSD, a socket bound to an interface IP does not receive
+  // the 255.255.255.255 broadcasts: so a single thread is bound to 0.0.0.0 for
+  // each server port, and identifies the receiving interface via IP_PKTINFO
+  // - FreeBSD has a specific IP_ONESBCAST option and OpenBSD seems out of reach
+  TDhcpServerInterface = record
+    /// the TMacAddress.IfIndex of this interface
+    IfIndex: integer;
+    /// the IPv4 address of this interface, matching one Scope[] subnet
+    IP4: TNetIP4;
+    /// the UDP client port of this Scope[]
+    ClientPort: TNetPort;
+  end;
+  PDhcpServerInterface = ^TDhcpServerInterface;
+  TDhcpServerInterfaceDynArray = array of TDhcpServerInterface;
+  {$endif HAS_IP_PKTINFO}
+
   /// listen for DHCP messages on one local UDP IPv4 and port
+  // - on Windows, broadcast replies may reach other interfaces on multihomed hosts
+  // - on Linux/MacOS/NetBSD, use IP_PKTINFO with a single 0.0.0.0:port per server
+  // - on other BSD flavors (or OS), multiple interfaces lookup is not guaranteed
   TDhcpServerThread = class(TUdpServerThread)
   protected
     fOwner: TDhcpServer;
     fState: TDhcpState;
     fClientPort, fServerPort: TNetPort;
+    {$ifdef HAS_IP_PKTINFO}
+    fInterface: TDhcpServerInterfaceDynArray; // via fOwner.fScopeSafe
+    procedure AddInterface(const aScope: TDhcpScope;
+      const aInterface: TMacAddress);
+    function GetFramePort(ip: PNetIP4 = nil): TNetPort;
+    function GetInterfacePtr(ifindex: integer): PDhcpServerInterface;
+    {$endif HAS_IP_PKTINFO}
     function DoBind: TNetResult; override;
     procedure OnFrameReceived(len: integer; var remote: TNetAddr); override;
     procedure OnShutdown; override; // to call TDhcpServer.ThreadShutdownNotify
@@ -1694,21 +1724,26 @@ type
     constructor Create(aOwner: TDhcpServer; const aScope: TDhcpScope;
       const aInterface: TMacAddress); reintroduce;
   end;
+  TDhcpServerThreadDynArray = array of TDhcpServerThread;
 
   /// implements a full DHCP IPv4 server over UDP
   // - several interfaces and ports could be bound to this single instance
   TDhcpServer = class(TDhcpProcess)
   protected
-    fThreads: TThreads; // fThreads.List[] are TDhcpServerThread
+    fThreads: TThreads; // fThreads.List[] are owned TDhcpServerThread instances
     function GetThread(s: PDhcpScope): TDhcpServerThread;
     function EnsureBound(s: PDhcpScope; mac: PMacAddress): TDhcpServerThread;
-    procedure ThreadShutdownNotify(Sender: TDhcpServerThread);
   public
     /// finalize this DHCP server instance and any per-interface UDP threads
     destructor Destroy; override;
     /// bind and start listening to incoming UDP frames
     // - will bind all network interfaces matching a Scope[] by default; you
     // can limit to bind a single interface by providing its IPv4
+    // - on Linux/MacOS/NetBSD, a single 0.0.0.0 socket is bound for each server
+    // port, and serves the requests received on those interfaces: so no other
+    // socket of this computer could be bound to this port; Windows may send
+    // broadcasts on all interfaces, and other OS may not properly implement
+    // multiple network interfaces
     procedure Bind(const InterfaceIP4: RawUtf8 = ''); virtual;
     /// relase all bound interfaces and their threads, and wait for finalization
     procedure Shutdown; virtual;
@@ -3726,10 +3761,11 @@ begin
     for i := 0 to n do
       r[i] := PoolRules[ndx[i]];
     for i := 0 to n - 1 do
-      if p[i].IpMaxLE <= p[i + 1].IpMinLE then
+      if p[i].IpMaxLE >= p[i + 1].IpMinLE then
         InvalidRange('overlap in max', p[i].IpMax);
     Pools := p;
     PoolRules := r;
+    Main.SubPools := pointer(p);
   end;
   // log the scope settings and the computed sub-network context
   if Assigned(log) then
@@ -5855,30 +5891,25 @@ begin
     fLog.Add.RawLog(sllClient, OnLogFrame, @State);
 end;
 
-function TDhcpProcess.RetrieveFrameIP(
-  var State: TDhcpState; Lease: PDhcpLease): boolean;
-var
-  ip4: TNetIP4;
+function TDhcpProcess.RetrieveFrameIP(var State: TDhcpState;
+  Lease: PDhcpLease): boolean;
 begin
   // from DISCOVER or REQUEST to validate option 50 hint (not authoritative)
   result := false;
-  ip4 := DhcpIP4(@State.Recv, State.RecvLens[doRequestedAddress]); // opt 50
-  if ip4 = 0 then
-    exit;
+  // caller set State.Ip4 from doRequestedAddress value and ensured it is <> 0
   if (Lease = nil) or
-     (Lease^.IP4 <> ip4) then
-    if (not State.Scope^.SubNet.Match(ip4)) or
-       (not State.Pool^.Match(ip4)) or
-       State.Scope^.Exists(ip4) then
+     (Lease^.IP4 <> State.Ip4) then
+    if (not State.Scope^.SubNet.Match(State.Ip4)) or
+       (not State.Pool^.Match(State.Ip4)) or
+       State.Scope^.Exists(State.Ip4) then
     begin
       // this IP seems already used by another MAC, or in another subnet/pool
-      IP4Short(@ip4, State.Ip);
+      IP4Short(@State.Ip4, State.Ip);
       DoLog(sllTrace, 'ignore requested', State); // transient info: no DoError
       inc(State.Scope^.Metrics.Current[dsmDroppedInvalidIP]);
       exit;
     end;
   inc(State.Scope^.Metrics.Current[dsmOption50Hits]);
-  State.Ip4 := ip4;
   result := true;
 end;
 
@@ -5909,11 +5940,15 @@ begin
     // e.g. VLAN 10 relay set giaddr=192.168.10.1 Gateway IP field
     // - giaddr from RFC 2131 is authoritative so we should not fallback
     State.Scope := GetScope(State.Recv.giaddr)
+  else if (State.Recv.ciaddr <> 0) and
+          (State.RecvType in [dmtRequest, dmtInform, dmtRelease]) then
+    // no giaddr: RENEWING/REBINDING/INFORM unicast from a configured client
+    State.Scope := GetScope(State.Recv.ciaddr)
   else if State.RecvIp4 <> 0 then
-    // no giaddr: check RecvIp4 bound local server IP as set by the UDP server
+    // no ciaddr: check RecvIp4 bound local server IP as set by the UDP server
     State.Scope := GetScope(State.RecvIp4)
   else
-    // no option 118 no giaddr nor RecvIp4: default to Scope[0]
+    // no option 118 no giaddr no ciaddr nor RecvIp4: default to Scope[0]
     State.Scope := pointer(fScope);
   result := State.Scope <> nil;
 end;
@@ -6198,7 +6233,9 @@ begin
            (p^.State = lsReserved) then // reserved = client refused this IP
         begin
           // first time seen (most common case), or renewal
-          if not RetrieveFrameIP(State, p) then // IP from option 50
+          State.Ip4 := DhcpIP4(@State.Recv, State.RecvLens[doRequestedAddress]);
+          if (State.Ip4 = 0) or
+             not RetrieveFrameIP(State, p) then // IP from option 50
           begin
             State.Ip4 := State.Pool^.NextIp4; // guess a free IP from pool
             if State.Ip4 = 0 then
@@ -6239,6 +6276,7 @@ begin
     dmtRequest:
       begin
         inc(State.Scope^.Metrics.Current[dsmRequest]);
+        State.Ip4 := DhcpIP4(@State.Recv, State.RecvLens[doRequestedAddress]);
         ip := DhcpIP4(@State.Recv, State.RecvLens[doServerIdentifier]);
         if (ip <> 0) and
            (ip <> State.Scope^.ServerIdentifier) then
@@ -6261,7 +6299,6 @@ begin
           if p^.State = lsStatic then
           begin
             // check option 50 requested IP on SELECTING or INIT-REBOOT
-            State.Ip4 := DhcpIP4(@State.Recv, State.RecvLens[doRequestedAddress]);
             if (State.Ip4 <> 0) and
                (State.Ip4 <> p^.IP4) then
             begin
@@ -6272,7 +6309,8 @@ begin
           end;
           inc(State.Scope^.Metrics.Current[dsmLeaseRenewed]);
         end
-        else if RetrieveFrameIP(State, p) then // IP from option 50
+        else if (State.Ip4 <> 0) and
+                RetrieveFrameIP(State, p) then // IP from option 50
         begin
           // no lease, but Option 50 = INIT-REBOOT
           if p = nil then
@@ -6508,9 +6546,72 @@ begin
   fFrame := @fState.Recv;
   fClientPort := aScope.ClientPort;
   fServerPort := aScope.ServerPort;
-  inherited Create(aOwner.Log, aInterface.IP, UInt32ToUtf8(aScope.ServerPort),
+  {$ifdef HAS_IP_PKTINFO}
+  // register main network interface
+  AddInterface(aScope, aInterface);
+  // binding aInterface.IP would not receive the 255.255.255.255 broadcasts
+  fPacketInfo := true; // let TUdpServerThread retrieve the interface number
+  inherited Create(aOwner.Log, cAnyHost, UInt32ToUtf8(fServerPort), '', 1000);
+  {$else}
+  inherited Create(aOwner.Log, aInterface.IP, UInt32ToUtf8(fServerPort),
     aScope.Main.Name, 1000);
+  {$endif HAS_IP_PKTINFO}
 end;
+
+{$ifdef HAS_IP_PKTINFO}
+procedure TDhcpServerThread.AddInterface(const aScope: TDhcpScope;
+  const aInterface: TMacAddress);
+var
+  n: PtrInt;
+begin
+  n := length(fInterface);
+  SetLength(fInterface, n + 1);
+  with fInterface[n] do
+  begin
+    IfIndex := aInterface.IfIndex;
+    ClientPort := aScope.ClientPort;
+    NetIsIP4(pointer(aInterface.IP), @IP4);
+  end;
+end;
+
+function TDhcpServerThread.GetInterfacePtr(ifindex: integer): PDhcpServerInterface;
+var
+  n: TDALen;
+begin
+  // caller made at least fOwner.fScopeSafe.ReadLock
+  result := pointer(fInterface); // fInterface[] as set by TDhcpServer.Bind
+  if (result = nil) or
+     (result^.IfIndex = ifindex) then // most likely the first (single) one
+    exit;
+  n := PDALen(PAnsiChar(result) - _DALEN)^ + _DAOFF; // = length(fInterface)
+  repeat
+    dec(n);
+    if n = 0 then
+      break;
+    inc(result);
+    if result^.IfIndex = ifindex then
+      exit;
+  until false;
+  result := nil;
+end;
+
+function TDhcpServerThread.GetFramePort(ip: PNetIP4): TNetPort;
+var
+  p: PDhcpServerInterface;
+begin
+  fOwner.fScopeSafe.ReadLock;
+  p := GetInterfacePtr(fFrameIfIndex); // fFrameIfIndex set for current frame
+  if p <> nil then
+  begin
+    result := p^.ClientPort;
+    if ip <> nil then
+      ip^ := p^.IP4;
+  end
+  else
+    result := 0;
+  fOwner.fScopeSafe.ReadUnLock;
+end;
+{$endif HAS_IP_PKTINFO}
 
 function TDhcpServerThread.DoBind: TNetResult;
 begin
@@ -6521,8 +6622,7 @@ end;
 
 procedure TDhcpServerThread.OnShutdown;
 begin
-  fOwner.ThreadShutdownNotify(self);
-  fOwner := nil;
+  fOwner := nil; // TDhcpServer.Shutdown own and manage each TDhcpServerThread
 end;
 
 procedure TDhcpServerThread.OnIdle(tix64: Int64);
@@ -6534,13 +6634,23 @@ end;
 procedure TDhcpServerThread.OnFrameReceived(len: integer; var remote: TNetAddr);
 var
   nr: TNetResult;
+  port: TNetPort;
+  ifindex: integer;
 begin
   // avoid GPF during shutdown
   if fOwner = nil then
     exit;
+  // locate the interface and bound IP4 as set by Bind()
+  {$ifdef HAS_IP_PKTINFO}
+  port := GetFramePort(@fState.RecvIp4); // fFrameIfIndex lookup
+  if port = 0 then
+    exit; // not found in fInterface[]
+  {$else}
+  port := fClientPort;
+  fState.RecvIp4 := fSockAddr.IP4; // bound server IP - not remote.IP4
+  {$endif HAS_IP_PKTINFO}
   // parse the request, and compute the response
   fState.RecvLen := len;
-  fState.RecvIp4 := remote.IP4;
   fState.BootTix32 := GetUptimeSec; // not GetTickSec to include sleep time
   len := fOwner.ComputeResponse(fState);
   if len <= 0 then
@@ -6555,21 +6665,25 @@ begin
   else if fState.SendType = dmtNak then
     // RFC 2131 4.3.2: with no relay, a DHCPNAK MUST be broadcasted to
     // 0xffffffff because the client may have a wrong address or subnet mask
-    remote.SetIP4Port(cAnyHost32, fClientPort)
+    remote.SetIP4Port(cAnyHost32, port)
   else if (fState.Recv.ciaddr <> 0) and
           (fState.Recv.flags and DHCP_BROADCAST_FLAG = 0) and
           (fState.RecvType in [dmtRequest, dmtInform]) then
     // unicast to known client IP
-    remote.SetIP4Port(fState.Recv.ciaddr, fClientPort)
+    remote.SetIP4Port(fState.Recv.ciaddr, port)
   else
     // RFC 2131 4.1: broadcast back the response to 0xffffffff
-    remote.SetIP4Port(cAnyHost32, fClientPort);
+    remote.SetIP4Port(cAnyHost32, port);
+  // a broadcast would follow the default route: force the receiving interface
+  ifindex := 0;
+  if remote.IP4 = cAnyHost32 then
+    ifindex := fFrameIfIndex;
   // actual send back the response frame over UDP
-  nr := fSock.SendTo(@fState.Send, len, remote);
+  nr := fSock.SendToIf(@fState.Send, len, remote, ifindex);
   if (nr <> nrOk) and
      (fOwner <> nil) and
      (fOwner.fLog <> nil) then
-    fOwner.fLog.Add.Log(sllWarning, 'SendTo(%)=%',
+    fOwner.fLog.Add.Log(sllWarning, 'SendToIf(%)=%',
       [remote.IPShort({withport=}true), ToText(nr)], self);
 end;
 
@@ -6578,17 +6692,14 @@ end;
 
 destructor TDhcpServer.Destroy;
 begin
-  if fThreads.List <> nil then
-    Shutdown;
+  Shutdown;
   inherited Destroy;
-  if fThreads.List <> nil then
-    ObjArrayClear(fThreads.List);
 end;
 
 function TDhcpServer.GetThread(s: PDhcpScope): TDhcpServerThread;
 var
   t: ^TDhcpServerThread;
-  n: integer;
+  n {$ifdef HAS_IP_PKTINFO} , i {$endif}: integer;
 begin
   result := nil;
   if s = nil then
@@ -6597,23 +6708,58 @@ begin
   try
     t := pointer(fThreads.List);
     for n := 1 to length(fThreads.List) do
+    begin
+      {$ifdef HAS_IP_PKTINFO}
+      for i := 0 to high(t^.fInterface) do
+        if s^.Subnet.Match(t^.fInterface[i].IP4) then
+      {$else}
       if s^.Subnet.Match(t^.BindAddress) then
-      begin
-        result := t^;
-        exit;
-      end
-      else
-        inc(t);
+      {$endif HAS_IP_PKTINFO}
+        begin
+          result := t^;
+          exit;
+        end;
+      inc(t);
+    end;
   finally
     fThreads.Safe.UnLock;
   end;
 end;
 
 function TDhcpServer.EnsureBound(s: PDhcpScope; mac: PMacAddress): TDhcpServerThread;
+{$ifdef HAS_IP_PKTINFO}
+var
+  i: PtrInt;
+{$endif HAS_IP_PKTINFO}
 begin
+  // validate the scope by subnet
   result := GetThread(s);
+  {$ifdef HAS_IP_PKTINFO}
   if result <> nil then
+  begin
+    if result.GetInterfacePtr(mac^.IfIndex) = nil then
+      EDhcpServer.RaiseUtf8(
+        '%.Bind(%): subnet already bound to another interface',
+        [self, mac^.IP]);
+    exit; // already registered on this interface
+  end;
+  // a single 0.0.0.0 socket per server port identifies all its interfaces
+  if mac^.IfIndex <= 0 then
+    EDhcpServer.RaiseUtf8('%.Bind(%): no interface index', [self, mac^.IP]);
+  fThreads.Safe.Lock;
+  for i := 0 to high(fThreads.List) do
+    if TDhcpServerThread(fThreads.List[i]).fServerPort = s^.ServerPort then
+      result := pointer(fThreads.List[i]);
+  fThreads.Safe.UnLock;
+  if result <> nil then
+  begin
+    result.AddInterface(s^, mac^);
     exit;
+  end;
+  {$else}
+  if result <> nil then
+    exit; // already registered on this interface
+  {$endif HAS_IP_PKTINFO}
   result := TDhcpServerThread.Create(self, s^, mac^); // may raise exception
   fThreads.Add(result);
 end;
@@ -6632,14 +6778,14 @@ begin
     begin
       // bind to all interfaces matching scopes by default
       mac := pointer(all);
-      n := length(all);
-      repeat
+      for n := 1 to length(all) do
+      begin
         ds := GetScope(mac^.IP);
         if ds <> nil then
           EnsureBound(ds, mac);
         inc(mac);
-        dec(n);
-      until n = 0;
+      end;
+      // no interface yet is just ignored for Bind('') - should retry later
     end
     else
     begin
@@ -6657,15 +6803,32 @@ begin
   end;
 end;
 
-procedure TDhcpServer.ThreadShutdownNotify(Sender: TDhcpServerThread);
-begin
-  if self <> nil then
-    fThreads.Terminated(Sender);
-end;
-
 procedure TDhcpServer.Shutdown;
+var
+  threads: TDhcpServerThreadDynArray;
+  i: PtrInt;
 begin
-  fThreads.TerminateAndWait({secs=}30, self, fLog);
+  // detach the owned threads from the internal list
+  fThreads.Safe.Lock;
+  try
+    threads := TDhcpServerThreadDynArray(fThreads.List);
+    fThreads.List := nil;
+  finally
+    fThreads.Safe.UnLock;
+  end;
+  // phase 1: signal all threads before waiting for any
+  for i := 0 to high(threads) do
+    threads[i].Terminate;
+  try
+    // phase 2: wake blocked UDP receivers and wait
+    for i := 0 to high(threads) do
+      threads[i].TerminateAndWaitFinished(5000); // check for the state
+    for i := 0 to high(threads) do
+      threads[i].WaitFor; // ensures the OS thread actually exited
+  finally
+    // TUdpServerThread.Destroy will eventually closes each fSock handle
+    ObjArrayClear(threads);
+  end;
 end;
 
 

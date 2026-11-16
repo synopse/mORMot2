@@ -2183,11 +2183,11 @@ asm
         mov     dword ptr [esp + 08H], 0 // bits
         xor     edi, edi
         {$ifdef FPC} align 16 {$else} {$ifdef ASMALIGN} .align 16 {$endif}{$endif}
-@main:  cmp     ebx, [esp + 04H]      // src_end
+@main:  cmp     ebx, [esp + 04H]   // src_end
         jae     @done
         cmp     dword ptr [esp + 08H], 0
         jne     @token
-        mov     edi, [ebx]          // next 32 control bits
+        mov     edi, [ebx]         // next 32 control bits
         add     ebx, 4
         mov     dword ptr [esp + 08H], 32
         cmp     ebx, [esp+04H]
@@ -2199,12 +2199,11 @@ asm
         test    edi, edi
         jz      @litcnt            // all remaining bits are literals
         bsf     ecx, edi           // guaranteed nonzero
-@litcnt:mov     edx, [esp + 04H]     // src_end
+@litcnt:mov     edx, [esp + 04H]   // src_end
         sub     edx, ebx           // compressed bytes remaining
         cmp     ecx, edx
-        jbe     @litcap
-        mov     ecx, edx
-@litcap:mov     [esp + 10H], ecx      // save run
+        cmova   ecx, edx           // cap last (partial) control word
+        mov     [esp + 10H], ecx   // save run
         cmp     ecx, 4
         jb      @litb
         // final dword first, then backwards by dwords
@@ -2246,21 +2245,21 @@ asm
 @read:  movzx   edx, word ptr [ebx]
         add     ebx, 2
         mov     eax, edx
-        shr     edx, 4            // offset hash index
-        and     eax, 15           // match length nibble
+        shr     edx, 4             // offset hash index
+        and     eax, 15            // match length nibble
         add     eax, 2
         cmp     eax, 2
         jne     @short
         movzx   eax, byte ptr [ebx]
         inc     ebx
         add     eax, 18
-@short: mov     [esp + 0CH], eax    // match length
+@short: mov     [esp + 0CH], eax   // match length
         mov     eax, [esp + 1CH + edx * 4] // source offset
         mov     ecx, esi
-        sub     ecx, eax          // dst - match source
+        sub     ecx, eax           // dst - match source
         mov     edx, [esp + 0CH]
         cmp     ecx, edx
-        jb      @ovlap            // overlapping match: forward byte copy
+        jb      @ovlap             // overlapping match: forward byte copy
         // retain existing i386 fast match paths, including pre-SSE2 CPUs
         cmp     edx, 32
         ja      @large
@@ -2268,7 +2267,7 @@ asm
         jg      @9_32
 {$ifdef HASNOSSE2}
         mov     ecx, [eax]
-        mov     eax, [eax + 4]      // same 8-byte speculative copy as MoveFast()
+        mov     eax, [eax + 4]     // same 8-byte speculative copy as MoveFast()
         mov     [esi], ecx
         mov     [esi + 4], eax
         jmp     @movend
@@ -2349,8 +2348,8 @@ asm
         jnz     @by
         pop     esi
         pop     ebx
-@movend:cmp     ebx, [esp + 04H]    // src_end
-        jae     @done             // final token: don't hash any further
+@movend:cmp     ebx, [esp + 04H]   // src_end
+        jae     @done              // final token: don't hash any further
         cmp     ebp, esi
         jae     @finish
         {$ifdef FPC} align 16 {$else} {$ifdef ASMALIGN} .align 16 {$endif}{$endif}
@@ -2363,12 +2362,12 @@ asm
         mov     [esp + 1CH + edx * 4], ebp
         cmp     ebp, esi
         jb      @hash2
-@finish:add     esi, [esp + 0CH]    // match length
+@finish:add     esi, [esp + 0CH]   // match length
         lea     ebp, [esi - 1]
         shr     edi, 1
         dec     dword ptr [esp + 08H]
         jmp     @main
-@done:  mov     eax, [esp]
+@done:  mov     eax, [esp]         // result
         add     esp, 16412
         pop     edi
         pop     esi

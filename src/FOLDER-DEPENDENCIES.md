@@ -150,6 +150,7 @@ mORMot2 follows a **strict layered architecture** with 14 source folders organiz
 - **Key Units:**
   - `mormot.crypt.core` - AES, SHA-2, SHA-3, HMAC, PBKDF2
   - `mormot.crypt.secure` - Secure random, password hashing
+  - `mormot.crypt.factory` - High-level `Rnd`/`Hash`/`Sign`/`Cipher`/`Asym`/`Cert`/`Store` factories
   - `mormot.crypt.ecc` - Elliptic Curve Cryptography
   - `mormot.crypt.ecc256r1` - ECC secp256r1 curve
   - `mormot.crypt.rsa` - RSA encryption/signatures
@@ -165,14 +166,17 @@ mORMot2 follows a **strict layered architecture** with 14 source folders organiz
 
 ### Layer 2: Networking
 
-#### **net** (18 files)
+#### **net** (22 files)
 - **Dependencies:** core, crypt
 - **Key Units:**
   - `mormot.net.sock` - Low-level sockets API abstraction
   - `mormot.net.http` - HTTP protocol implementation
   - `mormot.net.client` - HTTP client
   - `mormot.net.server` - HTTP server
+  - `mormot.net.server.win` - Windows http.sys HTTP and WebSockets servers
+  - `mormot.net.peercache` - Local peer-to-peer HTTP cache
   - `mormot.net.async` - Asynchronous I/O
+  - `mormot.net.proxy` - HTTP server with proxy and cache
   - `mormot.net.ws.core` - WebSocket core
   - `mormot.net.ws.client` - WebSocket client
   - `mormot.net.ws.server` - WebSocket server

@@ -2293,6 +2293,7 @@ type
     function ReceivePending: integer;
     function Send(Buffer: pointer; var Length: integer): TNetResult;
     function ReleaseBuffers: PtrInt;
+    procedure SocketClosed;
   end;
 
 
@@ -3518,6 +3519,11 @@ begin
   fOutput := '';
   fDataPos := 0;
   fOutputPos := 0;
+end;
+
+procedure TSChannelNetTls.SocketClosed;
+begin
+  fSocket := nil; // Destroy won't call CleanShutdown on a closed handle
 end;
 
 

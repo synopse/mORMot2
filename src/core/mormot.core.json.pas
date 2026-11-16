@@ -195,6 +195,10 @@ function IsStringJson(P: PUtf8Char; len: PtrInt): boolean; overload;
 /// test if the supplied buffer is a valid JSON number with no trailing space
 function IsNumberJson(P: PUtf8Char): boolean;
 
+/// test if the supplied variable is case-sensitive 'null' JSON identifier
+function IsNullJson(const U: RawUtf8): boolean;
+  {$ifdef HASINLINE} inline; {$endif}
+
 /// test if the supplied buffer is a valid JSON true/false boolean with no space
 function IsBooleanJson(P: PUtf8Char; V: PBoolean = nil): boolean;
   {$ifdef HASINLINE} inline; {$endif}
@@ -204,7 +208,9 @@ function IsConstantOrNumberJson(P: PUtf8Char; len: PtrUInt): boolean;
 
 /// test if the supplied text buffer seems to be a correct (extended) JSON value
 // - will allow comments and extended MongoDB JSON syntax unless Strict=true
-// - numbers, escaped strings and commas are wild guessed, for performance
+// - numbers, escaped strings and commas are wild guessed, for performance: even
+// in Strict=true mode, this is not a full RFC 8259 validation function, but
+// it validates the input would be good enough at least for our own JSON parser
 function IsValidJson(P: PUtf8Char; len: PtrInt; strict: boolean = false): boolean; overload;
 
 /// test if the supplied text seems to be a correct (extended) JSON value
@@ -578,6 +584,10 @@ procedure QuotedStrJson(P: PUtf8Char; PLen: PtrInt; var result: RawUtf8;
 // - with proper escaping of the content, and surounding " characters
 function QuotedStrJson(const aText: RawUtf8): RawUtf8; overload;
   {$ifdef HASINLINE}inline;{$endif}
+
+/// append UTF-8 content as JSON-escaped text into a TSynTempAdder instance
+// - P may contain #0 bytes, which are escaped as \u0000
+procedure AdderJsonEscape(var Dest: TSynTempAdder; P, PEnd: PUtf8Char);
 
 const
   FIELDCOUNT_PATTERN: PUtf8Char = '{"fieldCount":'; // PatternLen = 14 chars
@@ -963,7 +973,8 @@ type
   /// event signature for TPreprocAbstract.OnAddDebugComment callback
   TOnPreprocAddDebugComment = procedure(const info: ShortString) of object;
   /// flags used to identify the $(ident) variables stored by TPreprocAbstract
-  TPreprocMarker = (pmTemplate, pmConstNum, pmEscapedString, pmPlainString);
+  TPreprocMarker = (
+    pmTemplate, pmConstNum, pmEscapedString, pmPlainString);
 
   /// abstract class used for JSON or Text pre-processing as $(ident) and $if$
   // - pre-processing logic is properly implemented in mormot.core.fmt.pas
@@ -2746,13 +2757,13 @@ begin
   StackCount := 0;
   JsonFirst := @JSON_TOKENS;
   Max := PMax;
-end; // RootCount is not initialized by default unless InitCount() is called
+  RootCount := 0;
+end;
 
 procedure TJsonParser.InitCount(Strict: boolean; PMax: PUtf8Char;
   First: TJsonParserState);
 begin
   Init(Strict, PMax);
-  RootCount := 0;
   Stack[0] := stValue; // emulate parsing of the opening [ or {
   inc(StackCount);
   State := First;
@@ -3032,7 +3043,7 @@ begin
       State := stValue;
   else if Fmt * [jrfTrailingComma, jrfNoTrailingComma] = [] then
          if (FmtJson <> jsonMorml) or  // no need of },value or ],value
-            not (W.B^ in ['}', ']']) then
+            not (W.LastChar in ['}', ']']) then
            W.AddDirect(',');
   end;
   if jrfIndent in Fmt then
@@ -3237,7 +3248,7 @@ begin
     m := pmPlainString; // AddJsonEscape
   ReformatBeginValue;
   if m = pmConstNum then
-    W.AddShort(v, l)
+    W.AddNoJsonEscape(v, l)
   else
   begin
     W.AddDirect('"');
@@ -3245,7 +3256,7 @@ begin
       if m = pmPlainString then
         W.AddJsonEscape(v, l)    // |default or enc:NAME
       else
-        W.AddShort(v, l); // pmEscapedString: val = "was \r quoted"
+        W.AddNoJsonEscape(v, l); // pmEscapedString: val = "was \r quoted"
     W.AddDirect('"');
   end;
   ReformatEndValue;
@@ -3318,7 +3329,7 @@ dquote:   ReformatBeginValue;
           if (Value <> nil) and
              (jcEndOfJsonValueField in JsonSet[Value^]) then // #0#9#10#13 ,}]{[
           begin
-            W.AddShort(P, Value - P); // true number
+            W.AddNoJsonEscape(P, Value - P); // true number, unbounded length
             P := Value;
             ReformatEndValue;
           end
@@ -3413,9 +3424,9 @@ ident:    Value := P;
           inc(StackCount);
           inc(W.fHumanReadableLevel);
           if FmtJson = jsonMorml then // no need of ,{ ,[ :{ or :[
-            if W.B^ in [':', ','] then
+            if W.LastChar in [':', ','] then
               W.CancelLastChar;
-          W.AddDirect(P^);
+          W.Add(P^);
           if P^ = '{' then
             State := stObjectNameFirst
           else
@@ -3431,7 +3442,7 @@ ident:    Value := P;
           dec(W.fHumanReadableLevel);
           if jrfIndent in Fmt then
             W.AddCRAndIndent;
-          W.AddDirect(P^);
+          W.Add(P^);
           inc(P);
           if (jrfTrailingComma in Fmt) and
              not (State in [stObjectNameFirst, stValueFirst]) then
@@ -3635,6 +3646,12 @@ begin
         end;
     end;
   result := false;
+end;
+
+function IsNullJson(const U: RawUtf8): boolean;
+begin
+  result := (pointer(U) <> nil) and
+            (PInteger(U)^ = NULL_LOW);
 end;
 
 function IsConstantOrNumberJson(P: PUtf8Char; len: PtrUInt): boolean;
@@ -4212,7 +4229,8 @@ begin
       begin // should be unescaped in-place
         info.Json := Name - 1;
         info.GetJsonField;
-        if (info.Value <> nil) and
+        if (info.Json <> nil) and
+           (info.Value <> nil) and
            info.WasString and
            (info.EndOfObject = ':') then
         begin
@@ -4607,7 +4625,7 @@ begin
         exit;
       if aftername = stPropNameUnquoted then // was 'a:' -> append '"a",'
         wk.AddDirect('"');
-      wk.AddShort(kb, ke - kb);
+      wk.AddNoJsonEscape(kb, ke - kb);
       if aftername = stPropNameUnquoted then
         wk.AddDirect('"', ',')
       else
@@ -5001,6 +5019,39 @@ begin
   QuotedStrJson(pointer(aText), Length(aText), result, '', '');
 end;
 
+procedure AdderJsonEscape(var Dest: TSynTempAdder; P, PEnd: PUtf8Char);
+var
+  b: PUtf8Char;
+  x: PCardinalArray;
+  esc: byte;
+begin
+  if (P = nil) or
+     (PtrUInt(PEnd) <= PtrUInt(P)) then
+    exit;
+  repeat
+    b := P;
+    while (P < PEnd) and
+          (JSON_ESCAPE[byte(P^)] = JSON_ESCAPE_NONE) do
+      inc(P);
+    Dest.Add(b, P - b); // copy unescaped text at once
+    if P >= PEnd then
+      break;
+    esc := JSON_ESCAPE[byte(P^)];
+    if esc <= JSON_ESCAPE_UNICODEHEX then
+    begin
+      x := Dest.Add(6);
+      x[0] := JSON_UHEXC;
+      x[1] := TwoDigitsHexW[P^];
+    end
+    else
+    begin
+      Dest.Add('\');
+      Dest.AddDirect(AnsiChar(esc));
+    end;
+    inc(P);
+  until false;
+end;
+
 function Expect(var P: PUtf8Char; Pattern: PUtf8Char; PatternLen: PtrInt): boolean;
 var
   i: PtrInt;
@@ -5381,15 +5432,12 @@ begin
     else
       W.AddShort4(NULL_LOW);
     exit;
-  end
-  else
-    W.Add('"');
+  end;
   bak := W.CustomOptions;
   if woDateTimeWithZSuffix in Options then
     include(W.fCustomOptions, twoDateTimeWithZ);
-  W.AddDateTime(Value, 'T', #0, WithMS);
+  W.AddDateTime(Value, 'T', '"', WithMS);
   W.CustomOptions := bak;
-  W.AddDirect('"');
 end;
 
 procedure TJsonSaveContext.AddShortBoolean(PS: PShortString; Value: boolean);

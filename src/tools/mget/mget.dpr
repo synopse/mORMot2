@@ -49,6 +49,7 @@ uses
   mormot.net.http,
   mormot.net.client,
   mormot.net.server,
+  mormot.net.peercache,
   mormot.crypt.secure,
   mormot.lib.openssl11,
   mormot.tools.mget;

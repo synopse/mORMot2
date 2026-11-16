@@ -50,6 +50,7 @@ uses
   Posix.SysMman,
   Posix.SysStat,
   Posix.SysWait,
+  Posix.Signal,
   Posix.SysSocket,
   Posix.SysUtsname,
   Posix.SysSysctl,
@@ -160,9 +161,20 @@ const
   SIGINT  = 2;
   SIGQUIT = 3;
   SIGKILL = 9;
+  SIGPIPE = 13;
   SIGTERM = 15;
 
+  // same values on Linux, Android and MacOS
+  F_GETFD = 1;
+  F_SETFD = 2;
+  WNOHANG = 1;
+  SIG_SETMASK = Posix.Signal.SIG_SETMASK; // 2 on Linux, but 3 on MacOS
+  {$ifdef OSLINUX}
+  O_CLOEXEC = $80000; // for pipe2() and open()
+  {$endif OSLINUX}
+
   W_OK    = Posix.Unistd.W_OK;
+  X_OK    = Posix.Unistd.X_OK;
   S_IRUSR = Posix.SysStat.S_IRUSR;
   S_IWUSR = Posix.SysStat.S_IWUSR;
   S_IRGRP = Posix.SysStat.S_IRGRP;
@@ -270,6 +282,29 @@ function fpexecve(path: PAnsiChar; argc, envp: pointer): cint;
 procedure fpexit(code: cint);
 function WaitProcess(pid: cint): cint;
 
+type
+  TFilDes       = array[0..1] of cint;
+  TSigSet       = sigset_t;
+  PSigSet       = Psigset_t;
+  SigactionRec  = sigaction_t; // handler field name depends on the platform
+  PSigactionRec = Psigaction_t;
+
+function fppipe(var fd: TFilDes): cint;
+function fpdup2(oldfd, newfd: cint): cint;
+function fpfcntl(fd, cmd: cint; arg: cint = 0): cint;
+function fpwaitpid(pid: TPid; status: pcint; options: cint): TPid;
+function fpwaitid(pid: TPid; info: pointer; options: cint): cint;
+function wifexited(status: cint): boolean;
+function wexitstatus(status: cint): cint;
+function fpsigemptyset(var nset: TSigSet): cint;
+function fpsigprocmask(how: cint; nset, oset: PSigSet): cint;
+function fpsigaction(sig: cint; act, oact: PSigactionRec): cint;
+
+{$ifdef OSLINUX}
+function pipe2(fd: pcint; flags: cint): cint; cdecl;
+  external clib name 'pipe2'; // glibc 2.9+
+{$endif OSLINUX}
+
 function fpmmap(start: pointer; len: PtrUInt; prot, flags, fd: cint; offst: Int64): pointer;
 function fpmunmap(start: pointer; len: PtrUInt): cint;
 
@@ -337,8 +372,10 @@ procedure _OsLoadResString(Rec: PResStringRec; var Res: string);
 { ****************** Network POSIX Operating Systems API for Delphi }
 
 const
+  IPPROTO_IP    = 0;
   IPPROTO_TCP   = IPPROTO_TCP;
   IPPROTO_UDP   = IPPROTO_UDP;
+
   TCP_NODELAY   = 1;
   TCP_CORK      = 3; // Linux specific
   TCP_NOPUSH    = 4; // BSD specific
@@ -348,7 +385,9 @@ const
   TCP_KEEPINTVL = 5;
   TCP_KEEPCNT   = 6;
   {$endif OSLINUXANDROID}
+
   MSG_PEEK      = Posix.SysSocket.MSG_PEEK;
+
   SHUT_RD       = Posix.SysSocket.SHUT_RD;
   SHUT_WR       = Posix.SysSocket.SHUT_WR;
   SHUT_RDWR     = Posix.SysSocket.SHUT_RDWR;
@@ -356,12 +395,16 @@ const
   SOCK_RAW      = Posix.SysSocket.SOCK_RAW;
   SOCK_STREAM   = Posix.SysSocket.SOCK_STREAM;
   SOCK_DGRAM    = Posix.SysSocket.SOCK_DGRAM;
+
   AF_INET       = Posix.SysSocket.AF_INET;
   AF_INET6      = Posix.SysSocket.AF_INET6;
   AF_UNIX       = Posix.SysSocket.AF_UNIX;
   AF_PACKET     = 17; // Linux specific
+
   SOMAXCONN     = Posix.SysSocket.SOMAXCONN;
+
   SOL_SOCKET    = Posix.SysSocket.SOL_SOCKET;
+
   SO_ERROR      = Posix.SysSocket.SO_ERROR;
   SO_SNDTIMEO   = Posix.SysSocket.SO_SNDTIMEO;
   SO_RCVTIMEO   = Posix.SysSocket.SO_RCVTIMEO;
@@ -378,7 +421,6 @@ const
   SO_PRIORITY   = Posix.SysSocket.SO_PRIORITY;
   {$endif OSLINUXANDROID}
   {$endif OSANDROID}
-
 
 type
   // POSIX definitions to share the same type fields between FPC and Delphi
@@ -782,6 +824,56 @@ begin
     result := WEXITSTATUS(s)
   else if result > 0 then
     result := -result;
+end;
+
+function fppipe(var fd: TFilDes): cint;
+begin
+  result := pipe(PInteger(@fd));
+end;
+
+function fpdup2(oldfd, newfd: cint): cint;
+begin
+  result := dup2(oldfd, newfd);
+end;
+
+function fpfcntl(fd, cmd, arg: cint): cint;
+begin
+  result := fcntl(fd, cmd, arg);
+end;
+
+function fpwaitpid(pid: TPid; status: pcint; options: cint): TPid;
+begin
+  result := waitpid(pid, PInteger(status), options);
+end;
+
+function fpwaitid(pid: TPid; info: pointer; options: cint): cint;
+begin
+  result := waitid(P_PID, pid, info, options);
+end;
+
+function wifexited(status: cint): boolean;
+begin
+  result := Posix.SysWait.WIFEXITED(status);
+end;
+
+function wexitstatus(status: cint): cint;
+begin
+  result := Posix.SysWait.WEXITSTATUS(status);
+end;
+
+function fpsigemptyset(var nset: TSigSet): cint;
+begin
+  result := sigemptyset(nset);
+end;
+
+function fpsigprocmask(how: cint; nset, oset: PSigSet): cint;
+begin
+  result := sigprocmask(how, nset, oset);
+end;
+
+function fpsigaction(sig: cint; act, oact: PSigactionRec): cint;
+begin
+  result := sigaction(sig, act, oact);
 end;
 
 function fpmmap(start: pointer; len: PtrUInt; prot, flags, fd: cint; offst: Int64): pointer;

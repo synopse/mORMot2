@@ -213,6 +213,10 @@ type
     procedure TStreamSlow(Context: TObject);
     /// client side geniune 64 bit identifiers generation
     procedure TSynUniqueIdentifierSlow(Sender: TObject);
+    /// test RunRedirect() function
+    procedure DoRunRedirect(Dummy: TObject);
+    /// test TExternalProcess class
+    procedure DoTExternalProcess(Sender: TObject);
   published
     /// test RecordCopy(), TRttiMap and TRttiFilter
     procedure _Records;
@@ -306,6 +310,15 @@ type
 
 
 implementation
+
+{$ifdef OSPOSIX}
+uses
+  {$ifdef FPC}
+  baseunix;
+  {$else}
+  mormot.core.os.delphi;
+  {$endif FPC}
+{$endif OSPOSIX}
 
 
 { TOrmPeople }
@@ -3587,24 +3600,24 @@ end;
 procedure TTestCoreBase._ParseCommandArgs;
 
   procedure Test(const cmd: RawUtf8; const expected: array of RawUtf8;
-     const flags: TParseCommands = []; posix: boolean = true);
+     const flags: TParseCommands = []; opt: TParseCommandOptions = [pcoPosix]);
   var
     tmp: RawUtf8;
     n, i: integer; // integer, not PtrInt
     a: TParseCommandsArgs;
     p: TRawUtf8DynArray;
   begin
-    if CheckFailed(ParseCommandArgs(cmd, nil, nil, nil, posix) = flags) then
+    if CheckFailed(ParseCommandArgs(cmd, nil, nil, nil, opt) = flags) then
       exit;
     FillcharFast(a, SizeOf(a), 255); // ensure a[n]<>nil
-    Check(ParseCommandArgs(cmd, @a, @n, @tmp, posix) = flags);
+    Check(ParseCommandArgs(cmd, @a, @n, @tmp, opt) = flags);
     if (flags <> []) or
        CheckFailed(n = length(expected)) then
       exit;
     for i := 0 to n - 1 do
       Check(StrComp(pointer(a[i]), pointer(expected[i])) = 0);
     Check(a[n] = nil, 'last param should be nil');
-    Check(ExtractCommandArgs(cmd, p, posix) = flags);
+    Check(ExtractCommandArgs(cmd, p, opt) = flags);
     if Check(n = length(p)) then
       for i := 0 to n - 1 do
         CheckEqual(p[i], expected[i]);
@@ -3654,23 +3667,941 @@ begin
   Test('one\ two', ['one two'], []);
   Test('one\\two', ['one\two'], []);
   Test('one\\\\\\two', ['one\\\two'], []);
-  Test('one|two', [], [pcHasRedirection], {posix=}false);
-  Test('one&two', ['one&two'], [], false);
-  Test(''' one'' two', ['''', 'one''', 'two'], [], false);
-  Test('"one" two', ['one', 'two'], [], false);
-  Test('one "two"', ['one', 'two'], [], false);
-  Test('one     "two"', ['one', 'two'], [], false);
-  Test('one " two"', ['one', ' two'], [], false);
-  Test('" one" two', [' one', 'two'], [], false);
-  Test('"one one" two', ['one one', 'two'], [], false);
+  Test('one|two', [], [pcHasRedirection], []);
+  Test('one&two', ['one&two'], [], []);
+  Test(''' one'' two', ['''', 'one''', 'two'], [], []);
+  Test('"one" two', ['one', 'two'], [], []);
+  Test('one "two"', ['one', 'two'], [], []);
+  Test('one     "two"', ['one', 'two'], [], []);
+  Test('one " two"', ['one', ' two'], [], []);
+  Test('" one" two', [' one', 'two'], [], []);
+  Test('"one one" two', ['one one', 'two'], [], []);
+  // regression for #764: optional Windows caret escaping
+  // Legacy Windows behavior is preserved
+  Test('grep ^Foo', ['grep', 'Foo'], [], []);
+  Test('grep ^^Foo', ['grep', '^Foo'], [], []);
+  Test('grep ^', [], [pcInvalidCommand, pcHasEndingBackSlash], []);
+  // Interactive input: carets are ordinary characters
+  Test('grep ^Foo', ['grep', '^Foo'], [], [pcoNoCaretEscape]);
+  Test('grep ^^Foo', ['grep', '^^Foo'], [], [pcoNoCaretEscape]);
+  Test('grep ^', ['grep', '^'], [], [pcoNoCaretEscape]);
+  // Apostrophes and Windows paths are preserved
+  Test('open O''Brien C:\dir\', ['open', 'O''Brien', 'C:\dir\'], [],
+    [pcoNoCaretEscape]);
+  // Quoting still works
+  Test('open "some folder" ^Foo', ['open', 'some folder', '^Foo'], [],
+    [pcoNoCaretEscape]);
+  // The option must not alter POSIX parsing
+  Test('grep ^Foo', ['grep', '^Foo'], [], [pcoPosix, pcoNoCaretEscape]);
+  // The ExtractExecutableName wrapper forwards the options
+  CheckEqual(ExtractExecutableName('^tool arg', [pcoNoCaretEscape]), '^tool');
+  CheckEqual(ExtractExecutableName('^tool arg', []), 'tool');
 end;
+
+type
+  // TOnRedirect is a method, so needs a class instance
+  TRunRedirectTest = class
+  public
+    Output: RawUtf8;
+    Calls: integer;
+    FirstCallEmpty, AbortOnText: boolean;
+    SeenPid: cardinal;
+    ThreadIndex: PtrInt;
+    function OnOutput(const text: RawByteString; pid: cardinal): boolean;
+  end;
+
+function TRunRedirectTest.OnOutput(const text: RawByteString; pid: cardinal): boolean;
+begin
+  if Calls = 0 then
+    FirstCallEmpty := text = '';
+  inc(Calls);
+  SeenPid := pid;
+  ThreadIndex := TSynLog.ThreadIndex;
+  Output := Output + text;
+  result := AbortOnText and
+            (text <> '');
+end;
+
+{$ifdef OSPOSIX}
+
+{$ifdef FPC} // sigaction_t handler field name depends on the Delphi platform
+
+type
+  // send SIGUSR1 to a given thread every 20 ms
+  TSignalSender = class(TThreadAbstract)
+  protected
+    fTarget: TThreadID;
+    procedure Execute; override;
+  public
+    Sent: integer;
+    constructor Create(target: TThreadID); reintroduce;
+  end;
+
+function pthread_kill(thread: TThreadID; sig: cint): cint;
+  cdecl; external {$ifdef OSLINUX} 'pthread' {$endif} name 'pthread_kill';
+
+constructor TSignalSender.Create(target: TThreadID);
+begin
+  fTarget := target;
+  inherited Create({suspended=}false);
+end;
+
+procedure TSignalSender.Execute;
+begin
+  while not Terminated do
+  begin
+    if pthread_kill(fTarget, SIGUSR1) = 0 then
+      inc(Sent);
+    SleepHiRes(10);
+  end;
+end;
+
+procedure NoopSignalHandler(sig: cint); cdecl;
+begin
+end;
+
+{$endif FPC}
+
+function ProcessExists(pid: cint): boolean; // also true for a zombie
+begin
+  result := (pid > 0) and
+            ((fpkill(pid, 0) = 0) or
+             (fpgeterrno = ESysEPERM));
+end;
+
+function ProcessEnded(pid: cint): boolean;
+var
+  i: integer;
+begin
+  for i := 1 to 200 do // an orphan may take some time to be reaped by init
+  begin
+    result := not ProcessExists(pid);
+    if result then
+      exit;
+    SleepHiRes(10);
+  end;
+end;
+
+function OpenedHandles: integer;
+var
+  fd: cint;
+begin
+  result := 0;
+  for fd := 0 to 1023 do
+    if fpfcntl(fd, F_GETFD) >= 0 then
+      inc(result);
+end;
+
+// wait for the first line of output, i.e. the PID of a background process
+function ReadFirstLinePid(p: TExternalProcess): cint;
+var
+  s: RawUtf8;
+  i: integer;
+begin
+  s := '';
+  for i := 1 to 500 do
+  begin
+    s := s + p.ReadAvailable;
+    if PosExChar(#10, s) > 0 then
+      break;
+    SleepHiRes(10);
+  end;
+  result := GetInteger(pointer(s));
+end;
+
+procedure TTestCoreBase.DoRunRedirect(Dummy: TObject);
+var
+  r: TRunRedirectTest;
+  {$ifdef FPC}
+  sender: TSignalSender;
+  sa, old: SigactionRec;
+  {$endif FPC}
+  exitcode: integer;
+  bg: cint;
+  output: RawByteString;
+  start: Int64;
+  cwd: TFileName;
+  dir: RawUtf8;
+
+  procedure Run(const cmd, expected: RawUtf8; expectedexitcode: integer;
+    options: TRunOptions = RUN_CMD; const env: TRunArg = '';
+    const wrkdir: TFileName = '');
+  begin
+    start := GetTickCount64;
+    output := RunRedirect(cmd, @exitcode, nil, 10000, true, env, wrkdir, options);
+    CheckEqual(exitcode, expectedexitcode, cmd);
+    CheckEqual(output, expected, cmd);
+    // should return as soon as the child exited, not after waitfordelayms
+    CheckUtf8(GetTickCount64 - start < 5000, cmd);
+  end;
+
+begin
+  Run('true', '', 0);                                // no output, no shell
+  Run('echo hello', 'hello'#10, 0);                  // some output, no shell
+  Run('sh -c "exit 3"', '', 3);                      // exit code, no shell
+  Run('echo one && echo two', 'one'#10'two'#10, 0);  // via the shell
+  Run('exit 5', '', 5);                              // shell built-in
+  CheckEqual(RunRedirect('echo hi', @exitcode, nil, 10000, {setresult=}false),
+    '', 'setresult');
+  CheckEqual(exitcode, 0, 'setresult');
+  // a process terminated by a signal returns a negative exit code
+  Run('kill -9 $$', '', -SIGKILL);
+  // stdin and stderr are inherited by default, unless specified
+  Run('cat', '', 0, RUN_CMD + [roStdinNull]);
+  Run('echo out; echo err >&2', 'out'#10'err'#10, 0, RUN_CMD + [roStderrMerge]);
+  // env is supplied to the child process
+  Run('echo [$ZVB648]', '[bar]'#10, 0, RUN_CMD, 'ZVB648=bar'#0#0);
+  // wrkdir is applied to the child process only
+  cwd := GetCurrentDir;
+  dir := '/';
+  if cwd = '/' then
+    dir := '/usr';
+  Run('pwd', dir + #10, 0, RUN_CMD, '', TFileName(dir));
+  CheckEqual(StringToUtf8(GetCurrentDir), StringToUtf8(cwd), 'wrkdir');
+  // the child should not inherit an ignored SIGPIPE, e.g. from a server
+  SigPipeIntercept;
+  Run('kill -PIPE $$; echo alive', '', -SIGPIPE);
+  if not IsDebuggerPresent then
+  begin
+    {$ifdef FPC}
+    // a signal received by the calling thread should not abort the redirection
+    FillCharFast(sa, SizeOf(sa), 0);
+    sa.sa_handler := SigActionHandler(@NoopSignalHandler);
+    fpsigaction(SIGUSR1, @sa, @old);
+    sender := TSignalSender.Create(GetCurrentThreadId);
+    try
+      Run('sh -c "sleep 1; echo done; exit 7"', 'done'#10, 7);
+    finally
+      sender.Terminate;
+      sender.WaitFor;
+      // MacOS arm64 runners only send 9 or 10 signals in this second
+      CheckUtf8(sender.Sent >= 3, 'signals=%', [sender.Sent]);
+      sender.Free;
+      fpsigaction(SIGUSR1, @old, nil);
+    end;
+    {$endif FPC}
+  end;
+  r := TRunRedirectTest.Create;
+  try
+    // the callback is called at startup with '', then with the output
+    output := RunRedirect('echo hi', @exitcode, r.OnOutput);
+    CheckEqual(output, 'hi'#10, 'onoutput result');
+    CheckEqual(r.Output, 'hi'#10, 'onoutput');
+    Check(r.FirstCallEmpty, 'onoutput startup');
+    Check(r.Calls >= 2, 'onoutput calls');
+    Check(r.SeenPid <> 0, 'onoutput pid');
+    // returning true from the callback aborts the whole process group
+    r.AbortOnText := true;
+    r.Output := '';
+    start := GetTickCount64;
+    RunRedirect('sleep 30 & echo $!; wait', @exitcode, r.OnOutput);
+    CheckEqual(exitcode, -1, 'abort');
+    CheckUtf8(GetTickCount64 - start < 5000, 'abort delay');
+    bg := GetInteger(pointer(r.Output));
+    Check(bg > 0, 'abort pid');
+    Check(ProcessEnded(bg), 'abort group');
+  finally
+    r.Free;
+  end;
+  // abort after waitfordelayms
+  start := GetTickCount64;
+  RunRedirect('sleep 30', @exitcode, nil, 200);
+  CheckEqual(exitcode, -1, 'timeout');
+  CheckUtf8(GetTickCount64 - start < 5000, 'timeout delay');
+end;
+
+procedure TTestCoreBase.DoTExternalProcess(Sender: TObject);
+var
+  p, b: TExternalProcess;
+  r: TRunRedirectTest;
+  data, s, dir, tool: RawUtf8;
+  cwd: TFileName;
+  start: Int64;
+  bg, pid, hfd: cint;
+  fds: TFilDes;
+  files, i: integer;
+  ndx: PtrInt;
+begin
+  // basic execution with stdout and exit code
+  p := TExternalProcess.Create;
+  try
+    Check(p.State = epsNotStarted, 'state0');
+    CheckEqual(p.ExitCode, -1, 'exitcode0');
+    Check(p.Start('sh -c "echo hello; exit 3"'), 'start');
+    Check(p.State = epsRunning, 'state1');
+    Check(p.Pid <> 0, 'pid');
+    CheckEqual(p.WaitFor(10000), 3, 'waitfor');
+    CheckEqual(p.ExitCode, 3, 'exitcode');
+    Check(p.State = epsExited, 'state2');
+    Check(not p.Running, 'running');
+    CheckEqual(p.ReadAvailable, 'hello'#10, 'output');
+    CheckEqual(p.ReadAvailable, '', 'output2');
+    Check(not p.Start('true'), 'restart');
+    {$ifdef OSLINUX}
+    // a pid which is gone has no name, even just after a successful call
+    s := EnumProcessName(GetCurrentProcessId); // from /proc/<pid>/exe
+    Check((s <> '') and
+          (s[1] = '/'), 'ownpath');
+    CheckEqual(EnumProcessName(p.Pid), '', 'noname');
+    {$endif OSLINUX}
+  finally
+    p.Free;
+  end;
+  // a process terminated by a signal returns a negative exit code
+  p := TExternalProcess.Create;
+  try
+    Check(p.Start('kill -9 $$'), 'start9');
+    CheckEqual(p.WaitFor(10000), -SIGKILL, 'signal');
+  finally
+    p.Free;
+  end;
+  // stderr is merged into stdout by default, or in its own pipe
+  p := TExternalProcess.Create;
+  try
+    Check(p.Start('echo out; echo err >&2'), 'merge');
+    CheckEqual(p.WaitFor(10000), 0, 'merge');
+    CheckEqual(p.ReadAvailable, 'out'#10'err'#10, 'merge');
+  finally
+    p.Free;
+  end;
+  p := TExternalProcess.Create;
+  try
+    Check(p.Start('echo out; echo err >&2', '', '',
+      RUN_PROCESS - [roStderrMerge] + [roStderrPipe]), 'stderr');
+    CheckEqual(p.WaitFor(10000), 0, 'stderr');
+    CheckEqual(p.ReadAvailable, 'out'#10, 'stdout');
+    CheckEqual(p.ReadErrorAvailable, 'err'#10, 'stderr');
+  finally
+    p.Free;
+  end;
+  // stdin is the null device by default
+  p := TExternalProcess.Create;
+  try
+    Check(p.Start('cat'), 'null');
+    CheckEqual(p.WaitFor(10000), 0, 'null');
+    Check(not p.Write('x'), 'nowrite');
+  finally
+    p.Free;
+  end;
+  // full duplex: Write() blocks until cat output is read by the thread
+  SetLength(data, 4 shl 20);
+  for i := 1 to length(data) do
+    data[i] := AnsiChar(i * 7);
+  p := TExternalProcess.Create;
+  try
+    Check(p.Start('cat', '', '', RUN_PROCESS + [roStdinPipe]), 'cat');
+    Check(p.WriteAndCloseStdin(data), 'write');
+    CheckEqual(p.WaitFor(30000), 0, 'cat');
+    s := p.ReadAvailable;
+    CheckEqual(length(s), length(data), 'duplex');
+    Check(s = data, 'duplex');
+  finally
+    p.Free;
+  end;
+  // OnOutput is called instead of filling the ReadAvailable buffer
+  r := TRunRedirectTest.Create;
+  p := TExternalProcess.Create;
+  try
+    p.OnOutput := r.OnOutput;
+    Check(p.Start('echo hi'), 'onoutput');
+    CheckEqual(p.WaitFor(10000), 0, 'onoutput');
+    CheckEqual(r.Output, 'hi'#10, 'onoutput');
+    CheckEqual(p.ReadAvailable, '', 'onoutput');
+    Check(r.SeenPid = p.Pid, 'onoutput pid');
+  finally
+    p.Free;
+    r.Free;
+  end;
+  // the background thread releases its TSynLog thread number when it ends
+  r := TRunRedirectTest.Create;
+  try
+    ndx := 0;
+    for i := 0 to 19 do
+    begin
+      p := TExternalProcess.Create;
+      try
+        p.OnOutput := r.OnOutput;
+        Check(p.Start('echo hi'), 'threadnumber');
+        CheckEqual(p.WaitFor(10000), 0, 'threadnumber');
+      finally
+        p.Free;
+      end;
+      if i = 0 then
+        ndx := r.ThreadIndex;
+    end;
+    Check(r.ThreadIndex < ndx + 10, 'threadnumber reused');
+  finally
+    r.Free;
+  end;
+  // explicit arguments are neither parsed nor given to the shell
+  p := TExternalProcess.Create;
+  try
+    Check(p.Start(['echo', 'a  b', '$HOME', '"q"', '*']), 'args');
+    CheckEqual(p.WaitFor(10000), 0, 'args');
+    CheckEqual(p.ReadAvailable, 'a  b $HOME "q" *'#10, 'args');
+  finally
+    p.Free;
+  end;
+  // the executable is searched in the PATH of the child environment
+  dir := StringToUtf8(TemporaryFileName);
+  Check(CreateDir(Utf8ToString(dir)), 'dir');
+  tool := dir + '/zvb648tool';
+  FileFromString('#!/bin/sh'#10'echo found $ZVB648'#10, Utf8ToString(tool));
+  fpchmod(pointer(tool), $1ed); // octal 755
+  p := TExternalProcess.Create;
+  try
+    Check(p.Start(['zvb648tool'], 'PATH=' + dir + #0'ZVB648=bar'#0#0), 'path');
+    CheckEqual(p.WaitFor(10000), 0, 'path');
+    CheckEqual(p.ReadAvailable, 'found bar'#10, 'path');
+  finally
+    p.Free;
+  end;
+  DeleteFile(Utf8ToString(tool));
+  RemoveDir(Utf8ToString(dir));
+  // wrkdir is applied to the child process only
+  cwd := GetCurrentDir;
+  dir := '/';
+  if cwd = '/' then
+    dir := '/usr';
+  p := TExternalProcess.Create;
+  try
+    Check(p.Start('pwd', '', TFileName(dir)), 'wrkdir');
+    CheckEqual(p.WaitFor(10000), 0, 'wrkdir');
+    CheckEqual(p.ReadAvailable, dir + #10, 'wrkdir');
+    CheckEqual(StringToUtf8(GetCurrentDir), StringToUtf8(cwd), 'wrkdir');
+  finally
+    p.Free;
+  end;
+  // Start() returns false if the executable can't be executed
+  p := TExternalProcess.Create;
+  try
+    Check(not p.Start(['/nonexistent/zvb648']), 'failed1');
+    Check(p.State = epsFailed, 'failed1');
+  finally
+    p.Free;
+  end;
+  p := TExternalProcess.Create;
+  try
+    Check(not p.Start('/nonexistent/zvb648'), 'failed2');
+  finally
+    p.Free;
+  end;
+  p := TExternalProcess.Create;
+  try
+    Check(not p.Start(['zvb648-not-in-path']), 'failed3');
+  finally
+    p.Free;
+  end;
+  // Terminate() stops the whole process group
+  p := TExternalProcess.Create;
+  try
+    Check(p.Start('sleep 30 & echo $!; sleep 30'), 'terminate');
+    bg := ReadFirstLinePid(p);
+    Check(ProcessExists(bg), 'terminate probe'); // validate ProcessExists()
+    start := GetTickCount64;
+    Check(p.Terminate(5000), 'terminate');
+    CheckUtf8(GetTickCount64 - start < 3000, 'terminate delay');
+    CheckEqual(p.ExitCode, -SIGTERM, 'sigterm');
+    Check(ProcessEnded(bg), 'terminate group');
+  finally
+    p.Free;
+  end;
+  // WaitFor() timeout, then Kill()
+  p := TExternalProcess.Create;
+  try
+    Check(p.Start('sleep 30'), 'kill');
+    CheckEqual(p.WaitFor(100), -1, 'waitfor timeout');
+    Check(p.Running, 'kill');
+    p.Kill;
+    CheckEqual(p.WaitFor(5000), -SIGKILL, 'kill');
+  finally
+    p.Free;
+  end;
+  // Destroy terminates and reaps a running process
+  p := TExternalProcess.Create;
+  try
+    Check(p.Start('sleep 30'), 'destroy');
+    pid := p.Pid;
+  finally
+    start := GetTickCount64;
+    p.Free;
+  end;
+  CheckUtf8(GetTickCount64 - start < 3000, 'destroy delay');
+  Check(not ProcessExists(pid), 'destroy');
+  // a background child keeping stdout delays WaitFor() but not Destroy
+  p := TExternalProcess.Create;
+  try
+    Check(p.Start('sleep 30 & echo $!'), 'background');
+    bg := ReadFirstLinePid(p);
+    CheckEqual(p.WaitFor(300), -1, 'background');
+    Check(not p.Running, 'background');
+  finally
+    start := GetTickCount64;
+    p.Free;
+  end;
+  CheckUtf8(GetTickCount64 - start < 2000, 'background delay');
+  if CheckFailed(ProcessExists(bg), 'background') then
+    exit; // never fpkill(0) = our own process group
+  fpkill(bg, SIGKILL);
+  Check(ProcessEnded(bg), 'background');
+  {$if defined(OSLINUX) or defined(OSDARWIN) or defined(OSFREEBSD)}
+  // roCloseChildren closes at Destroy a child left by an ended process
+  bg := 0;
+  p := TExternalProcess.Create;
+  try
+    Check(p.Start('sleep 30 >/dev/null 2>&1 & echo $!; exit 3', '', '',
+      RUN_PROCESS + [roCloseChildren]), 'closechildren');
+    bg := ReadFirstLinePid(p);
+    CheckEqual(p.WaitFor(5000), 3, 'closechildren exitcode');
+    Check(ProcessExists(bg), 'closechildren alive');
+    p.Terminate(100); // as on Windows, does nothing once the process ended
+    Check(ProcessExists(bg), 'closechildren terminate');
+  finally
+    p.Free;
+  end;
+  Check(ProcessEnded(bg), 'closechildren');
+  if ProcessExists(bg) then
+    fpkill(bg, SIGKILL);
+  p := TExternalProcess.Create;
+  try
+    Check(p.Start('kill -9 $$', '', '',
+      RUN_PROCESS + [roCloseChildren]), 'closechildren9');
+    CheckEqual(p.WaitFor(10000), -SIGKILL, 'closechildren signal');
+    pid := p.Pid;
+    Check(ProcessExists(pid), 'closechildren zombie'); // not reaped yet
+  finally
+    p.Free;
+  end;
+  Check(not ProcessExists(pid), 'closechildren reaped');
+  {$ifend}
+  // the pipes of a process are not inherited by another process
+  p := TExternalProcess.Create;
+  b := TExternalProcess.Create;
+  try
+    Check(p.Start('cat', '', '', RUN_PROCESS + [roStdinPipe]), 'inherit');
+    Check(b.Start('sleep 30'), 'inherit');
+    // RunCommand() does not close the inherited descriptors in the child
+    CheckEqual(RunCommand('sleep 2 &'), 0, 'inherit');
+    p.CloseStdin;
+    start := GetTickCount64;
+    CheckEqual(p.WaitFor(5000), 0, 'inherit');
+    CheckUtf8(GetTickCount64 - start < 1000, 'inherit delay');
+  finally
+    b.Free;
+    p.Free;
+  end;
+  // other descriptors with no close-on-exec, e.g. sockets, are not inherited
+  Check(fppipe(fds) = 0, 'fppipe');
+  p := TExternalProcess.Create;
+  try
+    Check(p.Start('sleep 2'), 'descriptors');
+    fpclose(fds[1]); // the child should not have its own copy of fds[1]
+    start := GetTickCount64;
+    CheckEqual(fpread(fds[0], @i, SizeOf(i)), 0, 'descriptors eof');
+    CheckUtf8(GetTickCount64 - start < 1000, 'descriptors delay');
+    fpclose(fds[0]);
+  finally
+    p.Free;
+  end;
+  // nor a descriptor far above all the others - e.g. 255 on MacOS by default
+  hfd := GetFileOpenLimit - 1;
+  if hfd > 1000 then
+    hfd := 1000;
+  if hfd > 200 then
+  begin
+    Check(fppipe(fds) = 0, 'fppipe');
+    CheckEqual(fpdup2(fds[1], hfd), hfd, 'dup2'); // without close-on-exec
+    fpclose(fds[1]);
+    p := TExternalProcess.Create;
+    try
+      Check(p.Start('sleep 2'), 'high');
+      fpclose(hfd);
+      start := GetTickCount64;
+      CheckEqual(fpread(fds[0], @i, SizeOf(i)), 0, 'high eof');
+      CheckUtf8(GetTickCount64 - start < 1000, 'high delay');
+      fpclose(fds[0]);
+    finally
+      p.Free;
+    end;
+  end;
+  // the child should not inherit an ignored SIGPIPE, e.g. from a server
+  SigPipeIntercept;
+  p := TExternalProcess.Create;
+  try
+    Check(p.Start('kill -PIPE $$; echo alive'), 'sigpipe');
+    CheckEqual(p.WaitFor(10000), -SIGPIPE, 'sigpipe');
+    CheckEqual(p.ReadAvailable, '', 'sigpipe');
+  finally
+    p.Free;
+  end;
+  // no handle nor zombie leak
+  files := OpenedHandles;
+  pid := 0;
+  for i := 1 to 200 do
+  begin
+    p := TExternalProcess.Create;
+    try
+      Check(p.Start('true'), 'leak');
+      pid := p.Pid;
+    finally
+      p.Free;
+    end;
+  end;
+  CheckEqual(OpenedHandles, files, 'handles');
+  Check(not ProcessExists(pid), 'zombie');
+end;
+
+{$else}
+{$ifdef OSWINDOWS}
+
+const
+  SYNCHRONIZE  = $00100000;
+  WAIT_TIMEOUT = $00000102;
+
+function GetProcessHandleCount(hProcess: THandle; var count: cardinal): BOOL;
+  stdcall; external 'kernel32.dll';
+function OpenProcess(dwDesiredAccess: cardinal; bInheritHandle: BOOL;
+  dwProcessId: cardinal): THandle;
+  stdcall; external 'kernel32.dll';
+function CreatePipe(var hReadPipe, hWritePipe: THandle; lpPipeAttributes: pointer;
+  nSize: cardinal): BOOL;
+  stdcall; external 'kernel32.dll';
+function PeekNamedPipe(hNamedPipe: THandle; lpBuffer: pointer; nBufferSize: cardinal;
+  lpBytesRead, lpTotalBytesAvail, lpBytesLeftThisMessage: pointer): BOOL;
+  stdcall; external 'kernel32.dll';
+
+type
+  TPipeSecurity = record
+    nLength: cardinal;
+    lpSecurityDescriptor: pointer;
+    bInheritHandle: BOOL;
+  end;
+
+// true if the pipe returns ERROR_BROKEN_PIPE within 1 second
+function PipeBrokenSoon(rd: THandle): boolean;
+var
+  i: integer;
+begin
+  result := true;
+  for i := 1 to 100 do
+    if PeekNamedPipe(rd, nil, 0, nil, nil, nil) then
+      SleepHiRes(10)
+    else
+      exit;
+  result := false;
+end;
+
+function OpenedHandles: integer;
+var
+  n: cardinal;
+begin
+  n := 0;
+  GetProcessHandleCount(GetCurrentProcess, n);
+  result := n;
+end;
+
+function ProcessRunning(pid: cardinal): boolean;
+var
+  h: THandle;
+begin
+  h := OpenProcess(SYNCHRONIZE, false, pid);
+  result := (h <> 0) and
+            (WaitForSingleObject(h, 0) = WAIT_TIMEOUT);
+  if h <> 0 then
+    CloseHandle(h);
+end;
+
+procedure TTestCoreBase.DoRunRedirect(Dummy: TObject);
+var
+  exitcode: integer;
+begin
+  // RunRedirect() still uses RunCommandWin() on Windows
+  CheckEqual(RunRedirect('cmd /c "echo hello& exit 3"', @exitcode),
+    'hello'#13#10, 'output');
+  CheckEqual(exitcode, 3, 'exitcode');
+end;
+
+procedure TTestCoreBase.DoTExternalProcess(Sender: TObject);
+var
+  p, b: TExternalProcess;
+  r: TRunRedirectTest;
+  data, s: RawUtf8;
+  dir, fn: TFileName;
+  start: Int64;
+  pid: cardinal;
+  files, i, timeout: integer;
+  ndx: PtrInt;
+  sec: TPipeSecurity;
+  rd, wr: THandle;
+begin
+  // basic execution with stdout and exit code - no shell on Windows
+  p := TExternalProcess.Create;
+  try
+    Check(p.State = epsNotStarted, 'state0');
+    CheckEqual(p.ExitCode, -1, 'exitcode0');
+    Check(p.Start('cmd /c "echo hello& exit 3"'), 'start');
+    Check(p.State = epsRunning, 'state1');
+    Check(p.Pid <> 0, 'pid');
+    CheckEqual(p.WaitFor(10000), 3, 'waitfor');
+    CheckEqual(p.ExitCode, 3, 'exitcode');
+    Check(p.State = epsExited, 'state2');
+    Check(not p.Running, 'running');
+    CheckEqual(p.ReadAvailable, 'hello'#13#10, 'output');
+    CheckEqual(p.ReadAvailable, '', 'output2');
+    Check(not p.Start('cmd /c exit'), 'restart');
+  finally
+    p.Free;
+  end;
+  // stderr is merged into stdout by default, or in its own pipe
+  p := TExternalProcess.Create;
+  try
+    Check(p.Start('cmd /c "echo out& >&2 echo err"'), 'merge');
+    CheckEqual(p.WaitFor(10000), 0, 'merge');
+    CheckEqual(p.ReadAvailable, 'out'#13#10'err'#13#10, 'merge');
+  finally
+    p.Free;
+  end;
+  p := TExternalProcess.Create;
+  try
+    Check(p.Start('cmd /c "echo out& >&2 echo err"', '', '',
+      RUN_PROCESS - [roStderrMerge] + [roStderrPipe]), 'stderr');
+    CheckEqual(p.WaitFor(10000), 0, 'stderr');
+    CheckEqual(p.ReadAvailable, 'out'#13#10, 'stdout');
+    CheckEqual(p.ReadErrorAvailable, 'err'#13#10, 'stderr');
+  finally
+    p.Free;
+  end;
+  // stdin is the null device by default
+  p := TExternalProcess.Create;
+  try
+    Check(p.Start('sort'), 'null');
+    CheckEqual(p.WaitFor(10000), 0, 'null');
+    CheckEqual(p.ReadAvailable, '', 'null');
+    Check(not p.Write('x'), 'nowrite');
+  finally
+    p.Free;
+  end;
+  if not (wsWine in WindowsSpecs) then // findstr limination
+  begin
+    // full duplex: Write() blocks until findstr output is read by the thread
+    for i := 1 to 300000 do
+      Append(data, ['line ', i, #13#10]);
+    p := TExternalProcess.Create;
+    try
+      Check(p.Start('findstr "^"', '', '', RUN_PROCESS + [roStdinPipe]), 'findstr');
+      Check(p.WriteAndCloseStdin(data), 'write');
+      CheckEqual(p.WaitFor(30000), 0, 'findstr');
+      s := p.ReadAvailable;
+      CheckEqual(length(s), length(data), 'duplex');
+      Check(s = data, 'duplex');
+    finally
+      p.Free;
+    end;
+  end;
+  // OnOutput is called instead of filling the ReadAvailable buffer
+  r := TRunRedirectTest.Create;
+  p := TExternalProcess.Create;
+  try
+    p.OnOutput := r.OnOutput;
+    Check(p.Start('cmd /c echo hi'), 'onoutput');
+    CheckEqual(p.WaitFor(10000), 0, 'onoutput');
+    CheckEqual(r.Output, 'hi'#13#10, 'onoutput');
+    CheckEqual(p.ReadAvailable, '', 'onoutput');
+    Check(r.SeenPid = p.Pid, 'onoutput pid');
+  finally
+    p.Free;
+    r.Free;
+  end;
+  // the background thread releases its TSynLog thread number when it ends
+  r := TRunRedirectTest.Create;
+  try
+    ndx := 0;
+    for i := 0 to 19 do
+    begin
+      p := TExternalProcess.Create;
+      try
+        p.OnOutput := r.OnOutput;
+        Check(p.Start('cmd /c echo hi'), 'threadnumber');
+        CheckEqual(p.WaitFor(10000), 0, 'threadnumber');
+      finally
+        p.Free;
+      end;
+      if i = 0 then
+        ndx := r.ThreadIndex;
+    end;
+    Check(r.ThreadIndex < ndx + 10, 'threadnumber reused');
+  finally
+    r.Free;
+  end;
+  // explicit arguments are quoted as CommandLineToArgvW() expects: cmd
+  // "echo" shows the command line as it was received
+  p := TExternalProcess.Create;
+  try
+    Check(p.Start(['cmd', '/c', 'echo', 'a b', 'q"x', 'c:\d\', 'e f\']), 'args');
+    CheckEqual(p.WaitFor(10000), 0, 'args');
+    CheckEqual(p.ReadAvailable, '"a b" "q\"x" c:\d\ "e f\\"'#13#10, 'args');
+  finally
+    p.Free;
+  end;
+  p := TExternalProcess.Create;
+  try
+    Check(p.Start(['cmd', '/c', 'exit 7']), 'args exit');
+    CheckEqual(p.WaitFor(10000), 7, 'args exit');
+  finally
+    p.Free;
+  end;
+  // wrkdir is applied to the child process only
+  dir := GetEnvironmentVariable('SystemRoot');
+  p := TExternalProcess.Create;
+  try
+    Check(p.Start('cmd /c cd', '', dir), 'wrkdir');
+    CheckEqual(p.WaitFor(10000), 0, 'wrkdir');
+    s := p.ReadAvailable;
+    CheckUtf8(IdemPropNameU(s, StringToUtf8(dir) + #13#10), s); // ignore case
+    Check(not SameText(GetCurrentDir, dir), 'wrkdir');
+  finally
+    p.Free;
+  end;
+  // Start() returns false if the executable can't be executed
+  p := TExternalProcess.Create;
+  try
+    Check(not p.Start(['c:\nonexistent\zvb648.exe']), 'failed1');
+    Check(p.State = epsFailed, 'failed1');
+  finally
+    p.Free;
+  end;
+  if not (wsWine in WindowsSpecs) then // ping inconsistency
+  begin
+    // Terminate() stops the process and its children, so that the output ends
+    p := TExternalProcess.Create;
+    try
+      Check(p.Start('cmd /c ping -n 30 127.0.0.1'), 'terminate');
+      for i := 1 to 500 do
+        if p.HasDataAvailable then
+          break
+        else
+          SleepHiRes(10);
+      Check(p.ReadAvailable <> '', 'terminate ping'); // ping is running
+      p.Terminate(500); // CTRL_BREAK only shows ping statistics: hard kill
+      Check(not p.Running, 'terminate');
+      Check(p.WaitFor(5000) <> -1, 'terminate children'); // ping closed stdout
+    finally
+      p.Free;
+    end;
+    // roCloseChildren closes at Destroy a child left by an ended process
+    fn := WorkDir + 'closechildren.tmp';
+    p := TExternalProcess.Create;
+    try
+      Check(p.Start('cmd /c start /b ping -n 30 127.0.0.1 >"' + fn + '"',
+        '', '', RUN_PROCESS + [roCloseChildren]), 'closechildren');
+      for i := 1 to 500 do
+        if p.Running then
+          SleepHiRes(10)
+        else
+          break;
+      Check(not p.Running, 'closechildren ended'); // cmd ended
+      Check(not DeleteFile(fn), 'closechildren alive'); // ping keeps it open
+    finally
+      p.Free;
+    end;
+    for i := 1 to 200 do
+      if DeleteFile(fn) then
+        break
+      else
+        SleepHiRes(10);
+    Check(not FileExists(fn), 'closechildren');
+  end;
+  // WaitFor() timeout, then Kill()
+  p := TExternalProcess.Create;
+  try
+    Check(p.Start('ping -n 30 127.0.0.1'), 'kill');
+    CheckEqual(p.WaitFor(100), -1, 'waitfor timeout');
+    Check(p.Running, 'kill');
+    p.Kill;
+    CheckEqual(p.WaitFor(5000), 255, 'kill');
+  finally
+    p.Free;
+  end;
+  // Destroy terminates a running process
+  timeout := RunAbortTimeoutSecs;
+  RunAbortTimeoutSecs := 0; // no graceful termination: ping ignores CTRL_BREAK
+  p := TExternalProcess.Create;
+  try
+    Check(p.Start('ping -n 30 127.0.0.1'), 'destroy');
+    pid := p.Pid;
+  finally
+    start := GetTickCount64;
+    p.Free;
+    RunAbortTimeoutSecs := timeout;
+  end;
+  CheckUtf8(GetTickCount64 - start < 3000, 'destroy delay');
+  Check(not ProcessRunning(pid), 'destroy');
+  // the pipes of a process are not inherited by another process
+  p := TExternalProcess.Create;
+  b := TExternalProcess.Create;
+  try
+    Check(p.Start('sort', '', '', RUN_PROCESS + [roStdinPipe]), 'inherit');
+    Check(b.Start('ping -n 30 127.0.0.1'), 'inherit');
+    p.CloseStdin;
+    start := GetTickCount64;
+    CheckEqual(p.WaitFor(5000), 0, 'inherit');
+    CheckUtf8(GetTickCount64 - start < 1000, 'inherit delay');
+    b.Kill;
+  finally
+    b.Free;
+    p.Free;
+  end;
+  if OSVersion >= wVista then // no PROC_THREAD_ATTRIBUTE_HANDLE_LIST in XP
+  begin
+    // other inheritable handles, e.g. from another library, are not inherited
+    sec.nLength := SizeOf(sec);
+    sec.lpSecurityDescriptor := nil;
+    sec.bInheritHandle := true;
+    Check(CreatePipe(rd, wr, @sec, 0), 'CreatePipe');
+    p := TExternalProcess.Create;
+    try
+      Check(p.Start('ping -n 3 127.0.0.1'), 'handles');
+      CloseHandle(wr); // the child should not have its own copy of wr
+      Check(PipeBrokenSoon(rd), 'handles not inherited');
+      CloseHandle(rd);
+      p.Kill;
+    finally
+      p.Free;
+    end;
+  end;
+  // no handle leak
+  files := OpenedHandles;
+  for i := 1 to 100 do
+  begin
+    p := TExternalProcess.Create;
+    try
+      Check(p.Start('cmd /c exit'), 'leak');
+      p.WaitFor(10000);
+    finally
+      p.Free;
+    end;
+  end;
+  CheckUtf8(OpenedHandles - files < 20, 'handles=% %', [files, OpenedHandles]);
+  // GetParentProcess() closes its snapshot handle
+  files := OpenedHandles;
+  for i := 1 to 30 do
+    Check(GetParentProcess <> 0, 'ppid');
+  CheckUtf8(OpenedHandles - files < 20, 'ppid=% %', [files, OpenedHandles]);
+end;
+
+{$endif OSWINDOWS}
+{$endif OSPOSIX}
 
 procedure TTestCoreBase._TExecutableCommandLine;
 var
   c: TExecutableCommandLine;
   f: RawUtf8;
   t: integer;
+  raw, values: TRawUtf8DynArray;
+  strvalues: TStringDynArray;
 begin
+  Run(DoRunRedirect, self, 'RunRedirect', true, false);
+  Run(DoTExternalProcess, self, 'TExternalProcess', true, false);
   c := TExecutableCommandLine.Create;
   try
     c.RawParams := CsvToRawUtf8DynArray('one two three', ' ');
@@ -3742,6 +4673,173 @@ begin
     CheckEqual(f, '/config');
     CheckEqual(c.Args[0], '/opt/porter/x.config');
     CheckEqual(c.DetectUnknown, 'Unexpected "/opt/porter/x.config" argument'#10);
+    // regression for #761: malformed switches should not disappear
+    c.Clear;
+    c.RawParams := CsvToRawUtf8DynArray('x --=v -- - -v', ' ');
+    Check(c.Parse(#10, '-', '--'));
+    CheckEqual(length(c.Args), 1);
+    CheckEqual(length(c.Options), 1);
+    CheckEqual(length(c.Names), 0);
+    CheckEqual(length(c.Values), 0);
+    Check(c.Arg(0, '#first first argument'));
+    Check(c.Option('v'));
+    CheckEqual(c.DetectUnknown,
+      'Unexpected "--=v" parameter'#10 +
+      'Unexpected "--" parameter'#10 +
+      'Unexpected "-" parameter'#10);
+    // parsing again should reset previous errors
+    c.RawParams := CsvToRawUtf8DynArray('x --name=value -v', ' ');
+    Check(c.Parse(#10, '-', '--'));
+    CheckEqual(length(c.Args), 1);
+    CheckEqual(length(c.Options), 1);
+    CheckEqual(length(c.Names), 1);
+    CheckEqual(length(c.Values), 1);
+    Check(c.Arg(0));
+    Check(c.Option('v'));
+    Check(c.Get('name', f));
+    CheckEqual(f, 'value');
+    CheckEqual(c.DetectUnknown, '');
+    // an empty raw argument is already a positional argument
+    c.Clear;
+    SetLength(raw, 2);
+    raw[0] := 'x';
+    raw[1] := '';
+    c.RawParams := raw;
+    Check(c.Parse(#10, '-', '--'));
+    CheckEqual(length(c.Args), 2);
+    CheckEqual(c.Args[0], 'x');
+    CheckEqual(c.Args[1], '');
+    Check(c.Arg(0));
+    CheckEqual(c.DetectUnknown, 'Unexpected "" argument'#10);
+    // an empty parameter value should remain valid
+    c.Clear;
+    raw[0] := '-n';
+    raw[1] := '';
+    c.RawParams := raw;
+    Check(c.Parse(#10, '-', '--'));
+    CheckEqual(length(c.Args), 0);
+    CheckEqual(length(c.Names), 1);
+    CheckEqual(length(c.Values), 1);
+    Check(c.Get('n', f));
+    CheckEqual(f, '');
+    CheckEqual(c.DetectUnknown, '');
+    // same with the name=value syntax
+    c.RawParams := CsvToRawUtf8DynArray('--name= -v', ' ');
+    Check(c.Parse(#10, '-', '--'));
+    CheckEqual(length(c.Args), 0);
+    CheckEqual(length(c.Names), 1);
+    CheckEqual(length(c.Options), 1);
+    Check(c.Get('name', f));
+    CheckEqual(f, '');
+    Check(c.Option('v'));
+    CheckEqual(c.DetectUnknown, '');
+    {$ifdef OSWINDOWS}
+    // native Windows / switches should behave identically
+    c.Clear;
+    c.RawParams := CsvToRawUtf8DynArray('x /=v /', ' ');
+    Check(c.Parse(#10));
+    CheckEqual(length(c.Args), 1);
+    CheckEqual(length(c.Options), 0);
+    CheckEqual(length(c.Names), 0);
+    Check(c.Arg(0));
+    CheckEqual(c.DetectUnknown,
+      'Unexpected "/=v" parameter'#10 +
+      'Unexpected "/" parameter'#10);
+    {$endif OSWINDOWS}
+    // regression for #762: missing required argument without description
+    c.Clear;
+    c.RawParams := CsvToRawUtf8DynArray('watch', ' ');
+    Check(c.Parse(#10, '-', '--'));
+    Check(c.Arg(0, '', true));
+    Check(not c.Arg(1, '', false));
+    CheckEqual(c.DetectUnknown,
+      'Missing <arg2> argument'#10);
+    // missing required argument with an explicit description
+    c.Clear;
+    c.RawParams := CsvToRawUtf8DynArray('watch', ' ');
+    Check(c.Parse(#10, '-', '--'));
+    Check(c.Arg(0, '', true));
+    Check(not c.Arg(1, '#folder folder to watch', false));
+    CheckEqual(c.DetectUnknown,
+      'Missing <folder> argument'#10);
+    // an unclaimed supplied argument must still be unexpected,
+    // even when a subsequent missing argument has a description
+    c.Clear;
+    c.RawParams := CsvToRawUtf8DynArray('watch', ' ');
+    Check(c.Parse(#10, '-', '--'));
+    Check(not c.Arg(1, '#folder folder to watch', false));
+    CheckEqual(c.DetectUnknown,
+      'Unexpected "watch" argument'#10 +
+      'Missing <folder> argument'#10);
+    // no positional argument supplied: generic first argument name
+    c.Clear;
+    c.RawParams := CsvToRawUtf8DynArray('--verbose', ' ');
+    Check(c.Parse(#10, '-', '--'));
+    Check(c.Option('verbose'));
+    Check(not c.Arg(0, '', false));
+    CheckEqual(c.DetectUnknown,
+      'Missing <arg1> argument'#10);
+    // optional missing argument must not trigger an error
+    c.Clear;
+    c.RawParams := CsvToRawUtf8DynArray('watch', ' ');
+    Check(c.Parse(#10, '-', '--'));
+    Check(c.Arg(0));
+    Check(not c.Arg(1, '', true));
+    CheckEqual(c.DetectUnknown, '');
+    // regression for #763: preserve empty values when requested
+    c.Clear;
+    c.RawParams := CsvToRawUtf8DynArray(
+      '--param= --param=b --param= --param=c', ' ');
+    Check(c.Parse(#10, '-', '--'));
+    // default behavior is unchanged
+    values := nil;
+    Check(c.Get(['param'], values));
+    CheckEqual(length(values), 2);
+    CheckEqual(values[0], 'b');
+    CheckEqual(values[1], 'c');
+    CheckEqual(c.DetectUnknown, '');
+    // opt-in: preserve all values and their order
+    values := nil;
+    Check(c.Get(['param'], values, '', true));
+    CheckEqual(length(values), 4);
+    CheckEqual(values[0], '');
+    CheckEqual(values[1], 'b');
+    CheckEqual(values[2], '');
+    CheckEqual(values[3], 'c');
+    CheckEqual(c.DetectUnknown, '');
+    // TStringDynArray should have identical semantics
+    Check(c.Get(['param'], strvalues, '', true));
+    CheckEqual(length(strvalues), 4);
+    Check(strvalues[0] = '');
+    Check(strvalues[1] = 'b');
+    Check(strvalues[2] = '');
+    Check(strvalues[3] = 'c');
+    // only empty values: result should be true when included
+    c.RawParams := CsvToRawUtf8DynArray('--param=', ' ');
+    Check(c.Parse(#10, '-', '--'));
+    values := nil;
+    Check(not c.Get(['param'], values));
+    CheckEqual(length(values), 0);
+    CheckEqual(c.DetectUnknown, '');
+    Check(c.Get(['param'], values, '', true));
+    CheckEqual(length(values), 1);
+    CheckEqual(values[0], '');
+    CheckEqual(c.DetectUnknown, '');
+    // empty value supplied as a separate raw argument
+    c.Clear;
+    SetLength(raw, 4);
+    raw[0] := '--param';
+    raw[1] := '';
+    raw[2] := '--param';
+    raw[3] := 'b';
+    c.RawParams := raw;
+    Check(c.Parse(#10, '-', '--'));
+    values := nil;
+    Check(c.Get(['param'], values, '', true));
+    CheckEqual(length(values), 2);
+    CheckEqual(values[0], '');
+    CheckEqual(values[1], 'b');
+    CheckEqual(c.DetectUnknown, '');
   finally
     c.Free;
   end;
@@ -4818,6 +5916,7 @@ procedure TTestCoreBase.Integers;
     bin := HexToBin(hex);
     r.Init(bin);
     failed := false;
+    // TSynLog.Family.ExceptionIgnoreCurrentThread := true; made by caller
     try
       r.VarLeb64;
     except
@@ -5146,6 +6245,25 @@ begin
   result := GetExtended(P, err); // resolve the proper GetExtended() overload
 end;
 
+// raw ULP comparison helper to be used instead of CheckSame() for huge numbers
+function SameWithin2Ulps(A, B: PDouble): boolean;
+var
+  a64, b64: QWord;
+begin
+  result := A^ = B^; // also handles +0/-0 (NAN/INF never appear here)
+  if result then
+    exit;
+  a64 := PUInt64(A)^;
+  b64 := PUInt64(B)^;
+  result := false;
+  if ((a64 xor b64) shr 63) <> 0 then
+    exit; // different signs
+  if a64 > b64 then
+    result := a64 - b64 <= 2
+  else
+    result := b64 - a64 <= 2;
+end;
+
 procedure TTestCoreBase.NumericalConversionsSlow(Sender: TObject);
 var
   HasFP80: boolean;
@@ -5320,13 +6438,20 @@ var
         p2 := GetNum(p, vd, {double=}true);
         Check(p2 - p = lens[i]);
         Check(vd.VType >= varInteger);
-        if not HasFP80 then
+        {$ifdef ASMX64NOTPIC}
+        if (@GetExt <> @GetExtendedPas) and
+           not HasFP80 then
+        begin
+          // exact comparison when pure 64-bit double are involved
           if vd.VType = varDouble then
             Check(ref[i] = vd.VInt64, 'refvd1')
           else if Check(VariantToDouble(variant(vd), PDouble(@d64)^)) then
-            Check(ref[i] = d64, 'refvd2')
-        else if Check(VariantToDouble(variant(vd), d)) then
-          CheckSame(d, PDouble(@ref[i])^, DOUBLE_SAME, 'refvd3');
+            Check(ref[i] = d64, 'refvd2');
+        end
+        else // fallback for pure pascal version, but with high resolution
+        {$endif ASMX64NOTPIC}
+        if Check(VariantToDouble(variant(vd), d)) then
+          Check(SameWithin2Ulps(@d, @ref[i]), 'refvd3');
         p := p2 + 1;
       end;
       NotifyTestSpeed('GetNumericVariant%', [tmp], length(lens), length(data), @Timer);
@@ -5410,7 +6535,7 @@ var
       tmp := 'Pas';
       DoTest(@GetExtendedPas, @GetNumericVariantPas);
       tmp := 'Ssse3';
-      if cfSSE3 in CpuFeatures then
+      if cfSSSE3 in CpuFeatures then
         DoTest(@GetExtendedSsse3, @GetNumericVariantSsse3);
       {$else}
       tmp[0] := #0;
@@ -8751,11 +9876,11 @@ procedure TTestCoreBase.Iso8601DateAndTime;
     t := s;
     t[11] := ''''; // as in SynDB VArray[] quoted parameters
     J.From(pointer(t), 10);
-    Check(I.Value and not (1 shl (6 + 6 + 5) - 1) = J.Value);
+    CheckEqual(I.Value and not (1 shl (6 + 6 + 5) - 1), J.Value);
     I.From(s);
     t := I.Text(Expanded);
     if t <> s then // we allow error on time = 00:00:00 -> I.Text = just date
-      Check(I.Value and (1 shl (6 + 6 + 5) - 1) = 0)
+      CheckEqual(I.Value and (1 shl (6 + 6 + 5) - 1), 0)
     else
       Check(true);
     J.From(E);
@@ -8799,12 +9924,32 @@ procedure TTestCoreBase.Iso8601DateAndTime;
     end;
   end;
 
+  procedure CheckReducedTime(const S: RawUtf8;
+    H, M, Sec: cardinal; const Expected: RawUtf8);
+  var
+    d: TDateTime;
+    bits: TTimeLogBits;
+    noTime: boolean;
+  begin
+    d := Iso8601ToDateTime(S);
+    CheckEqual(DateTimeToIso8601(d, true), Expected);
+    bits.Value := Iso8601ToTimeLog(S);
+    CheckEqual(bits.Value, TimeLogFromDateTime(d), S);
+    CheckEqual(bits.Hour, H, S);
+    CheckEqual(bits.Minute, M, S);
+    CheckEqual(bits.Second, Sec, S);
+    noTime := true;
+    bits.Value := Iso8601ToTimeLogPUtf8Char(pointer(S), length(S), @noTime);
+    CheckUtf8(not noTime, S);
+  end;
+
 var
   i: integer;
   D, D2: TDateTime;
   u: Int64; // TUnixTime/TUnixMSTime
   tmp: RawUtf8;
   b: TTimeLogBits;
+  noTime: boolean;
   st, start: TSynSystemTime;
 begin
   Check(TTextDateWriter.InstanceSize <= SizeOf(TLocalWriter) - 256, 'TLocalWriter');
@@ -8887,6 +10032,99 @@ begin
     Check(Abs(D2 - D) < (1 / MilliSecsPerDay)); // we allow 1 ms error
     D := D + rnd.NextDouble * 57; // go further a little bit: change date/time
   end;
+  // Issue #755 - support ISO-8601 reduced time precision in both parsers.
+  CheckReducedTime('2030-01-01T08', 8, 0, 0, '2030-01-01T08:00:00');
+  CheckReducedTime('2030-01-01T08:17', 8, 17, 0, '2030-01-01T08:17:00');
+  CheckReducedTime('2030-01-01 08:17', 8, 17, 0, '2030-01-01T08:17:00');
+  CheckReducedTime('20300101T08', 8, 0, 0, '2030-01-01T08:00:00');
+  CheckReducedTime('20300101T0817', 8, 17, 0, '2030-01-01T08:17:00');
+  CheckReducedTime('20300101T081742', 8, 17, 42, '2030-01-01T08:17:42');
+  CheckReducedTime('2030-01-01T08:17Z', 8, 17, 0, '2030-01-01T08:17:00');
+  CheckReducedTime('2030-01-01T08:17:42', 8, 17, 42, '2030-01-01T08:17:42');
+  CheckEqual(Iso8601ToTimeLog('20300101081742'),
+             Iso8601ToTimeLog('2030-01-01T08:17:42'));
+  CheckEqual(DateTimeToIso8601(Iso8601ToDateTime('2030-01-01'), true),
+             '2030-01-01T00:00:00');
+  tmp := '2030-01-01';
+  noTime := false;
+  b.Value := Iso8601ToTimeLogPUtf8Char(pointer(tmp), length(tmp), @noTime);
+  Check(noTime);
+  Check(b.Year = 2030);
+  tmp := '2030-01-01T00';
+  noTime := true;
+  b.Value := Iso8601ToTimeLogPUtf8Char(pointer(tmp), length(tmp), @noTime);
+  Check(not noTime);
+  Check(b.Hour = 0);
+  // Midnight and over-range values coverage
+  CheckReducedTime('2030-01-01T00', 0, 0, 0, '2030-01-01T00:00:00');
+  CheckReducedTime('2030-01-01T00:00', 0, 0, 0, '2030-01-01T00:00:00');
+  CheckReducedTime('2030-01-01T23:59', 23, 59, 0, '2030-01-01T23:59:00');
+  Check(Iso8601ToDateTime('2030-01-01T24') = 0);
+  Check(Iso8601ToDateTime('2030-01-01T08:60') = 0);
+  Check(Iso8601ToTimeLog('2030-01-01T24') = 0);
+  Check(Iso8601ToTimeLog('2030-01-01T08:60') = 0);
+  // Standalone time-only decoders: hh, hhmm, hh:mm, complete and midnight.
+  CheckSame(Iso8601ToTime('08'), 8 / 24, 1e-10);
+  CheckSame(Iso8601ToTime('T08'), 8 / 24, 1e-10);
+  CheckSame(Iso8601ToTime('0800'), 8 / 24, 1e-10);
+  CheckSame(Iso8601ToTime('08:17'),
+    (8 * 60 + 17) / 1440, 1e-10);
+  CheckSame(Iso8601ToTime('T0817'),
+    (8 * 60 + 17) / 1440, 1e-10);
+  CheckSame(Iso8601ToTime('T08:17'),
+    (8 * 60 + 17) / 1440, 1e-10);
+  CheckSame(Iso8601ToDateTime('T08'), 8 / 24, 1e-10);
+  CheckSame(Iso8601ToDateTime('08:17'),
+    (8 * 60 + 17) / 1440, 1e-10);
+  CheckSame(Iso8601ToTime('T00'), 0, 1e-10);
+  Check(IsIso8601('T00', 3));
+  Check(IsIso8601('08', 2));
+  Check(Iso8601ToTimeLog('08') = Iso8601ToTimeLog('T08'));
+  Check(Iso8601ToTimeLog('08:17') = Iso8601ToTimeLog('T08:17'));
+  Check(IsIso8601('2030-01-01T08:17', 16));
+  // Strict JSON/BSON decoder keeps its full-precision format contract.
+  tmp := '2030-01-01T08';
+  Check(not Iso8601CheckAndDecode(pointer(tmp), length(tmp), D));
+  tmp := '2030-01-01T08:17';
+  Check(not Iso8601CheckAndDecode(pointer(tmp), length(tmp), D));
+  tmp := '20300101T0817';
+  Check(not Iso8601CheckAndDecode(pointer(tmp), length(tmp), D));
+  tmp := 'T08';
+  Check(not Iso8601CheckAndDecode(pointer(tmp), length(tmp), D));
+  tmp := 'T00';
+  Check(not Iso8601CheckAndDecode(pointer(tmp), length(tmp), D));
+  tmp := 'T08:17';
+  Check(not Iso8601CheckAndDecode(pointer(tmp), length(tmp), D));
+  // When successful, the strict decoder must also populate Value.
+  tmp := '2030-01-01T08:17:42';
+  D := 0;
+  Check(Iso8601CheckAndDecode(pointer(tmp), length(tmp), D));
+  CheckEqual(DateTimeToIso8601(D, true), tmp);
+  tmp := 'T08:17:42';
+  D := 0;
+  Check(Iso8601CheckAndDecode(pointer(tmp), length(tmp), D));
+  CheckSame(D, (8 * 3600 + 17 * 60 + 42) / SecsPerDay, 1e-10);
+  // Standalone time parser rejects invalid reduced-precision values.
+  Check(Iso8601ToTime('24') = 0);
+  Check(Iso8601ToTime('08:60') = 0);
+  Check(Iso8601ToTime('08:') = 0);
+  Check(Iso8601ToTimeLog('20300101T0817') =
+        Iso8601ToTimeLog('2030-01-01T08:17'));
+  // Explicit length: buffer with no terminator beyond last byte.
+  tmp := '2030-01-01T08:17X';
+  CheckSame(Iso8601ToDateTimePUtf8Char(pointer(tmp), 16),
+    Iso8601ToDateTime('2030-01-01T08:17'), 1e-10);
+  Check(Iso8601ToTimeLogPUtf8Char(pointer(tmp), 16) =
+    Iso8601ToTimeLog('2030-01-01T08:17'));
+  // Truncated date/time must retain the decoded date (SynDB VArray case).
+  tmp := '19060506T204351';
+  u := Iso8601ToTimeLog(tmp);
+  tmp[11] := '''';
+  noTime := false;
+  b.Value := Iso8601ToTimeLogPUtf8Char(pointer(tmp), 10, @noTime);
+  Check(noTime);
+  Check(b.Value = (u and not ((1 shl 17) - 1)));
+  // TTimeLog parsing
   b.Value := Iso8601ToTimeLog('20150504');
   Check(b.Year = 2015);
   Check(b.Month = 5);
@@ -11479,9 +12717,9 @@ begin
     'MULTIPART/FORM-DATA; BOUNDARY=upper', bound) and
     (bound = 'upper'), 'b12');
   // invalid boundaries are rejected in the constructors
+  TSynLog.Family.ExceptionIgnoreCurrentThread := true;
   src := TRawByteStringStream.Create('X');
   try
-    TSynLog.Family.ExceptionIgnoreCurrentThread := true;
     raised := false;
     try
       SetLength(bound, 500);
@@ -11867,6 +13105,50 @@ procedure TTestCoreBase.Debugging;
     end;
   end;
 
+  procedure TestSaveToExeSigned;
+  var
+    deb: TDebugFile;
+    exe: RawByteString;
+    p: PAnsiChar;
+    fn: TFileName;
+    raised: boolean;
+  begin
+    // minimal PE32 header, enough for SaveToExe() and its signature detection
+    p := FastNewRawByteString(exe, 1024);
+    FillCharFast(p^, 1024, 0);
+    PWord(p)^ := $5a4d;
+    PCardinal(p + $3c)^ := $80; // set e_lfanew
+    inc(p, $80);                // move to PE header
+    PCardinal(p)^ := $00004550;
+    PWord(p + 24)^ := $010b;
+    fn := WorkDir + 'mabsigned.exe';
+    FileFromString(exe, fn);
+    deb := TDebugFile.Create(fn, [dfsNoMabSaveAtCreate,
+      dfsNoMabExternalCheck, dfsNoMabInternalCheck]);
+    try
+      deb.SaveToExe(fn);
+      Check(FileSize(fn) > 1024, 'unsigned exe');
+      // set IMAGE_DIRECTORY_ENTRY_SECURITY: appending would break the signature
+      PCardinal(p + $98)^ := 1000;
+      PCardinal(p + $9c)^ := 24;
+      FileFromString(exe, fn);
+      raised := false;
+      TSynLog.Family.ExceptionIgnore.Add(ESynLogException);
+      try
+        deb.SaveToExe(fn);
+      except
+        on ESynLogException do
+          raised := true;
+      end;
+      TSynLog.Family.ExceptionIgnore.Remove(ESynLogException);
+      Check(raised, 'signed exe');
+      CheckEqual(FileSize(fn), 1024, 'signed exe untouched');
+    finally
+      deb.Free;
+      DeleteFile(fn);
+    end;
+  end;
+
 var
   tmp: TBuffer2K;
   dst, up: PUtf8Char;
@@ -12019,6 +13301,7 @@ begin
   TestPlainText;
   TestNoProcNoEvent;
   TestZonedLayout;
+  TestSaveToExeSigned;
   Test('D:\Dev\lib\SQLite3\exe\TestSQL3.exe 1.2.3.4 (2011-04-07 11:09:06)'#13#10 +
     'Host=MyPC User=MySelf CPU=2*0-15-1027 OS=2.3=5.1.2600 Wow64=0 Freq=3579545 ' +
     'Instance=D:\Dev\MyLibrary.dll'#13#10 +

@@ -1,8 +1,8 @@
 # `mormot.net.tunnel` — End-to-End Tunnel Security and Deployment Guidance
 
-**Scope:** mORMot2 local TCP forwarding through `ITunnelTransmit`, including `TTunnelLocalServer`, `TTunnelLocalClient`, the relay interfaces, the `tlmVersion2` handshake, and authenticated encrypted TCP payloads. The principal example is administrator-to-agent remote assistance carrying VNC/RFB through a relay.
+**Scope:** mORMot2 local TCP forwarding through `ITunnelTransmit`, including `TTunnelLocalServer`, `TTunnelLocalClient`, the relay interfaces, the `tlmVersion2` handshake, and authenticated encrypted TCP payloads. The principal example is administrator-to-agent remote assistance carrying VNC/RFB through a relay. Direct in-process tunneling without local TCP forwarding is also possible with `OpenDirect`.
 
-**Implementation:** [`src/net/mormot.net.tunnel.pas`](../../src/net/mormot.net.tunnel.pas).  
+**Implementation:** [`src/net/mormot.net.tunnel.pas`](../../src/net/mormot.net.tunnel.pas).
 **Cryptographic dependencies:** [`mormot.crypt.ecc256r1.pas`](../../src/crypt/mormot.crypt.ecc256r1.pas), [`mormot.crypt.core.pas`](../../src/crypt/mormot.crypt.core.pas), and `ICryptCert` in [`mormot.crypt.secure.pas`](../../src/crypt/mormot.crypt.secure.pas).  
 **Related tests:** [`test/test.net.proto.pas`](../../test/test.net.proto.pas) (`TNetworkProtocols.Tunnel`, `TunnelTest`, `TunnelRelay`, `TunnelDeferred`) and [`test/test.core.ecc.pas`](../../test/test.core.ecc.pas).
 
@@ -34,6 +34,7 @@ The endpoint cryptographic server/client roles can be reversed, and the relay tr
 | Session association | Handshake session value and GCM additional authenticated data | A session number is a public routing identifier, not a credential |
 | Diagnostic metadata | Optional AES-CTR obfuscation; certificate-signature coverage when enabled | `InfoNameValue` must not contain secrets or authorization assertions |
 | Availability | Frame-size and pending-queue bounds limit local resource use | The relay can still prevent service or terminate a connection |
+| Direct payload confidentiality and integrity | AES-128-GCM of in-process tunnelling | No local TCP forwarding involved with `OpenDirect` |
 
 The expected production security model assumes uncompromised endpoints, trustworthy randomness, suitably protected long-term credentials, correctly implemented cryptographic primitives, and an appropriate application authorization flow. Neither the tunnel nor its cryptography protects a device already controlled by an attacker.
 
@@ -47,7 +48,9 @@ The expected production security model assumes uncompromised endpoints, trustwor
 | `TTunnelLocal.Open` | Bind/connect a local TCP socket and open the tunnel | Accepts `AppSecret`, `SignCert`, and `VerifyCert` |
 | `TTunnelLocal.OpenSocket` | Transfer ownership of an already connected/accepted socket | The caller must validate its local socket peer |
 | `TTunnelLocal.WaitForHandshake` | Wait for a queued peer handshake | Useful for demand-driven connections; does not consume the frame |
-| `TTunnelLocalThread` | Forward TCP data | Owns directional GCM objects, IV state, and socket I/O |
+| `TTunnelLocal.OpenDirect` | Connect an in-process plaintext endpoint without TCP | Uses the same handshake and optional AES-GCM as TCP mode |
+| `TTunnelLocal.SendData` | Send application plaintext to the remote endpoint | Preserves outbound AES-GCM IV and frame order |
+| `TTunnelSocketTransmit` / `TTunnelLocalThread` | Forward local TCP data | Adapter owns the worker; AES-GCM keys and IVs belong to `TTunnelLocal` |
 | `Ecc256r1MakeKey` / `Ecc256r1SharedSecret` | Establish a P-256 shared secret | Native implementation validates peer points and private scalar ranges |
 
 The defined tunnel options are `toEcdhe`, `toEncrypt`, `toClientSigned`, `toServerSigned`, and `toAcceptNonLocal`.
@@ -67,7 +70,7 @@ Both endpoints must agree on the session number, effective options, and `AppSecr
 | --- | --- | --- |
 | `toEcdhe` | Fresh P-256 ECDH key agreement (unless a `SpecificKey` is supplied), followed by AES-128-GCM forwarding | Preferred mode for remote assistance; combine with a strong `AppSecret` and/or independently trusted peer certificates |
 | `toEncrypt` without `toEcdhe` | AES-128-GCM with keys based on `AppSecret`, without ECDHE forward secrecy | Use only where a strong, confidential PSK is available; the code rejects an empty `AppSecret` in this mode |
-| Neither encryption option | Forwarded TCP bytes remain plaintext | Suitable for debugging and explicitly trusted local transport, not confidential VNC traffic over a relay |
+| Neither encryption option | Forwarded application bytes remain plaintext | Suitable for debugging and explicitly trusted local transport, not confidential VNC traffic over a relay |
 | `toClientSigned`, `toServerSigned` | Describe which endpoint's handshake is digitally signed | Do not set these by hand to request signatures; `OpenInternal()` recomputes them from `SignCert` and `VerifyCert` |
 | `toAcceptNonLocal` | Allows non-loopback connections to the listener bound by `Open()` | Usually leave unset; the VNC viewer should connect on the local machine |
 
@@ -102,7 +105,7 @@ For remote VNC assistance:
 - **Console**: the administrator-side application. It manages the administrator's connection to the relay and normally exposes a loopback TCP port for a conventional **VNC viewer**. It typically creates one `TTunnelLocalServer` per forwarded VNC TCP stream.
 - **Agent**: the application running on the end user's device, behind a NAT/firewall in many deployments. It maintains its own relay connection and normally connects a `TTunnelLocalClient` to the **local VNC server** on that machine (e.g. an approved `127.0.0.1:5900` endpoint). It need not accept an incoming Internet connection.
 - **Relay**: the central process that associates console-side and agent-side callbacks by `TTunnelSession` and forwards binary `ITunnelTransmit.TunnelSend()` frames. It need not terminate or decrypt the established end-to-end AES-GCM stream.
-- **Viewer** and **VNC server**: ordinary local TCP applications that exchange RFB bytes. Neither needs to understand mORMot, WebSockets, the end-to-end handshake or the relay protocol.
+- **Viewer** and **VNC server**: ordinary local TCP applications that exchange RFB bytes. Neither needs to understand mORMot, WebSockets, the end-to-end handshake or the relay protocol. Could be an in-process KVM code using `OpenDirect` with no local TCP port.
 
 ```text
 ADMINISTRATOR DEVICE                RELAY SERVER                   END-USER DEVICE
@@ -117,6 +120,8 @@ TTunnelLocalServer -- ITunnelConsole === ITunnelAgent -- TTunnelLocalClient
 ```
 
 The relay implements **one shared `TTunnelAgent` service endpoint** for all agent-associated sessions, plus **one `TTunnelConsole` service endpoint per resolved console SOA session**. Thus, an `ITunnelAgent` reference on the relay is a *multiplexing service*, not an object representing one specific end-user PC. Similarly, one console service endpoint may own several tunnel sessions (several viewers, tabs, or devices). The application must maintain its own mapping from authenticated agent/device identity to routing requests.
+
+Instead of `VNC server` over TCP localhost, it could be an in-process KVM logic initialized with `OpenDirect`. This scheme shares the same cryptographic logic and safety attributes.
 
 The code conventionally pairs `TTunnelLocalServer` with the console and `TTunnelLocalClient` with the agent, but the classes do **not** mandate which machine opens a TCP listener. What matters is that the two ends use opposite handshake roles for correct certificate flags and client/server nonce ordering.
 
@@ -367,15 +372,15 @@ The traffic-key derivation uses `THmacSha256`, incorporating the `AppSecret` con
 
 This is an application-specific, HMAC-based key schedule, not TLS, Noise, or a claimed implementation of RFC 5869 HKDF extract-and-expand. The protocol's conditional security argument relies on its specific transcript checks, correct ECDH implementation, key separation, correct randomness, and authenticators trusted outside the relay.
 
-## 7. AES-128-GCM protection of forwarded TCP frames
+## 7. AES-128-GCM protection of forwarded frames
 
 For encrypted traffic, the wire frame is:
 
 ```text
-[ciphertext of N TCP bytes][16-byte GCM authentication tag][4-byte session ID]
+[ciphertext of N application bytes][16-byte GCM authentication tag][4-byte session ID]
 ```
 
-`TTunnelLocalThread.Create()` uses separate `TAesFast[mGcm]` objects for receiving and sending. Their keys are independently derived. The local `TTunnelSession` is passed as **GCM additional authenticated data (AAD)**, binding ciphertext frames to the session even though the routing trailer is transmitted in cleartext.
+`TTunnelLocal.OpenInternal()` initializes separate `TAesFast[mGcm]` objects for receiving and sending. Their keys are independently derived. The local `TTunnelSession` is passed as **GCM additional authenticated data (AAD)**, binding ciphertext frames to the session even though the routing trailer is transmitted in cleartext.
 
 Each direction maintains its own evolving GCM IV. `GCM_IncIV()` advances the nonce for each send or receive operation, and the record does not carry a redundant explicit nonce. This keeps the record overhead at **20 bytes** (16-byte tag plus 4-byte routing trailer), with the tradeoff that the transport must preserve **frame order and frame boundaries** for each direction.
 
@@ -489,6 +494,7 @@ A focused negative-security suite should also exercise:
 | Send oversized or truncated frames / invalid JSON lengths | No out-of-bounds access or uncontrolled plaintext allocation |
 | Exceed 128 queued handshake frames | Predictable rejection without unbounded local queue growth |
 | Repeated open/close, deferred callbacks, and socket shutdown races | No deadlock, use-after-free, leaked descriptor, or unintended key reuse |
+| `OpenDirect` validation | Proper handshake and AES-GCM without TCP forwarding |
 
 Test runs should record compiler (Delphi/FPC), operating system, architecture, cryptographic backend (native/OpenSSL), and transport (direct callbacks/WebSockets). The present review is based on source code and test inspection; it does **not** assert these negative cases were run successfully.
 

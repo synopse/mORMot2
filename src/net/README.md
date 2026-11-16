@@ -56,9 +56,21 @@ HTTP/UDP Server Classes
 - Custom URI Routing using an efficient Radix Tree
 - Shared Server-Side HTTP Process
 - `THttpServerSocket`/`THttpServer` HTTP/1.1 Server
-- `THttpPeerCache` Local Peer-to-peer Cache
+
+### mormot.net.server.win
+
+HTTP Server Classes Over Windows `http.sys` Module
 - `THttpApiServer` HTTP/1.1 Server Over Windows `http.sys` Module
 - `THttpApiWebSocketServer` Over Windows `http.sys` Module
+
+This unit is void on POSIX: it only has content when `USEHTTPSYS` is defined, i.e. on Windows.
+
+### mormot.net.peercache
+
+HTTP Local Peer-to-peer Cache
+- `THttpPeerCache` Local Peer-to-peer Cache, with its UDP discovery and `THttpPeerCrypt` frames encryption
+
+Used e.g. by the `mget` tool to share downloads between peers on the same local network.
 
 ### mormot.net.asynch
 
@@ -67,7 +79,14 @@ Event-Driven Network Classes and Functions
 - Client or Server Asynchronous Process
 - `THttpAsyncServer` Event-Driven HTTP Server
 
-Used e.g. by both `mormot.net.relay` and `mormot.net.rtsphttp` to handle thousands on concurrent streams, with minimal resources, in a cross-platform way.
+Used e.g. by `mormot.net.relay`, `mormot.net.proxy` and `mormot.net.rtsphttp` to handle thousands on concurrent streams, with minimal resources, in a cross-platform way.
+
+### mormot.net.proxy
+
+HTTP Server With Proxy and Cache
+- `THttpProxyServer` HTTP Server With Proxy and Cache
+
+Serves local folders, remote URIs with memory and disk cache, or custom events, over a `THttpAsyncServer`.
 
 ### mormot.net.ws.core
 

@@ -2140,7 +2140,7 @@ begin
   begin
     // explicit default value
     if cardinal(PVarData(def)^.VType) = varBoolean then
-      result := BOOL_UTF8[PVarData(def)^.VBoolean] // normalize
+      result := BOOL_UTF8[ord(PVarData(def)^.VBoolean) <> 0] // normalize
     else if VariantToUtf8(def^, result) then
       result := QuotedStr(result); // single quoted pascal string
   end

@@ -1452,21 +1452,21 @@ type
       const description: RawUtf8 = ''; const default: RawUtf8 = ''): boolean; overload;
     /// search for "-parametername" and return all RawUtf8 "parametervalue" occurrences
     function Get(const name: array of RawUtf8; out value: TRawUtf8DynArray;
-      const description: RawUtf8 = ''): boolean; overload;
+      const description: RawUtf8 = ''; includeempty: boolean = false): boolean; overload;
     /// search for "-parametername" and return its plain string "parametervalue"
     // - if name contains a & character, will also register the following char
     function Get(const name: RawUtf8; out value: string;
       const description: RawUtf8 = ''; const default: string = ''): boolean; overload;
     /// search for "-parametername" and return all string "parametervalue" occurrences
     function Get(const name: array of RawUtf8; out value: TStringDynArray;
-      const description: RawUtf8 = ''): boolean; overload;
+      const description: RawUtf8 = ''; includeempty: boolean = false): boolean; overload;
     /// search for "-parametername" and return its plain string "parametervalue"
     function Get(const name: array of RawUtf8; out value: string;
       const description: RawUtf8 = ''; const default: string = ''): boolean; overload;
     /// search for "-parametername" and return all string "parametervalue" occurrences
     // - if name contains a & character, will also register the following char
     function Get(const name: RawUtf8; out value: TStringDynArray;
-      const description: RawUtf8 = ''): boolean; overload;
+      const description: RawUtf8 = ''; includeempty: boolean = false): boolean; overload;
     /// search for "-parametername" and return its integer "parametervalue"
     // - if name contains a & character, will also register the following char
     function Get(const name: RawUtf8; out value: integer;
@@ -1716,6 +1716,12 @@ var
   // - call explicitly Executable.Version.RetrieveInformationFromFileName if you
   // want to populate all Version text fields like CompanyName or LegalCopyright
   Executable: TExecutable;
+
+  /// equivalency of ParamStr() as UTF-8 strings, retrieved at startup
+  // - on Windows, calls CommandLineToArgvW() official API to be consistent
+  // between Delphi and FPC - whereas ParamStr() is not
+  // - ParamUtf8[0] is set from Executable.ProgramFileName including full path
+  ParamUtf8: TRawUtf8DynArray;
 
 {$ifndef PUREMORMOT2}
   /// deprecated global: use Executable variable instead
@@ -2639,6 +2645,14 @@ const
 type
   /// we use Delphi TMonitor on POSIX - no pthread direct call yet
   TRTLCriticalSection = class(TObject);
+  /// opaque storage of a pthread_mutex_t, as used by TOSLightLock on Delphi POSIX
+  // - pthread_mutex_t is 40 bytes on Linux x86_64 and 64 bytes on Darwin, so
+  // we reserve enough room without referencing Posix.SysTypes in this interface
+  TPosixLightMutex = record
+    aligned: pointer;
+    padding: array[1 .. 7] of PtrUInt;
+  end;
+
   TLibHandle = PtrUInt;
   TSystemTime = packed record
     Year, Month, DayOfWeek, Day, Hour, Minute, Second, MilliSecond: word;
@@ -2654,8 +2668,10 @@ type
 
 type
   /// system-specific structure holding a non-recursive mutex e.g. for TOSLightLock
-  // - is a futex 32-bit flag on Linux/Windows or a pthread_mutex on BSD
-  TOSLightMutex = {$ifdef OSFUTEX} cardinal {$else} TRTLCriticalSection {$endif};
+  // - is a futex 32-bit flag on Windows and FPC Linux, or a pthread_mutex on
+  // BSD and Delphi POSIX
+  TOSLightMutex = {$ifdef OSFUTEX} cardinal {$else}
+    {$ifdef FPC} TRTLCriticalSection {$else} TPosixLightMutex {$endif} {$endif};
 
 /// raw cross-platform library loading function
 // - alternative to LoadLibrary() and SafeLoadLibrary() Windows API and RTL
@@ -4816,7 +4832,8 @@ type
 
   /// the fastest non-reentrant lock supplied by the Operating System
   // - on Windows, calls WaitOnAddress/WakeByAddressSingle Win8+ API
-  // - on Linux, uses 32-bit futex syscall; on BSD, calls pthread_mutex_*()
+  // - on FPC Linux, uses 32-bit futex syscall; on BSD and Delphi POSIX, calls
+  // pthread_mutex_*() with no recursive attribute
   // - other systems fallback to TRTLCriticalSection
   // - don't forget to call Init and Done to properly initialize the structure
   // - to protect a very small code section of a few CPU cycles with no Init/Done
@@ -4844,13 +4861,15 @@ type
     // - warning: this method is NOT reentrant/recursive, so any nested call
     // would deadlock
     procedure Lock;
-      {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef HASINLINE} {$ifndef DELPHIPOSIX} inline; {$endif} {$endif}
     /// try once to acquire the raw futex or call pthread_mutex_trylock() method
     function TryLock: boolean;
-      {$ifdef HASINLINE} inline; {$endif}
+      {$ifdef HASINLINE} {$ifndef DELPHIPOSIX} inline; {$endif} {$endif}
     /// leave an OS lock
     procedure UnLock;
-      {$ifdef HASSAFEINLINE} inline; {$endif}
+      {$ifdef HASSAFEINLINE} {$ifndef DELPHIPOSIX} inline; {$endif} {$endif}
+    // note: not inlined on Delphi POSIX since Posix.Pthread is used only by the
+    // implementation section of this unit
   end;
   POSLightLock = ^TOSLightLock;
 
@@ -5664,6 +5683,10 @@ var
   // - will return the CurrentThreadNameShort^ threadvar 31 chars value or
   // the full thread name as set via mormot.core.log's SetThreadName()
   GetCurrentThreadName: function: RawUtf8;
+  /// to be called when a thread is ended, if SetThreadName() was also made
+  // - default implementation is nil, mormot.core.log set TSynLog.NotifyThreadEnded
+  // - it is easier to inherit from TThreadAbstract instead of plain TThread
+  NotifyThreadEnded: TThreadMethod;
 
 /// low-level access to the thread name, as set by SetThreadName()
 // - since threadvar can't contain managed strings, it is defined as TShort31,
@@ -6319,7 +6342,6 @@ type
     pcTooManyArguments,
     pcInvalidCommand,
     pcHasEndingBackSlash);
-
   TParseCommands = set of TParseCommand;
   PParseCommands = ^TParseCommands;
 
@@ -6329,6 +6351,10 @@ type
   // but some Windows versions seemed to limit to 8KB total as a whole
   TParseCommandsArgs = array[byte] of PAnsiChar;
   PParseCommandsArgs = ^TParseCommandsArgs;
+  /// allow to customize ParseCommandArgs() process
+  // - pcoPosix enables POSIX-style quoting and escaping
+  // - pcoNoCaretEscape disables the Windows cmd.exe ^ caret escape
+  TParseCommandOptions = set of (pcoPosix, pcoNoCaretEscape);
 
 const
   /// identifies some bash-specific processing
@@ -6341,7 +6367,7 @@ const
 
   /// let ParseCommandArgs/ExtractExecutableName/ExtractCommandArgs follow the
   // current running OS command-line expectations by default
-  PARSCOMMAND_POSIX = {$ifdef OSWINDOWS} false {$else} true {$endif};
+  PARSECOMMAND_OPT = {$ifdef OSWINDOWS} [] {$else} [pcoPosix] {$endif};
 
 /// low-level parsing of a RunCommand() execution command
 // - parse and fill argv^[0 .. argc^ - 1] with corresponding arguments, after
@@ -6357,20 +6383,20 @@ const
 // - warning: argc^ should be a 32-bit "integer" variable, not a PtrInt
 function ParseCommandArgs(const cmd: RawUtf8; argv: PParseCommandsArgs = nil;
   argc: PInteger = nil; temp: PRawUtf8 = nil;
-  posix: boolean = PARSCOMMAND_POSIX): TParseCommands;
+  opt: TParseCommandOptions = PARSECOMMAND_OPT): TParseCommands;
 
 /// high-level extraction of the executable of a RunCommand() execution command
 // - returns the first parameter returned by ParseCommandArgs()
 // - returns '' if cmd is incorrectly formatted
 function ExtractExecutableName(const cmd: RawUtf8;
-  posix: boolean = PARSCOMMAND_POSIX): RawUtf8;
+  opt: TParseCommandOptions = PARSECOMMAND_OPT): RawUtf8;
 
 /// high-level extraction of all parts of a RunCommand() execution command
 // - output param[0] is the executable name, and other param[] are the
 // actual command line arguments, just like the ParamStr() RTL function
 // - param is left nil on error, with result * PARSECOMMAND_ERROR <> []
 function ExtractCommandArgs(const cmd: RawUtf8; out param: TRawUtf8DynArray;
-  posix: boolean = PARSCOMMAND_POSIX): TParseCommands;
+  opt: TParseCommandOptions = PARSECOMMAND_OPT): TParseCommands;
 
 type
   /// callback used by RunRedirect() to notify of console output at runtime
@@ -6389,28 +6415,49 @@ type
   /// define how RunCommand() and RunRedirect() run their sub-process
   // - roEnvAddExisting is used when the env pairs should be added to the
   // existing system environment variable
-  // - roWinJobCloseChildren will use the CREATE_BREAKAWAY_FROM_JOB flag and
+  // - roCloseChildren will use the CREATE_BREAKAWAY_FROM_JOB flag and
   // run CreateJobToClose(allowSilentBreakaway=true) and AssignJobToProcess()
   // on the new process so that any of its future children would be
-  // synchronized and closed with their father, in a relaxed way
+  // synchronized and closed with their father, in a relaxed way - on Windows
+  // only for RunCommand() and RunRedirect(), but also on POSIX and in a
+  // strict way for TExternalProcess
   // - on Windows, will create its own console and its own execution group, unless
   // roWinNoProcessDetach is defined - e.g. as RUN_CMD for RunCommand/RunRedirect
   // - roWinNewConsole won't inherit the parent console, but have its own console
   // - roWinKeepProcessOnTimeout won't make Ctrl+C / WM_QUIT or TerminateProcess
   // - roWinCheckSynchronize will call CheckSynchronize() from the main thread
+  // - by default, the child stdin and stderr are inherited from the current
+  // process: roStdinNull reads stdin from the null device, and roStdinPipe from
+  // TExternalProcess.Write; roStderrMerge redirects stderr to stdout, and
+  // roStderrPipe to TExternalProcess.OnError/ReadErrorAvailable
+  // - RunRedirect() ignores roStdinPipe and roStderrPipe
   TRunOptions = set of (
     roEnvAddExisting,
-    roWinJobCloseChildren,
+    roCloseChildren,
     roWinNoProcessDetach,
     roWinNewConsole,
     roWinKeepProcessOnTimeout,
-    roWinCheckSynchronize);
+    roWinCheckSynchronize,
+    roStdinNull,
+    roStdinPipe,
+    roStderrMerge,
+    roStderrPipe);
 
 const
   /// the default options for RunCommand() and RunRedirect() transient execution
   // - detaching the process from the console and Job group by default does only
   // make sense for RunProcess() which will use TRunOptions = []
   RUN_CMD = [roWinNoProcessDetach];
+
+  /// the default options for TExternalProcess.Start
+  // - with the same behavior on all systems: no stdin, and stderr in stdout
+  RUN_PROCESS = [roWinNoProcessDetach, roStdinNull, roStderrMerge];
+
+{$ifndef PUREMORMOT2}
+  /// deprecated name: use roCloseChildren instead
+  roWinJobCloseChildren = roCloseChildren;
+{$endif PUREMORMOT2}
+
 type
   /// the low-level OS API type for executing processes arguments
   TRunArg = {$ifdef OSPOSIX} RawUtf8 {$else} TFileName {$endif};
@@ -6438,8 +6485,8 @@ function RunCommand(const cmd: TRunArg; waitfor: boolean = true;
   {$else} processhandle: PHandle = nil {$endif OSPOSIX}): integer;
 
 /// execute a command, returning its output console as text
-// - calls CreateProcessW on Windows (via our RunCommandWin function), and
-// FPC RTL popen/pclose on POSIX to be truly cross-platform
+// - calls CreateProcessW on Windows (via our RunCommandWin function), and our
+// TExternalProcess class on POSIX to be truly cross-platform
 // - return '' on cmd execution error, or the whole output console text content
 // with no conversion (unless setresult is false - see below)
 // - on POSIX, result is likely to be UTF-8 but on Windows it depends on each
@@ -6450,8 +6497,8 @@ function RunCommand(const cmd: TRunArg; waitfor: boolean = true;
 // onoutput() callback returns true - see RedirectToConsole global callback
 // - will abort once waitfordelayms expires - if not its default INFINITE
 // - force setresult=false if you only need onouput() and will discard the result
-// - optional env is Windows only, (FPC popen does not support it), and should
-// be encoded as name=value#0 pairs - with env[length(env)]=#0 to end with #0#0
+// - optional env should be encoded as name=value#0 pairs - with
+// env[length(env)]=#0 to end with #0#0
 // - you can specify a wrkdir if the path specified by cmd is not good enough
 // - TRunOptions = RUN_CMD as expected from executing a transient command
 // - warning: exitcode^ should be a 32-bit "integer" variable, not a PtrInt
@@ -6509,6 +6556,162 @@ var
   /// global variable to define RunRedirect/RunCommand soft termination methods
   // - used before hard SIGKILL/TerminateProcess
   RunAbortMethods: TRunAbortMethods = RUNABORT_DEFAULT;
+
+type
+  /// the execution state of a TExternalProcess instance
+  TExternalProcessState = (epsNotStarted, epsRunning, epsExited, epsFailed);
+  TExternalProcessFlag = (fOutputEof, fTerminated, fAborted, fKilling,
+    fThreaded, fZombie, fKeepOutput, fKeepError);
+
+  /// execute an external process with redirected standard input and output
+  // - stdin/stdout/stderr redirection is defined by the Start() options, by
+  // default RUN_PROCESS for the same behavior on all systems: stdin from the
+  // null device, and stderr merged into stdout
+  // - a single background thread per instance reads stdout/stderr in blocking
+  // mode, and calls OnOutput/OnError - or append to an internal buffer, to be
+  // retrieved by ReadAvailable/ReadErrorAvailable if no callback is set
+  // - Write/WriteAndCloseStdin/CloseStdin need the roStdinPipe option
+  // - on POSIX, a simple command line is executed with no shell, and the process
+  // is created in its own session, so that Terminate/Kill also stop its children
+  // - on Windows, the command line is given to CreateProcessW() as such - so use
+  // e.g. 'cmd /c ...' for a shell built-in - and the process is created in its
+  // own process group and job, so that Terminate/Kill also stop its children
+  // - roCloseChildren also kills any child still running when this
+  // instance is released - and on Windows, when the current process ends:
+  // on Linux, FreeBSD and MacOS, the ended process is then not reaped
+  // before this instance is released, so that its process group is kept
+  // - RunRedirect() is implemented over this class on POSIX, from the calling
+  // thread, but still uses RunCommandWin() on Windows
+  TExternalProcess = class(TSynPersistent)
+  protected
+    fSafe: TLightLock;                // protect fState/fExitCode/fInternalFlags
+    fOutputSafe: TLightLock;          // protect fOutput/fError
+    fState: TExternalProcessState;               // 8-bit
+    fInternalFlags: set of TExternalProcessFlag; // 8-bit
+    fOptions: TRunOptions;                       // 16-bit
+    fThreadDone: integer;             // set by the background thread when done
+    fPid: cardinal;
+    fExitCode: integer;
+    // POSIX descriptors are signed, but THandle is unsigned on Delphi POSIX
+    {$ifdef OSWINDOWS}
+    fStdin, fStdout, fStderr, fWakeUpRead, fWakeUpWrite, fProcess, fJob: THandle;
+    {$else}
+    fStdin, fStdout, fStderr, fWakeUpRead, fWakeUpWrite: integer;
+    {$endif OSWINDOWS}
+    fOnOutput, fOnError: TOnRedirect;
+    fOutput, fError: RawUtf8;
+    fStdinSafe: TOSLightLock;         // Write() may block: use an OS lock
+    procedure SetFlag(f: TExternalProcessFlag; v: boolean = true);
+    function IsSet(f: TExternalProcessFlag): boolean;
+    // OS-specific methods
+    function DoStart(const cmd: TRunArg; const args: array of TRunArg;
+      const env: TRunArg; const wrkdir: TFileName; options: TRunOptions;
+      withthread: boolean): boolean;
+    function DoReap: boolean; // true if not running any more
+    procedure DoSignal(hard: boolean);
+    function DoPump(timeoutms: integer): integer; // -1 on EOF, or bytes read
+    function DoWrite(p: pointer; len: PtrInt): boolean;
+    procedure DoCloseStdin;
+    procedure DoClose;
+    procedure DoWakeUp;
+    // cross-platform methods
+    function StartThread: boolean;
+    procedure DoOutput(p: pointer; len: PtrInt; iserror: boolean);
+    function WaitExit(endtix: Int64): boolean;
+    function Redirect(waitfordelayms: cardinal; setresult: boolean;
+      exitcode: PInteger): RawUtf8;
+    /// the background thread loop, reading stdout/stderr until EOF
+    // - may be overriden to customize how the output is retrieved
+    procedure Pump; virtual;
+  public
+    /// initialize this instance
+    constructor Create; override;
+    /// terminate the process if still running, and release all resources
+    // - will wait for the background thread to finish
+    destructor Destroy; override;
+    /// start the execution of a command line
+    // - on POSIX, a simple command is executed directly after a lookup in the
+    // PATH of env, and the shell is called only for complex commands
+    // - on Windows, cmd is given to CreateProcessW() as such, which searches
+    // the executable in the PATH of the current process
+    // - env is encoded as 'n1=v1'#0'n2=v2'#0#0 pairs, possibly with
+    // roEnvAddExisting to complete the current environment
+    // - returns false if the process could not be executed, or if its
+    // background thread could not be created - the process is then killed
+    function Start(const cmd: TRunArg; const env: TRunArg = '';
+      const wrkdir: TFileName = ''; options: TRunOptions = RUN_PROCESS): boolean; overload;
+    /// start the execution of an executable with some explicit arguments
+    // - args[0] is the executable, args[1..] its arguments, with no parsing
+    // nor shell call, e.g. if any argument comes from an untrusted source
+    // - on Windows, the arguments are quoted as CommandLineToArgvW() expects
+    function Start(const args: array of TRunArg; const env: TRunArg = '';
+      const wrkdir: TFileName = ''; options: TRunOptions = RUN_PROCESS): boolean; overload;
+    /// send some data to the process stdin, with the roStdinPipe option
+    // - returns false on error, e.g. if the process ended
+    // - on POSIX, Start() with roStdinPipe calls SigPipeIntercept, so that
+    // writing to an ended process does not raise SIGPIPE - but SigPipeIntercept
+    // does nothing yet on Delphi POSIX
+    function Write(const data: RawByteString): boolean; overload;
+    /// send some data to the process stdin, with the roStdinPipe option
+    function Write(p: pointer; len: PtrInt): boolean; overload;
+    /// send some data to the process stdin, then close it
+    function WriteAndCloseStdin(const data: RawByteString): boolean;
+    /// close the process stdin, so that it reads EOF
+    procedure CloseStdin;
+    /// retrieve and clear the pending stdout content, if OnOutput is not set
+    function ReadAvailable: RawByteString;
+    /// retrieve and clear the pending stderr content, with roStderrPipe and
+    // if OnError is not set
+    function ReadErrorAvailable: RawByteString;
+    /// check if some stdout content is pending, if OnOutput is not set
+    function HasDataAvailable: boolean;
+    /// try a graceful termination of the process, then a hard kill
+    // - on POSIX, send SIGTERM then SIGKILL to the whole process group
+    // - on Windows, send CTRL_BREAK if the process shares the console of the
+    // caller - i.e. roWinNoProcessDetach without roWinNewConsole, from a
+    // console application - and WM_QUIT, then terminate it: a console
+    // process started from a GUI application has therefore no graceful
+    // termination, and is killed after waitms - rather write to its stdin
+    // if it expects a quit command, e.g. 'q' for ffmpeg
+    // - returns true if the process ended within waitms
+    // - at return, the last output of the process may not have been read
+    // yet: call WaitFor() to wait for the end of the output
+    function Terminate(waitms: cardinal = 5000): boolean;
+    /// unconditionally and immediately kill the process
+    procedure Kill;
+    /// wait for the process to end, and its output to be read
+    // - returns the exit code, or -1 on timeout
+    // - also waits for the end of output, so for any child process which
+    // inherited the process stdout or stderr
+    function WaitFor(waitms: cardinal = INFINITE): integer;
+    /// check if the process is still running
+    function Running: boolean;
+    /// the exit code of the process, once ended
+    // - is -1 before, and negative if the process was terminated by a signal
+    // on POSIX, following the RTL WaitProcess() function convention
+    // - on Windows, is 255 after a hard Terminate() or Kill()
+    property ExitCode: integer
+      read fExitCode;
+    /// the OS process ID
+    property Pid: cardinal
+      read fPid;
+    /// the current execution state of this instance
+    property State: TExternalProcessState
+      read fState;
+    /// the options used by Start()
+    property Options: TRunOptions
+      read fOptions;
+    /// optional callback receiving the stdout content
+    // - should be set before Start(), and is called from the background thread
+    // - the content is not appended to the ReadAvailable buffer, and the
+    // function result is ignored
+    property OnOutput: TOnRedirect
+      read fOnOutput write fOnOutput;
+    /// optional callback receiving the stderr content, with roStderrPipe
+    // - should be set before Start(), and is called from the background thread
+    property OnError: TOnRedirect
+      read fOnError write fOnError;
+  end;
 
 
 implementation
@@ -10245,7 +10448,7 @@ begin
 end;
 {$endif OSANDROID}
 
-procedure InitializeProcessInfo; // called once at startup
+procedure InitializeProcessInfo; // called once after InitializeSpecificUnit
 var
   dt: TDateTime;
   rnd: PBlock128;
@@ -10315,6 +10518,7 @@ begin
   with Executable do            // retrieve Executable + Host/User info
   begin
     ProgramFileName := ExpandFileName(ParamStr(0)); // main executable from RTL
+    _toutf8(ProgramFileName, ParamUtf8[0]);
     ProgramFilePath := ExtractFilePath(ProgramFileName);
     ProgramName := GetFileNameWithoutExtOrPath(ProgramFileName);
     dt := 0;
@@ -10632,7 +10836,7 @@ begin
 end;
 
 function TExecutableCommandLine.Get(const name: array of RawUtf8;
-  out value: TRawUtf8DynArray; const description: RawUtf8): boolean;
+  out value: TRawUtf8DynArray; const description: RawUtf8; includeempty: boolean): boolean;
 var
   first, i: PtrInt;
 begin
@@ -10645,7 +10849,8 @@ begin
     i := Find(name, clkParam, '', '', first);
     if i < 0 then
       break; // no more occurence
-    if fValues[i] <> '' then
+    if includeempty or
+       (fValues[i] <> '') then
     begin
       _addutf8(value, fValues[i]);
       result := true;
@@ -10695,18 +10900,18 @@ begin
 end;
 
 function TExecutableCommandLine.Get(const name: RawUtf8;
-  out value: TStringDynarray; const description: RawUtf8): boolean;
+  out value: TStringDynarray; const description: RawUtf8; includeempty: boolean): boolean;
 begin
-  result := Get(UnAmp(name), value, description);
+  result := Get(UnAmp(name), value, description, includeempty);
 end;
 
 function TExecutableCommandLine.Get(const name: array of RawUtf8;
-  out value: TStringDynarray; const description: RawUtf8): boolean;
+  out value: TStringDynarray; const description: RawUtf8; includeempty: boolean): boolean;
 var
   tmp: TRawUtf8DynArray;
   i: PtrInt;
 begin
-  result := Get(name, tmp, description);
+  result := Get(name, tmp, description, includeempty);
   SetLength(value, length(tmp));
   for i := 0 to length(tmp) - 1 do
     value[i] := string(tmp[i]);
@@ -10847,10 +11052,18 @@ begin
     for i := 0 to length(fRetrieved[clk]) - 1 do
       if not fRetrieved[clk][i] then
         if clk = clkArg then
-          if i >= length(fDescArg) then
-            result := Join([result, 'Unexpected "', fNames[clkArg][i], '" argument', fLineFeed])
+        begin
+          if i < length(fNames[clkArg]) then
+            result := Join([result, 'Unexpected "',
+              fNames[clkArg][i], '" argument', fLineFeed])
+          else if (i < length(fDescArg)) and
+                  (fDescArg[i] <> '') then
+            result := Join([result, 'Missing <',
+              fDescArg[i], '> argument', fLineFeed])
           else
-            result := Join([result, 'Missing <', fDescArg[i], '> argument', fLineFeed])
+            result := Join([result, 'Missing <',
+              _fmt('arg%d', [i + 1]), '> argument', fLineFeed]);
+        end
         else
         begin
           result := Join([result, 'Unexpected ', SwitchAsText(fNames[clk][i]), ' ']);
@@ -10909,17 +11122,11 @@ begin
   fSwitch[false] := ShortSwitch;
   fSwitch[true]  := LongSwitch;
   if fRawParams = nil then
-  begin
-    n := ParamCount;
-    if n <= 0 then
-      exit; // may equal -1 e.g. from a .so on MacOS
-    SetLength(fRawParams, n);
-    for i := 0 to n - 1 do
-      _toutf8(ParamStr(i + 1), fRawParams[i]);
-  end;
+    fRawParams := copy(ParamUtf8, 1, length(ParamUtf8)); // as retrieved at startup
   Finalize(fNames);
   Finalize(fValues);
   Finalize(fRetrieved);
+  FastAssignNew(fUnknown);
   n := length(fRawParams);
   if n = 0 then
   begin
@@ -10944,32 +11151,32 @@ begin
   i := 0;
   repeat
     s := fRawParams[i];
-    if s <> '' then
-      if swlen[i] <> 0 then
+    if (s <> '') and
+       (swlen[i] <> 0) then
+    begin
+      delete(s, 1, swlen[i]);
+      j := PosExChar('=', s);
+      if (s = '') or
+         (j = 1) then
+        fUnknown := Join([fUnknown, 'Unexpected "', fRawParams[i],
+          '" parameter', fLineFeed])
+      else if j <> 0 then
       begin
-        delete(s, 1, swlen[i]);
-        if s <> '' then
-        begin
-          j := PosExChar('=', s);
-          if j <> 1 then
-            if j <> 0 then
-            begin
-              _addutf8(fNames[clkParam], copy(s, 1, j - 1));
-              _addutf8(fValues, copy(s, j + 1, MaxInt));
-            end
-            else if (i + 1 = n) or
-                    (swlen[i + 1] <> 0) then
-              _addutf8(fNames[clkOption], s)
-            else
-            begin
-              _addutf8(fNames[clkParam], s);
-              inc(i);
-              _addutf8(fValues, fRawParams[i]);
-            end;
-          end;
+        _addutf8(fNames[clkParam], copy(s, 1, j - 1));
+        _addutf8(fValues, copy(s, j + 1, MaxInt));
       end
+      else if (i + 1 = n) or
+              (swlen[i + 1] <> 0) then
+        _addutf8(fNames[clkOption], s)
       else
-        _addutf8(fNames[clkArg], s);
+      begin
+        _addutf8(fNames[clkParam], s);
+        inc(i);
+        _addutf8(fValues, fRawParams[i]);
+      end;
+    end
+    else
+      _addutf8(fNames[clkArg], s);
     inc(i);
   until i = n;
   SetLength(fRetrieved[clkArg],    length(fNames[clkArg]));
@@ -13371,13 +13578,13 @@ begin
   result := @_SERVICESTATE[st];
 end;
 
-function ExtractExecutableName(const cmd: RawUtf8; posix: boolean): RawUtf8;
+function ExtractExecutableName(const cmd: RawUtf8; opt: TParseCommandOptions): RawUtf8;
 var
   temp: RawUtf8;
   argv: TParseCommandsArgs;
   argc: integer;
 begin
-  if (pcInvalidCommand in ParseCommandArgs(cmd, @argv, @argc, @temp, posix)) or
+  if (pcInvalidCommand in ParseCommandArgs(cmd, @argv, @argc, @temp, opt)) or
      ({%H-}argc = 0) then
     FastAssignNew(result)
   else
@@ -13385,14 +13592,14 @@ begin
 end;
 
 function ExtractCommandArgs(const cmd: RawUtf8; out param: TRawUtf8DynArray;
-  posix: boolean): TParseCommands;
+  opt: TParseCommandOptions): TParseCommands;
 var
   temp: RawUtf8;
   argv: TParseCommandsArgs;
   argc: integer;
   i: PtrInt;
 begin
-  result := ParseCommandArgs(cmd, @argv, @argc, @temp, posix);
+  result := ParseCommandArgs(cmd, @argv, @argc, @temp, opt);
   if result * PARSECOMMAND_ERROR <> [] then
     exit; // failed
   SetLength(param, argc);
@@ -13401,7 +13608,7 @@ begin
 end;
 
 function ParseCommandArgs(const cmd: RawUtf8; argv: PParseCommandsArgs;
-  argc: PInteger; temp: PRawUtf8; posix: boolean): TParseCommands;
+  argc: PInteger; temp: PRawUtf8; opt: TParseCommandOptions): TParseCommands;
 var
   n: PtrInt;
   state: set of (sWhite, sInArg, sInSQ, sInDQ, sSpecial, sBslash);
@@ -13465,7 +13672,7 @@ begin
            continue;
         end;
       '\':
-        if posix and
+        if (pcoPosix in opt) and
            (state * [sInSQ, sBslash] = []) then
           if sInDQ in state then
           begin
@@ -13489,7 +13696,8 @@ begin
             inc(p);
           end;
       '^':
-        if not posix and
+        if (not (pcoNoCaretEscape in opt)) and
+           (not (pcoPosix in opt)) and
            (state * [sInSQ, sInDQ, sBslash] = []) then
           if PWord(p)^ = EOLW then
           begin
@@ -13508,7 +13716,7 @@ begin
             inc(p);
           end;
       '''':
-        if posix and
+        if (pcoPosix in opt) and
            not(sInDQ in state) then
           if sInSQ in state then
           begin
@@ -13557,23 +13765,23 @@ begin
           include(result, pcHasRedirection);
       '&',
       ';':
-        if posix and
+        if (pcoPosix in opt) and
            (state * [sInSQ, sInDQ] = []) then
         begin
           include(state, sSpecial);
           include(result, pcHasJobControl);
         end;
       '`':
-        if posix and
+        if (pcoPosix in opt) and
            (state * [sInSQ, sBslash] = []) then
            include(result, pcHasSubCommand);
       '(',
       ')':
-        if posix and
+        if (pcoPosix in opt) and
            (state * [sInSQ, sInDQ] = []) then
           include(result, pcHasParenthesis);
       '$':
-        if posix and
+        if (pcoPosix in opt) and
            (state * [sInSQ, sBslash] = []) then
           if p^ = '(' then
             include(result, pcHasSubCommand)
@@ -13581,7 +13789,7 @@ begin
             include(result, pcHasShellVariable);
       '*',
       '?':
-        if posix and
+        if (pcoPosix in opt) and
            (state * [sInSQ, sInDQ] = []) then
           include(result, pcHasWildcard);
     end;
@@ -13597,6 +13805,358 @@ begin
     if d <> nil then
       inc(d);
   until false;
+end;
+
+
+{ TExternalProcess }
+
+type
+  // the background thread of a TExternalProcess instance
+  TExternalProcessThread = class(TThread)
+  protected
+    fOwner: TExternalProcess;
+    procedure Execute; override; // redirect to fOwner.Pump
+  public
+    constructor Create(owner: TExternalProcess); reintroduce;
+  end;
+
+constructor TExternalProcessThread.Create(owner: TExternalProcess);
+begin
+  fOwner := owner;
+  inherited Create({suspended=}false);
+  // TThread.WaitFor from the main thread would loop over CheckSynchronize(100)
+  // on FPC/POSIX: the owner waits for fThreadDone instead
+  FreeOnTerminate := true;
+end;
+
+procedure TExternalProcessThread.Execute;
+begin
+  try
+    try
+      SetCurrentThreadName('process %', [fOwner.fPid]); // may raise
+      fOwner.Pump;
+    finally
+      if Assigned(NotifyThreadEnded) then
+        NotifyThreadEnded(); // release the TSynLog thread number
+    end;
+  finally
+    fOwner.SetFlag(fOutputEof); // e.g. on OnOutput exception: don't WaitFor EOF
+    LockedInc32(@fOwner.fThreadDone); // with a barrier: last access to fOwner
+  end;
+end;
+
+function Deadline(waitms: cardinal): Int64;
+begin
+  if waitms = INFINITE then
+    result := 0
+  else
+    result := GetTickCount64 + waitms;
+end;
+
+procedure TExternalProcess.SetFlag(f: TExternalProcessFlag; v: boolean);
+begin
+  fSafe.Lock;
+  if v then
+    include(fInternalFlags, f)
+  else
+    exclude(fInternalFlags, f);
+  fSafe.UnLock;
+end;
+
+function TExternalProcess.IsSet(f: TExternalProcessFlag): boolean;
+begin
+  fSafe.Lock;
+  result := f in fInternalFlags;
+  fSafe.UnLock;
+end;
+
+constructor TExternalProcess.Create;
+begin
+  inherited Create;
+  fExitCode := -1;
+  {$ifdef OSPOSIX}
+  fStdin := -1;
+  fStdout := -1;
+  fStderr := -1;
+  fWakeUpRead := -1;
+  fWakeUpWrite := -1;
+  {$endif OSPOSIX}
+  fStdinSafe.Init;
+end;
+
+destructor TExternalProcess.Destroy;
+begin
+  if fState = epsRunning then
+    Terminate(RunAbortTimeoutSecs * 1000);
+  if IsSet(fThreaded) then
+  begin
+    SetFlag(fTerminated);
+    DoWakeUp;
+    while fThreadDone = 0 do // wait for the background thread to finish
+      SleepHiRes(1);
+  end;
+  DoClose;
+  fStdinSafe.Done;
+  inherited Destroy;
+end;
+
+function TExternalProcess.StartThread: boolean;
+begin
+  result := true;
+  if not Assigned(fOnOutput) then
+    SetFlag(fKeepOutput);
+  if not Assigned(fOnError) then
+    SetFlag(fKeepError);
+  if IsSet(fOutputEof) then
+    exit; // nothing to read
+  SetFlag(fThreaded);
+  try
+    TExternalProcessThread.Create(self); // with FreeOnTerminate = true
+  except
+    // the thread could not be created, e.g. out of resources: nothing would
+    // read the output of this process, and Destroy would wait for ever
+    Terminate(0);              // hard kill - fThreaded: WaitExit() only reaps
+    SetFlag(fThreaded, false); // Destroy has no thread to wait for
+    DoClose;
+    fState := epsFailed;
+    result := false;
+  end;
+end;
+
+function TExternalProcess.Start(const cmd: TRunArg; const env: TRunArg;
+  const wrkdir: TFileName; options: TRunOptions): boolean;
+begin
+  result := (fState = epsNotStarted) and
+            DoStart(cmd, [], env, wrkdir, options, {withthread=}true) and
+            StartThread;
+end;
+
+function TExternalProcess.Start(const args: array of TRunArg;
+  const env: TRunArg; const wrkdir: TFileName; options: TRunOptions): boolean;
+begin
+  result := (fState = epsNotStarted) and
+            (high(args) >= 0) and
+            DoStart('', args, env, wrkdir, options, {withthread=}true) and
+            StartThread;
+end;
+
+procedure TExternalProcess.Pump;
+begin
+  while not IsSet(fTerminated) and
+        (DoPump(-1) >= 0) do
+    ; // DoPump() calls DoOutput() until EOF or DoWakeUp
+end;
+
+procedure TExternalProcess.DoOutput(p: pointer; len: PtrInt; iserror: boolean);
+var
+  cb: TOnRedirect;
+  u: RawUtf8;
+begin
+  if iserror then
+    cb := fOnError
+  else
+    cb := fOnOutput;
+  if (iserror and IsSet(fKeepError)) or
+     (not iserror and IsSet(fKeepOutput)) then
+  begin
+    fOutputSafe.Lock;
+    try
+      if iserror then
+        AppendBufferToUtf8(p, len, fError) // assume CP_UTF8 on POSIX
+      else
+        AppendBufferToUtf8(p, len, fOutput);
+    finally
+      fOutputSafe.UnLock;
+    end;
+  end;
+  if Assigned(cb) then
+  begin
+    FastSetString(u, p, len);
+    if cb(u, fPid) and
+       not IsSet(fKilling) then
+      SetFlag(fAborted); // only used by Redirect()
+  end;
+end;
+
+function TExternalProcess.WaitExit(endtix: Int64): boolean;
+var
+  ms: integer;
+begin
+  ms := 0;
+  repeat
+    result := DoReap;
+    if result or
+       ((endtix <> 0) and
+        (GetTickCount64 >= endtix)) then
+      exit;
+    if IsSet(fThreaded) or
+       (DoPump(ms) < 0) then // no background thread: read output meanwhile
+      SleepHiRes(ms);
+    if ms < 10 then
+      inc(ms);
+  until false;
+end;
+
+function TExternalProcess.Redirect(waitfordelayms: cardinal; setresult: boolean;
+  exitcode: PInteger): RawUtf8;
+var
+  wait: integer;
+  endtix: Int64;
+begin
+  FastAssignNew(result);
+  SetFlag(fKeepOutput, setresult);
+  if Assigned(fOnOutput) then
+    fOnOutput('', fPid); // notify the process start, ignoring its result
+  wait := 200;
+  endtix := 0;
+  if waitfordelayms <> INFINITE then
+  begin
+    if waitfordelayms < cardinal(wait) then
+      wait := waitfordelayms;
+    endtix := GetTickCount64 + waitfordelayms;
+  end;
+  repeat
+    case DoPump(wait) of
+      -1:
+        break; // EOF = execution finished
+      0:
+        if Assigned(fOnOutput) and // idle
+           fOnOutput('', fPid) then
+          SetFlag(fAborted);
+    end;
+    if IsSet(fAborted) or
+       ((endtix <> 0) and
+        (GetTickCount64 > endtix)) then
+    begin
+      // abort process execution after timeout or onoutput()=true
+      SetFlag(fAborted);
+      SetFlag(fKilling);
+      if (RunAbortTimeoutSecs > 0)
+         {$ifdef OSPOSIX} and (ramSigTerm in RunAbortMethods) {$endif} then
+      begin
+        DoSignal({hard=}false); // try gracefull death
+        WaitExit(GetTickCount64 + RunAbortTimeoutSecs * 1000);
+      end;
+      DoSignal({hard=}true); // force termination alla Robespierre
+      break;
+    end;
+  until false;
+  WaitExit(0); // reap the zombie (immediate after SIGKILL)
+  DoClose;
+  if (exitcode <> nil) and
+     not IsSet(fAborted) then
+    exitcode^ := fExitCode;
+  pointer(result) := pointer(fOutput); // transfer ownership
+  pointer(fOutput) := nil;
+end;
+
+function TExternalProcess.Write(p: pointer; len: PtrInt): boolean;
+begin
+  fStdinSafe.Lock;
+  try
+    result := DoWrite(p, len);
+  finally
+    fStdinSafe.UnLock;
+  end;
+end;
+
+function TExternalProcess.Write(const data: RawByteString): boolean;
+begin
+  result := Write(pointer(data), length(data));
+end;
+
+function TExternalProcess.WriteAndCloseStdin(const data: RawByteString): boolean;
+begin
+  result := Write(pointer(data), length(data));
+  CloseStdin;
+end;
+
+procedure TExternalProcess.CloseStdin;
+begin
+  fStdinSafe.Lock;
+  try
+    DoCloseStdin;
+  finally
+    fStdinSafe.UnLock;
+  end;
+end;
+
+function TExternalProcess.ReadAvailable: RawByteString;
+begin
+  FastAssignNew(result);
+  if fOutput = '' then
+    exit;
+  fOutputSafe.Lock;
+  pointer(result) := pointer(fOutput); // transfer ownership
+  pointer(fOutput) := nil;
+  fOutputSafe.UnLock;
+end;
+
+function TExternalProcess.ReadErrorAvailable: RawByteString;
+begin
+  FastAssignNew(result);
+  if fError = '' then
+    exit;
+  fOutputSafe.Lock;
+  pointer(result) := pointer(fError);
+  pointer(fError) := nil;
+  fOutputSafe.UnLock;
+end;
+
+function TExternalProcess.HasDataAvailable: boolean;
+begin
+  result := fOutput <> '';
+end;
+
+function TExternalProcess.Running: boolean;
+begin
+  result := (fState = epsRunning) and
+            not DoReap;
+end;
+
+function TExternalProcess.Terminate(waitms: cardinal): boolean;
+begin
+  result := true;
+  if not Running then
+    exit;
+  SetFlag(fKilling);
+  if waitms <> 0 then
+  begin
+    DoSignal({hard=}false);
+    result := WaitExit(Deadline(waitms));
+    if result then
+      exit;
+  end;
+  DoSignal({hard=}true);
+  WaitExit(GetTickCount64 + 5000); // a killed process is reaped at once
+  result := false;
+end;
+
+procedure TExternalProcess.Kill;
+begin
+  if Running then
+    DoSignal({hard=}true);
+end;
+
+function TExternalProcess.WaitFor(waitms: cardinal): integer;
+var
+  endtix: Int64;
+begin
+  result := -1;
+  if fState in [epsNotStarted, epsFailed] then
+    exit;
+  endtix := Deadline(waitms);
+  if not WaitExit(endtix) then
+    exit;
+  while not IsSet(fOutputEof) do // wait for the end of the output
+    if (endtix <> 0) and
+       (GetTickCount64 >= endtix) then
+      exit
+    else if IsSet(fThreaded) then
+      SleepHiRes(1)
+    else if DoPump(10) < 0 then
+      break;
+  result := fExitCode;
 end;
 
 
@@ -13620,9 +14180,9 @@ begin
   // setup some constants
   JSON_CONTENT_TYPE_VAR        := JSON_CONTENT_TYPE;
   JSON_CONTENT_TYPE_HEADER_VAR := JSON_CONTENT_TYPE_HEADER;
-  NULL_STR_VAR     := 'null';
-  BOOL_UTF8[false] := 'false';
-  BOOL_UTF8[true]  := 'true';
+  PCardinal(FastSetString(NULL_STR_VAR, 4))^ := NULL_LOW;    // 'null'
+  FastSetString(BOOL_UTF8[false], @BOOL_STR[false][1], 5);   // 'false'
+  PCardinal(FastSetString(BOOL_UTF8[true], 4))^ := TRUE_LOW; // 'true'
   // minimal stubs which will be properly implemented in other mormot.core units
   ShortToUuid           := _ShortToUuid;           // mormot.core.text
   AppendShortUuid       := _AppendShortUuid;

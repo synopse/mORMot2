@@ -1008,9 +1008,10 @@
   {$endif CPU32}
   {$ifdef OSLINUX}
     {$define OSLINUXANDROID}
+    {$define HAS_IP_PKTINFO}  // SetPacketInfo/RecvFromIf/SendToIf support
     {$define OSELF}
     {$ifdef FPC}
-      {$define OSFUTEX}   // direct futex syscall on FPC Linux
+      {$define OSFUTEX}       // direct futex syscall on FPC Linux
     {$endif FPC}
     {$ifdef ABIX86}
       {$define OSLINUXINTEL}
@@ -1037,10 +1038,14 @@
   {$endif OSANDROID}
   {$ifdef OSDARWIN}
     {$define OSBSDDARWIN}     // OSBSDDARWIN = OSBSD or OSDARWIN
+    {$define HAS_IP_PKTINFO}  // SetPacketInfo/RecvFromIf/SendToIf support
   {$endif OSDARWIN}
   {$ifdef OSBSD}
     {$define OSBSDDARWIN}     // OSBSDDARWIN = OSBSD or OSDARWIN
     {$define OSELF}           // OSX has its own macho executable format
+    {$ifdef OSNETBSD}         // other BSD (especially OpenBSD) are too diverse
+      {$define HAS_IP_PKTINFO}
+    {$endif OSNETBSD}
   {$endif OSBSD}
 {$endif OSWINDOW}
 

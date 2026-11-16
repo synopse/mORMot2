@@ -3163,7 +3163,7 @@ begin
   if cut < 0 then
     exit;
   while (cut > 0) and
-        (p[cut - 1] <= ' ') do
+        (S[cut] <= ' ') do
     dec(cut);
   SetLength(S, cut);
 end;
@@ -3397,7 +3397,7 @@ type
       LineIdx: integer; var Text: RawUtf8): PUtf8Char;
     procedure EmitFlowScalar(const Frag: RawUtf8; LineIdx: integer);
     procedure EmitScalarFragment(const Frag: RawUtf8; LineIdx: integer);
-    procedure EmitKey(const K: RawUtf8);
+    procedure EmitKey(const K: RawUtf8; LineIdx: integer);
     procedure EmitCollectBlockScalar(MinIndent, ExplicitIndent: integer;
       Folded, Chomp: AnsiChar);
     procedure EmitBlockScalar(const rest: RawUtf8; BaseIndent: integer);
@@ -3491,14 +3491,21 @@ begin
     Error(LineIdx, 'multi-document streams are not supported');
 end;
 
-procedure TYamlToJson.EmitKey(const K: RawUtf8);
+procedure TYamlToJson.EmitKey(const K: RawUtf8; LineIdx: integer);
 begin
   if K <> '' then
     case K[1] of
-      '"':
-        fOut.AddString(K);              // already JSON-escaped
+      '"',
       '''':
-        fOut.AddQuotedStringAsJson(K);  // unquote and JSON-escape
+        begin
+          // A quoted YAML scalar must be entirely consumed before JSON output.
+          if SkipQuoted(LineIdx, pointer(K)) - PUtf8Char(pointer(K)) <> length(K) then
+            ErrorFmt(LineIdx, 'unexpected text after quoted scalar %', [K]);
+          if K[1] = '"' then
+            fOut.AddString(K)             // already JSON-escaped
+          else
+            fOut.AddQuotedStringAsJson(K);
+        end;
     else
       fOut.AddJsonString(K);            // JSON-escape
     end
@@ -3523,7 +3530,7 @@ begin
   end;
   if s[1] in ['"', ''''] then
   begin
-    EmitKey(s);
+    EmitKey(s, LineIdx);
     exit;
   end;
   CheckUnsupportedScalar(LineIdx, pointer(s));
@@ -3843,7 +3850,7 @@ begin
       TrimLeftCopy(c^.Content, keyEnd + 2, MaxInt, rest);
     if not first then
       fOut.AddDirect(',');
-    EmitKey(keyText);
+    EmitKey(keyText, fIdx);
     fOut.AddDirect(':');
     lineIdx := fIdx;
     if (rest = '') or
@@ -3935,7 +3942,12 @@ begin
       // the current line to look like it starts at that indent and recurse
       c^.Content := afterDash;
       c^.Indent := implicitIndent;
+      if fDepth >= fMaxDepth then
+        ErrorFmt(lineIdx, 'YAML nesting depth exceeds YamlMaxDepth (%)',
+          [fMaxDepth]);
+      inc(fDepth);
       ParseBlockSeq(implicitIndent);
+      dec(fDepth);
     end
     else if afterDash[1] in ['{', '['] then
     begin
@@ -3951,8 +3963,14 @@ begin
       ParseValue(implicitIndent);
     end
     else if YamlLineKeyEnd(afterDash) >= 0 then
+    begin
       // implicit mapping item: "- key: value" [, "   key2: v2"]
-      ParseImplicitMapFromDash(implicitIndent, afterDash, lineIdx)
+      if fDepth >= fMaxDepth then
+        ErrorFmt(lineIdx, 'YAML nesting depth exceeds YamlMaxDepth (%)', [fMaxDepth]);
+      inc(fDepth);
+      ParseImplicitMapFromDash(implicitIndent, afterDash, lineIdx);
+      dec(fDepth);
+    end
     else
     begin
       if afterDash[1] in ['"', ''''] then
@@ -3984,7 +4002,7 @@ begin
   rest := '';
   if keyEnd + 1 < length(firstEntry) then
     TrimLeftCopy(firstEntry, keyEnd + 2, MaxInt, rest);
-  EmitKey(keyText);
+  EmitKey(keyText, firstLineIdx);
   fOut.AddDirect(':');
   if (rest = '') or
      (rest[1] = '#') then
@@ -4040,7 +4058,7 @@ begin
     if keyEnd + 1 < length(lineContent) then
       TrimLeftCopy(lineContent, keyEnd + 2, MaxInt, rest);
     fOut.AddDirect(',');
-    EmitKey(keyText);
+    EmitKey(keyText, fIdx);
     fOut.AddDirect(':');
     curIdx := fIdx;
     if (rest = '') or
@@ -4114,7 +4132,8 @@ begin
         break;
       '''',
       '"':
-        result := SkipQuoted(LineIdx, result);
+        if result = p then
+          result := SkipQuoted(LineIdx, result) - 1;
       '{',
       '[':
         inc(depth);
@@ -4199,7 +4218,7 @@ begin
     CheckUnsupportedScalar(LineIdx, pointer(keyText));
     if not first then
       fOut.Add(',');
-    EmitKey(keyText);
+    EmitKey(keyText, LineIdx);
     fOut.AddDirect(':');
     first := false;
     // skip whitespace before value
@@ -4338,6 +4357,8 @@ begin
   repeat
     // detect line ending (using SSE2 asm if available)
     len := BufferLineLength(lineStart, lineEnd); // both CRLF or LF
+    if PosChar(lineStart, len, #0) <> nil then
+       Error(fCount, '#0 not allowed inside input buffer');
     lineNext := lineStart + len;
     // prepare a new entry in fLines[]
     if fCount >= length(fLines) then
@@ -4380,7 +4401,7 @@ begin
       inc(lineStart);
     if lineStart^ = #10 then
       inc(lineStart);
-  until lineStart^ = #0;
+  until lineStart >= lineEnd;
   if length(fLines) <> fCount then
     DynArrayFakeLength(fLines, fCount);
 end;
@@ -6431,9 +6452,10 @@ begin
         Len := keylen;
       end;
       while (result^ <> ending) and
-            (result^ in [#0 .. #31]) do
+            (result^ > ' ') do
         inc(result);
-      inc(result); // skip trailing $ or }
+      if result^ = ending then
+        inc(result); // skip trailing $ or }
       exit;
     end;
     key := result;
@@ -6464,17 +6486,23 @@ var
   m: TPreprocMarker;
 begin
   result := Expand(P, v, l, {KeepMarker=}true);
-  if v = nil then // this $(ident) was not found
+  if (v = nil) or
+     (L <= 0) then // this $(ident) was not found - or void
     exit;
   m := TPreprocMarker(v^);
   if m = pmTemplate then
-    exit;// { } [] not expanded in "string"
-  if m <= high(m) then // skip marker
+    exit; // { } [] not expanded in "string"
+  if byte(m) <= byte(high(m)) then
   begin
     inc(v);
     dec(l);
-  end;
-  W.AddShort(v, l);
+    if m <> pmPlainString then
+    begin
+      W.AddNoJsonEscape(v, l); // no escape for pmConstNum or pmEscapedString
+      exit;
+    end;
+  end; // out of range m would fallback to pmPlainString
+  TJsonWriter(W).AddJsonEscape(v, l); // raw text needs some escape
 end;
 
 procedure TPreproc.DoEndif(var P: PUtf8Char);
@@ -6487,7 +6515,8 @@ begin
        (IfLevel in IfSkip) then
       DoSkip(P); // continue skip as in DoIf()
   end
-  else if Assigned(OnAddDebugComment) then
+  else if (jppDebugComment in Options) and
+          Assigned(OnAddDebugComment) then
     OnAddDebugComment('$endif$ with no prior $if')
 end;
 
@@ -6527,35 +6556,41 @@ procedure TPreproc.DoSkip(var P: PUtf8Char);
 begin
   repeat
     P := PosChar(P, '$'); // use SSE2 on x86_64
-    case ParseIfDollar(P) of
-      piNone:
-        inc(P);
-      piIf:
-        begin
-          dec(P, 4); // caller should detect and execute DslIf()
-          exit;
-        end;
-      piIfDef:
-        begin
-          dec(P, 7);
-          exit;
-        end;
-      piEnd:
-        begin
-          DoEndif(P);
-          exit;
-        end;
-      piElse:
-        if IfLevel = 0 then // paranoid
-          exit
-        else if IfLevel in IfSkip then
-        begin
-          exclude(IfSkip, IfLevel); // include until $end$
-          exit;
-        end
-        else
-          include(IfSkip, IfLevel);  // and continue skip loop
-    end;
+    if P <> nil then
+      case ParseIfDollar(P) of
+        piNone:
+          inc(P);
+        piIf:
+          begin
+            dec(P, 4); // caller should detect and execute DslIf()
+            exit;
+          end;
+        piIfDef:
+          begin
+            dec(P, 7);
+            exit;
+          end;
+        piEnd:
+          begin
+            DoEndif(P);
+            exit;
+          end;
+        piElse:
+          if IfLevel = 0 then // paranoid
+            exit
+          else if IfLevel in IfSkip then
+          begin
+            exclude(IfSkip, IfLevel); // include until $end$
+            exit;
+          end
+          else
+            include(IfSkip, IfLevel);  // and continue skip loop
+      end
+      else
+      begin
+        P := @NULCHAR; // missing ending $
+        break;
+      end;
   until false;
 end;
 
@@ -6623,11 +6658,13 @@ begin // P^ = 'id$' or 'id = val$' from '$ifdef id$' or '$if id = val$'
        inc(exp.NameStart); // trim marker after raw DoFind()
        dec(exp.NameLen);
       end;
-      if exp.ValueLen < 0 then
-        match := exp.NameStart <> nil // $ifdef id$ just need DoFind() <> nil
+      if exp.ValueLen < 0 then // $ifdef id$ just need DoFind() <> nil
+        match := (exp.NameStart <> nil) and
+                 (exp.NameLen > 0)
       else if (exp.ValueStart = nil) or
               (exp.ValueLen = 0) then
-        match := (exp.NameStart = nil) or (exp.NameLen = 0) // both void
+        match := (exp.NameStart = nil) or
+                 (exp.NameLen = 0) // both void
       else
         match := EvaluateTextExpression(exp); // non-void = < > <= >= ~ ~~ * **
       inc(IfLevel);
@@ -6640,7 +6677,8 @@ begin // P^ = 'id$' or 'id = val$' from '$ifdef id$' or '$if id = val$'
         exit; // no inc(result) after DslSkip()
       end;
     end
-  else if Assigned(OnAddDebugComment) then
+  else if (jppDebugComment in Options) and
+          Assigned(OnAddDebugComment) then
     OnAddDebugComment('too many nested $if$ (15 allowed)');
   if result^ = '$' then
     inc(result);
@@ -6662,7 +6700,8 @@ begin
           include(IfSkip, IfLevel); // skip until $end$
           DoSkip(P);
         end
-      else if Assigned(OnAddDebugComment) then
+      else if (jppDebugComment in Options) and
+              Assigned(OnAddDebugComment) then
         OnAddDebugComment('$else$ with no prior $if');
     piEnd:         // $endif$
       DoEndif(P);
@@ -6692,7 +6731,11 @@ begin
           dec(level);
       '"':
         result := GotoEndOfJsonString(result);
+      '''':
+        result := GotoEndOfQuotedString(result);
     end;
+    if result^ = #0 then
+      exit; // unterminated quoted string
     inc(result);
   until false;
 end;
@@ -6700,6 +6743,7 @@ end;
 procedure TPreproc.DoRegister(m: TPreprocMarker; k, v, ve: PUtf8Char; kl: PtrInt);
 var
   beg, val: PUtf8Char;
+  vm: TPreprocMarker;
   l, vallen: PtrInt; // @vallen = PPtrInt
   comment: PShortString;
   tmp: TSynTempAdder;
@@ -6708,10 +6752,14 @@ begin
   tmp.AddDirect(AnsiChar(m)); // type: #0=template #1="string" #2=const/num
   repeat
     beg := v;
-    while (v < ve) and
-          (cardinal(PWord(v)^) <> SLASH_16) and
-          not (v^ in ['$', '#']) do
-      inc(v);
+    while (v < ve) and (v^ <> '$') do
+      if (m = pmTemplate) and
+         ((v^ = '#') or
+          (cardinal(PWord(v)^) = SLASH_16)) and
+         ((v = beg) or (v[-1] <= ' ')) then
+        break
+      else
+        inc(v);
     tmp.Add(beg, v - beg);
     if v >= ve then
       break;
@@ -6721,28 +6769,44 @@ begin
         continue
       else
       begin
-        // $ident$ ${ident} $env:NAME$ ${env:NAME}
-        v := Expand(v, val, vallen, {KeepMarker=}false);
+        // $ident$ ${ident} $env:NAME$ ${env:NAME} ExpandTo() into tmp
+        v := Expand(v, val, vallen, {KeepMarker=}true);
         if val <> nil then
-          tmp.Add(val, vallen); // early evaluation of $(ident) within templates
+        begin
+          vm := TPreprocMarker(val^);
+          if (vallen > 0) and
+             (byte(vm) <= byte(high(vm))) then
+          begin
+            inc(val);
+            dec(vallen);
+          end
+          else
+            vm := pmPlainString;
+          if (m = pmEscapedString) and
+             (vm = pmPlainString) then
+            AdderJsonEscape(tmp, val, val + vallen)
+          else
+            tmp.Add(val, vallen);
+        end;
       end
     else
     begin
       // # comment or // comment
       l := v - beg;
       while (l <> 0) and
-            (v[l - 1] = ' ') do
+            (beg[l - 1] = ' ') do
         dec(l); // trim right
       if l > 0 then
       begin
-        tmp.Add(beg, l);
+        dec(tmp.Store.added, v - beg - l);
         tmp.AddDirect(#10);
       end;
       v := GotoNextLineSmall(v);
     end;
   until v >= ve;
   Vars.Update(k, tmp.Buffer, kl, tmp.Size);
-  if Assigned(OnAddDebugComment) then
+  if (jppDebugComment in Options) and
+     Assigned(OnAddDebugComment) then
   begin
     comment := tmp.Buffer;
     if tmp.Size > 100 then
@@ -6776,6 +6840,8 @@ begin // called with P^ = '$$'
     P := result; // P^ = line just after '$$$' = verbatim start
     repeat
       result := GotoNextNotSpace(GotoNextLineSmall(result));
+      if result^ = #0 then
+        exit; // unterminated $$$ block
     until (result^ = '$') and
           (cardinal(PWord(result + 1)^) = DOLLAR_16);
     if Assigned(OnVerbatim) then
@@ -6804,7 +6870,8 @@ ok: result := GotoNextNotSpace(result);
         continue;     // comment line
       'i',
       'I':
-        if (IncludeFolder <> '') and
+        if ((IncludeFolder <> '') or
+            (jppIncludeAbsolute in Options)) and
            (result[1] in ['n', 'N']) then
           case IdemPCharSep(result + 2, 'CLUDE |SERT |') of
             0:
@@ -6838,23 +6905,30 @@ ok: result := GotoNextNotSpace(result);
       '[': // value = whole {..}/[..] text block
         begin
           result := GotoTemplateEnding(result);
-          DoRegister(pmTemplate, key, value, result - 1, keylen);
+          DoRegister(pmTemplate, key, value, result, keylen);
           continue; // has been expanded and processed for any nested $if$
         end;
-      '"',
+      '"':
+        result := GotoEndOfJsonString(result);   // handles \" the JSON way
       '''':
         result := GotoEndOfQuotedString(result); // ignore double quotes within
     else
       begin
         value := result;
-        while not (result^ in [#0 .. #31, '#', '/']) do
+        while not (result^ in [#0 .. #31]) do
         begin
+          // detect real // comments but keep valid http://... content
+          if ((result^ = '#') or
+              ((result^ = '/') and (result[1] = '/'))) and
+             ((result = value) or (result[-1] <= ' ')) then
+            break;
           // unquoted value in $$ DSL section = till end of line or comment
           if result^ in ['\', '"'] then
             marker := pmPlainString; // would need W.AddJsonEscape()
           inc(result);
         end;
-        while result[-1] = ' ' do
+        while (result > value) and
+              (result[-1] = ' ') do
           dec(result); // trim right
         if IsConstantOrNumberJson(value, result - value) then
           marker := pmConstNum;
@@ -6871,14 +6945,21 @@ var
   v: PUtf8Char;
   vlen: PtrInt;     // @vlen = PPtrInt
   c: AnsiChar;
+  quoted: boolean;
   txt: RawUtf8;     // UTF-8 file name
   fn: TFileName;    // RTL file name
 begin
   tmp[0] := #0;
-  if P^ in ['"', ''''] then
-    inc(P); // allow quoted "<filename>", but with no quotes support
-  while not (P^ in [#0, '"', '''', #13, #10]) do
+  quoted := P^ in ['"', ''''];
+  if quoted then
+    inc(P); // allow quoted "<filename>"
+  while not (P^ in [#0, '"', '''', '#', #13, #10]) do
   begin
+    if (not quoted) and
+       (P^ = '/') and
+       (P[1] = '/') and
+       (P[-1] <= ' ') then
+      break;
     if P^ = '$' then
     begin
       P := Expand(P, v, vlen, {KeepMarker=}false);
@@ -6891,11 +6972,16 @@ begin
       if c = InvertedPathDelim then
         c := PathDelim; // normalize for direct cross-platform support
       AppendShortCharSafe(c, tmp);
+      inc(P);
     end;
   end;
+  while (tmp[0] <> #0) and
+        (tmp[ord(tmp[0])] <= ' ') do
+    dec(tmp[0]); // trim right
   if IncludeDepth >= DSL_INCLUDE_DEPTH then
   begin
-    if Assigned(OnAddDebugComment) then
+    if (jppDebugComment in Options) and
+       Assigned(OnAddDebugComment) then
       OnAddDebugComment('include too deep: rejected');
     exit;
   end;
@@ -6904,12 +6990,14 @@ begin
   begin
     if not (jppIncludeAbsolute in Options) then
       exit;
-  end else if SafeFileName(fn) then
+  end else if (IncludeFolder <> '') and
+              SafeFileName(fn) then
     fn := IncludeFolder + fn
   else
     exit;
   txt := RawUtf8FromFile(fn);
-  if Assigned(OnAddDebugComment) then
+  if (jppDebugComment in Options) and
+     Assigned(OnAddDebugComment) then
   begin
     if txt = '' then
       AppendShort(' not found: skipped', tmp)
@@ -6938,7 +7026,8 @@ var
 begin
   preproc := TPreProc.Create(Flags, IncludeRoot);
   try
-    JsonBufferReformat(pointer(Json), result, Format, preproc);
+    if not JsonBufferReformat(pointer(Json), result, Format, preproc) then
+      FastAssignNew(result);
   finally
     preproc.Free;
   end;
@@ -6978,7 +7067,7 @@ type
   TPreprocText = class(TPreproc)
   protected
     W: TTextWriter;
-    LineFeed: cardinal;    // e.g. #13#10
+    LineFeed: cardinal;    // e.g. #13#10 encoded as 32-bit constant
     LineFeedLen: cardinal; // e.g. 2
     // TPreprocAbstract OnAppend/OnVerbatim/OnAddDebugComment callbacks
     function TextAppend(P: PUtf8Char): boolean;
@@ -6988,12 +7077,6 @@ type
     function TextPreprocessToWriter(P: PUtf8Char; Dest: TTextWriter): boolean;
   end;
 
-function TPreprocText.TextAppend(P: PUtf8Char): boolean;
-begin
-  W.AddNoJsonEscape(P, StrLen(P));
-  result := true; // not used anyway
-end;
-
 procedure TPreprocText.TextVerbatim(P: PUtf8Char; Len: PtrInt);
 begin
   W.AddNoJsonEscape(P, Len);
@@ -7001,18 +7084,58 @@ end;
 
 procedure TPreprocText.TextComment(const info: ShortString);
 begin
-  PCardinal(W.B + 1)^ := LineFeed;
-  inc(W.B, LineFeedLen);
+  W.AddShort4(LineFeed, LineFeedLen);
   W.AddShort('# debug: ');
   W.AddShort(info);
   PCardinal(W.B + 1)^ := LineFeed;
   inc(W.B, LineFeedLen);
 end;
 
-function TPreprocText.TextPreprocessToWriter(P: PUtf8Char; Dest: TTextWriter): boolean;
+function TPreprocText.TextAppend(P: PUtf8Char): boolean;
 var
   B, v: PUtf8Char;
   l: PtrInt;
+begin
+  result := false;
+  if (P = nil) or
+     (W = nil) then
+    exit;
+  repeat
+    // copy all literal text preceding the next '$'
+    B := P;
+    while (P^ <> #0) and
+          (P^ <> '$') do
+      inc(P);
+    if P > B then
+      W.AddNoJsonEscape(B, P - B);
+    if P^ = #0 then
+      break;
+    if P[1] = '$' then
+      // $$ ... $$ or $$$ ... $$$
+      P := ParseSection(P)
+    else if WasIf(P) then
+      // $if$ / $else$ / $endif$ - WasIf updates P, potentially skipping content
+      continue
+    else if P[1] in ['(', '{'] then
+    begin
+      // $(ident) or ${ident}
+      P := Expand(P, v, l, {KeepMarker=}false);
+      if v <> nil then
+        W.AddNoJsonEscape(v, l);
+    end
+     else
+    begin
+      // '$' is kept verbatim (e.g. $ident$ is not expanded in text mode)
+      W.AddDirect('$');
+      inc(P);
+    end;
+  until false;
+  result := true;
+end;
+
+function TPreprocText.TextPreprocessToWriter(P: PUtf8Char; Dest: TTextWriter): boolean;
+var
+  B: PUtf8Char;
 begin
   result := false;
   if (P = nil) or
@@ -7041,32 +7164,7 @@ begin
     end;
     P := B;
   end;
-  // main loop
-  repeat
-    while (P^ <> #0) and
-          (P^ <> '$') do
-      inc(P);
-    W.AddNoJsonEscape(B, P - B);
-    if P^ = #0 then
-      break;
-    if P[1] = '$' then
-    begin
-      B := ParseSection(P);    // $$ ... $$ DSL section: include + vars
-      continue;
-    end;
-    B := P;
-    if WasIf(B) then           // $if$ $else$ $endif$
-      continue;
-    if P[1] in ['(', '{'] then // only $(ident) ${ident} - not $ident$
-    begin
-      P := Expand(P, v, l, {keepmarker=}false);
-      if v <> nil then
-        W.AddShort(v, l);
-    end
-    else
-      inc(P); // this was not $(ident) -> write verbatim and continue
-  until false;
-  result := true;
+  result := TextAppend(P);
 end;
 
 
@@ -7117,8 +7215,7 @@ begin
   try
     F := TFileStreamEx.Create(Dest, fmCreate);
     try
-      TextPreprocessToStream(Text, F, Flags, IncludeRoot);
-      result := true;
+      result := TextPreprocessToStream(Text, F, Flags, IncludeRoot);
     finally
       F.Free;
     end;

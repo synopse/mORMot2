@@ -45,12 +45,18 @@ The `mormot.net.*` units provide the complete network communication layer for th
 
 **mormot.net.server** - HTTP/UDP servers
 - `THttpServer` - Multi-threaded HTTP/1.1 server over sockets
-- `THttpApiServer` - Windows http.sys integration (high performance)
 - `TUriRouter` - Radix tree-based URI routing (~26M lookups/sec)
   - Supports parametrized routes: `/users/<id>` → extracts `<id>`
   - URI rewriting with placeholders
   - Per-HTTP-method trees (GET/POST/PUT/DELETE/OPTIONS/HEAD/PATCH)
 - `TUdpServerThread` - Abstract UDP server base
+
+**mormot.net.server.win** - Windows http.sys servers (void unit on POSIX)
+- `THttpApiServer` - Windows http.sys integration (high performance)
+- `THttpApiWebSocketServer` - WebSockets over http.sys
+
+**mormot.net.peercache** - Local peer-to-peer HTTP cache
+- `THttpPeerCache` - Shares downloaded files between peers of a local network, with UDP discovery
 
 ### Asynchronous Layer (High-Performance)
 
@@ -59,8 +65,10 @@ The `mormot.net.*` units provide the complete network communication layer for th
   - Uses IOCP on Windows, epoll on Linux, kqueue on BSD/macOS
   - Handles thousands of concurrent connections efficiently
 - `THttpAsyncServer` - Async HTTP/1.1 server
-- `THttpProxyServer` - HTTP proxy with caching
 - Used by relay and RTSP modules for scalability
+
+**mormot.net.proxy** - HTTP server with proxy and cache
+- `THttpProxyServer` - Serves local folders, remote URIs with caching, or custom events over `THttpAsyncServer`
 
 ### WebSockets Layer
 

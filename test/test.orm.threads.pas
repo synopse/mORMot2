@@ -153,10 +153,10 @@ type
   public
 {$endif FORCE_TCPONLY}
     {$ifdef USEWININET}
-    {$ifndef ONLYUSEHTTPSOCKET}
+    {$ifdef USEHTTPSYS}
     /// test via TRestHttpClientWinHTTP instances over http.sys (HTTP API) server
     procedure WindowsAPI;
-    {$endif ONLYUSEHTTPSOCKET}
+    {$endif USEHTTPSYS}
     {$endif USEWININET}
     {$ifdef OSPOSIX}
     /// test via TRestHttpClientSocket instances over Unix Socket API server
@@ -721,13 +721,13 @@ begin
 end;
 
 {$ifdef USEWININET}
-{$ifndef ONLYUSEHTTPSOCKET}
+{$ifdef USEHTTPSYS}
 procedure TTestMultiThreadProcess.WindowsAPI;
 begin
   sleep(100); // sometimes needed to avoid ERROR_SHARING_VIOLATION
   Test(TRestHttpClientWinHTTP, useHttpApi);
 end;
-{$endif ONLYUSEHTTPSOCKET}
+{$endif USEHTTPSYS}
 {$endif USEWININET}
 
 const
