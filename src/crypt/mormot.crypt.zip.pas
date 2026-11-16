@@ -204,8 +204,8 @@ const
 constructor TZipCryptAes.Create(AesStrength: integer);
 begin
   inherited Create(AesStrength);
-  fKeyLen := 8 + AesStrength shl 3;          // 16/24/32 bytes
-  fHeaderLen := fKeyLen shr 1 + AES_PWV;     // salt is 8/12/16 bytes
+  fKeyLen := 8 + AesStrength shl 3;      // 16/24/32 bytes
+  fHeaderLen := fKeyLen shr 1 + AES_PWV; // salt is 8/12/16 bytes
   fTrailerLen := AES_MAC;
 end;
 

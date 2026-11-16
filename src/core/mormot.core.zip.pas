@@ -299,7 +299,7 @@ type
     /// version of this extra field, currently 1
     version: byte;
     /// File Name Field CRC32 Checksum
-    nameCRC32: cardinal;
+    nameCrc32: cardinal;
     /// UTF-8 version of the entry File Name of size bytes length
     utf8Name: AnsiChar;
   end;
@@ -2987,7 +2987,7 @@ var
   h, hnext: PFileHeader;
   extraname: PFileInfoExtraName;
   e, prev: PZipReadEntry;
-  i: PtrInt;
+  i, needed: PtrInt;
   p64: PQWord;
   tmp: RawByteString;
 begin
@@ -3035,10 +3035,18 @@ begin
     begin
       extraname := h^.LocateExtra(UNICODEPATH_EXTRA_ID);
       if extraname <> nil then
+        if extraname^.size < 5 then // at least version + nameCrc
+          ESynZip.RaiseUtf8('%.Create: truncated Unicode Path extra in %',
+            [self, fFileName])
+        else if (extraname^.version <> 1) or
+                (extraname^.nameCrc32 <>
+                   mormot.lib.z.crc32(0, e^.storedName, h^.fileInfo.nameLen)) or
+                (extraname^.size = 5) then
+          extraname := nil; // skip unsupported/stale Unicode Path metadata
+      if extraname <> nil then
       begin
         // unicode path stored in file info extra block
-        SetString(tmp, PAnsiChar(@extraname.utf8Name),
-          extraname.size - 5{version+nameCrc});
+        SetString(tmp, PAnsiChar(@extraname.utf8Name), extraname.size - 5);
         Utf8ToFileName(tmp, e^.zipName)
       end
       else if h^.fileInfo.GetUtf8FileNameFlag or
@@ -3074,34 +3082,42 @@ begin
       ESynZip.RaiseUtf8('%.Create: Unsupported zipmethod % for % in %',
         [self, h^.fileInfo.zZipMethod, e^.zipName, fFileName]);
     // proper zip64 support
+    needed := 0;
     { TFileInfoExtra64 is the layout of the zip64 extended info "extra" block.
       If one of the size or offset fields in the Local or Central directory
       record is too small to hold the required data, a zip64 extended information
       record is created. The order of the fields in the zip64 extended information
       record is fixed, but the fields **MUST only appear** if the corresponding
       Local or Central directory record field is set to 0xFFFF or 0xFFFFFFFF. }
-    if (h^.localHeadOff       = ZIP32_MAXSIZE) or
-       (h^.fileInfo.zfullSize = ZIP32_MAXSIZE) or
-       (h^.fileInfo.zzipSize  = ZIP32_MAXSIZE) then
-      // zip64 format: retrieve TFileInfoExtra64 position in dir64
-      if h^.fileInfo.IsZip64 then
-      begin
-        e^.dir64 := h^.LocateExtra(ZIP64_EXTRA_ID);
-        if e^.dir64 = nil then
-          ESynZip.RaiseUtf8('%.Create: zip64 extra not found for % in %',
-            [self, e^.zipName, fFileName]);
-        e^.fileinfo.zip64id := ZIP64_EXTRA_ID;
-        e^.fileinfo.size := 3 * SizeOf(QWord);
-      end
-      else
+    if h^.fileInfo.zfullSize = ZIP32_MAXSIZE then
+      inc(needed, SizeOf(QWord));
+    if h^.fileInfo.zzipSize = ZIP32_MAXSIZE then
+      inc(needed, SizeOf(QWord));
+    if h^.localHeadOff = ZIP32_MAXSIZE then
+      inc(needed, SizeOf(QWord));
+    if needed <> 0 then
+    begin
+      if not h^.fileInfo.IsZip64 then
         ESynZip.RaiseUtf8('%.Create: zip64 version % error for % in %',
           [self, ToByte(h^.fileInfo.neededVersion), e^.zipName, fFileName]);
-    p64 := @e^.dir64^.zfullSize; // where 64-bit field(s) may appear
+      e^.dir64 := h^.LocateExtra(ZIP64_EXTRA_ID);
+      if e^.dir64 = nil then
+        ESynZip.RaiseUtf8('%.Create: zip64 extra not found for % in %',
+          [self, e^.zipName, fFileName]);
+      if e^.dir64^.size < needed then
+        ESynZip.RaiseUtf8('%.Create: zip64 truncated extra (% < %) for %',
+          [self, e^.dir64^.size, needed, e^.zipName]);
+      e^.fileinfo.zip64id := ZIP64_EXTRA_ID;
+      e^.fileinfo.size := 3 * SizeOf(QWord);
+    end;
+    p64 := nil;
+    if e^.dir64 <> nil then
+      p64 := @e^.dir64^.zfullSize;
     if e^.dir^.fileInfo.zfullSize = ZIP32_MAXSIZE then
     begin
-      if e^.dir64 = nil then
-        ESynZip.RaiseUtf8('zip64 FullSize format error for % in %',
-          [e^.zipName, fFileName]);
+      if e^.dir64 = nil then // also ensure
+        ESynZip.RaiseUtf8('%.Create: zip64 FullSize format error for % in %',
+          [self, e^.zipName, fFileName]);
       e^.fileinfo.zfullSize := p64^;
       inc(p64); // go to the next field
     end
@@ -3110,8 +3126,8 @@ begin
     if e^.dir^.fileInfo.zzipSize = ZIP32_MAXSIZE then
     begin
       if e^.dir64 = nil then
-        ESynZip.RaiseUtf8('zip64 ZipSize format error for % in %',
-          [e^.zipName, fFileName]);
+        ESynZip.RaiseUtf8('%.Create: zip64 ZipSize format error for % in %',
+          [self, e^.zipName, fFileName]);
       e^.fileinfo.zzipSize := p64^;
       inc(p64);
     end
@@ -3119,8 +3135,8 @@ begin
       e^.fileinfo.zzipSize := e^.dir^.fileInfo.zzipSize;
     if e^.dir^.localHeadOff = ZIP32_MAXSIZE then
       if e^.dir64 = nil then
-        ESynZip.RaiseUtf8('zip64 LocalHeadOff format error for % in %',
-          [e^.zipName, fFileName])
+        ESynZip.RaiseUtf8('%.Create: zip64 LocalHeadOff format error for % in %',
+          [self, e^.zipName, fFileName])
       else
         e^.fileinfo.offset := p64^
     else
@@ -3461,6 +3477,10 @@ begin
   result := GetCrypt(strength);
   if info.f64.zzipSize < result.HeaderLen + result.TrailerLen then
     ESynZip.RaiseUtf8('%.UnZip: truncated %', [self, e^.zipName]);
+  if (method = Z_STORED) and
+     (info.f64.zzipSize - result.HeaderLen - result.TrailerLen <> info.f64.zfullSize) then
+    ESynZip.RaiseUtf8('%.UnZip: invalid stored size for %',
+      [self, e^.zipName]);
 end;
 
 procedure TZipRead.CryptHeader(c: TZipCrypt; e: PZipReadEntry;
@@ -3502,11 +3522,10 @@ var
   remaining: Int64;
   n: PtrInt;
 begin
-  result := false;
   // only called for file-backed entries, after CryptPrepare
-  if info.f64.zzipSize > High(Int64) then
-    ESynZip.RaiseUtf8('%.UnZip: entry too large for %',
-      [self, e^.zipName]);
+  if info.f64.zzipSize >= High(Int64) then
+    ESynZip.RaiseUtf8('%.UnZip: entry too large (%) for %',
+      [self, KBNoSpace(info.f64.zzipSize), e^.zipName]);
   local.LoadAndDataSeek(fSource, e^.fileinfo.offset + fSourceOffset);
   fSource.ReadBuffer(head, c.HeaderLen);
   CryptHeader(c, e, info, @head);
@@ -3538,16 +3557,22 @@ var
 begin
   FastAssignNew(result{%H-});
   if not RetrieveFileInfo(aIndex, info) or
-     (info.f64.zfullSize = 0) or
      ((aMaxSize > 0) and
       ((info.f64.zzipSize > aMaxSize) or
        (info.f64.zfullSize > aMaxSize))) then
     exit;
   e := @Entry[aIndex];
   c := CryptPrepare(e, info, method);
-  // call libdeflate_crc32 / libdeflate_deflate_decompress if available
-  FastSetString(RawUtf8(result), info.f64.zfullSize); // assume CP_UTF8 for FPC
   len := info.f64.zfullsize;
+  if len = 0 then
+  begin
+    if c <> nil then
+      if CryptLoad(c, e, info, tmp) = nil then
+        ESynZip.RaiseUtf8('%.UnZip(%): authentication failure from %',
+          [self, e^.zipName, fFileName]);
+    exit;
+  end;
+  FastSetString(RawUtf8(result), len); // assume CP_UTF8 for FPC
   ziplen := info.f64.zzipSize;
   if c <> nil then
   begin
@@ -3574,6 +3599,7 @@ begin
     fSource.ReadBuffer(data^, ziplen);
   end;
   if method = Z_DEFLATED then
+    // call libdeflate_crc32 / libdeflate_deflate_decompress if available
     len := UnCompressMem(data, pointer(result), ziplen, len)
   else if data <> pointer(result) then
   begin
