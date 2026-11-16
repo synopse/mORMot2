@@ -53,20 +53,25 @@ type
 
 { ************ TZipCryptAes Class Implementing the WinZip AE-1/AE-2 Format }
 
+const
+  // WinZip AES-CTR uses 64 * 128-bit = 1KB of pre-computed AES blocks
+  ZIP_AESCTR = 64;
+
 type
   /// WinZip AES encryption (AE-1/AE-2) of .zip entries
   // - registered by this unit into the mormot.core.zip ZipCryptClass[] variable
   // - key derivation is PBKDF2-HMAC-SHA1 with 1000 rounds over a random salt,
   // data is encrypted using AES-CTR with a little-endian counter, then
   // authenticated with the first 80-bit of its HMAC-SHA1
+  // - on Intel, will use 4 interleaved AES-NI and SHA-NI opcodes if available
   // - see https://www.winzip.com/en/support/aes-encryption
   TZipCryptAes = class(TZipCrypt)
   protected
     fAes: TAes;
-    fHmac: TSynSigner;
     fCtr: QWord;
     fKeyLen, fKeyStreamPos: PtrInt;
-    fKeyStream: array[0 .. 63] of TAesBlock; // pre-computed AES-CTR blocks
+    fHmac: TSynSigner;
+    fKeyStream: array[0 .. ZIP_AESCTR - 1] of TAesBlock; // pre-computed blocks
     function Setup(const Password: RawByteString; Salt: PByteArray): cardinal;
     procedure Crypt(Data: PByteArray; Len: PtrInt);
   public
@@ -235,25 +240,39 @@ begin
   result := PWord(@PByteArray(k)[fKeyLen * 2])^;
   FillZero(k);
   fCtr := 0;
-  fKeyStreamPos := SizeOf(fKeyStream); // compute on first Crypt() call
+  fKeyStreamPos := SizeOf(fKeyStream); // trigger the first DoBlocks() call
+end;
+
+procedure FillCtr(p: PHash128Rec; ctr: PtrUInt);
+var
+  n: integer;
+begin
+  // WinZip AES-CTR uses a 128-bit little-endian counter starting at 1
+  n := ZIP_AESCTR;
+  repeat
+    inc(ctr);
+    p^.L := ctr;
+    p^.H := 0;
+    inc(p);
+    dec(n);
+  until n = 0;
 end;
 
 procedure TZipCryptAes.Crypt(Data: PByteArray; Len: PtrInt);
 var
-  i, n: PtrInt;
+  n: PtrInt;
 begin
   while Len > 0 do
   begin
     if fKeyStreamPos = SizeOf(fKeyStream) then
     begin
-      // WinZip AES-CTR uses a 128-bit little-endian counter starting at 1
-      FillCharFast(fKeyStream, SizeOf(fKeyStream), 0);
-      for i := 0 to high(fKeyStream) do
-      begin
-        inc(fCtr);
-        PQWord(@fKeyStream[i])^ := fCtr;
-      end;
-      fAes.DoBlocks(@fKeyStream, @fKeyStream, length(fKeyStream), true);
+      FillCtr(@fKeyStream, fCtr);
+      inc(fCtr, ZIP_AESCTR);
+      {$ifdef CPU32}
+      if PtrUInt(fCtr) = 0 then // PtrUInt ctr would overflow after 64GB
+        ESynZip.RaiseUtf8('%.Crypt: 32-bit overflow', [self]);
+      {$endif CPU32}
+      fAes.DoBlocks(@fKeyStream, @fKeyStream, length(fKeyStream), true); // AES-NI
       fKeyStreamPos := 0;
     end;
     n := SizeOf(fKeyStream) - fKeyStreamPos;
@@ -284,7 +303,7 @@ end;
 procedure TZipCryptAes.Encrypt(Data: PByteArray; Len: PtrInt);
 begin
   Crypt(Data, Len);
-  fHmac.Update(Data, Len); // authenticate the encrypted data
+  fHmac.Update(Data, Len); // authenticate the encrypted data - may use SHA-NI
 end;
 
 procedure TZipCryptAes.EncryptDone(Trailer: PByteArray);
@@ -303,7 +322,7 @@ end;
 
 procedure TZipCryptAes.Decrypt(Data: PByteArray; Len: PtrInt; AuthOnly: boolean);
 begin
-  fHmac.Update(Data, Len); // authenticate the encrypted data
+  fHmac.Update(Data, Len); // authenticate the encrypted data - may use SHA-NI
   if not AuthOnly then
     Crypt(Data, Len);
 end;
