@@ -9835,14 +9835,19 @@ begin
   for i := low(ERRORS) to high(ERRORS) do
   with ERRORS[i] do
   begin
-    YamlExpectRaise(Join([' for ', Name]), Yaml);
-    if not IdemPChar(pointer(Name), 'NUL-') then
-      continue;
-    CheckNotEqual(StrLen(pointer(Yaml)), length(Yaml), Name);
-    json := SmallUInt32Utf8[i];
-    CheckUtf8(not TryYamlToJson(Yaml, json), // specific call to detect #0
-      'YamlToJson should reject %', [Name]);
-    CheckEqual(json, '');
+    TSynLog.Family.ExceptionIgnoreCurrentThread := true;
+    try
+      YamlExpectRaise(Join([' for ', Name]), Yaml);
+      if not IdemPChar(pointer(Name), 'NUL-') then
+        continue;
+      CheckNotEqual(StrLen(pointer(Yaml)), length(Yaml), Name);
+      json := SmallUInt32Utf8[i];
+      CheckUtf8(not TryYamlToJson(Yaml, json), // specific call to detect #0
+        'YamlToJson should reject %', [Name]);
+      CheckEqual(json, '');
+    finally
+      TSynLog.Family.ExceptionIgnoreCurrentThread := false;
+    end;
   end;
 end;
 
