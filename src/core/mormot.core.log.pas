@@ -6480,6 +6480,11 @@ begin
     InternalSetCurrentThreadName(name);
 end;
 
+procedure _NotifyThreadEnded;
+begin
+  TSynLog.NotifyThreadEnded;
+end;
+
 function _GetCurrentThreadName: RawUtf8;
 var
   ndx: PtrInt;
@@ -9328,6 +9333,7 @@ begin
   GetEnumTrimmedNames(TypeInfo(TAppLogLevel), @_LogAppText);
   SetThreadName := _SetThreadName;
   GetCurrentThreadName := _GetCurrentThreadName;
+  NotifyThreadEnded := _NotifyThreadEnded;
   SetCurrentThreadName('MainThread');
   GetExecutableLocation := _GetExecutableLocation; // use FindLocationShort()
   LogCompressAlgo := AlgoSynLZ; // very fast and efficient on logs

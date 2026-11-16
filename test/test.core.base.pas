@@ -3706,6 +3706,7 @@ type
     Calls: integer;
     FirstCallEmpty, AbortOnText: boolean;
     SeenPid: cardinal;
+    ThreadIndex: PtrInt;
     function OnOutput(const text: RawByteString; pid: cardinal): boolean;
   end;
 
@@ -3715,6 +3716,7 @@ begin
     FirstCallEmpty := text = '';
   inc(Calls);
   SeenPid := pid;
+  ThreadIndex := TSynLog.ThreadIndex;
   Output := Output + text;
   result := AbortOnText and
             (text <> '');
@@ -3918,6 +3920,7 @@ var
   bg, pid, hfd: cint;
   fds: TFilDes;
   files, i: integer;
+  ndx: PtrInt;
 begin
   // basic execution with stdout and exit code
   p := TExternalProcess.Create;
@@ -4007,6 +4010,27 @@ begin
     Check(r.SeenPid = p.Pid, 'onoutput pid');
   finally
     p.Free;
+    r.Free;
+  end;
+  // the background thread releases its TSynLog thread number when it ends
+  r := TRunRedirectTest.Create;
+  try
+    ndx := 0;
+    for i := 0 to 19 do
+    begin
+      p := TExternalProcess.Create;
+      try
+        p.OnOutput := r.OnOutput;
+        Check(p.Start('echo hi'), 'threadnumber');
+        CheckEqual(p.WaitFor(10000), 0, 'threadnumber');
+      finally
+        p.Free;
+      end;
+      if i = 0 then
+        ndx := r.ThreadIndex;
+    end;
+    Check(r.ThreadIndex < ndx + 10, 'threadnumber reused');
+  finally
     r.Free;
   end;
   // explicit arguments are neither parsed nor given to the shell
@@ -4306,6 +4330,7 @@ var
   start: Int64;
   pid: cardinal;
   files, i, timeout: integer;
+  ndx: PtrInt;
   sec: TPipeSecurity;
   rd, wr: THandle;
 begin
@@ -4385,6 +4410,27 @@ begin
     Check(r.SeenPid = p.Pid, 'onoutput pid');
   finally
     p.Free;
+    r.Free;
+  end;
+  // the background thread releases its TSynLog thread number when it ends
+  r := TRunRedirectTest.Create;
+  try
+    ndx := 0;
+    for i := 0 to 19 do
+    begin
+      p := TExternalProcess.Create;
+      try
+        p.OnOutput := r.OnOutput;
+        Check(p.Start('cmd /c echo hi'), 'threadnumber');
+        CheckEqual(p.WaitFor(10000), 0, 'threadnumber');
+      finally
+        p.Free;
+      end;
+      if i = 0 then
+        ndx := r.ThreadIndex;
+    end;
+    Check(r.ThreadIndex < ndx + 10, 'threadnumber reused');
+  finally
     r.Free;
   end;
   // explicit arguments are quoted as CommandLineToArgvW() expects: cmd
