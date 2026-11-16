@@ -6,8 +6,9 @@ Details are available [on out GitHub repository](https://github.com/synopse/mORM
 ## [2.5.stable] - trunk
 ### Added 
 - Preliminary compatibility with Delphi 13.1+ Linux MacOS Android iOS
+- New `mormot.core.fmt.pas` `mormot.crypt.factory.pas` `mormot.net.peercache.pas` `mormot.net.server.win.pas` `mormot.net.proxy.pas` extracted units
 - Native CNG support on Windows via `mormot.crypt.win.pas`
-- new `mormot.core.fmt.pas` `mormot.crypt.factory.pas` `mormot.net.peercache.pas` `mormot.net.server.win.pas` `mormot.net.proxy.pas` extracted units
+- Zip file password encryption via `mormot.crypt.zip.pas`
 - Text resources translation via the new `mormot.core.i18n.pas` unit
 - XML pull/SAX/DOM Parser
 - YAML 1.2 Read and Write Support

@@ -1891,7 +1891,7 @@ begin
     else
       enc := zeAes256;
     if ZipCryptClass[enc] = nil then
-      ESynZip.RaiseUtf8('%: % requires the mormot.crypt.zip unit',
+      ESynZip.RaiseUtf8('%.GetCrypt: % requires the mormot.crypt.zip unit',
         [self, ENCRYPTION_NAME[enc]]);
     fCrypt := ZipCryptClass[enc].Create(AesStrength);
   end;
@@ -2151,7 +2151,8 @@ end;
 
 destructor TZipWrite.Destroy;
 begin
-  FinalFlush;
+  if fDest <> nil then
+    FinalFlush; // write central directory to disk
   inherited Destroy;
   fCryptWriter.Free;
   if fDestOwned then
@@ -3468,19 +3469,27 @@ begin
   if not (method in [Z_STORED, Z_DEFLATED]) then
     ESynZip.RaiseUtf8('%.UnZip: Unsupported method % for % %',
       [self, method, e^.zipName, fFileName]);
-  if (info.f32.flags and FLAG_ENCRYPTED = 0) and
-     (e^.aes = nil) then
-    exit;
-  if fPassword = '' then
-    ESynZip.RaiseUtf8('%.UnZip: % is encrypted: missing Password',
-      [self, e^.zipName]);
-  result := GetCrypt(strength);
-  if info.f64.zzipSize < result.HeaderLen + result.TrailerLen then
-    ESynZip.RaiseUtf8('%.UnZip: truncated %', [self, e^.zipName]);
-  if (method = Z_STORED) and
-     (info.f64.zzipSize - result.HeaderLen - result.TrailerLen <> info.f64.zfullSize) then
-    ESynZip.RaiseUtf8('%.UnZip: invalid stored size for %',
-      [self, e^.zipName]);
+  if (info.f32.flags and FLAG_ENCRYPTED <> 0) or
+     (e^.aes <> nil) then
+  begin
+    if fPassword = '' then
+      ESynZip.RaiseUtf8('%.UnZip: % is encrypted: missing Password',
+        [self, e^.zipName]);
+    result := GetCrypt(strength);
+    if info.f64.zzipSize < result.HeaderLen + result.TrailerLen then
+      ESynZip.RaiseUtf8('%.UnZip: truncated %', [self, e^.zipName]);
+  end;
+  if method = Z_STORED then
+    if result = nil then
+    begin
+      if info.f64.zzipSize <> info.f64.zfullSize then
+        ESynZip.RaiseUtf8('%.UnZip: invalid stored size for %',
+          [self, e^.zipName]);
+    end
+    else if info.f64.zzipSize - result.HeaderLen - result.TrailerLen <>
+            info.f64.zfullSize then
+      ESynZip.RaiseUtf8('%.UnZip: invalid stored size for %',
+        [self, e^.zipName]);
 end;
 
 procedure TZipRead.CryptHeader(c: TZipCrypt; e: PZipReadEntry;
@@ -3549,7 +3558,7 @@ function TZipRead.UnZip(aIndex: integer; aMaxSize: Int64): RawByteString;
 var
   e: PZipReadEntry;
   len, ziplen: PtrUInt;
-  method: integer;
+  method: integer; // not PtrInt
   data: PAnsiChar;
   tmp: RawByteString;
   info: TFileInfoFull;
@@ -3624,7 +3633,7 @@ var
   tmp, plain: RawByteString;
   tmplen, len, ziplen, written: Int64;
   read: PtrInt;
-  method: integer;
+  method: integer; // not PtrInt
   local: TLocalFileHeader;
   c: TZipCrypt;
   buf: TTemp64; // encryption header or trailer
@@ -3717,6 +3726,8 @@ begin
             begin
               deflate.Flush; // needed for accurate CRC final value
               crc := deflate.CRC;
+              if deflate.SizeOut <> aInfo.f64.zfullSize then
+                exit; // AES HMAC authenticates compressed ciphertext
             end;
             written := deflate.SizeOut - written;
           end;
