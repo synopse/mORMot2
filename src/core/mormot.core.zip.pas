@@ -655,6 +655,9 @@ type
     // - returns the plain data, or nil on authentication failure
     function CryptLoad(c: TZipCrypt; e: PZipReadEntry;
       const info: TFileInfoFull; out tmp: RawByteString): pointer;
+    // verifies the ciphertext before UnZipStream writes plaintext
+    function CryptAuthenticate(c: TZipCrypt; e: PZipReadEntry;
+      const info: TFileInfoFull): boolean;
   public
     /// open a .zip archive file as Read Only
     // - if the .zip content has been appended to the file, search for its
@@ -1708,7 +1711,7 @@ function TZipCryptWriter.Write(const Buffer; Count: Longint): Longint;
 var
   p: PByteArray;
   n: PtrInt;
-  tmp: array[0 .. 16383] of byte; // encrypt by chunks with no heap allocation
+  tmp: TBuffer32K; // encrypt by chunks with no heap allocation
 begin
   result := Count;
   inc(fPosition, Count);
@@ -2261,7 +2264,7 @@ function TZipWrite.WriteHeaderDest(const zipName: TFileName;
 var
   c: TZipCrypt;
   e: PZipWriteEntry;
-  head: array[0 .. 63] of byte;
+  head: TTemp64;
 begin
   result := fDest;
   if fPassword = '' then
@@ -2297,7 +2300,7 @@ end;
 
 procedure TZipWrite.WriteTrailer(Dest: TStream);
 var
-  trailer: array[0 .. 63] of byte;
+  trailer: TTemp64;
 begin
   if (Dest = fDest) or
      (fCrypt.TrailerLen = 0) then
@@ -3467,6 +3470,40 @@ begin
     result := nil;
 end;
 
+
+function TZipRead.CryptAuthenticate(c: TZipCrypt;
+  e: PZipReadEntry; const info: TFileInfoFull): boolean;
+var
+  local: TLocalFileHeader;
+  head: TTemp64;
+  tmp: TBuffer32K;
+  remaining: Int64;
+  n: PtrInt;
+begin
+  result := false;
+  // only called for file-backed entries, after CryptPrepare
+  if info.f64.zzipSize > High(Int64) then
+    ESynZip.RaiseUtf8('%.UnZip: entry too large for %',
+      [self, e^.zipName]);
+  local.LoadAndDataSeek(fSource, e^.fileinfo.offset + fSourceOffset);
+  fSource.ReadBuffer(head, c.HeaderLen);
+  CryptHeader(c, e, info, @head);
+  remaining := Int64(info.f64.zzipSize) -
+    c.HeaderLen - c.TrailerLen;
+  while remaining > 0 do
+  begin
+    n := SizeOf(tmp);
+    if remaining < n then
+      n := remaining;
+    fSource.ReadBuffer(tmp, n);
+    c.Decrypt(@tmp, n);
+    dec(remaining, n);
+  end;
+  if c.TrailerLen <> 0 then
+    fSource.ReadBuffer(head, c.TrailerLen);
+  result := c.DecryptDone(@head);
+end; // caller calls CryptHeader() again to reset state
+
 function TZipRead.UnZip(aIndex: integer; aMaxSize: Int64): RawByteString;
 var
   e: PZipReadEntry;
@@ -3542,20 +3579,30 @@ var
   method: integer;
   local: TLocalFileHeader;
   c: TZipCrypt;
-  buf: array[0 .. 63] of byte; // encryption header or trailer
+  buf: TTemp64; // encryption header or trailer
 begin
   result := false;
   if (self = nil) or
      (cardinal(aIndex) >= cardinal(Count)) then
     exit;
+  e := @Entry[aIndex];
+  c := CryptPrepare(e, aInfo, method);
   len := aInfo.f64.zfullsize;
   if len = 0 then
   begin
-    result := true;
+    if c = nil then
+      result := true
+    else if e^.local <> nil then
+      result := CryptLoad(c, e, aInfo, plain) <> nil
+    else
+      result := CryptAuthenticate(c, e, aInfo);
     exit;
   end;
-  e := @Entry[aIndex];
-  c := CryptPrepare(e, aInfo, method);
+  // verify file-backed AES before exposing plaintext
+  if c <> nil then
+    if (e^.local = nil) and (c.TrailerLen <> 0) then
+      if not CryptAuthenticate(c, e, aInfo) then
+        exit;
   InfoStart(len, 'UnZip ', e^.zipName);
   ziplen := aInfo.f64.zzipSize;
   if c <> nil then
@@ -3974,7 +4021,7 @@ var
   parsePEheader: boolean;
   certoffs, certlenoffs, certlen, certlen2: cardinal;
   zip: TZipWrite;
-  buf: array[0 .. 128 shl 10 - 1] of byte; // 128KB of temp copy buffer on stack
+  buf: TBuffer128K; // 128KB of temp copy buffer on stack
 begin
   if new = main then
     ESynZip.RaiseUtf8('%: main=new=%', [ctxt, main]);
@@ -4055,7 +4102,7 @@ begin
       begin
         // the certificate length should be 64-bit aligned -> pad the payload
         ASize := O.Position - APos;
-        buf[0] := 0;
+        buf[0] := #0;
         while ASize and 7 <> 0 do
         begin
           O.WriteBuffer(buf[0], 1);
