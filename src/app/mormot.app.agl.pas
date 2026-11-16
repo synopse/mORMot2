@@ -557,7 +557,7 @@ begin
   fWrkDir := aWrkDir;
   // fRunOptions=[] without roWinNoProcessDetach to detach from main console
   if soWinJobCloseChildren in aService.StartOptions then
-    include(fRunOptions, roWinJobCloseChildren); // just ignored on POSIX
+    include(fRunOptions, roCloseChildren); // just ignored on POSIX
   if not (soReplaceEnv in aService.StartOptions) then
     include(fRunOptions, roEnvAddExisting);
   fRedirect := aRedirect;
