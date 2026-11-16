@@ -251,24 +251,24 @@ type
     procedure Run7zExtract(const Params: array of const);
     procedure Run7zUpdate(const Params: array of const);
     {$endif OSWINDOWS}
+    /// direct deflate/inflate/synlz functions
+    procedure InMemoryCompression(Sender: TObject);
+    procedure DoSynLZ;
+    /// .zip archive handling
+    procedure ZipFormat(Sender: TObject);
+    procedure ZipEncryption(Sender: TObject);
+    /// TAlgoCompress classes
+    procedure _TAlgoCompress(Sender: TObject);
   public
     procedure Setup; override;
     procedure CleanUp; override;
   published
-    /// direct deflate/inflate functions
-    procedure InMemoryCompression;
-    /// .gzip archive handling
-    procedure GZIPFormat;
-    /// .zip archive handling
-    procedure ZIPFormat;
+    /// validate all supported formats and archives
+    procedure Algorithms;
     {$ifdef OSWINDOWS}
     /// validate the 7z.dll wrapper in mormot.lib.win7zip
     procedure _7Zip;
     {$endif OSWINDOWS}
-    /// SynLZ internal format
-    procedure _SynLZ;
-    /// TAlgoCompress classes
-    procedure _TAlgoCompress;
   end;
 
 type
@@ -11788,7 +11788,7 @@ begin
   result := not result;
 end;
 
-procedure TTestCoreCompression.GZipFormat;
+procedure TTestCoreCompression.Algorithms;
 var
   Z: TSynZipCompressor;
   L, n: integer;
@@ -11798,6 +11798,8 @@ var
   s, tmp: RawByteString;
   gzr: TGZRead;
 begin
+  Run(InMemoryCompression, self, 'deflate synlz', true, true);
+  NotifyProgress(['gzip']);
   Check(crc32(0, @c32t, 5) = $DF4EC16C, 'crc32');
   Check(ReferenceCrc32(0, @c32t, 5) = $DF4EC16C, 'crc32');
   Check(crc32(0, @c32t, 1024) = $6FCF9E13, 'crc32');
@@ -11829,7 +11831,7 @@ begin
     inc(P, n);
     dec(L, n);
   end;
-  Check(crc0 = ReferenceCrc32(0, Pointer(Data), length(Data)));
+  CheckEqual(crc0, ReferenceCrc32(0, Pointer(Data), length(Data)), 'crc32');
   Check(crc0 = Z.CRC, '0crc32');
   Check(crc2 = crc0,  '2crc32');
   Check(crc3 = crc0,  '3crc32');
@@ -11853,10 +11855,9 @@ begin
   s := '';
   repeat
     n := gzr.ZStreamNext;
-    if n = 0 then
-      break;
-    s := s + copy(tmp, 1, n);
-  until false;
+    Check(n >= 0, 'ZStreamNext');
+    Append(s, pointer(tmp), n);
+  until n = 0;
   check(gzr.ZStreamDone, 'ZStreamDone');
   Check(gzr.uncomplen32 = Cardinal(length(s)));
   check(s = Data);
@@ -11870,6 +11871,9 @@ begin
   Check(CompressDeflate(s, true) = 'deflate');
   Check(CompressDeflate(s, false) = 'deflate');
   Check(s = Data, 'CompressDeflate');
+  Run(ZipFormat, self, '.zip', true, true);
+  Run(ZipEncryption, self, 'zipcrypt', true, true);
+  Run(_TAlgoCompress, self, 'TAlgoCompress', true, true);
 end;
 
 procedure TTestCoreCompression.InMemoryCompression;
@@ -11889,6 +11893,7 @@ begin
     CompressZLib(tmp, false);
     CheckHash(tmp, hash, 'CompressZLib');
   end;
+  DoSynLZ;
 end;
 
 function W(p: PAnsiChar; value, bytes: PtrUInt): PAnsiChar;
@@ -11904,7 +11909,7 @@ begin
   result := @p[length(text)];
 end;
 
-procedure TTestCoreCompression.ZipFormat;
+procedure TTestCoreCompression.ZipFormat(Sender: TObject);
 var
   FN, FN2: TFileName;
   S: TRawByteStringStream;
@@ -12108,259 +12113,6 @@ var
     end;
   end;
 
-  procedure CheckAesWritePolicy(const Plain: RawByteString;
-    Mode: integer);
-  var
-    s: TRawByteStringStream;
-    w: TZipWrite;
-    z: TZipRead;
-    st: TStream;
-    zip: RawByteString;
-    fn: TFileName;
-    expected: integer;
-    crc: cardinal;
-  begin
-    fn := WorkDir + 'zip-ae-test-input.bin';
-    s := TRawByteStringStream.Create;
-    try
-      w := TZipWrite.Create(s);
-      try
-        w.Password := 'mORMot';
-        case Mode of
-          0:
-            w.AddStored('data', pointer(Plain), length(Plain));
-          1:
-            begin
-              Check(FileFromString(Plain, fn));
-              w.AddStored(fn, true, 'data');
-            end;
-          2:
-            begin
-              st := w.AddDeflatedStream('data', 0, 0);
-              try
-                st.WriteBuffer(pointer(Plain)^, length(Plain));
-              finally
-                st.Free;
-              end;
-            end;
-          3:
-            w.AddDeflated('data', pointer(Plain), length(Plain));
-        end;
-      finally
-        w.Free;
-      end;
-      zip := s.DataString;
-    finally
-      s.Free;
-      if Mode = 1 then
-        DeleteFile(fn);
-    end;
-    z := TZipRead.Create(pointer(zip), length(zip));
-    try
-      CheckEqual(z.Count, 1, 'AE count');
-      Check(z.Entry[0].aes <> nil, 'AE extra');
-      if length(Plain) < 20 then
-        expected := 2
-      else
-        expected := 1;
-      CheckEqual(z.Entry[0].aes^.version, expected,
-        'AE version');
-      crc := 0;
-      if expected = 1 then
-        crc := mormot.lib.z.crc32(0, pointer(Plain), length(Plain));
-      CheckEqual(z.Entry[0].dir^.fileInfo.zcrc32, crc, 'AE CRC');
-      z.Password := 'mORMot';
-      CheckEqual(z.UnZip(0), Plain, 'AE roundtrip');
-      // Verify that the reader actually checks AE-1 CRC.
-      if expected = 1 then
-      begin
-        z.Entry[0].dir^.fileInfo.zcrc32 := z.Entry[0].dir^.fileInfo.zcrc32 xor 1;
-        Check(not z.TestAll, 'AE-1 CRC mismatch');
-      end;
-    finally
-      z.Free;
-    end;
-  end;
-
-  procedure ZipEncryption;
-  const
-    INFOZIP: array[0..151] of byte = (
-      $50, $4b, $03, $04, $0a, $00, $09, $00, $00, $00, $26, $a3, $5f, $5d,
-      $15, $3f, $91, $3f, $1c, $00, $00, $00, $10, $00, $00, $00, $05, $00,
-      $00, $00, $61, $2e, $74, $78, $74, $01, $4d, $91, $b2, $a2, $9e, $8c,
-      $23, $5d, $b5, $18, $64, $ea, $89, $3b, $ec, $c5, $f6, $b7, $c1, $78,
-      $e8, $6c, $0e, $91, $41, $b7, $5b, $50, $4b, $07, $08, $15, $3f, $91,
-      $3f, $1c, $00, $00, $00, $10, $00, $00, $00, $50, $4b, $01, $02, $1e,
-      $03, $0a, $00, $09, $00, $00, $00, $26, $a3, $5f, $5d, $15, $3f, $91,
-      $3f, $1c, $00, $00, $00, $10, $00, $00, $00, $05, $00, $00, $00, $00,
-      $00, $00, $00, $00, $00, $00, $00, $a4, $81, $00, $00, $00, $00, $61,
-      $2e, $74, $78, $74, $50, $4b, $05, $06, $00, $00, $00, $00, $01, $00,
-      $01, $00, $33, $00, $00, $00, $4f, $00, $00, $00, $00, $00);
-    // 'mORMot AES-256' encrypted by 7-Zip "7z a -tzip -mem=AES256 -mx=0
-    // -mtm=off -mtc=off -mta=off -pmormot v7.zip b.txt"
-    SEVENZIP: array[0..171] of byte = (
-      $50, $4b, $03, $04, $33, $00, $01, $00, $63, $00, $00, $00, $21, $00,
-      $00, $00, $00, $00, $2a, $00, $00, $00, $0e, $00, $00, $00, $05, $00,
-      $0b, $00, $62, $2e, $74, $78, $74, $01, $99, $07, $00, $02, $00, $41,
-      $45, $03, $00, $00, $50, $2d, $ad, $63, $1a, $e4, $1d, $ef, $61, $49,
-      $c4, $bd, $84, $36, $dc, $32, $cb, $3f, $d7, $8b, $17, $b3, $ba, $81,
-      $0a, $4c, $4e, $61, $16, $4d, $d3, $42, $b6, $ab, $c2, $d3, $fb, $18,
-      $9a, $d9, $9a, $6b, $50, $4b, $01, $02, $3f, $03, $33, $00, $01, $00,
-      $63, $00, $00, $00, $21, $00, $00, $00, $00, $00, $2a, $00, $00, $00,
-      $0e, $00, $00, $00, $05, $00, $0b, $00, $00, $00, $00, $00, $00, $00,
-      $20, $80, $a4, $81, $00, $00, $00, $00, $62, $2e, $74, $78, $74, $01,
-      $99, $07, $00, $02, $00, $41, $45, $03, $00, $00, $50, $4b, $05, $06,
-      $00, $00, $00, $00, $01, $00, $01, $00, $3e, $00, $00, $00, $58, $00,
-      $00, $00, $00, $00);
-  var
-    z: TZipRead;
-    w: TZipWrite;
-    mode: integer;
-    zip: RawByteString;
-    zipfn: TFileName;
-    S: TRawByteStringStream;
-    st: TStream;
-
-    function Raised(i: integer): boolean;
-    begin
-      result := false;
-      try
-        z.UnZip(i);
-      except
-        on ESynZip do
-          result := true;
-      end;
-    end;
-
-    procedure Vector(p: pointer; len: integer; const expected: RawUtf8);
-    begin
-      z := TZipRead.Create(p, len);
-      try
-        CheckEqual(z.Count, 1, 'vector count');
-        z.Password := 'mormot';
-        CheckEqual(z.UnZip(0), expected, 'vector');
-      finally
-        z.Free;
-      end;
-    end;
-
-    procedure CheckRead(reader: TZipRead; enc: TZipEncryption);
-    begin
-      z := reader;
-      try
-        CheckEqual(z.Count, 5, 'crypt count');
-        Check(z.Entry[0].dir^.fileInfo.flags and 1 <> 0, 'encrypted');
-        Check((z.Entry[0].aes <> nil) = (enc = zeAes256), 'aes');
-        Check(z.Entry[4].dir^.fileInfo.flags and 1 = 0, 'plain');
-        Check(Raised(0), 'no password');
-        z.Password := 'mormot';
-        Check(Raised(1), 'wrong password');
-        Check(not Raised(4), 'plain with password');
-        z.Password := 'mORMot';
-        Check(z.TestAll, 'crypt testall');
-        CheckEqual(z.UnZip('crypt\deflated'), Data, 'crypt1');
-        CheckEqual(z.UnZip('crypt\stored'), Data, 'crypt2');
-        CheckEqual(z.UnZip('crypt\file'), Data, 'crypt3');
-        CheckEqual(z.UnZip('crypt\filestored'), Data, 'crypt4');
-        CheckEqual(z.UnZip('plain'), Data, 'crypt5');
-      finally
-        z.Free;
-      end;
-    end;
-
-    procedure RoundTrip(enc: TZipEncryption);
-    begin
-      S := TRawByteStringStream.Create;
-      try
-        w := TZipWrite.Create(S);
-        try
-          w.Password := 'mORMot';
-          w.Encryption := enc;
-          w.AddDeflated('crypt\deflated', pointer(Data), length(Data));
-          w.AddStored('crypt\stored', pointer(Data), length(Data));
-          w.AddDeflated(DataFile, true, Z_USUAL_COMPRESSION, 'crypt\file');
-          w.AddStored(DataFile, true, 'crypt\filestored');
-          w.Password := '';
-          w.AddDeflated('plain', pointer(Data), length(Data));
-        finally
-          w.Free;
-        end;
-        zip := S.DataString;
-      finally
-        S.Free;
-      end;
-      FileFromString(zip, zipfn);
-      CheckRead(TZipRead.Create(pointer(zip), length(zip)), enc);
-      CheckRead(TZipRead.Create(zipfn), enc);
-      CheckRead(TZipRead.Create(zipfn, 0, 0, 1024), enc); // force fSource
-      // detect tampered content (via crc32 or HMAC-SHA1)
-      zip[length(zip) shr 2] := AnsiChar(ord(zip[length(zip) shr 2]) xor 1);
-      z := TZipRead.Create(pointer(zip), length(zip));
-      try
-        z.Password := 'mORMot';
-        Check(not z.TestAll, 'tampered');
-      finally
-        z.Free;
-      end;
-    end;
-
-  begin
-    CheckEqual(SizeOf(TFileInfoExtraAes), 11, 'AES extra size');
-    Vector(@INFOZIP, SizeOf(INFOZIP), 'mORMot ZipCrypto');
-    Vector(@SEVENZIP, SizeOf(SEVENZIP), 'mORMot AES-256');
-    zipfn := WorkDir + 'zipcrypt.zip';
-    TSynLog.Family.ExceptionIgnoreCurrentThread := true;
-    try
-      S := TRawByteStringStream.Create;
-      try
-        w := TZipWrite.Create(S);
-        try
-          Check(w.Encryption = zeAes256, 'default encryption');
-          w.Password := 'mORMot';
-          // AES-CTR encrypts on the fly: AddDeflatedStream is supported
-          st := w.AddDeflatedStream('crypt\stream');
-          st.WriteBuffer(pointer(Data)^, length(Data));
-          st.Free;
-          // ZipCrypto needs the crc32 ahead of time: AddDeflatedStream fails
-          w.Encryption := zeZipCrypto; // available with mormot.crypt.zip
-          Check(w.Encryption = zeZipCrypto, 'set encryption');
-          try
-            w.AddDeflatedStream('crypt\stream2').Free;
-            Check(false, 'zipcrypto stream');
-          except
-            on ESynZip do
-              CheckEqual(w.Count, 1, 'zipcrypto stream count');
-          end;
-        finally
-          w.Free;
-        end;
-        zip := S.DataString;
-      finally
-        S.Free;
-      end;
-      z := TZipRead.Create(pointer(zip), length(zip));
-      try
-        CheckEqual(z.Count, 1, 'stream count');
-        z.Password := 'mORMot';
-        Check(z.TestAll, 'stream testall');
-        CheckEqual(z.UnZip(0), Data, 'stream');
-      finally
-        z.Free;
-      end;
-      RoundTrip(zeAes256);
-      RoundTrip(zeZipCrypto);
-    finally
-      TSynLog.Family.ExceptionIgnoreCurrentThread := false;
-    end;
-    Check(DeleteFile(zipfn));
-    for mode := 0 to 3 do
-    begin
-      CheckAesWritePolicy(RawUtf8OfChar('x', 19), mode);
-      CheckAesWritePolicy(RawUtf8OfChar('x', 20), mode);
-      CheckAesWritePolicy(RawUtf8OfChar('x', 300), mode);
-    end;
-  end;
-
 var
   i, m: integer;
   mem: QWord;
@@ -12416,7 +12168,6 @@ begin
     S.Free;
   end;
   StreamLevel0;
-  ZipEncryption;
   // onprog := TStreamRedirect.ProgressInfoToConsole;
   onprog := TSynLog.ProgressInfo;
   for m := 1 to 2 do
@@ -12527,6 +12278,259 @@ begin
   end;
 end;
 
+procedure TTestCoreCompression.ZipEncryption(Sender: TObject);
+const
+  INFOZIP: array[0..151] of byte = (
+    $50, $4b, $03, $04, $0a, $00, $09, $00, $00, $00, $26, $a3, $5f, $5d,
+    $15, $3f, $91, $3f, $1c, $00, $00, $00, $10, $00, $00, $00, $05, $00,
+    $00, $00, $61, $2e, $74, $78, $74, $01, $4d, $91, $b2, $a2, $9e, $8c,
+    $23, $5d, $b5, $18, $64, $ea, $89, $3b, $ec, $c5, $f6, $b7, $c1, $78,
+    $e8, $6c, $0e, $91, $41, $b7, $5b, $50, $4b, $07, $08, $15, $3f, $91,
+    $3f, $1c, $00, $00, $00, $10, $00, $00, $00, $50, $4b, $01, $02, $1e,
+    $03, $0a, $00, $09, $00, $00, $00, $26, $a3, $5f, $5d, $15, $3f, $91,
+    $3f, $1c, $00, $00, $00, $10, $00, $00, $00, $05, $00, $00, $00, $00,
+    $00, $00, $00, $00, $00, $00, $00, $a4, $81, $00, $00, $00, $00, $61,
+    $2e, $74, $78, $74, $50, $4b, $05, $06, $00, $00, $00, $00, $01, $00,
+    $01, $00, $33, $00, $00, $00, $4f, $00, $00, $00, $00, $00);
+  // 'mORMot AES-256' encrypted by 7-Zip "7z a -tzip -mem=AES256 -mx=0
+  // -mtm=off -mtc=off -mta=off -pmormot v7.zip b.txt"
+  SEVENZIP: array[0..171] of byte = (
+    $50, $4b, $03, $04, $33, $00, $01, $00, $63, $00, $00, $00, $21, $00,
+    $00, $00, $00, $00, $2a, $00, $00, $00, $0e, $00, $00, $00, $05, $00,
+    $0b, $00, $62, $2e, $74, $78, $74, $01, $99, $07, $00, $02, $00, $41,
+    $45, $03, $00, $00, $50, $2d, $ad, $63, $1a, $e4, $1d, $ef, $61, $49,
+    $c4, $bd, $84, $36, $dc, $32, $cb, $3f, $d7, $8b, $17, $b3, $ba, $81,
+    $0a, $4c, $4e, $61, $16, $4d, $d3, $42, $b6, $ab, $c2, $d3, $fb, $18,
+    $9a, $d9, $9a, $6b, $50, $4b, $01, $02, $3f, $03, $33, $00, $01, $00,
+    $63, $00, $00, $00, $21, $00, $00, $00, $00, $00, $2a, $00, $00, $00,
+    $0e, $00, $00, $00, $05, $00, $0b, $00, $00, $00, $00, $00, $00, $00,
+    $20, $80, $a4, $81, $00, $00, $00, $00, $62, $2e, $74, $78, $74, $01,
+    $99, $07, $00, $02, $00, $41, $45, $03, $00, $00, $50, $4b, $05, $06,
+    $00, $00, $00, $00, $01, $00, $01, $00, $3e, $00, $00, $00, $58, $00,
+    $00, $00, $00, $00);
+var
+  z: TZipRead;
+  w: TZipWrite;
+  mode: integer;
+  zip: RawByteString;
+  zipfn: TFileName;
+  S: TRawByteStringStream;
+  st: TStream;
+
+  function Raised(i: integer): boolean;
+  begin
+    result := false;
+    try
+      z.UnZip(i);
+    except
+      on ESynZip do
+        result := true;
+    end;
+  end;
+
+  procedure Vector(p: pointer; len: integer; const expected: RawUtf8);
+  begin
+    z := TZipRead.Create(p, len);
+    try
+      CheckEqual(z.Count, 1, 'vector count');
+      z.Password := 'mormot';
+      CheckEqual(z.UnZip(0), expected, 'vector');
+    finally
+      z.Free;
+    end;
+  end;
+
+  procedure CheckRead(reader: TZipRead; enc: TZipEncryption);
+  begin
+    z := reader;
+    try
+      CheckEqual(z.Count, 5, 'crypt count');
+      Check(z.Entry[0].dir^.fileInfo.flags and 1 <> 0, 'encrypted');
+      Check((z.Entry[0].aes <> nil) = (enc = zeAes256), 'aes');
+      Check(z.Entry[4].dir^.fileInfo.flags and 1 = 0, 'plain');
+      Check(Raised(0), 'no password');
+      z.Password := 'mormot';
+      Check(Raised(1), 'wrong password');
+      Check(not Raised(4), 'plain with password');
+      z.Password := 'mORMot';
+      Check(z.TestAll, 'crypt testall');
+      CheckEqual(z.UnZip('crypt\deflated'), Data, 'crypt1');
+      CheckEqual(z.UnZip('crypt\stored'), Data, 'crypt2');
+      CheckEqual(z.UnZip('crypt\file'), Data, 'crypt3');
+      CheckEqual(z.UnZip('crypt\filestored'), Data, 'crypt4');
+      CheckEqual(z.UnZip('plain'), Data, 'crypt5');
+    finally
+      z.Free;
+    end;
+  end;
+
+  procedure RoundTrip(enc: TZipEncryption);
+  begin
+    S := TRawByteStringStream.Create;
+    try
+      w := TZipWrite.Create(S);
+      try
+        w.Password := 'mORMot';
+        w.Encryption := enc;
+        w.AddDeflated('crypt\deflated', pointer(Data), length(Data));
+        w.AddStored('crypt\stored', pointer(Data), length(Data));
+        w.AddDeflated(DataFile, true, Z_USUAL_COMPRESSION, 'crypt\file');
+        w.AddStored(DataFile, true, 'crypt\filestored');
+        w.Password := '';
+        w.AddDeflated('plain', pointer(Data), length(Data));
+      finally
+        w.Free;
+      end;
+      zip := S.DataString;
+    finally
+      S.Free;
+    end;
+    FileFromString(zip, zipfn);
+    CheckRead(TZipRead.Create(pointer(zip), length(zip)), enc);
+    CheckRead(TZipRead.Create(zipfn), enc);
+    CheckRead(TZipRead.Create(zipfn, 0, 0, 1024), enc); // force fSource
+    // detect tampered content (via crc32 or HMAC-SHA1)
+    zip[length(zip) shr 2] := AnsiChar(ord(zip[length(zip) shr 2]) xor 1);
+    z := TZipRead.Create(pointer(zip), length(zip));
+    try
+      z.Password := 'mORMot';
+      Check(not z.TestAll, 'tampered');
+    finally
+      z.Free;
+    end;
+  end;
+
+  procedure CheckAesWritePolicy(const Plain: RawByteString;
+    Mode: integer);
+  var
+    s: TRawByteStringStream;
+    w: TZipWrite;
+    z: TZipRead;
+    st: TStream;
+    zip: RawByteString;
+    fn: TFileName;
+    expected: integer;
+    crc: cardinal;
+  begin
+    fn := WorkDir + 'zip-ae-test-input.bin';
+    s := TRawByteStringStream.Create;
+    try
+      w := TZipWrite.Create(s);
+      try
+        w.Password := 'mORMot';
+        case Mode of
+          0:
+            w.AddStored('data', pointer(Plain), length(Plain));
+          1:
+            begin
+              Check(FileFromString(Plain, fn));
+              w.AddStored(fn, true, 'data');
+            end;
+          2:
+            begin
+              st := w.AddDeflatedStream('data', 0, 0);
+              try
+                st.WriteBuffer(pointer(Plain)^, length(Plain));
+              finally
+                st.Free;
+              end;
+            end;
+          3:
+            w.AddDeflated('data', pointer(Plain), length(Plain));
+        end;
+      finally
+        w.Free;
+      end;
+      zip := s.DataString;
+    finally
+      s.Free;
+      if Mode = 1 then
+        DeleteFile(fn);
+    end;
+    z := TZipRead.Create(pointer(zip), length(zip));
+    try
+      CheckEqual(z.Count, 1, 'AE count');
+      Check(z.Entry[0].aes <> nil, 'AE extra');
+      if length(Plain) < 20 then
+        expected := 2
+      else
+        expected := 1;
+      CheckEqual(z.Entry[0].aes^.version, expected,
+        'AE version');
+      crc := 0;
+      if expected = 1 then
+        crc := mormot.lib.z.crc32(0, pointer(Plain), length(Plain));
+      CheckEqual(z.Entry[0].dir^.fileInfo.zcrc32, crc, 'AE CRC');
+      z.Password := 'mORMot';
+      CheckEqual(z.UnZip(0), Plain, 'AE roundtrip');
+      // Verify that the reader actually checks AE-1 CRC.
+      if expected = 1 then
+      begin
+        z.Entry[0].dir^.fileInfo.zcrc32 := z.Entry[0].dir^.fileInfo.zcrc32 xor 1;
+        Check(not z.TestAll, 'AE-1 CRC mismatch');
+      end;
+    finally
+      z.Free;
+    end;
+  end;
+
+begin
+  CheckEqual(SizeOf(TFileInfoExtraAes), 11, 'AES extra size');
+  Vector(@INFOZIP, SizeOf(INFOZIP), 'mORMot ZipCrypto');
+  Vector(@SEVENZIP, SizeOf(SEVENZIP), 'mORMot AES-256');
+  zipfn := WorkDir + 'zipcrypt.zip';
+  TSynLog.Family.ExceptionIgnoreCurrentThread := true;
+  try
+    S := TRawByteStringStream.Create;
+    try
+      w := TZipWrite.Create(S);
+      try
+        Check(w.Encryption = zeAes256, 'default encryption');
+        w.Password := 'mORMot';
+        // AES-CTR encrypts on the fly: AddDeflatedStream is supported
+        st := w.AddDeflatedStream('crypt\stream');
+        st.WriteBuffer(pointer(Data)^, length(Data));
+        st.Free;
+        // ZipCrypto needs the crc32 ahead of time: AddDeflatedStream fails
+        w.Encryption := zeZipCrypto; // available with mormot.crypt.zip
+        Check(w.Encryption = zeZipCrypto, 'set encryption');
+        try
+          w.AddDeflatedStream('crypt\stream2').Free;
+          Check(false, 'zipcrypto stream');
+        except
+          on ESynZip do
+            CheckEqual(w.Count, 1, 'zipcrypto stream count');
+        end;
+      finally
+        w.Free;
+      end;
+      zip := S.DataString;
+    finally
+      S.Free;
+    end;
+    z := TZipRead.Create(pointer(zip), length(zip));
+    try
+      CheckEqual(z.Count, 1, 'stream count');
+      z.Password := 'mORMot';
+      Check(z.TestAll, 'stream testall');
+      CheckEqual(z.UnZip(0), Data, 'stream');
+    finally
+      z.Free;
+    end;
+    RoundTrip(zeAes256);
+    RoundTrip(zeZipCrypto);
+  finally
+    TSynLog.Family.ExceptionIgnoreCurrentThread := false;
+  end;
+  Check(DeleteFile(zipfn));
+  for mode := 0 to 3 do
+  begin
+    CheckAesWritePolicy(RawUtf8OfChar('x', 19), mode);
+    CheckAesWritePolicy(RawUtf8OfChar('x', 20), mode);
+    CheckAesWritePolicy(RawUtf8OfChar('x', 300), mode);
+  end;
+end;
+
 function By1(pattern: byte; n: integer): RawUtf8;
 begin
   FillCharFast(FastSetString(result, n)^, n, pattern);
@@ -12541,7 +12545,7 @@ begin
     PIntegerArray(result)[i] := pattern;
 end;
 
-procedure TTestCoreCompression._SynLZ;
+procedure TTestCoreCompression.DoSynLZ;
 
   procedure TestOne(const v: RawByteString);
   var
@@ -12706,7 +12710,7 @@ begin
   TestPartial('000008000000414243506702', '', '', 0); // no writes
 end;
 
-procedure TTestCoreCompression._TAlgoCompress;
+procedure TTestCoreCompression._TAlgoCompress(Sender: TObject);
 
   procedure TestAlgo(algo: TAlgoCompress);
   var
@@ -12841,6 +12845,7 @@ begin
   lib := Executable.ProgramFilePath + '7z.dll';
   if FileExists(lib) then
   begin
+    RunWait(true, 120, false); // we need the local expected .zip
     // validate I7zReader
     zin := New7zReader(ZipFile, fhUndefined, lib);
     Check(zin.Format = fhZip);
