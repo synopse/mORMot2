@@ -849,13 +849,22 @@ end;
 
 { TDocVariantArrayDataSet }
 
+function ColumnIndex(dv: PDocVariantData; hint: PtrInt; const name: RawUtf8): PtrInt;
+begin
+  if (hint < dv^.Count) and // row may have fewer fields
+     PropNameEquals(dv^.Names[hint], name) then
+    result := hint // optimistic match when fields are in-order (most common case)
+  else
+    result := dv^.GetValueIndex(name);
+end;
+
 constructor TDocVariantArrayDataSet.Create(Owner: TComponent;
   const Data: TVariantDynArray; DataCount: integer;
   const ColumnNames: array of RawUtf8;
   const ColumnTypes: array of TSqlDBFieldType);
 var
-  n, ndx, j: PtrInt;
-  first: PDocVariantData;
+  n, ndx, j, v: PtrInt;
+  first, dv: PDocVariantData;
   col: PDocVariantArrayDataSetColumn;
 begin
   fValues := Data;
@@ -892,23 +901,20 @@ begin
           // TCurrencyField is a TFloatField
           col^.FieldType := mormot.db.core.ftDouble;
         mormot.db.core.ftInt64:
-          // ensure type coherency of whole column
-          for j := 1 to first^.Count - 1 do
-            if j >= fValuesCount then
-              break
-            else
-              // ensure objects are consistent and no float valule appears
-              with _Safe(fValues[j], dvObject)^ do
-                if (ndx < Length(Names)) and
-                   PropNameEquals(Names[ndx], col^.Name) and
-                   (VariantTypeToSqlDBFieldType(Values[ndx]) in
-                     [mormot.db.core.ftNull,
-                      mormot.db.core.ftDouble,
-                      mormot.db.core.ftCurrency]) then
-                  begin
-                    col^.FieldType := mormot.db.core.ftDouble;
-                    break;
-                  end;
+          // ensure no float value appears in the whole column
+          for j := 1 to fValuesCount - 1 do
+          begin
+            dv := _Safe(fValues[j], dvObject);
+            v := ColumnIndex(dv, ndx, col^.Name);
+            if (v >= 0) and
+               (VariantTypeToSqlDBFieldType(dv^.Values[v]) in
+                 [mormot.db.core.ftDouble,
+                  mormot.db.core.ftCurrency]) then
+            begin
+              col^.FieldType := mormot.db.core.ftDouble;
+              break;
+            end;
+          end;
       end;
       inc(col);
     end;
@@ -941,17 +947,11 @@ begin
             mormot.db.core.ftUnknown,
             mormot.db.core.ftCurrency] then
     exit;
-  if not _SafeObject(fValues[RowIndex], dv) or
-     (dv^.Count = 0) then
+  if not _SafeObject(fValues[RowIndex], dv) then
     exit;
-  if PropNameEquals(col^.Name, dv^.Names[f]) then
-    ndx := f // optimistic match when fields are in-order (most common case)
-  else
-  begin
-    ndx := dv^.GetValueIndex(col^.Name);
-    if ndx < 0 then
-      exit;
-  end;
+  ndx := ColumnIndex(dv, f, col^.Name);
+  if ndx < 0 then
+    exit;
   v := @dv^.Values[ndx];
   if VarIsEmptyOrNull(v^) then
     exit
