@@ -135,6 +135,7 @@ sudo -u postgres psql -c "create user bench password 'bench' superuser"
 ./dbbench --prepare --sf 1 -d /data        # generate and load TPC-H (once)
 ./dbbench --sf 1 -d /data --md sf1.md      # run all queries, 5 runs each
 ./dbbench --sf 1 -d /data -o q01,a3 -e duckdb,sqlite   # a subset
+./dbbench --files --sf 1 -d /data          # DuckDB file methods, see below
 
 ./dbbench --prepare -s rail --years 2024 -d /data   # download and load
 ./dbbench -s rail --years 2024 -d /data --md rail-2024.md
@@ -277,6 +278,46 @@ slower on these read-only queries (the reason is not investigated yet).
   - `rail` `r2` / `r8`: aggregate per station first, then join `stations`
     (the same SQL on all engines) - SQLite3 from 10.7 s to 1.7 s.
   - DuckDB needed no tuning.
+
+## Data files: DuckDB file methods vs a rows loop
+
+`TSqlDBDuckDBConnectionProperties` can let DuckDB read and write data files
+itself, the format being recognized from the file extension (`.csv` `.tsv`
+`.json` `.jsonl` `.ndjson` `.parquet` `.xlsx`):
+
+```pascal
+props := TSqlDBDuckDBConnectionProperties.Create('', '', '', ''); // in-memory
+props.ImportFile('customers', 'customers.csv');  // CREATE TABLE AS read_csv(?)
+props.ExportSql('from customers where sales > 1000', 'top.xlsx');
+props.ConvertFile('export.csv', 'export.parquet'); // COPY (read_csv(?)) TO ?
+rows := props.FileToDocVariant('data.xlsx', 'sheet = ''Data''');
+```
+
+`dbbench --files` compares them with the regular `mormot.db.sql` way, i.e.
+fetching the rows and writing them in Pascal (`FetchAllToCsvValues`,
+`FetchAllToJson`), on the first `--filerows` rows (1 million by default) of
+`lineitem` (16 columns), or `stops` for `rail`.
+
+Delphi 13.1 Win64, DuckDB 2.0.0, AMD Ryzen 7 PRO 6850U, TPC-H scale factor 1,
+1 million rows, best of 3 runs:
+
+| operation | DuckDB file method | mormot.db.sql rows loop |
+|---|---:|---:|
+| table -> CSV | **374 ms** (`ExportSql`) | 1.12 s (`FetchAllToCsvValues`) |
+| table -> JSON | 1.06 s (`ExportSql`) | **856 ms** (`FetchAllToJson`) |
+| CSV -> table | 469 ms (`ImportFile`) | - |
+| CSV -> Parquet | 503 ms (`ConvertFile`) | - |
+| Parquet -> table | 88 ms (`ImportFile`) | - |
+
+- DuckDB writes CSV 3 times faster, using several threads, but the JSON
+  output of mORMot is faster than the DuckDB one.
+- Importing a file creates a typed table (DuckDB detects e.g. DATE and BOOLEAN
+  columns in a CSV) with no row going through Pascal: there is no equivalent in
+  `mormot.db.sql`.
+- Parquet is the format to use between DuckDB instances: columnar, compressed
+  and typed, it is imported 5 times faster than CSV.
+- `.xlsx` needs the DuckDB `excel` extension: reading autoloads it, but it
+  should have been installed for writing (e.g. `INSTALL excel` once).
 
 ## SQL for analytics: DuckDB vs PostgreSQL vs SQLite3
 

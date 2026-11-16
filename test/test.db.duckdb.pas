@@ -51,6 +51,7 @@ type
     procedure Bulk;
     procedure BatchInsert;
     procedure Appender;
+    procedure Files;
   end;
 
   /// regression tests for the Quack client of mormot.db.raw.duckdb.pas and
@@ -638,6 +639,89 @@ begin
   Check(rows.Step);
   CheckEqual(rows.ColumnInt(0), 20001, 'appender count');
   CheckEqual(rows.ColumnUtf8(1), '200012469.5000', 'appender sum');
+end;
+
+
+procedure TTestDuckDB.Files;
+const
+  COUNT = 1000;
+var
+  csv, tsv, parquet, json, xlsx: TFileName;
+  doc: variant;
+  row: PDocVariantData;
+  rows: ISqlDBRows;
+  hasexcel: boolean;
+begin
+  if fProps = nil then
+    exit;
+  csv := WorkDir + 'duckfiles.csv';
+  tsv := WorkDir + 'duckfiles.tsv';
+  parquet := WorkDir + 'duckfiles.parquet';
+  json := WorkDir + 'duckfiles.json';
+  xlsx := WorkDir + 'duckfiles.xlsx';
+  fProps.ExecuteNoResult('create or replace table filesrc as select ' +
+    'i as id, ''n'' || i as name, (i / 4)::DOUBLE as v, ' +
+    '?::DATE + i::INTEGER as d, i % 2 = 0 as b ' +
+    'from range(1, ?) t(i)', ['2020-01-01', COUNT + 1]);
+  fProps.ExecuteNoResult('drop table if exists fileimp', []);
+  // table -> CSV -> new table: DuckDB sniffs the column types back
+  CheckEqual(fProps.ExportSql('from filesrc order by id', csv), COUNT, 'export');
+  Check(FileSize(csv) > COUNT * 20, 'csv size');
+  CheckEqual(fProps.ImportFile('fileimp', csv), COUNT, 'import');
+  rows := fProps.Execute('select any_value(typeof(d)), any_value(typeof(b)), ' +
+    'sum(id) from fileimp', []);
+  Check(rows.Step);
+  CheckEqual(rows.ColumnUtf8(0), 'DATE', 'csv date sniffed');
+  CheckEqual(rows.ColumnUtf8(1), 'BOOLEAN', 'csv boolean sniffed');
+  CheckEqual(rows.ColumnInt(2), COUNT * (COUNT + 1) div 2, 'sum');
+  rows := nil;
+  // file -> file conversions, then file -> TDocVariant
+  CheckEqual(fProps.ConvertFile(csv, tsv), COUNT, 'csv to tsv');
+  CheckEqual(fProps.ConvertFile(tsv, parquet), COUNT, 'tsv to parquet');
+  CheckEqual(fProps.ConvertFile(parquet, json), COUNT, 'parquet to json');
+  doc := fProps.FileToDocVariant(json);
+  CheckEqual(DocVariantData(doc)^.Count, COUNT, 'json rows');
+  row := _Safe(DocVariantData(doc)^.Values[1]);
+  CheckEqual(row^.I['id'], 2);
+  CheckEqual(row^.U['name'], 'n2');
+  CheckSame(row^.D['v'], 0.5);
+  CheckEqual(row^.U['d'], '2020-01-03');
+  CheckEqual(row^.I['b'], 1, 'boolean as 0/1');
+  // read options are passed to the reader function
+  doc := fProps.FileToDocVariant(csv, 'header = false, skip = 1');
+  CheckEqual(DocVariantData(doc)^.Count, COUNT, 'csv options');
+  // an unknown file extension raises an exception
+  TSynLog.Family.ExceptionIgnoreCurrentThread := true;
+  try
+    try
+      fProps.ImportFile('nope', WorkDir + 'duckfiles.unknown');
+      Check(false, 'unknown extension');
+    except
+      on ESqlDBDuckDB do
+        Check(true);
+    end;
+  finally
+    TSynLog.Family.ExceptionIgnoreCurrentThread := false;
+  end;
+  // XLSX needs the excel extension, which may not be installed
+  rows := fProps.Execute('select count(*) from duckdb_extensions() ' +
+    'where extension_name = ? and installed', ['excel']);
+  hasexcel := rows.Step and
+              (rows.ColumnInt(0) = 1);
+  rows := nil;
+  if hasexcel then
+  begin
+    CheckEqual(fProps.ExportSql('from filesrc', xlsx), COUNT, 'xlsx export');
+    doc := fProps.FileToDocVariant(xlsx);
+    CheckEqual(DocVariantData(doc)^.Count, COUNT, 'xlsx rows');
+  end
+  else
+    NotifyProgress(['excel extension not installed - xlsx skipped']);
+  DeleteFile(csv);
+  DeleteFile(tsv);
+  DeleteFile(parquet);
+  DeleteFile(json);
+  DeleteFile(xlsx);
 end;
 
 
