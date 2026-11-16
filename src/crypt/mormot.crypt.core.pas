@@ -2884,6 +2884,12 @@ type
     // will use A..E with TSha1, A..H with TSha256
     A, B, C, D, E, F, G, H: cardinal;
   end;
+  {$ifdef ASMAESNI}
+  TAesNiBlocks4Params = record
+    ctxt, src, dst: pointer;
+    groups: PtrUInt; // groups of four blocks, not a byte count
+  end;
+  {$endif ASMAESNI}
 
 const
   // used by SHA-256
@@ -4163,7 +4169,30 @@ end;
 
 procedure TAes.DoBlocks(pIn, pOut: PAesBlock; out oIn, oOut: PAesBLock;
   Count: integer; doEncrypt: boolean);
+{$ifdef ASMAESNI}
+var
+  p: TAesNiBlocks4Params;
+  n: integer;
+{$endif ASMAESNI}
 begin
+  {$ifdef ASMAESNI}
+  if (Count >= 4) and
+     (aesNi in Flags) then
+  begin
+    n := Count and not 3; // number of complete 4-block groups
+    p.ctxt := @self;
+    p.src := pIn;
+    p.dst := pOut;
+    p.groups := n shr 2;
+    if doEncrypt then
+      AesNiEncryptBlocks4(p)
+    else
+      AesNiDecryptBlocks4(p);
+    inc(pIn, n);
+    inc(pOut, n);
+    dec(Count, n); // 0..3 blocks left for the ordinary per-block path
+  end;
+  {$endif ASMAESNI}
   if Count > 0 then
     repeat
       DoBlock(self, pIn^, pOut^);

@@ -4818,6 +4818,260 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         {$endif ABIWINX64}
 end;
 
+{
+  Four-way interleaved AES-NI ECB block transforms for TAes.DoBlocks.
+  The caller passes groups of four 16-byte blocks; remaining 0..3 blocks
+  are handled by the existing DoBlock path.
+  Only XMM0..XMM4 are used, so Win64 nonvolatile XMM6..XMM15 are intact.
+  No TAes field is written; the routine is reentrant/thread-safe.
+}
+
+procedure AesNiEncryptBlocks4(var p: TAesNiBlocks4Params);
+{$ifdef FPC}nostackframe; assembler; asm{$else}asm .noframe{$endif}
+        {$ifdef ABIWINX64}
+        mov     rax, rcx                     // Win64: p=rcx
+        {$else}
+        mov     rax, rdi                     // SysV: p=rdi
+        {$endif ABIWINX64}
+        mov     r8,  qword ptr [rax].TAesNiBlocks4Params.groups
+        mov     r10, qword ptr [rax].TAesNiBlocks4Params.src
+        mov     r11, qword ptr [rax].TAesNiBlocks4Params.dst
+        mov     rax, qword ptr [rax].TAesNiBlocks4Params.ctxt
+        test    r8, r8
+        jz      @done
+        {$ifdef FPC} align 16 {$endif}
+@by4:   // four independent AES-NI streams, 64 input bytes
+        movups  xmm0, dqword ptr [r10]
+        movups  xmm1, dqword ptr [r10 + $10]
+        movups  xmm2, dqword ptr [r10 + $20]
+        movups  xmm3, dqword ptr [r10 + $30]
+        movups  xmm4, dqword ptr [rax]  // RK[0]
+        pxor    xmm0, xmm4
+        pxor    xmm1, xmm4
+        pxor    xmm2, xmm4
+        pxor    xmm3, xmm4
+        movups  xmm4, dqword ptr [rax + $10]
+        aesenc  xmm0, xmm4
+        aesenc  xmm1, xmm4
+        aesenc  xmm2, xmm4
+        aesenc  xmm3, xmm4
+        movups  xmm4, dqword ptr [rax + $20]
+        aesenc  xmm0, xmm4
+        aesenc  xmm1, xmm4
+        aesenc  xmm2, xmm4
+        aesenc  xmm3, xmm4
+        movups  xmm4, dqword ptr [rax + $30]
+        aesenc  xmm0, xmm4
+        aesenc  xmm1, xmm4
+        aesenc  xmm2, xmm4
+        aesenc  xmm3, xmm4
+        movups  xmm4, dqword ptr [rax + $40]
+        aesenc  xmm0, xmm4
+        aesenc  xmm1, xmm4
+        aesenc  xmm2, xmm4
+        aesenc  xmm3, xmm4
+        movups  xmm4, dqword ptr [rax + $50]
+        aesenc  xmm0, xmm4
+        aesenc  xmm1, xmm4
+        aesenc  xmm2, xmm4
+        aesenc  xmm3, xmm4
+        movups  xmm4, dqword ptr [rax + $60]
+        aesenc  xmm0, xmm4
+        aesenc  xmm1, xmm4
+        aesenc  xmm2, xmm4
+        aesenc  xmm3, xmm4
+        movups  xmm4, dqword ptr [rax + $70]
+        aesenc  xmm0, xmm4
+        aesenc  xmm1, xmm4
+        aesenc  xmm2, xmm4
+        aesenc  xmm3, xmm4
+        movups  xmm4, dqword ptr [rax + $80]
+        aesenc  xmm0, xmm4
+        aesenc  xmm1, xmm4
+        aesenc  xmm2, xmm4
+        aesenc  xmm3, xmm4
+        movups  xmm4, dqword ptr [rax + $90]
+        aesenc  xmm0, xmm4
+        aesenc  xmm1, xmm4
+        aesenc  xmm2, xmm4
+        aesenc  xmm3, xmm4
+        cmp     byte ptr [rax].TAes.Rounds, 10
+        ja      @x192
+        movups  xmm4, dqword ptr [rax + $a0]
+        aesenclast xmm0, xmm4
+        aesenclast xmm1, xmm4
+        aesenclast xmm2, xmm4
+        aesenclast xmm3, xmm4
+        jmp     @wr
+@x192:  movups  xmm4, dqword ptr [rax + $a0]
+        aesenc  xmm0, xmm4
+        aesenc  xmm1, xmm4
+        aesenc  xmm2, xmm4
+        aesenc  xmm3, xmm4
+        movups  xmm4, dqword ptr [rax + $b0]
+        aesenc  xmm0, xmm4
+        aesenc  xmm1, xmm4
+        aesenc  xmm2, xmm4
+        aesenc  xmm3, xmm4
+        cmp     byte ptr [rax].TAes.Rounds, 12
+        ja      @x256
+        movups  xmm4, dqword ptr [rax + $c0]
+        aesenclast xmm0, xmm4
+        aesenclast xmm1, xmm4
+        aesenclast xmm2, xmm4
+        aesenclast xmm3, xmm4
+        jmp     @wr
+@x256:  movups  xmm4, dqword ptr [rax + $c0]
+        aesenc  xmm0, xmm4
+        aesenc  xmm1, xmm4
+        aesenc  xmm2, xmm4
+        aesenc  xmm3, xmm4
+        movups  xmm4, dqword ptr [rax + $d0]
+        aesenc  xmm0, xmm4
+        aesenc  xmm1, xmm4
+        aesenc  xmm2, xmm4
+        aesenc  xmm3, xmm4
+        movups  xmm4, dqword ptr [rax + $e0]
+        aesenclast xmm0, xmm4
+        aesenclast xmm1, xmm4
+        aesenclast xmm2, xmm4
+        aesenclast xmm3, xmm4
+ @wr:   // safe when src=dst, all four blocks were loaded first
+        movups  dqword ptr [r11], xmm0
+        movups  dqword ptr [r11 + $10], xmm1
+        movups  dqword ptr [r11 + $20], xmm2
+        movups  dqword ptr [r11 + $30], xmm3
+        add     r10, $40
+        add     r11, $40
+        dec     r8
+        jnz     @by4
+ @done: // no round-key material left in XMM0..XMM4
+        pxor    xmm0, xmm0
+        pxor    xmm1, xmm1
+        pxor    xmm2, xmm2
+        pxor    xmm3, xmm3
+        pxor    xmm4, xmm4
+end;
+
+procedure AesNiDecryptBlocks4(var p: TAesNiBlocks4Params);
+{$ifdef FPC}nostackframe; assembler; asm{$else}asm .noframe{$endif}
+        {$ifdef ABIWINX64}
+        mov     rax, rcx                     // Win64: p=rcx
+        {$else}
+        mov     rax, rdi                     // SysV: p=rdi
+        {$endif ABIWINX64}
+        mov     r8,  qword ptr [rax].TAesNiBlocks4Params.groups
+        mov     r10, qword ptr [rax].TAesNiBlocks4Params.src
+        mov     r11, qword ptr [rax].TAesNiBlocks4Params.dst
+        mov     rax, qword ptr [rax].TAesNiBlocks4Params.ctxt
+        test    r8, r8
+        jz      @done
+        movzx   ecx, byte ptr [rax].TAes.Rounds
+        shl     ecx, 4
+        lea     r9, [rax + rcx] // RK[Rounds]
+        {$ifdef FPC} align 16 {$endif}
+@by4:   // four independent AES-NI streams, 64 input bytes
+        movups  xmm0, dqword ptr [r10]
+        movups  xmm1, dqword ptr [r10 + $10]
+        movups  xmm2, dqword ptr [r10 + $20]
+        movups  xmm3, dqword ptr [r10 + $30]
+        movups  xmm4, dqword ptr [r9]  // RK[Rounds]
+        pxor    xmm0, xmm4
+        pxor    xmm1, xmm4
+        pxor    xmm2, xmm4
+        pxor    xmm3, xmm4
+        movups  xmm4, dqword ptr [r9 - $10]
+        aesdec  xmm0, xmm4
+        aesdec  xmm1, xmm4
+        aesdec  xmm2, xmm4
+        aesdec  xmm3, xmm4
+        movups  xmm4, dqword ptr [r9 - $20]
+        aesdec  xmm0, xmm4
+        aesdec  xmm1, xmm4
+        aesdec  xmm2, xmm4
+        aesdec  xmm3, xmm4
+        movups  xmm4, dqword ptr [r9 - $30]
+        aesdec  xmm0, xmm4
+        aesdec  xmm1, xmm4
+        aesdec  xmm2, xmm4
+        aesdec  xmm3, xmm4
+        movups  xmm4, dqword ptr [r9 - $40]
+        aesdec  xmm0, xmm4
+        aesdec  xmm1, xmm4
+        aesdec  xmm2, xmm4
+        aesdec  xmm3, xmm4
+        movups  xmm4, dqword ptr [r9 - $50]
+        aesdec  xmm0, xmm4
+        aesdec  xmm1, xmm4
+        aesdec  xmm2, xmm4
+        aesdec  xmm3, xmm4
+        movups  xmm4, dqword ptr [r9 - $60]
+        aesdec  xmm0, xmm4
+        aesdec  xmm1, xmm4
+        aesdec  xmm2, xmm4
+        aesdec  xmm3, xmm4
+        movups  xmm4, dqword ptr [r9 - $70]
+        aesdec  xmm0, xmm4
+        aesdec  xmm1, xmm4
+        aesdec  xmm2, xmm4
+        aesdec  xmm3, xmm4
+        movups  xmm4, dqword ptr [r9 - $80]
+        aesdec  xmm0, xmm4
+        aesdec  xmm1, xmm4
+        aesdec  xmm2, xmm4
+        aesdec  xmm3, xmm4
+        movups  xmm4, dqword ptr [r9 - $90]
+        aesdec  xmm0, xmm4
+        aesdec  xmm1, xmm4
+        aesdec  xmm2, xmm4
+        aesdec  xmm3, xmm4
+        cmp     byte ptr [rax].TAes.Rounds, 10
+        ja      @x192
+@last:  movups  xmm4, dqword ptr [rax] // RK[0], unchanged by AESIMC
+        aesdeclast xmm0, xmm4
+        aesdeclast xmm1, xmm4
+        aesdeclast xmm2, xmm4
+        aesdeclast xmm3, xmm4
+        jmp     @wr
+@x192:  movups  xmm4, dqword ptr [r9 - $a0]
+        aesdec  xmm0, xmm4
+        aesdec  xmm1, xmm4
+        aesdec  xmm2, xmm4
+        aesdec  xmm3, xmm4
+        movups  xmm4, dqword ptr [r9 - $b0]
+        aesdec  xmm0, xmm4
+        aesdec  xmm1, xmm4
+        aesdec  xmm2, xmm4
+        aesdec  xmm3, xmm4
+        cmp     byte ptr [rax].TAes.Rounds, 12
+        jbe     @last
+        movups  xmm4, dqword ptr [r9 - $c0]
+        aesdec  xmm0, xmm4
+        aesdec  xmm1, xmm4
+        aesdec  xmm2, xmm4
+        aesdec  xmm3, xmm4
+        movups  xmm4, dqword ptr [r9 - $d0]
+        aesdec  xmm0, xmm4
+        aesdec  xmm1, xmm4
+        aesdec  xmm2, xmm4
+        aesdec  xmm3, xmm4
+        jmp     @last
+@wr:    // safe when src=dst, all four blocks were loaded first
+        movups  dqword ptr [r11], xmm0
+        movups  dqword ptr [r11 + $10], xmm1
+        movups  dqword ptr [r11 + $20], xmm2
+        movups  dqword ptr [r11 + $30], xmm3
+        add     r10, $40
+        add     r11, $40
+        dec     r8
+        jnz     @by4
+@done:  // no round-key material left in XMM0..XMM4
+        pxor    xmm0, xmm0
+        pxor    xmm1, xmm1
+        pxor    xmm2, xmm2
+        pxor    xmm3, xmm3
+        pxor    xmm4, xmm4
+end;
 
 { AES-CTR alternative code }
 
