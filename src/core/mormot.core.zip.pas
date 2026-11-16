@@ -1671,6 +1671,7 @@ const
   // WinZip AES encryption method, with its AES_EXTRA_ID extra information
   Z_AES = 99;
   AES_EXTRA_ID = $9901;
+  AES_EXTRA_SIZE = 7;
   AES_VENDOR = ord('A') + ord('E') shl 8;
   AES_STRENGTH: array[TZipEncryption] of byte = (3, 0);
   ENCRYPTION_NAME: array[TZipEncryption] of RawUtf8 = (
@@ -1785,16 +1786,19 @@ begin
   if remaining = 0 then
     exit;
   p := pointer(PAnsiChar(@self) + sizeof(self) + fileInfo.NameLen);
-  repeat
+  while remaining >= SizeOf(TFileInfoExtra) do
+  begin
+    len := SizeOf(TFileInfoExtra) + p^.size;
+    if len > remaining then
+      exit; // malformed extra field
     if p^.id = aID then
     begin
       result := p; // we found it
       exit;
     end;
-    len := p^.size + SizeOf(p^);
     inc(PByte(p), len);
     dec(remaining, len);
-  until remaining <= 0;
+  end;
 end;
 
 
@@ -3026,11 +3030,18 @@ begin
       // WinZip AES encryption: actual method is stored in the extra field
       e^.aes := h^.LocateExtra(AES_EXTRA_ID);
       if (e^.aes = nil) or
+         (h^.fileInfo.flags and FLAG_ENCRYPTED = 0) then
+        ESynZip.RaiseUtf8('%.Create: invalid AES header for %',
+          [self, e^.zipName]);
+      if e^.aes^.size <> AES_EXTRA_SIZE then
+        ESynZip.RaiseUtf8('%.Create: invalid AES extra size for %',
+          [self, e^.zipName]);
+      if not (e^.aes^.version in [1, 2]) or
          (e^.aes^.vendor <> AES_VENDOR) or
          not (e^.aes^.strength in [1 .. 3]) or
          not (e^.aes^.method in [Z_STORED, Z_DEFLATED]) then
-        ESynZip.RaiseUtf8('%.Create: Unsupported AES format for % in %',
-          [self, e^.zipName, fFileName]);
+        ESynZip.RaiseUtf8('%.Create: unsupported AES format for %',
+          [self, e^.zipName]);
     end
     else if not (h^.fileInfo.zZipMethod in [Z_STORED, Z_DEFLATED]) and
        not IsFolder(e^.zipName) then

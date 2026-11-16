@@ -12230,6 +12230,7 @@ var
     end;
 
   begin
+    CheckEqual(SizeOf(TFileInfoExtraAes), 11, 'AES extra size');
     Vector(@INFOZIP, SizeOf(INFOZIP), 'mORMot ZipCrypto');
     Vector(@SEVENZIP, SizeOf(SEVENZIP), 'mORMot AES-256');
     zipfn := WorkDir + 'zipcrypt.zip';
