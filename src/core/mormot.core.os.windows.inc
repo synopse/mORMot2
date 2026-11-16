@@ -5349,7 +5349,6 @@ begin
   end;
   // put the process in its own job, to terminate it with its children
   if roCloseChildren in options then
-    
     fJob := CreateJobToClose(pi.dwProcessId, 'ExternalProcess',
       {allowSilentBreakaway=}false) // false: children should stay in the job
   else
