@@ -518,9 +518,10 @@ const
 
 type
   /// abstract encryption algorithm of .zip entries, as used by TZipWrite/TZipRead
-  // - both the traditional PKWARE encryption (ZipCrypto) and the WinZip AES
-  // encryption are implemented in the mormot.crypt.zip unit, and registered
-  // into the global ZipCryptClass[] variable
+  // - never instantiate this abstract class
+  // - traditional PKWARE encryption (ZipCrypto) and WinZip AES encryptions
+  // (AE-1, AE-2 and even latest AE-3 with AES-GCM) are implemented in the
+  // mormot.crypt.zip unit, and registered into global ZipCryptClass[] variable
   TZipCrypt = class
   protected
     fHeaderLen, fTrailerLen, fAesStrength: byte;
@@ -562,7 +563,7 @@ type
     /// 0 for ZipCrypto, 1/2/3 for AES-128/AES-192/AES-256, or 4 for AE-3
     property AesStrength: byte
       read fAesStrength;
-    /// AE-3 PBKDF2 work factor, set from the entry's validated extra field
+    /// AE-3 PBKDF2 work factor, set from the zip entry's validated extra field
     property AesIterations: cardinal
       read fAesIterations write fAesIterations;
   end;
@@ -660,7 +661,7 @@ type
     procedure LocateCentralDirectory(BufZip: PByteArray; Size: PtrInt;
       Offset: Int64);
     function UnZipStream(aIndex: integer; const aInfo: TFileInfoFull;
-      aDest: TStream): boolean;
+      aDest: TStream; AuthenticateFirst: boolean = true): boolean;
     // return the actual compression method, and the TZipCrypt if encrypted
     function CryptPrepare(e: PZipReadEntry; const info: TFileInfoFull;
       out method: integer): TZipCrypt;
@@ -2326,7 +2327,7 @@ begin
   c := GetCrypt(AES_STRENGTH[fEncryption]);
   if c.AesStrength = 4 then
     if fAe3Iterations = 0 then
-      c.AesIterations := 600000 // restore the default if previously customized
+      c.AesIterations := 600000 // restore default AE-3 if previously customized
     else
       c.AesIterations := fAe3Iterations;
   e := @Entry[Count];
@@ -2905,41 +2906,6 @@ begin
   fDest.Size := fDest.Position; // files need to be truncated
 end;
 
-const
-  /// direct conversion from code page 437 to UTF-16, as PKware appnote requires
-  // - on POSIX, a constant table is easier and lighter than running external
-  // iconv/ICU from mormot.core.os (in UTF-8 POSIX, we don't need code pages)
-  CP_437: array[128..255] of word = (
-    $00C7, $00FC, $00E9, $00E2, $00E4, $00E0, $00E5, $00E7, $00EA, $00EB, $00E8,
-    $00EF, $00EE, $00EC, $00C4, $00C5, $00C9, $00E6, $00C6, $00F4, $00F6, $00F2,
-    $00FB, $00F9, $00FF, $00D6, $00DC, $00A2, $00A3, $00A5, $20A7, $0192, $00E1,
-    $00ED, $00F3, $00FA, $00F1, $00D1, $00AA, $00BA, $00BF, $2310, $00AC, $00BD,
-    $00BC, $00A1, $00AB, $00BB, $2591, $2592, $2593, $2502, $2524, $2561, $2562,
-    $2556, $2555, $2563, $2551, $2557, $255D, $255C, $255B, $2510, $2514, $2534,
-    $252C, $251C, $2500, $253C, $255E, $255F, $255A, $2554, $2569, $2566, $2560,
-    $2550, $256C, $2567, $2568, $2564, $2565, $2559, $2558, $2552, $2553, $256B,
-    $256A, $2518, $250C, $2588, $2584, $258C, $2590, $2580, $03B1, $00DF, $0393,
-    $03C0, $03A3, $03C3, $03BC, $03C4, $03A6, $0398, $03A9, $03B4, $221E, $03C6,
-    $03B5, $2229, $2261, $00B1, $2265, $2264, $2320, $2321, $00F7, $2248, $00B0,
-    $2219, $00B7, $221A, $207F, $00B2, $25A0, $00A0);
-
-procedure Cp437ToFileName(oem: PByteArray; len: PtrInt; var filename: TFileName);
-var
-  i, c: PtrInt;
-  utf16: array[0 .. ZIP_MAXNAMELEN - 1] of word;
-begin
-  if len > high(utf16) then
-    exit; // paranoid - IsZipStart() checked nameLen < ZIP_MAXNAMELEN
-  for i := 0 to len - 1 do
-  begin
-    c := oem[i];
-    if c > 127 then
-      c := CP_437[c];
-    utf16[i] := c;
-  end;
-  RawUnicodeToString(@utf16, len, string(filename));
-end;
-
 function FindZipStart(P: pointer; Last: PtrInt = 0): PtrInt;
 begin
   for result := 0 to Last do
@@ -3122,11 +3088,11 @@ begin
       else if h^.fileInfo.GetUtf8FileNameFlag or
               IsValidUtf8Small(tmp) then
         // flag let decode UTF-8 file name into native string/TFileName type
-        // also detects UTF-8 without the flag (happens from POSIX zippers)
+        // also detects UTF-8/Ascii7 without the flag (e.g. from POSIX zippers)
         Utf8ToFileName(tmp, e^.zipName)
       else
-        // legacy Windows-OEM-CP437 encoding
-        Cp437ToFileName(pointer(tmp), length(tmp), e^.zipName);
+        // fallback to legacy Windows-OEM-CP437 encoding
+        e^.zipName := AnsiToString(tmp, CP_437);
     end;
     // validate entry
     if h^.fileInfo.zZipMethod = Z_AES then
@@ -3652,8 +3618,8 @@ var
   method: integer; // not PtrInt
   data: PAnsiChar;
   tmp: RawByteString;
-  info: TFileInfoFull;
   c: TZipCrypt;
+  info: TFileInfoFull;
 begin
   FastAssignNew(result{%H-});
   if not RetrieveFileInfo(aIndex, info) or
@@ -3666,7 +3632,7 @@ begin
   len := info.f64.zfullsize;
   if len = 0 then
   begin
-    if c <> nil then
+    if c <> nil then // even void files should be authenticated
       if CryptLoad(c, e, info, tmp) = nil then
         ESynZip.RaiseUtf8('%.UnZip(%): authentication failure from %',
           [self, e^.zipName, fFileName]);
@@ -3715,18 +3681,18 @@ begin
 end;
 
 function TZipRead.UnZipStream(aIndex: integer; const aInfo: TFileInfoFull;
-  aDest: TStream): boolean;
+  aDest: TStream; AuthenticateFirst: boolean): boolean;
 var
   e: PZipReadEntry;
   crc: cardinal;
+  method: integer; // not PtrInt
   data: pointer;
   deflate: TSynZipDecompressor;
   tmp, plain: RawByteString;
   tmplen, len, ziplen, written: Int64;
   read: PtrInt;
-  method: integer; // not PtrInt
-  local: TLocalFileHeader;
   c: TZipCrypt;
+  local: TLocalFileHeader;
   buf: TTemp64; // encryption header or trailer
 begin
   result := false;
@@ -3738,6 +3704,7 @@ begin
   len := aInfo.f64.zfullsize;
   if len = 0 then
   begin
+    // a void file should be properly authenticated
     if c = nil then
       result := true
     else if e^.local <> nil then
@@ -3746,8 +3713,9 @@ begin
       result := CryptAuthenticate(c, e, aInfo);
     exit;
   end;
-  // verify file-backed AES before exposing plaintext
-  if c <> nil then
+  // Required for caller-owned streams, whose writes cannot be rolled back
+  if AuthenticateFirst and 
+     (c <> nil) then
     if (e^.local = nil) and (c.TrailerLen <> 0) then
       if not CryptAuthenticate(c, e, aInfo) then
         exit;
@@ -3762,7 +3730,8 @@ begin
     begin
       // data will be decrypted in-place after each read
       fSource.ReadBuffer(buf, c.HeaderLen);
-      CryptHeader(c, e, aInfo, @buf, {Reset=}true);
+      CryptHeader(c, e, aInfo, @buf,
+        {Reset=}AuthenticateFirst and (c.TrailerLen <> 0));
     end;
     {$ifdef LIBDEFLATESTATIC}
     // up to 64MB/128MB will call libdeflate using a temporary memory buffer
@@ -3894,7 +3863,7 @@ function TZipRead.UnZip(aIndex: integer; const DestDir: TFileName;
   DestDirIsFileName: boolean): boolean;
 var
   FS: TStream;
-  LocalZipName, LocalPath, Dest: TFileName;
+  LocalZipName, LocalPath, Dest, Partial: TFileName;
   info: TFileInfoFull;
 begin
   result := false;
@@ -3927,13 +3896,29 @@ begin
     result := EnsureDirectoryExistsNoExpand(Dest) <> ''
   else
   begin
-    FS := TFileStreamEx.Create(Dest, fmCreate);
+    // write only to a temporary file until full authentication succeeds
+    Partial := Dest + '.partial';
+    if FileExists(Partial, {FollowLink=}false) or
+       DirectoryExists(Partial, {FollowLink=}false) then
+      exit; // never overwrite another (possibly concurrent) partial file
+    FS := TFileStreamEx.Create(Partial, fmCreate);
     try
-      result := UnZipStream(aIndex, info, FS); // use libdeflate if possible
+      try
+        result := UnZipStream(aIndex, info, FS,
+          {AuthenticateFirst=}false); // only one pass over ciphertext
+      finally
+        FS.Free; // close before rename, notably on Windows
+      end;
+      if result then
+      begin
+        if FileExists(Dest) then
+          result := DeleteFile(Dest);
+        if result then
+          result := RenameFile(Partial, Dest);
+      end;
     finally
-      FS.Free;
       if not result then
-        DeleteFile(Dest); // remove incomplete/invalid files
+        DeleteFile(Partial); // invalid tag / bad CRC / exception
     end;
   end;
   if result then
@@ -3953,12 +3938,15 @@ function TZipRead.TestAll: boolean;
 var
   i: integer;
   fake: TStream;
+  info: TFileInfoFull;
 begin
   result := false;
   fake := TFakeWriterStream.Create;
   try
     for i := 0 to Count - 1 do
-      if not UnZip(i, fake) then
+      // checking ending authentication tag is enough - avoid extra read pass
+      if not RetrieveFileInfo(i, info) or
+         not UnZipStream(i, info, fake, {AuthenticateFirst=}false) then
         exit;
   finally
     fake.Free;

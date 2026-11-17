@@ -12905,6 +12905,62 @@ var
     end;
   end;
 
+  // Extract to a private .partial file and publish only after valid AE-3 tag.
+  // A corrupted tag must not damage an existing destination.
+  procedure CheckAe3PartialFile;
+  var
+    rawzip: RawByteString;
+    inname, outname, tmpname: TFileName;
+    reader: TZipRead;
+  begin
+    SetString(rawzip, PAnsiChar(@AE3_320K), SizeOf(AE3_320K));
+    inname := WorkDir + 'ae3-partial-fixture.zip';
+    outname := WorkDir + 'ae3-partial-result.txt';
+    tmpname := outname + '.partial';
+    DeleteFile(outname);
+    DeleteFile(tmpname);
+    try
+      Check(FileFromString(rawzip, inname), 'AE-3 partial fixture');
+      Check(FileFromString('old content', outname),
+        'AE-3 existing destination');
+      reader := TZipRead.Create(inname, 0, 0, 128); // force fSource
+      try
+        reader.Password := AE3_PASSWORD;
+        Check(reader.UnZip(0, outname, {DestDirIsFileName=}true),
+          'AE-3 one-pass file extraction');
+        CheckEqual(StringFromFile(outname),
+          'AE-3 custom iterations=320000' + #10, 'AE-3 published contents');
+        Check(not FileExists(tmpname, {FollowLink=}false),
+          'AE-3 successful partial renamed');
+      finally
+        reader.Free;
+      end;
+      // The 320k stored fixture has a 52-byte local header, 24-byte AE-3
+      // header, and 30-byte ciphertext. Corrupt the first byte of its tag.
+      rawzip[52 + 24 + 30 + 1] := AnsiChar(
+        ord(rawzip[52 + 24 + 30 + 1]) xor 1);
+      Check(FileFromString(rawzip, inname), 'AE-3 tampered fixture');
+      Check(FileFromString('keep existing', outname),
+        'AE-3 reset existing destination');
+      reader := TZipRead.Create(inname, 0, 0, 128);
+      try
+        reader.Password := AE3_PASSWORD;
+        Check(not reader.UnZip(0, outname, {DestDirIsFileName=}true),
+          'AE-3 reject corrupted tag before rename');
+        CheckEqual(StringFromFile(outname), 'keep existing',
+          'AE-3 preserve previous destination');
+        Check(not FileExists(tmpname, {FollowLink=}false),
+          'AE-3 failed partial removed');
+      finally
+        reader.Free;
+      end;
+    finally
+      DeleteFile(tmpname);
+      DeleteFile(outname);
+      DeleteFile(inname);
+    end;
+  end;
+
   // Remove a preceding plain entry and move the encrypted entry in-place.
   // This covers CreateFromIgnore() compaction and AES extra field rewrites.
   procedure CheckAe3Compact(p: pointer; len: integer;
@@ -13015,6 +13071,7 @@ begin
     CheckAe3Compact(@AE3_STORED, SizeOf(AE3_STORED),
       'AE-3 test: small stored file' + #10, AE3_PASSWORD, 3, 9);
     CheckAe3Tampering;
+    CheckAe3PartialFile;
     S := TRawByteStringStream.Create;
     try
       w := TZipWrite.Create(S);
