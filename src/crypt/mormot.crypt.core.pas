@@ -514,6 +514,9 @@ type
     // skipped by the dual pass process only, not by the single pass branches
     function Decrypt(ctp, ptp: pointer; ILen: PtrInt;
       ptag: pointer = nil; tlen: PtrInt = 0): boolean;
+    /// update the authentication data of the cipher text
+    // - same as Decrypt() without the AES-CTR phase
+    function Auth(ctp: pointer; ILen: PtrInt): boolean;
     /// append some data to be authenticated, but not encrypted
     function Add_AAD(pAAD: pointer; aLen: PtrInt): boolean;
     /// finalize the AES-GCM encryption, returning the authentication tag
@@ -5061,6 +5064,15 @@ begin
       exit;
   end;
   result := true;
+end;
+
+function TAesGcmEngine.Auth(ctp: pointer; ILen: PtrInt): boolean;
+begin
+  result := (ILen >= 0) and
+            ((ILen = 0) or (ctp <> nil)) and
+            not (flagFinalComputed in state.flags);
+  if result then
+    internal_auth(ctp, ILen, state.txt_ghv, state.atx_cnt);
 end;
 
 function TAesGcmEngine.Add_AAD(pAAD: pointer; aLen: PtrInt): boolean;
