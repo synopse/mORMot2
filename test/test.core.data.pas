@@ -12926,25 +12926,6 @@ var
       reader := TZipRead.Create(inname, 0, 0, 128); // force fSource
       try
         reader.Password := AE3_PASSWORD;
-        Check(reader.UnZip(0, outname, {DestDirIsFileName=}true),
-          'AE-3 one-pass file extraction');
-        CheckEqual(StringFromFile(outname),
-          'AE-3 custom iterations=320000' + #10, 'AE-3 published contents');
-        Check(not FileExists(tmpname, {FollowLink=}false),
-          'AE-3 successful partial renamed');
-      finally
-        reader.Free;
-      end;
-      // The 320k stored fixture has a 52-byte local header, 24-byte AE-3
-      // header, and 30-byte ciphertext. Corrupt the first byte of its tag.
-      rawzip[52 + 24 + 30 + 1] := AnsiChar(
-        ord(rawzip[52 + 24 + 30 + 1]) xor 1);
-      Check(FileFromString(rawzip, inname), 'AE-3 tampered fixture');
-      Check(FileFromString('keep existing', outname),
-        'AE-3 reset existing destination');
-      reader := TZipRead.Create(inname, 0, 0, 128);
-      try
-        reader.Password := AE3_PASSWORD;
         // Force CryptAuthenticate() + DecryptReset() + actual decryption.
         Check(reader.Entry[0].local = nil, 'AE-3 source-backed stream');
         output := TRawByteStringStream.Create;
@@ -12956,6 +12937,24 @@ var
         finally
           output.Free;
         end;
+        Check(reader.UnZip(0, outname, {DestDirIsFileName=}true),
+          'AE-3 one-pass file extraction');
+        CheckEqual(StringFromFile(outname),
+          'AE-3 custom iterations=320000' + #10, 'AE-3 published contents');
+        Check(not FileExists(tmpname, {FollowLink=}false),
+          'AE-3 successful partial renamed');
+      finally
+        reader.Free;
+      end;
+      // The 320k stored fixture has a 52-byte local header, 24-byte AE-3
+      // header, and 30-byte ciphertext. Corrupt the first byte of its tag.
+      rawzip[52 + 24 + 30 + 1] := AnsiChar(ord(rawzip[52 + 24 + 30 + 1]) xor 1);
+      Check(FileFromString(rawzip, inname), 'AE-3 tampered fixture');
+      Check(FileFromString('keep existing', outname),
+        'AE-3 reset existing destination');
+      reader := TZipRead.Create(inname, 0, 0, 128);
+      try
+        reader.Password := AE3_PASSWORD;
         Check(not reader.UnZip(0, outname, {DestDirIsFileName=}true),
           'AE-3 reject corrupted tag before rename');
         CheckEqual(StringFromFile(outname), 'keep existing',
