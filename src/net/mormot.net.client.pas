@@ -257,12 +257,9 @@ type
       aBufferSize: PtrInt = 65536); reintroduce;
     /// initialize the decoder from a full Content-Type header value
     // - raise EHttpMultiPart if aContentType has no valid boundary parameter
-    // - aDummy is unused: it only makes this signature distinct from Create(),
-    // so that C++Builder can reach both constructors (avoid Delphi W1029) -
-    // as the VCL does with TCustomForm.CreateNew()
     constructor CreateFromContentType(aSource: TStream;
       const aContentType: RawUtf8; aBufferSize: PtrInt = 65536;
-      aDummy: integer = 0);
+      aContext: PUtf8Char = nil);
     /// finalize this decoder instance
     destructor Destroy; override;
     /// move to the next section of the multipart content
@@ -2712,13 +2709,14 @@ begin
 end;
 
 constructor THttpMultiPartDecoder.CreateFromContentType(aSource: TStream;
-  const aContentType: RawUtf8; aBufferSize: PtrInt; aDummy: integer);
+  const aContentType: RawUtf8; aBufferSize: PtrInt; aContext: PUtf8Char);
 var
   b: RawUtf8;
-begin
+begin // aContext is also used to make the constructor unique for C++ binding
   if not MultiPartFormDataBoundary(aContentType, b) then
     EHttpMultiPart.RaiseUtf8(
-      '%.CreateFromContentType: no boundary in [%]', [self, aContentType]);
+      '%.CreateFromContentType(%): no boundary in [%]',
+      [aContext, self, aContentType]);
   Create(aSource, b, aBufferSize);
 end;
 
