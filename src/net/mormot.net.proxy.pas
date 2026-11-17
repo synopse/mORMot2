@@ -1055,7 +1055,19 @@ begin
   if h.Store.added <> 0 then // = h.Size
     dec(h.Store.added, 2);   // no CRLF after the last header
   h.Done(Headers);
-  delete(Output, 1, body); // in-place: the body is not copied to a new string
+  if GetRefCount(Output) <> 1 then
+    delete(Output, 1, body) // should never happen - but safe
+  else
+  begin
+    body := e - next;
+    if body = 0 then
+      FastAssignNew(Output)
+    else
+    begin
+      MoveFast(next^, pointer(Output)^, body);
+      FakeLength(Output, body); // truncate in Output with no allocation
+    end;
+  end;
   result := true;
 end;
 
