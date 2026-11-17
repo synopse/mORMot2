@@ -6653,8 +6653,7 @@ type
     /// send some data to the process stdin, with the roStdinPipe option
     // - returns false on error, e.g. if the process ended
     // - on POSIX, Start() with roStdinPipe calls SigPipeIntercept, so that
-    // writing to an ended process does not raise SIGPIPE - but SigPipeIntercept
-    // does nothing yet on Delphi POSIX
+    // writing to an ended process does not raise SIGPIPE
     function Write(const data: RawByteString): boolean; overload;
     /// send some data to the process stdin, with the roStdinPipe option
     function Write(p: pointer; len: PtrInt): boolean; overload;

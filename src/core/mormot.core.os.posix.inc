@@ -5145,7 +5145,16 @@ end;
 
 procedure SigPipeIntercept;
 begin
-  // do nothing by now
+  if fSigPipeDisabled in _F1 then
+    exit; // quickly return if already done
+  OSSafe.Lock;
+  try
+    if not (fSigPipeDisabled in _F1) and
+       (fpsigignore(SIGPIPE) = 0) then
+      include(_F1, fSigPipeDisabled); // set once AFTER disabling it
+  finally
+    OSSafe.UnLock;
+  end;
 end;
 
 {$endif FPC}

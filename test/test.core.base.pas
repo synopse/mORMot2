@@ -4234,6 +4234,20 @@ begin
   finally
     p.Free;
   end;
+  // writing to an ended process returns false, and raises no SIGPIPE
+  p := TExternalProcess.Create;
+  try
+    Check(p.Start('true', '', '', RUN_PROCESS - [roStdinNull] + [roStdinPipe]), 'epipe');
+    start := GetTickCount64 + 10000;
+    while p.Running and
+          (GetTickCount64 < start) do
+      SleepHiRes(10);
+    Check(not p.Running, 'epipe');
+    Check(not p.Write(data), 'epipe'); // bigger than any pipe buffer
+    CheckEqual(p.WaitFor(10000), 0, 'epipe');
+  finally
+    p.Free;
+  end;
   // no handle nor zombie leak
   files := OpenedHandles;
   pid := 0;

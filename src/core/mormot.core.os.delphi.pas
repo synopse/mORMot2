@@ -299,6 +299,8 @@ function wexitstatus(status: cint): cint;
 function fpsigemptyset(var nset: TSigSet): cint;
 function fpsigprocmask(how: cint; nset, oset: PSigSet): cint;
 function fpsigaction(sig: cint; act, oact: PSigactionRec): cint;
+/// ignore a signal for the whole process, i.e. set it to SIG_IGN
+function fpsigignore(sig: cint): cint;
 
 {$ifdef OSLINUX}
 function pipe2(fd: pcint; flags: cint): cint; cdecl;
@@ -874,6 +876,14 @@ end;
 function fpsigaction(sig: cint; act, oact: PSigactionRec): cint;
 begin
   result := sigaction(sig, act, oact);
+end;
+
+function fpsigignore(sig: cint): cint;
+var
+  prev: TSignalHandler;
+begin
+  prev := signal(sig, TSignalHandler(pointer(1))); // SIG_IGN = 1 on all POSIX
+  result := -ord(PtrInt(@prev) = -1); // SIG_ERR = -1
 end;
 
 function fpmmap(start: pointer; len: PtrUInt; prot, flags, fd: cint; offst: Int64): pointer;
