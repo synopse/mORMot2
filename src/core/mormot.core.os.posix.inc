@@ -2788,6 +2788,8 @@ end;
 
 procedure LinuxEventFDWrite(fd: integer; count: QWord);
 begin
+  if fd > 0 then
+    FpWrite(fd, @count, SizeOf(count)); // minimal implementation
 end;
 
 function LinuxEventFDWait(fd: integer; ms: integer): boolean;
