@@ -109,6 +109,9 @@ type
   protected
     fGcm: TAesGcmEngine;
     fAut: THash256;
+    fNonce: TAesBlock; // retain IV for the authenticated second pass
+    fHeader: THash192; // salt + KCV + counter, must be unchanged
+    fVerified: boolean;
     fProcessed: QWord;
     function Setup(const Password: RawByteString; Header: PByteArray): cardinal;
     procedure CheckSize(Len: PtrInt);
@@ -126,6 +129,9 @@ type
     procedure EncryptDone(Trailer: PByteArray); override;
     /// derivate the keys from the stored salt and check the password
     function DecryptInit(const Password: RawByteString; const Info: TFileInfo;
+      Header: PByteArray): boolean; override;
+    /// can be called instead of DecryptInit() twice
+    function DecryptReset(const Password: RawByteString; const Info: TFileInfo;
       Header: PByteArray): boolean; override;
     /// in-place AES-GCM decryption with authentication
     procedure Decrypt(Data: PByteArray; Len: PtrInt; AuthOnly: boolean); override;
@@ -382,7 +388,7 @@ const
   ZIP_AE3_KCV: array[0..3] of byte = (75, 67, 86, 0); // 'KCV'#0
   ZIP_AE3_FIN: array[0..3] of byte = (70, 73, 78, 0); // 'FIN'#0;
 
-// HKDF-Expand block #1; PRK comes directly from PBKDF2-HMAC-SHA256.
+// HKDF-Expand block #1; PRK comes directly from PBKDF2-HMAC-SHA256
 procedure ZipAe3Expand(const Prk: THash256; Info: pointer; InfoLen: integer;
   out Value: THash256);
 var
@@ -429,6 +435,8 @@ destructor TZipCryptGcm.Destroy;
 begin
   fGcm.Done;
   FillZero(fAut);
+  FillZero(fNonce);
+  FillZero(fHeader, SizeOf(fHeader));
   inherited Destroy;
 end;
 
@@ -443,7 +451,8 @@ var
   nonce: TAesBlock;
   checkValue: cardinal;
 begin
-  // Reject unbounded password KDF work when processing hostile archives.
+  fVerified := false;
+  // Reject unbounded password KDF work when processing hostile archives
   if (fAesIterations < 320000) or
      (fAesIterations > 5000000) or
      (fAesIterations mod 10000 <> 0) then
@@ -466,6 +475,7 @@ begin
   ZipAe3Expand(PHash256(@prk)^, @info, 8, digest);
   FillZero(nonce);
   MoveFast(digest, nonce, 12);
+  fNonce := nonce;
   fGcm.Done;
   if not fGcm.Init(dek, 256) or
      not fGcm.Reset(PHash128Rec(@nonce), 12) then
@@ -531,38 +541,38 @@ var
 begin
   kcv := Setup(Password, Header);
   result := IsEqual(kcv, Header^[16], 4);
-  if not result then
+  if result then
+    MoveFast(Header^, fHeader, ZIP_AE3_HEADER)
+  else
     fGcm.Done;
+end;
+
+function TZipCryptGcm.DecryptReset(const Password: RawByteString;
+  const Info: TFileInfo; Header: PByteArray): boolean;
+begin
+  // the first pass has already authenticated this exact entry
+  result := fVerified and IsEqual(fHeader, Header^, ZIP_AE3_HEADER);
+  fVerified := false;
+  if not result then
+    exit;
+  result := fGcm.Reset(PHash128Rec(@fNonce), 12); // keep the AES key
+  fProcessed := 0;
 end;
 
 procedure TZipCryptGcm.Decrypt(Data: PByteArray; Len: PtrInt;
   AuthOnly: boolean);
-var
-  temp: TBuffer32K;
-  n: PtrInt;
 begin
   CheckSize(Len);
   if Len = 0 then
     exit;
-  if not AuthOnly then
+  if AuthOnly then
   begin
-    if not fGcm.Decrypt(Data, Data, Len) then
-      ESynZip.RaiseUtf8('%.Decrypt: AES-256-GCM failed', [self]);
+    if fGcm.Auth(Data, Len) then // AES-CTR part not needed
+      exit;
+  end
+  else if fGcm.Decrypt(Data, Data, Len) then
     exit;
-  end;
-  // TZipRead.CryptAuthenticate() must not expose plaintext before tag check.
-  // Decrypt into discard-only scratch space; CryptHeader() resets for pass #2.
-  while Len > 0 do
-  begin
-    n := Len;
-    if n > SizeOf(temp) then
-      n := SizeOf(temp);
-    if not fGcm.Decrypt(Data, @temp, n) then
-      ESynZip.RaiseUtf8('%.Decrypt: AES-256-GCM failed', [self]);
-    inc(PByte(Data), n);
-    dec(Len, n);
-  end;
-  FillZero(temp, SizeOf(temp));
+  ESynZip.RaiseUtf8('%.Decrypt: AES-256-GCM failed', [self]);
 end;
 
 function TZipCryptGcm.DecryptDone(Trailer: PByteArray): boolean;
@@ -570,17 +580,18 @@ var
   tag: TAesBlock;
   fin: THash256;
 begin
-  if not fGcm.Final(tag) then
+  if not fGcm.Final(tag, {andDone=}false) then
     ESynZip.RaiseUtf8('%.DecryptDone: AES-256-GCM failed', [self]);
   ZipAe3Fin(fAut, tag, fin);
-  // Constant-time checks of BOTH the GCM tag and the authenticated FIN field.
-  // Compare the two independent checks even if the first one fails.
+  // constant-time checks of BOTH the GCM tag and the authenticated FIN field
   result := IsEqual(tag, Trailer^, 16);
   if not IsEqual(fin, Trailer^[16], 4) then
     result := false;
+  fVerified := result; // permit one fast reset only after authenticated data
   FillZero(fin);
   FillZero(tag);
 end;
+
 
 initialization
   ZipCryptClass[zeAes256]    := TZipCryptAes;

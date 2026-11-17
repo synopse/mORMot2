@@ -543,6 +543,10 @@ type
     // - returns false if Password is incorrect
     function DecryptInit(const Password: RawByteString; const Info: TFileInfo;
       Header: PByteArray): boolean; virtual; abstract;
+    /// restart decryption after an authenticated first pass
+    // - defaults to DecryptInit() for algorithms without a fast reset
+    function DecryptReset(const Password: RawByteString; const Info: TFileInfo;
+      Header: PByteArray): boolean; virtual;
     /// in-place decryption of some entry data
     procedure Decrypt(Data: PByteArray; Len: PtrInt;
       AuthOnly: boolean = false); virtual; abstract;
@@ -662,7 +666,8 @@ type
       out method: integer): TZipCrypt;
     // validate the encryption header of an encrypted entry
     procedure CryptHeader(c: TZipCrypt; e: PZipReadEntry;
-      const info: TFileInfoFull; head: PByteArray);
+      const info: TFileInfoFull; head: PByteArray;
+      Reset: boolean = false);
     // load and decrypt an entry into tmp from memory or fSource
     // - returns the plain data, or nil on authentication failure
     function CryptLoad(c: TZipCrypt; e: PZipReadEntry;
@@ -1713,6 +1718,12 @@ end;
 
 procedure TZipCrypt.EncryptDone(Trailer: PByteArray);
 begin
+end;
+
+function TZipCrypt.DecryptReset(const Password: RawByteString;
+  const Info: TFileInfo; Header: PByteArray): boolean;
+begin
+  result := DecryptInit(Password, Info, Header);
 end;
 
 function TZipCrypt.DecryptDone(Trailer: PByteArray): boolean;
@@ -3567,10 +3578,16 @@ begin
 end;
 
 procedure TZipRead.CryptHeader(c: TZipCrypt; e: PZipReadEntry;
-  const info: TFileInfoFull; head: PByteArray);
+  const info: TFileInfoFull; head: PByteArray; Reset: boolean);
 begin
-  if not c.DecryptInit(fPassword, info.f32, head) then
-    ESynZip.RaiseUtf8('%.UnZip: invalid Password for %', [self, e^.zipName]);
+  if Reset then
+  begin
+    if c.DecryptReset(fPassword, info.f32, head) then
+      exit;
+  end
+  else if c.DecryptInit(fPassword, info.f32, head) then
+    exit;
+  ESynZip.RaiseUtf8('%.UnZip: invalid Password for %', [self, e^.zipName]);
 end;
 
 function TZipRead.CryptLoad(c: TZipCrypt; e: PZipReadEntry;
@@ -3745,7 +3762,7 @@ begin
     begin
       // data will be decrypted in-place after each read
       fSource.ReadBuffer(buf, c.HeaderLen);
-      CryptHeader(c, e, aInfo, @buf);
+      CryptHeader(c, e, aInfo, @buf, {Reset=}true);
     end;
     {$ifdef LIBDEFLATESTATIC}
     // up to 64MB/128MB will call libdeflate using a temporary memory buffer
