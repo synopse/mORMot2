@@ -1015,6 +1015,7 @@ function TSqlDBDuckDBConnectionProperties.DoCopy(const Select: RawUtf8;
 var
   f: PtrInt;
   sql: RawUtf8;
+  rows: ISqlDBRows;
 begin
   f := DuckDBFileFormat(Dest);
   if f = DUCKDB_FILE_XLSX then
@@ -1024,9 +1025,12 @@ begin
     Append(sql, ', ', CopyOptions);
   Append(sql, ')');
   if Source = '' then
-    result := ExecuteNoResult(sql, [StringToUtf8(Dest)])
+    rows := Execute(sql, [Dest])
   else
-    result := ExecuteNoResult(sql, [StringToUtf8(Source), StringToUtf8(Dest)]);
+    rows := Execute(sql, [Dest, Source]);
+  result := 0;
+  if rows.Step then
+    result := rows.ColumnInt(0);
 end;
 
 function TSqlDBDuckDBConnectionProperties.FileToDocVariant(
@@ -1035,17 +1039,20 @@ var
   sql: RawUtf8;
 begin
   FileReader(FileName, ReadOptions, sql);
-  result := Execute(sql, [StringToUtf8(FileName)]).FetchAllToDocVariantArray;
+  result := Execute(sql, [FileName]).FetchAllToDocVariantArray;
 end;
 
 function TSqlDBDuckDBConnectionProperties.ImportFile(const TableName: RawUtf8;
   const FileName: TFileName; const ReadOptions: RawUtf8): integer;
 var
   sql: RawUtf8;
+  rows: ISqlDBRows;
 begin
   FileReader(FileName, ReadOptions, sql);
-  result := ExecuteNoResult(Join(['create table ', TableName, ' as ', sql]),
-    [StringToUtf8(FileName)]);
+  rows := Execute(Join(['create table ', TableName, ' as ', sql]), [FileName]);
+  result := 0;
+  if rows.Step then
+    result := rows.ColumnInt(0);
 end;
 
 function TSqlDBDuckDBConnectionProperties.ExportSql(const Sql: RawUtf8;

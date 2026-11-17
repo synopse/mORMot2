@@ -641,7 +641,6 @@ begin
   CheckEqual(rows.ColumnUtf8(1), '200012469.5000', 'appender sum');
 end;
 
-
 procedure TTestDuckDB.Files;
 const
   COUNT = 1000;
@@ -665,6 +664,7 @@ begin
     'from range(1, ?) t(i)', ['2020-01-01', COUNT + 1]);
   fProps.ExecuteNoResult('drop table if exists fileimp', []);
   // table -> CSV -> new table: DuckDB sniffs the column types back
+  DeleteFile(csv);
   CheckEqual(fProps.ExportSql('from filesrc order by id', csv), COUNT, 'export');
   Check(FileSize(csv) > COUNT * 20, 'csv size');
   CheckEqual(fProps.ImportFile('fileimp', csv), COUNT, 'import');
@@ -704,6 +704,8 @@ begin
     TSynLog.Family.ExceptionIgnoreCurrentThread := false;
   end;
   // XLSX needs the excel extension, which may not be installed
+  (fProps.ThreadSafeConnection as TSqlDBDuckDBConnection)
+    .ExecuteScript('INSTALL excel; LOAD excel;'); // needed on some systems
   rows := fProps.Execute('select count(*) from duckdb_extensions() ' +
     'where extension_name = ? and installed', ['excel']);
   hasexcel := rows.Step and

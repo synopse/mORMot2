@@ -12729,7 +12729,6 @@ var
     reader: TZipRead;
     rejected: boolean;
   begin
-    rejected := false;
     try
       reader := TZipRead.Create(pointer(damaged), length(damaged));
       try
@@ -12742,7 +12741,7 @@ var
       on ESynZip do
         rejected := true;
     end;
-    Check(rejected, description);
+    CheckUtf8(rejected, description);
   end;
 
   procedure Ae3ChangeByte(offset: PtrInt; newbyte: byte;
