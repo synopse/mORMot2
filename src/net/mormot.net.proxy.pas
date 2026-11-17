@@ -137,11 +137,13 @@ procedure FastCgiAppendRequest(var Dest: TSynTempAdder;
 // any following segment is the PATH_INFO
 // - returns false if Path has no script, or is unsafe, i.e. is absolute or
 // contains a '..' segment, a ':' or a '\'
+// - with Wsgi=true, SCRIPT_NAME is UriPrefix and PATH_INFO is the
+// decoded path under that prefix; no physical script is required
 // - a "Proxy:" header is never transmitted as HTTP_PROXY, and any header
 // with an underscore in its name is ignored
 function FastCgiAppendParams(var Dest: TSynTempAdder;
   Ctxt: THttpServerRequestAbstract; const Root, UriPrefix, ServerPort: RawUtf8;
-  Path: PUtf8Char; PathLen: PtrInt): boolean;
+  Path: PUtf8Char; PathLen: PtrInt; Wsgi: boolean = false): boolean;
 
 /// parse the CGI headers of a FastCGI frtStdOut content
 // - header lines could end with LF or CRLF
@@ -162,7 +164,7 @@ type
   // - handles a single request, then is closed by the application
   TFastCgiAsyncConnection = class(TAsyncConnection)
   protected
-    fHttpHandle: PtrUInt; // TConnectionAsyncHandle - 0 once answered
+    fHttpHandle: PtrUInt; // = TConnectionAsyncHandle = 0 once answered
     fResponse: TFastCgiResponse;
     procedure AfterCreate; override;
     function OnRead: TPollAsyncSocketOnReadWrite; override;
@@ -276,7 +278,9 @@ type
   // - hpoClientLowerCaseUri will force remote http://... to be in lowercase
   // - hpoClientNormalizeCaseHash to compute the local hash from uppercase URI
   // - hpoNoXProxyName will disable our custom 'X-Proxy-Name: xxxx' header
-  // - hpNoXCache will purge any X-Cache: X-Served-By: Via: Age: headers
+  // - hpoNoXCache will purge any X-Cache: X-Served-By: Via: Age: headers
+  // - hpoFastCgiWsgi makes fcgi:// sources pass SCRIPT_NAME/PATH_INFO for
+  // a WSGI application instead of locating a physical script file
   THttpProxyUrlOption = (
     hpoNoSubFolder,
     hpoNoFolderHtmlIndex,
@@ -294,7 +298,8 @@ type
     hpoClientLowerCaseUri,
     hpoClientNormalizeCaseHash,
     hpoNoXProxyName,
-    hpNoXCache);
+    hpoNoXCache,
+    hpoFastCgiWsgi);
   /// store THttpProxyUrl.Settings options for a given URI
   THttpProxyUrlOptions = set of THttpProxyUrlOption;
 
@@ -361,6 +366,8 @@ type
     // or fcgi://unix:/run/php-fpm.sock:/var/www), the request is transmitted
     // to this application, e.g. php-fpm, locating the script from the Url
     // within the folder of the application host set after the address
+    // - hpoFastCgiWsgi instead maps Url to WSGI SCRIPT_NAME, and the
+    // remaining request path to PATH_INFO (no SCRIPT_FILENAME is sent)
     property Source: RawUtf8
       read fSource write fSource;
     /// optional bandwidth limitation of Source http:// remote URIs download
@@ -515,6 +522,7 @@ type
     function AddProxy(const remoteuri: RawUtf8; const localuri: RawUtf8 = ''): THttpProxyUrlSettings;
     /// create a THttpProxyUrlSettings definition as FastCGI application
     // - fcgiuri is e.g. 'fcgi://127.0.0.1:9000/var/www' for php-fpm
+    // - set hpoFastCgiWsgi for Flask/WSGI (no script path is needed)
     // - all methods are transmitted by default, not only GET and HEAD
     function AddFastCgi(const fcgiuri: RawUtf8; const localuri: RawUtf8 = ''): THttpProxyUrlSettings;
     /// create a THttpProxyUrlSettings definition for using a callback
@@ -726,7 +734,7 @@ begin // append Folder + '/' + Path as value, with no temporary string
   FastCgiAppendName(Dest, pointer(Name), length(Name),
     length(Folder) + 1 + PathLen);
   Dest.Add(Folder);
-  Dest.Add('/');
+  Dest.AddDirect('/');
   Dest.Add(Path, PathLen);
 end;
 
@@ -864,7 +872,7 @@ end;
 
 function FastCgiAppendParams(var Dest: TSynTempAdder;
   Ctxt: THttpServerRequestAbstract; const Root, UriPrefix, ServerPort: RawUtf8;
-  Path: PUtf8Char; PathLen: PtrInt): boolean;
+  Path: PUtf8Char; PathLen: PtrInt; Wsgi: boolean): boolean;
 var
   name, p: PUtf8Char;
   namelen, scriptlen, i: PtrInt;
@@ -872,16 +880,33 @@ var
   num: TTemp24;
 begin
   result := false;
-  if PathLen <= 0 then
+  if (PathLen < 0) or
+     ((PathLen = 0) and not Wsgi) then
     exit;
-  // decode the path in-place within its own copy - Path is not #0 terminated
-  tmp.Init(Path, PathLen);
-  name := tmp.buf;
-  namelen := DoUrlDecode(tmp.buf, tmp.buf, '+') - name;
-  name[namelen] := #0;
-  // locate the script, and validate the path
-  scriptlen := FastCgiScriptLen(name, namelen);
-  if scriptlen <> 0 then
+  // decode the path once, with no temporary RawUtf8 allocation
+  name := nil;
+  namelen := 0;
+  scriptlen := 0;
+  if PathLen <> 0 then
+  begin
+    tmp.Init(Path, PathLen);
+    name := tmp.buf;
+    namelen := DoUrlDecode(tmp.buf, tmp.buf, '+') - name;
+    name[namelen] := #0;
+    if Wsgi then
+    begin
+      // no filesystem lookup; still reject an encoded NUL in PATH_INFO
+      if StrLen(name) <> namelen then
+      begin
+        tmp.Done;
+        exit;
+      end;
+    end
+    else
+      scriptlen := FastCgiScriptLen(name, namelen);
+  end;
+  if Wsgi or
+     (scriptlen <> 0) then
   begin
     // the standard CGI/1.1 variables
     FastCgiAppendParam(Dest, 'GATEWAY_INTERFACE', 'CGI/1.1');
@@ -894,14 +919,28 @@ begin
       i := length(Ctxt.Url);
     FastCgiAppendParam(Dest, 'QUERY_STRING', 12,
       PUtf8Char(pointer(Ctxt.Url)) + i, length(Ctxt.Url) - i);
-    FastCgiAppendPath(Dest, 'SCRIPT_NAME', UriPrefix, name, scriptlen);
-    FastCgiAppendPath(Dest, 'SCRIPT_FILENAME', Root, name, scriptlen);
-    FastCgiAppendParam(Dest, 'DOCUMENT_ROOT', Root);
-    if scriptlen < namelen then
-      FastCgiAppendParam(Dest, 'PATH_INFO', 9,
-        name + scriptlen, namelen - scriptlen);
-    if Ctxt.RemoteIP = '' then
-      FastCgiAppendParam(Dest, 'REMOTE_ADDR', '127.0.0.1') // see RemoteIPLocalHostAsVoidInServers
+    if Wsgi then
+    begin
+      FastCgiAppendParam(Dest, 'SCRIPT_NAME', UriPrefix);
+      if namelen <> 0 then
+        FastCgiAppendPath(Dest, 'PATH_INFO', '', name, namelen)
+      else if (length(Ctxt.Url) > length(UriPrefix)) and
+              (Ctxt.Url[length(UriPrefix) + 1] = '/') then
+        FastCgiAppendParam(Dest, 'PATH_INFO', '/')
+      else
+        FastCgiAppendParam(Dest, 'PATH_INFO', '');
+    end
+    else
+    begin
+      FastCgiAppendPath(Dest, 'SCRIPT_NAME', UriPrefix, name, scriptlen);
+      FastCgiAppendPath(Dest, 'SCRIPT_FILENAME', Root, name, scriptlen);
+      FastCgiAppendParam(Dest, 'DOCUMENT_ROOT', Root);
+      if scriptlen < namelen then
+        FastCgiAppendParam(Dest, 'PATH_INFO', 9,
+          name + scriptlen, namelen - scriptlen);
+    end;
+    if Ctxt.RemoteIP = '' then // see RemoteIPLocalHostAsVoidInServers
+      FastCgiAppendParam(Dest, 'REMOTE_ADDR', '127.0.0.1')
     else
       FastCgiAppendParam(Dest, 'REMOTE_ADDR', Ctxt.RemoteIP);
     i := length(Ctxt.Host);
@@ -932,7 +971,8 @@ begin
       FastCgiAppendHeaders(Dest, p, p + length(Ctxt.InHeaders));
     result := true;
   end;
-  tmp.Done;
+  if PathLen <> 0 then
+    tmp.Done;
 end;
 
 const
@@ -984,18 +1024,18 @@ begin
     until v^ <> ' ';
     known := IdemPPChar(p, @FCGI_CGIHEADER);
     case known of
-      0:
+      0: // STATUS:
         Status := GetCardinal(v);
-      1:
+      1: // CONTENT-TYPE:
         FastSetString(ContentType, v, p + len - v);
-      2:
+      2: // CONTENT-LENGTH:
         ; // ignored: computed by the HTTP server from the actual body
     else
       begin
-        if known = 3 then
-          location := true; // but still sent back to the HTTP client
-        h.Add(p, len);
-        h.AddDirect(#13, #10);
+        if known = 3 then      // LOCATION:
+          location := true;    // but still sent back to the HTTP client
+        h.Add(p, len);         // whole header content
+        h.AddDirect(#13, #10); // HTTP headers require CRLF
       end;
     end;
     p := next;
@@ -1012,8 +1052,8 @@ begin
     h.Store.Done;
     exit;
   end;
-  if h.Size <> 0 then
-    h.Size := h.Size - 2; // no CRLF after the last header
+  if h.Store.added <> 0 then // = h.Size
+    dec(h.Store.added, 2);   // no CRLF after the last header
   h.Done(Headers);
   delete(Output, 1, body); // in-place: the body is not copied to a new string
   result := true;
@@ -1085,37 +1125,39 @@ end;
 
 procedure TFastCgiAsyncConnection.HttpResponse(Status: integer);
 var
-  handle: PtrUInt;
+  h: PtrUInt;
+  o: TFastCgiAsyncConnections;
   server: THttpServerGeneric;
   ctype, headers: RawUtf8;
 begin
+  o := pointer(fOwner);
   // the HTTP client should be answered only once, but this method is called
   // from several threads: by OnRead from the threads polling the sockets, by
   // OnLastOperationIdle from the idle thread, and by OnClose from any thread
   // closing this connection - Send may also reset fHttpHandle from a HTTP
   // thread: so a compare-and-swap is needed to let a single caller continue
-  handle := fHttpHandle;
-  if (handle = 0) or
-     not LockedExc(fHttpHandle, 0, handle) or
-     TFastCgiAsyncConnections(fOwner).Terminated then // HTTP server may be gone
+  h := fHttpHandle;
+  if (h = 0) or
+     not LockedExc(fHttpHandle, 0, h) or
+     o.Terminated then // HTTP server may be gone
     exit;
-  server := TFastCgiAsyncConnections(fOwner).fHttpServer;
+  server := o.fHttpServer;
   if fResponse.Error <> '' then
-    TFastCgiAsyncConnections(fOwner).DoLog(sllDebug, 'HttpResponse(%) stderr=%',
+    o.DoLog(sllDebug, 'HttpResponse(%) stderr=%',
       [Status, EscapeToShort(fResponse.Error)], self);
   if Status = HTTP_SUCCESS then
     if (fResponse.ProtocolStatus = 0) and
        FastCgiParseOutput(fResponse.Output, Status, ctype, headers) then
     begin
       // Output is now the body, and is sent with no copy
-      server.AsyncResponse(handle, RawUtf8(fResponse.Output), ctype, Status,
+      server.AsyncResponse(h, RawUtf8(fResponse.Output), ctype, Status,
         headers);
       fResponse.Output := ''; // now owned by the HTTP server
       exit;
     end
     else
       Status := HTTP_BADGATEWAY; // invalid response from the application
-  server.AsyncResponseError(handle, 'FastCGI application failure', Status);
+  server.AsyncResponseError(h, 'FastCGI application failure', Status);
 end;
 
 function TFastCgiAsyncConnection.OnRead: TPollAsyncSocketOnReadWrite;
@@ -1181,6 +1223,7 @@ var
   sock: TNetSocket;
   addr: TNetAddr;
   c: TAsyncConnection;
+  f: TFastCgiAsyncConnection absolute c;
 begin
   result := false;
   if Terminated then
@@ -1197,16 +1240,16 @@ begin
     exit;
   end;
   // set the handle before any read: the response may come very quickly
-  TFastCgiAsyncConnection(c).fHttpHandle := aHttpHandle;
+  f.fHttpHandle := aHttpHandle;
   if not fSockets.Start(c) then
   begin
-    TFastCgiAsyncConnection(c).fHttpHandle := 0; // the caller will answer
+    f.fHttpHandle := 0; // the caller will answer
     ConnectionAbortAndNil(c);
     exit;
   end;
   // true if sent, or if OnClose did already answer to the HTTP client
   result := Write(c, aRequest, aRequestLen) or
-            not LockedExc(TFastCgiAsyncConnection(c).fHttpHandle, 0, aHttpHandle);
+            not LockedExc(f.fHttpHandle, 0, aHttpHandle);
 end;
 
 
@@ -1394,7 +1437,7 @@ begin // this method is protected by fOsSafe.Lock
   HttpRequestHashBase32(Uri, @cache.HashB32, pointer(fRemoteClient.Headers),
     @cache.Hash160, hpoClientNormalizeCaseHash in fSettings.Options);
   cache.PurgedHeaders := PurgeHeaders(fRemoteClient.Headers, false,
-    PURGED[hpNoXCache in fSettings.Options]);
+    PURGED[hpoNoXCache in fSettings.Options]);
   // optionnaly cache the headers and its decoded fields
   if Assigned(fHeadCache) and
      (status < HTTP_SERVERERROR) and  // retry on pure 5xx or 666 (client)
@@ -2350,7 +2393,8 @@ begin
   one := Ctxt.RouteOpaque;
   params.Init;
   if FastCgiAppendParams(params, Ctxt, one.fFastCgiRoot,
-       one.fFastCgiPrefix, fServer.SockPort, Uri.Path.Text, Uri.Path.Len) then
+       one.fFastCgiPrefix, fServer.SockPort, Uri.Path.Text, Uri.Path.Len,
+       hpoFastCgiWsgi in one.Settings.Options) then
   begin
     // send to the application: its response will come via fServer.AsyncResponse
     request.Init;
