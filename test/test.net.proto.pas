@@ -8746,7 +8746,7 @@ begin
   Check(resp.Done, 'done');
   CheckEqual(n, buf.Size - 8, 'whole records consumed');
   buf.Store.Done;
-  CheckEqual(RawUtf8(resp.Output), 'hello', 'stdout');
+  CheckEqual(resp.Output, 'hello', 'stdout');
   CheckEqual(resp.Error, 'err', 'stderr');
   Check(resp.AppStatus = $01020304, 'app status');
   CheckEqual(resp.ProtocolStatus, 0, 'protocol status');
@@ -8762,21 +8762,21 @@ begin
   CheckEqual(status, HTTP_SUCCESS, 'default status');
   CheckEqual(ctype, 'text/plain', 'crlf type');
   CheckEqual(headers, 'X-One: 1', 'crlf headers');
-  CheckEqual(RawUtf8(body), 'body', 'crlf body');
+  CheckEqual(body, 'body', 'crlf body');
   ParseOutput('Status: 404 Not Found'#10'content-type:text/html'#10 +
     'X-One: 1'#10'X-Two: 2'#10'Content-Length: 99'#10#10'b'#10#10'c', true);
   CheckEqual(status, HTTP_NOTFOUND, 'lf status');
   CheckEqual(ctype, 'text/html', 'lf type');
   CheckEqual(headers, 'X-One: 1'#13#10'X-Two: 2', 'lf headers');
-  CheckEqual(RawUtf8(body), 'b'#10#10'c', 'lf body');
+  CheckEqual(body, 'b'#10#10'c', 'lf body');
   ParseOutput('Location: /other'#13#10#13#10, true);
   CheckEqual(status, HTTP_FOUND, 'location status');
   CheckEqual(headers, 'Location: /other', 'location header');
-  CheckEqual(RawUtf8(body), '', 'location body');
+  CheckEqual(body, '', 'location body');
   ParseOutput('Status: 301'#10'Location: /moved'#10#10, true);
   CheckEqual(status, HTTP_MOVEDPERMANENTLY, 'explicit status');
   ParseOutput(#10'only a body', true);
-  CheckEqual(RawUtf8(body), 'only a body', 'no header');
+  CheckEqual(body, 'only a body', 'no header');
   ParseOutput('', false);
   ParseOutput('Content-Type: text/plain'#13#10'body', false); // no void line
   ParseOutput('not a header'#10#10'body', false);

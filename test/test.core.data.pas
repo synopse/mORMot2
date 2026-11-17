@@ -11872,7 +11872,11 @@ begin
   Check(CompressDeflate(s, false) = 'deflate');
   Check(s = Data, 'CompressDeflate');
   Run(ZipFormat, self, '.zip', true, true);
-  Run(ZipEncryption, self, 'zipcrypt', true, true);
+  Run(ZipEncryption, pointer(0), 'zipcrypt0', true, true);
+  Run(ZipEncryption, pointer(1), 'zipcrypt1', true, true);
+  Run(ZipEncryption, pointer(2), 'zipcrypt2', true, true);
+  Run(ZipEncryption, pointer(3), 'zipcrypt3', true, true);
+  Run(ZipEncryption, pointer(4), 'zipcrypt4', true, true);
   Run(_TAlgoCompress, self, 'TAlgoCompress', true, true);
 end;
 
@@ -12738,7 +12742,7 @@ var
         reader.Free;
       end;
     except
-      on ESynZip do
+      on Exception do
         rejected := true;
     end;
     CheckUtf8(rejected, description);
@@ -13053,89 +13057,105 @@ var
   end;
 
 begin
-  CheckEqual(SizeOf(TFileInfoExtraAes), 13, 'AES extra size');
-  Vector(@INFOZIP, SizeOf(INFOZIP), 'mORMot ZipCrypto');
-  Vector(@SEVENZIP, SizeOf(SEVENZIP), 'mORMot AES-256');
-  zipfn := WorkDir + 'zipcrypt.zip';
+  zipfn := MakeString([WorkDir, 'zipcrypt', PtrInt(Sender), '.zip']);
   TSynLog.Family.ExceptionIgnoreCurrentThread := true;
   try
-    CheckAe3Vector(@AE3_STORED, SizeOf(AE3_STORED),
-      'AE-3 test: small stored file' + #10, 0, 60, true, false);
-    CheckAe3Vector(@AE3_EMPTY, SizeOf(AE3_EMPTY), '', 0, 60,
-      false, false);
-    CheckAe3Vector(@AE3_320K, SizeOf(AE3_320K),
-      'AE-3 custom iterations=320000' + #10, 0, 32, false, false);
-    zip := '';
-    for mode := 1 to 137 do
-      Append(zip, 'AE-3 zipped data from mORMot test fixture' + #10);
-    CheckAe3Vector(@AE3_DEFLATED, SizeOf(AE3_DEFLATED), zip, 8, 60,
-      false, true);
-    CheckAe3Copy(@SEVENZIP, SizeOf(SEVENZIP), 'mORMot AES-256',
-      'mormot', 2, 7);
-    CheckAe3Copy(@AE3_STORED, SizeOf(AE3_STORED),
-      'AE-3 test: small stored file' + #10, AE3_PASSWORD, 3, 9);
-    CheckAe3Copy(@AE3_DEFLATED, SizeOf(AE3_DEFLATED),
-      zip, AE3_PASSWORD, 3, 9);
-    CheckAe3Compact(@SEVENZIP, SizeOf(SEVENZIP), 'mORMot AES-256',
-      'mormot', 2, 7);
-    CheckAe3Compact(@AE3_STORED, SizeOf(AE3_STORED),
-      'AE-3 test: small stored file' + #10, AE3_PASSWORD, 3, 9);
-    CheckAe3Tampering;
-    CheckAe3PartialFile;
-    S := TRawByteStringStream.Create;
-    try
-      w := TZipWrite.Create(S);
-      try
-        Check(w.Encryption = zeAes256, 'default encryption');
-        w.Password := 'mORMot';
-        // AES-CTR encrypts on the fly: AddDeflatedStream is supported
-        st := w.AddDeflatedStream('crypt\stream');
-        st.WriteBuffer(pointer(Data)^, length(Data));
-        st.Free;
-        // ZipCrypto needs the crc32 ahead of time: AddDeflatedStream fails
-        w.Encryption := zeZipCrypto; // available with mormot.crypt.zip
-        Check(w.Encryption = zeZipCrypto, 'set encryption');
-        try
-          w.AddDeflatedStream('crypt\stream2').Free;
-          Check(false, 'zipcrypto stream');
-        except
-          on ESynZip do
-            CheckEqual(w.Count, 1, 'zipcrypto stream count');
+    case PtrInt(Sender) of // naive-but-efficient-parallelizing-of-the-poor (TM)
+      0:
+        begin
+          CheckEqual(SizeOf(TFileInfoExtraAes), 13, 'AES extra size');
+          Vector(@INFOZIP, SizeOf(INFOZIP), 'mORMot ZipCrypto');
+          Vector(@SEVENZIP, SizeOf(SEVENZIP), 'mORMot AES-256');
+          CheckAe3Vector(@AE3_STORED, SizeOf(AE3_STORED),
+            'AE-3 test: small stored file' + #10, 0, 60, true, false);
+          CheckAe3Vector(@AE3_EMPTY, SizeOf(AE3_EMPTY), '', 0, 60,
+            false, false);
+          CheckAe3Vector(@AE3_320K, SizeOf(AE3_320K),
+            'AE-3 custom iterations=320000' + #10, 0, 32, false, false);
+          zip := '';
+          for mode := 1 to 137 do
+            Append(zip, 'AE-3 zipped data from mORMot test fixture' + #10);
+          CheckAe3Vector(@AE3_DEFLATED, SizeOf(AE3_DEFLATED), zip, 8, 60,
+            false, true);
         end;
-      finally
-        w.Free;
-      end;
-      zip := S.DataString;
-    finally
-      S.Free;
+      1:
+        begin
+          CheckAe3Copy(@SEVENZIP, SizeOf(SEVENZIP), 'mORMot AES-256',
+            'mormot', 2, 7);
+          CheckAe3Copy(@AE3_STORED, SizeOf(AE3_STORED),
+            'AE-3 test: small stored file' + #10, AE3_PASSWORD, 3, 9);
+          CheckAe3Copy(@AE3_DEFLATED, SizeOf(AE3_DEFLATED),
+            zip, AE3_PASSWORD, 3, 9);
+          CheckAe3Compact(@SEVENZIP, SizeOf(SEVENZIP), 'mORMot AES-256',
+            'mormot', 2, 7);
+          CheckAe3Compact(@AE3_STORED, SizeOf(AE3_STORED),
+            'AE-3 test: small stored file' + #10, AE3_PASSWORD, 3, 9);
+          CheckAe3Tampering;
+          CheckAe3PartialFile;
+        end;
+      2:
+        begin
+          S := TRawByteStringStream.Create;
+          try
+            w := TZipWrite.Create(S);
+            try
+              Check(w.Encryption = zeAes256, 'default encryption');
+              w.Password := 'mORMot';
+              // AES-CTR encrypts on the fly: AddDeflatedStream is supported
+              st := w.AddDeflatedStream('crypt\stream');
+              st.WriteBuffer(pointer(Data)^, length(Data));
+              st.Free;
+              // ZipCrypto needs the crc32 ahead of time: AddDeflatedStream fails
+              w.Encryption := zeZipCrypto; // available with mormot.crypt.zip
+              Check(w.Encryption = zeZipCrypto, 'set encryption');
+              try
+                w.AddDeflatedStream('crypt\stream2').Free;
+                Check(false, 'zipcrypto stream');
+              except
+                on ESynZip do
+                  CheckEqual(w.Count, 1, 'zipcrypto stream count');
+              end;
+            finally
+              w.Free;
+            end;
+            zip := S.DataString;
+          finally
+            S.Free;
+          end;
+          z := TZipRead.Create(pointer(zip), length(zip));
+          try
+            CheckEqual(z.Count, 1, 'stream count');
+            z.Password := 'mORMot';
+            Check(z.TestAll, 'stream testall');
+            CheckEqual(z.UnZip(0), Data, 'stream');
+          finally
+            z.Free;
+          end;
+          RoundTrip(zeAes256);
+          RoundTrip(zeZipCrypto);
+        end;
+      3:
+        RoundTrip(zeAes256Gcm);
+      4:
+        begin
+          for mode := 0 to 3 do
+          begin
+            CheckAesWritePolicy(RawUtf8OfChar('x', 19), mode, zeAes256);
+            CheckAesWritePolicy(RawUtf8OfChar('x', 20), mode, zeAes256);
+            CheckAesWritePolicy(RawUtf8OfChar('x', 300), mode, zeAes256);
+          end;
+          // RoundTrip(zeAes256Gcm) covers stored/deflated data and file writers.
+          // Retain the small-payload AE-3 version policy and the distinct streaming
+          // writer API, without repeating all four expensive encryption/decryptions.
+          CheckAesWritePolicy(RawUtf8OfChar('g', 1), 0, zeAes256Gcm);
+          CheckAesWritePolicy(RawUtf8OfChar('g', 201), 2, zeAes256Gcm);
+        end;
     end;
-    z := TZipRead.Create(pointer(zip), length(zip));
-    try
-      CheckEqual(z.Count, 1, 'stream count');
-      z.Password := 'mORMot';
-      Check(z.TestAll, 'stream testall');
-      CheckEqual(z.UnZip(0), Data, 'stream');
-    finally
-      z.Free;
-    end;
-    RoundTrip(zeAes256);
-    RoundTrip(zeZipCrypto);
-    RoundTrip(zeAes256Gcm);
   finally
     TSynLog.Family.ExceptionIgnoreCurrentThread := false;
   end;
-  Check(DeleteFile(zipfn));
-  for mode := 0 to 3 do
-  begin
-    CheckAesWritePolicy(RawUtf8OfChar('x', 19), mode, zeAes256);
-    CheckAesWritePolicy(RawUtf8OfChar('x', 20), mode, zeAes256);
-    CheckAesWritePolicy(RawUtf8OfChar('x', 300), mode, zeAes256);
-  end;
-  // RoundTrip(zeAes256Gcm) covers stored/deflated data and file writers.
-  // Retain the small-payload AE-3 version policy and the distinct streaming
-  // writer API, without repeating all four expensive encryption/decryptions.
-  CheckAesWritePolicy(RawUtf8OfChar('g', 1), 0, zeAes256Gcm);
-  CheckAesWritePolicy(RawUtf8OfChar('g', 201), 2, zeAes256Gcm);
+  if FileExists(zipfn) then
+    Check(DeleteFile(zipfn));
 end;
 
 function By1(pattern: byte; n: integer): RawUtf8;
@@ -13440,6 +13460,7 @@ var
   zout: I7zWriter;
   files: TFindFilesDynArray;
 begin
+  RunWait(true, 120, false); // we need the local expected .zip
   // T7zLib formats detection
   CheckEqual(ToUtf8(T7zLib.FormatGuid(fhGZip)),
              '23170F69-40C1-278A-1000-000110EF0000');
@@ -13452,7 +13473,6 @@ begin
   lib := Executable.ProgramFilePath + '7z.dll';
   if FileExists(lib) then
   begin
-    RunWait(true, 120, false); // we need the local expected .zip
     // validate I7zReader
     zin := New7zReader(ZipFile, fhUndefined, lib);
     Check(zin.Format = fhZip);
