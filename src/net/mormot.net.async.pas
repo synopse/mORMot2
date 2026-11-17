@@ -4121,7 +4121,8 @@ begin
       SetRes(notif, sub^.Tag, [pseWrite]);
       {$else}
       bytes := 0;
-      if fSockets.fWrite.GetOne(1000, 'W', notif) then
+      if fSockets.fWrite.GetOne(1000, 'W', notif) and
+         not Terminated then
       {$endif USE_WINIOCP}
         fSockets.ProcessWrite(notif, bytes);
     end;

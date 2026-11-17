@@ -1846,6 +1846,7 @@ begin
   if (self = nil) or
      (socket = nil) or
      (byte(events) = 0) or
+     fTerminated or
      (fCount = fMaxSockets) then
     exit;
   e := PseToPollEvent(events);
@@ -1991,6 +1992,7 @@ var
 begin
   result := false; // error
   if (self = nil) or
+     fTerminated or
      (fCount = 0) then
     exit;
   // here fCount=0 would not permit next async subscription
@@ -2086,6 +2088,7 @@ type
   TPollSocketEpoll = class(TPollSocketAbstract)
   protected
     fEPFD: integer;
+    fWakeFD: integer; // eventfd registered in epoll, to interrupt epoll_wait
   public
     constructor Create(aOwner: TPollSockets); override;
     destructor Destroy; override;
@@ -2110,23 +2113,52 @@ type
 // is defined for TPollSocketEpoll.FollowEpoll = true
 
 constructor TPollSocketEpoll.Create(aOwner: TPollSockets);
+var
+  e: TEPoll_Event;
+  err: integer;
 begin
   inherited Create(aOwner);
   fEPFD := epoll_create(10000); // since 2.6.8 size is ignored
+  if fEPFD <= 0 then
+    exit;
+  // keep the wakeup fd readable after termination: all concurrent waiters
+  // must be released, not just the first one (level-triggered epoll)
+  fWakeFD := LinuxEventFD({nonblocking=}true, {semaphore=}false);
+  if fWakeFD <= 0 then
+    exit; // fallback to the existing bounded epoll_wait timeout
+  e.events := EPOLLIN;
+  e.data.ptr := @fWakeFD; // private marker, not an application socket tag
+  repeat
+    err := epoll_ctl(fEPFD, EPOLL_CTL_ADD, fWakeFD, @e);
+  until (err = 0) or
+        (cerrno <> ESysEINTR);
+  if err <> 0 then
+  begin
+    FileClose(fWakeFD);
+    fWakeFD := 0; // unsupported: keep the legacy timeout behavior
+  end;
 end;
 
 destructor TPollSocketEpoll.Destroy;
 begin
   Terminate;
+  // TPollSockets.Destroy must first wait for any active GetOne() call
+  if fEPFD > 0 then
+    // note: closing fEPFD sooner (e.g. in Terminate) wouldn't wake epoll_wait()
+    FileClose(fEPFD);
+  fEPFD := -1;
+  if fWakeFD > 0 then
+    FileClose(fWakeFD);
+  fWakeFD := -1;
   inherited;
 end;
 
 procedure TPollSocketEpoll.Terminate;
 begin
-  if fEPFD <= 0 then
-    exit;
-  FileClose(fEPFD);
-  fEPFD := -1;
+  inherited Terminate; // set fTerminated flag
+  // use fWakeFD to release any pending WaitForModified()
+  if fWakeFD > 0 then
+    LinuxEventFDWrite(fWakeFD, 1);
 end;
 
 class function TPollSocketEpoll.FollowEpoll: boolean;
@@ -2165,8 +2197,10 @@ begin
   result := false;
   if (self = nil) or
      (socket = nil) or
+     fTerminated or
      (fEPFD <= 0) or
      (PtrUInt(socket) = PtrUInt(fEPFD)) or
+     (PtrUInt(socket) = PtrUInt(fWakeFD)) or
      (byte(events) = 0) then
     exit;
   e.data.ptr := pointer(tag); // don't use data.u64
@@ -2243,12 +2277,13 @@ var
 begin
   result := false; // error or nothing new
   if (self = nil) or
+     fTerminated or
      (fEPFD <= 0) then
     exit;
   // we allow fCount=0 which enable background epoll_ctl subscription
   n := EpollWaitNoEintr(fEPFD, @tmp, length(tmp), timeoutMS);
   // if pending > length(tmp): epoll_wait() would round-robin
-  results.Count := n;
+  results.Count := 0; // validate each eventfd
   if n <= 0 then
     exit; // nothing new
   // epoll notified some sockets
@@ -2264,39 +2299,43 @@ begin
   ee := @tmp;
   er := pointer(results.Events);
   repeat
-    ev := ee^.events;
-    {$ifdef FPC}
-    byte(e) := byte([pseRead]); // optimized for the most common case
-    {$else}
-    e := [pseRead];
-    {$endif FPC}
-    if ev <> EPOLLIN then
+    if ee^.data.ptr <> @fWakeFD then // never expose internal wakeup as a socket
     begin
-      if ev and (EPOLLIN or EPOLLPRI) = 0 then
-        byte(e) := 0;
-      if ev and EPOLLOUT <> 0 then
-        include(e, pseWrite);
-      if ev and EPOLLERR <> 0 then
-        include(e, pseError);
-      if ev and EPOLLCLOSE <> 0 then
-        include(e, pseClosed);
+      ev := ee^.events;
+      {$ifdef FPC}
+      byte(e) := byte([pseRead]); // optimized for the most common case
+      {$else}
+      e := [pseRead];
+      {$endif FPC}
+      if ev <> EPOLLIN then
+      begin
+        if ev and (EPOLLIN or EPOLLPRI) = 0 then
+          byte(e) := 0;
+        if ev and EPOLLOUT <> 0 then
+          include(e, pseWrite);
+        if ev and EPOLLERR <> 0 then
+          include(e, pseError);
+        if ev and EPOLLCLOSE <> 0 then
+          include(e, pseClosed);
+      end;
+      // inlined forward SetRes(er^, TPollSocketTag(ee^.data.ptr), e)
+      {$ifdef CPU32}
+      er^.B[4] := byte(e);
+      er^.Li := TPollSocketTag(ee^.data.ptr);
+      {$else}
+      {$ifdef OSANDROID} // keep the tagged pointer top byte - see SetRes()
+      er^ := PtrUInt(ee^.data.ptr) or (PtrUInt(byte(e)) shl 48);
+      {$else}
+      er^ := PtrUInt(ee^.data.ptr) or (PtrUInt(byte(e)) shl 60);
+      {$endif OSANDROID}
+      {$endif CPU32}
+      inc(er);
+      inc(results.Count);
     end;
-    // inlined forward SetRes(er^, TPollSocketTag(ee^.data.ptr), e)
-    {$ifdef CPU32}
-    er^.B[4] := byte(e);
-    er^.Li := TPollSocketTag(ee^.data.ptr);
-    {$else}
-    {$ifdef OSANDROID} // keep the tagged pointer top byte - see SetRes()
-    er^ := PtrUInt(ee^.data.ptr) or (PtrUInt(byte(e)) shl 48);
-    {$else}
-    er^ := PtrUInt(ee^.data.ptr) or (PtrUInt(byte(e)) shl 60);
-    {$endif OSANDROID}
-    {$endif CPU32}
     inc(ee);
-    inc(er);
     dec(n)
   until n = 0;
-  result := true;
+  result := results.Count <> 0;
 end;
 
 function PollSocketClass: TPollSocketClass;

@@ -1407,6 +1407,7 @@ type
   TPollAbstract = class
   protected
     fCount: integer;
+    fTerminated: boolean;
   public
     /// track status modifications on one specified TSocket
     // - you can specify which events are monitored - pseError and pseClosed
@@ -1416,8 +1417,11 @@ type
     // - similar to epoll's EPOLL_CTL_ADD control interface
     function Subscribe(socket: TNetSocket; events: TPollSocketEvents;
       tag: TPollSocketTag): boolean; virtual; abstract;
-    /// should finalize this processing before shutdown
+    /// should finalize this processing before shutdown and set Terminated=true
     procedure Terminate; virtual;
+    /// boolean flag set by the Terminate method
+    property Terminated: boolean
+      read fTerminated;
   published
     /// how many TSocket instances are currently tracked
     property Count: integer
@@ -1508,7 +1512,6 @@ type
     fPending: TPollSocketResults;
     fPendingIndex: PtrInt;
     fPollIndex: integer;
-    fTerminated: boolean;
     fUnsubscribeShutdownSocket: boolean;
     fPollClass: TPollSocketClass;
     fOnLog: TSynLogProc;
@@ -1603,9 +1606,6 @@ type
     property OnGetOneIdle: TOnPollSocketsIdle
       read fOnGetOneIdle write fOnGetOneIdle;
   published
-    /// is set to true by the Terminate method
-    property Terminated: boolean
-      read fTerminated;
     /// the index of the last notified event in the internal queue
     property PendingIndex: PtrInt
       read fPendingIndex;
@@ -5169,6 +5169,7 @@ end;
 
 procedure TPollAbstract.Terminate;
 begin
+  fTerminated := true;
 end;
 
 
@@ -5861,9 +5862,7 @@ procedure TPollSockets.Terminate;
 var
   i: PtrInt;
 begin
-  if self = nil then
-    exit;
-  fTerminated := true;
+  inherited Terminate; // set fTerminated flag
   for i := 0 to high(fPoll) do
     fPoll[i].Terminate;
 end;

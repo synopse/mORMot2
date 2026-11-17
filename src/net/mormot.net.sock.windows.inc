@@ -1392,6 +1392,7 @@ begin
   if (self = nil) or
      (socket = nil) or
      (byte(events) = 0) or
+     fTerminated or
      (fCount = fMaxSockets) or
      PtrUIntScanExists(pointer(fTagSocket), fCount, PtrUInt(socket)) then
     exit;
@@ -1442,6 +1443,7 @@ begin
   result := false; // error
   results.Count := 0;
   if (self = nil) or
+     fTerminated or
      (fCount = 0) then
     exit;
   n := fRead.fd_count; // fill local rd before select()
