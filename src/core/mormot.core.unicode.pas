@@ -1021,6 +1021,12 @@ procedure AnsiCharToUtf8(P: PAnsiChar; L: integer; var result: RawUtf8;
 function AnsiToString(const Ansi: RawByteString; CodePage: integer): string;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// convert an AnsiString (of a given code page) into a RTL string
+// - the destination code page should be supplied
+// - wrapper around TSynAnsiConvert.Engine(CodePage) and string conversion
+procedure AnsiToStringVar(Ansi: pointer; AnsiLen: PtrInt; CodePage: integer;
+  var Value: string);
+
 /// direct conversion of a WinAnsi (CodePage 1252) string into a UTF-8 encoded String
 // - faster than SysUtils: don't use Utf8Encode(WideString) -> no Windows.Global(),
 // and use a fixed pre-calculated array for individual chars conversion
@@ -4458,7 +4464,8 @@ end;
 function TSynAnsiConvert.AnsiToAnsi(From: TSynAnsiConvert;
   const Source: RawByteString): RawByteString;
 begin
-  if From = self then
+  if (From = self) or
+     (Source = '') then
     result := Source
   else
     result := AnsiToAnsi(From, pointer(Source), length(Source));
@@ -4470,11 +4477,11 @@ var
   u: PWideChar;
   tmp: TSynTempBuffer;
 begin
-  if From.fCodePage = fCodePage then
-    FastSetStringCP(result, Source, SourceChars, fCodePage)
-  else if (Source = nil) or
-          (SourceChars = 0) then
+  if (Source = nil) or
+     (SourceChars = 0) then
     FastAssignNew(result)
+  else if From.fCodePage = fCodePage then
+    FastSetStringCP(result, Source, SourceChars, fCodePage)
   else
   begin
     u := tmp.Init(SourceChars * 2);
@@ -5615,15 +5622,32 @@ end;
 
 function AnsiToString(const Ansi: RawByteString; CodePage: integer): string;
 begin
-  if Ansi = '' then
-    result := ''
+  {$ifndef UNICODE}
+  if (Ansi = '') or
+     (CodePage = Unicode_CodePage) then
+    result := Ansi
   else
-    {$ifdef UNICODE}
-    TSynAnsiConvert.Engine(CodePage).AnsiToUnicodeStringVar(
-      pointer(Ansi), length(Ansi), result);
-    {$else}
-    result := CurrentAnsiConvert.AnsiToAnsi(TSynAnsiConvert.Engine(CodePage), Ansi);
-    {$endif UNICODE}
+  {$endif UNICODE}
+    AnsiToStringVar(pointer(Ansi), length(Ansi), CodePage, result);
+end;
+
+procedure AnsiToStringVar(Ansi: pointer; AnsiLen: PtrInt; CodePage: integer;
+  var Value: string);
+var
+  eng: TSynAnsiConvert;
+begin
+  if (Ansi = nil) or
+     (AnsiLen <= 0 ) then
+  begin
+    Value := '';
+    exit;
+  end;
+  eng := TSynAnsiConvert.Engine(CodePage);
+  {$ifdef UNICODE}
+  eng.AnsiToUnicodeStringVar(Ansi, AnsiLen, Value);
+  {$else}
+  Value := CurrentAnsiConvert.AnsiToAnsi(eng, Ansi, AnsiLen);
+  {$endif UNICODE}
 end;
 
 function AnsiBufferToTempUtf8(var Temp: TSynTempBuffer; Buf: PAnsiChar; BufLen,
