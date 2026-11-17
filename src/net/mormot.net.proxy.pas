@@ -7,6 +7,7 @@ unit mormot.net.proxy;
   *****************************************************************************
 
    HTTP Server With Proxy and Cache
+   - FastCGI Asynchronous Client Connections
    - THttpProxyServer HTTP Server With Proxy and Cache
 
   *****************************************************************************
@@ -41,6 +42,162 @@ uses
   mormot.net.client,
   mormot.net.server,
   mormot.net.async;
+
+
+{ ******************** FastCGI Asynchronous Client Connections }
+
+const
+  /// the only FastCGI protocol version, as stored in TFastCgiHeader.Version
+  FCGI_VERSION_1 = 1;
+  /// the maximum content length of a single FastCGI record
+  FCGI_MAXCONTENT = 65535;
+
+type
+  /// the FastCGI record types, as stored in TFastCgiHeader.RecType
+  TFastCgiRecordType = (
+    frtNone,
+    frtBeginRequest,
+    frtAbortRequest,
+    frtEndRequest,
+    frtParams,
+    frtStdIn,
+    frtStdOut,
+    frtStdErr,
+    frtData,
+    frtGetValues,
+    frtGetValuesResult,
+    frtUnknownType);
+
+  /// the 8 bytes header of each FastCGI record
+  // - RequestID and ContentLen are stored in network (big-endian) order
+  TFastCgiHeader = packed record
+    Version: byte;
+    RecType: TFastCgiRecordType;
+    RequestID: word;
+    ContentLen: word;
+    PaddingLen: byte;
+    Reserved: byte;
+  end;
+  PFastCgiHeader = ^TFastCgiHeader;
+
+  /// decode the FastCGI records sent back by a responder application
+  {$ifdef USERECORDWITHMETHODS}
+  TFastCgiResponse = record
+  {$else}
+  TFastCgiResponse = object
+  {$endif USERECORDWITHMETHODS}
+  public
+    /// the frtStdOut content received so far, i.e. CGI headers and body
+    // - is appended by each record, as THttpRequestContext does for chunks,
+    // then FastCgiParseOutput() makes it the HTTP response body with no copy
+    Output: RawByteString;
+    /// the frtStdErr content received so far
+    Error: RawUtf8;
+    /// the application exit code, as received with frtEndRequest
+    AppStatus: cardinal;
+    /// the protocol status, as received with frtEndRequest
+    // - 0 means FCGI_REQUEST_COMPLETE
+    ProtocolStatus: byte;
+    /// true once frtEndRequest has been received
+    Done: boolean;
+    /// reset all fields, before a new request
+    procedure Init;
+    /// decode some received data
+    // - returns the number of bytes consumed, as whole records only: the
+    // caller should keep any remaining bytes for the next call
+    // - returns -1 on protocol error
+    function Parse(P: PAnsiChar; Len: PtrInt): PtrInt;
+  end;
+
+/// append one name/value pair to a FastCGI frtParams content
+procedure FastCgiAppendParam(var Dest: TSynTempAdder;
+  Name: PUtf8Char; NameLen: PtrInt; Value: PUtf8Char; ValueLen: PtrInt); overload;
+
+/// append one name/value pair to a FastCGI frtParams content
+procedure FastCgiAppendParam(var Dest: TSynTempAdder;
+  const Name, Value: RawUtf8); overload;
+
+/// append a whole FastCGI stream, i.e. frtParams or frtStdIn
+// - the content is split into records of FCGI_MAXCONTENT bytes at most,
+// and is always followed by the void record which ends the stream
+procedure FastCgiAppendStream(var Dest: TSynTempAdder;
+  RecType: TFastCgiRecordType; Content: PAnsiChar; ContentLen: PtrInt);
+
+/// append a whole FastCGI responder request
+// - as frtBeginRequest, then the frtParams and frtStdIn streams
+// - with RequestID = 1 and no FCGI_KEEP_CONN flag, i.e. the application
+// should close the connection once it has sent its response
+procedure FastCgiAppendRequest(var Dest: TSynTempAdder;
+  Params: PAnsiChar; ParamsLen: PtrInt; const Body: RawByteString);
+
+/// append the CGI/1.1 variables of a HTTP request to a FastCGI frtParams content
+// - Path/PathLen is the URI path below the UriPrefix route, with no ?query
+// - the script is located as the Path up to its first segment with a dot,
+// then set as SCRIPT_NAME below UriPrefix and as SCRIPT_FILENAME below Root:
+// any following segment is the PATH_INFO
+// - returns false if Path has no script, or is unsafe, i.e. is absolute or
+// contains a '..' segment, a ':' or a '\'
+// - a "Proxy:" header is never transmitted as HTTP_PROXY, and any header
+// with an underscore in its name is ignored
+function FastCgiAppendParams(var Dest: TSynTempAdder;
+  Ctxt: THttpServerRequestAbstract; const Root, UriPrefix, ServerPort: RawUtf8;
+  Path: PUtf8Char; PathLen: PtrInt): boolean;
+
+/// parse the CGI headers of a FastCGI frtStdOut content
+// - header lines could end with LF or CRLF
+// - Status is set from any "Status:" header, or as 302 with a "Location:"
+// header, or as 200
+// - "Content-Type:" is returned as ContentType, "Content-Length:" is ignored,
+// and all other headers are returned CRLF separated as Headers
+// - on success, the headers are removed from Output, which becomes the body
+// - returns false if the headers are not terminated by a void line, or if
+// a header line is invalid
+function FastCgiParseOutput(var Output: RawByteString; out Status: integer;
+  var ContentType, Headers: RawUtf8): boolean;
+
+type
+  TFastCgiAsyncConnections = class;
+
+  /// one asynchronous connection to a FastCGI responder application
+  // - handles a single request, then is closed by the application
+  TFastCgiAsyncConnection = class(TAsyncConnection)
+  protected
+    fHttpHandle: PtrUInt; // TConnectionAsyncHandle - 0 once answered
+    fResponse: TFastCgiResponse;
+    procedure AfterCreate; override;
+    function OnRead: TPollAsyncSocketOnReadWrite; override;
+    procedure OnClose; override;
+    function OnLastOperationIdle(nowsec: TAsyncConnectionSec): boolean; override;
+    procedure HttpResponse(Status: integer);
+  end;
+
+  /// asynchronous connections to a FastCGI responder application, e.g. php-fpm
+  // - each HTTP request has its own connection, and is answered via the
+  // AsyncResponse() method of the associated HTTP server
+  TFastCgiAsyncConnections = class(TAsyncClient)
+  protected
+    fHttpServer: THttpServerGeneric;
+    fLayer: TNetLayer;
+    fTimeoutSec: integer;
+  public
+    /// initialize the connections to a FastCGI application
+    // - aUri is e.g. 'fcgi://127.0.0.1:9000' or 'fcgi://unix:/run/php-fpm.sock:'
+    // - aTimeoutSec is how long an application may take with no data sent back
+    constructor Create(aHttpServer: THttpServerGeneric; const aUri: TUri;
+      aTimeoutSec: integer; aLog: TSynLogClass); reintroduce;
+    /// connect to the application, then asynchronously send a request
+    // - the response will be sent back to aHttpHandle via AsyncResponse()
+    // - returns false if the application could not be reached: the caller
+    // should then answer to the HTTP client by itself
+    function Send(aHttpHandle: TConnectionAsyncHandle;
+      aRequest: pointer; aRequestLen: PtrInt): boolean;
+    /// how many seconds an application may take with no data sent back
+    function GetLastOperationIdleSeconds: cardinal; override;
+    /// should be called every second, e.g. from the HTTP server idle process
+    // - on Windows IOCP, a TAsyncClient has no idle process of its own, which
+    // is needed to detect any timeout and to release the closed connections
+    procedure Idle(NowTix: Int64);
+  end;
 
 
 { ******************** THttpProxyServer HTTP Server With Proxy and Cache }
@@ -157,6 +314,7 @@ type
     fMethods: TUriRouterMethods;
     fCacheControlMaxAgeSec: integer;
     fHttpKeepAlive, fHttpHeadCacheSec, fHttpDirectGetKB, fHttpLimitPerSecond: integer;
+    fFastCgiTimeoutSec: integer;
     fMemCache: THttpProxyMem; // owned as TSynAutoCreateFields
     fDiskCache: THttpProxyDisk;
     fRejectCsv: RawUtf8;
@@ -199,12 +357,21 @@ type
     // remote proxy with caching, which is e.g. 'http://ftp.debian.org/debian'
     // 'or http://security.debian.org/debian-security' matching Local 'debian' or
     // 'debian-security' prefixes, to compute a source remote URI
+    // - if Source is a FastCGI application (like fcgi://127.0.0.1:9000/var/www
+    // or fcgi://unix:/run/php-fpm.sock:/var/www), the request is transmitted
+    // to this application, e.g. php-fpm, locating the script from the Url
+    // within the folder of the application host set after the address
     property Source: RawUtf8
       read fSource write fSource;
     /// optional bandwidth limitation of Source http:// remote URIs download
     // - would trigger a TStreamRedirect.LimitPerSecond additional process
     property HttpLimitPerSecond: integer
       read fHttpLimitPerSecond write fHttpLimitPerSecond;
+    /// how many seconds a Source fcgi:// application may take with no data
+    // - the client then receives a 504 HTTP_GATEWAYTIMEOUT response
+    // - default is 60 seconds
+    property FastCgiTimeoutSec: integer
+      read fFastCgiTimeoutSec write fFastCgiTimeoutSec;
     /// how many seconds HEAD requests could be cached in memory
     // - 0 would disable head caching
     // - default is 60, i.e. cache HEAD response for 1 minute
@@ -346,6 +513,10 @@ type
       RaiseExceptionOnNonExistingFolder: ESynExceptionClass = nil): THttpProxyUrlSettings;
     /// create a THttpProxyUrlSettings definition as remote URI proxy
     function AddProxy(const remoteuri: RawUtf8; const localuri: RawUtf8 = ''): THttpProxyUrlSettings;
+    /// create a THttpProxyUrlSettings definition as FastCGI application
+    // - fcgiuri is e.g. 'fcgi://127.0.0.1:9000/var/www' for php-fpm
+    // - all methods are transmitted by default, not only GET and HEAD
+    function AddFastCgi(const fcgiuri: RawUtf8; const localuri: RawUtf8 = ''): THttpProxyUrlSettings;
     /// create a THttpProxyUrlSettings definition for using a callback
     function AddEvent(const request: TOnHttpProxyServerRequest;
       const uri: RawUtf8 = ''): THttpProxyUrlSettings;
@@ -377,7 +548,8 @@ type
     hpsUndefined,
     hpsLocalFolder,
     hpsRemoteUri,
-    hpsEvent);
+    hpsEvent,
+    hpsFastCgi);
   THttpProxySources = set of THttpProxySource;
 
   /// internal HEAD request cache entry for a given resource (80-bytes on CPU64)
@@ -406,6 +578,8 @@ type
     fSource: THttpProxySource;
     fAlgos: THashAlgos; // may be in [hfMD5, hfSha1, hfSha256] range
     fRemoteUri: TUri;
+    fFastCgi: TFastCgiAsyncConnections; // for hpsFastCgi
+    fFastCgiRoot, fFastCgiPrefix: RawUtf8;
     fHeadCache: TSynDictionary; // THash160 / THeadCache
     fMemCache: TSynDictionary;  // THash160 / Content:RawByteString
     fHashCache: TSynDictionary; // name:RawUtf8 / hash[fAlgos]:TRawUtf8DynArray
@@ -465,6 +639,7 @@ type
     function OnExecute(Ctxt: THttpServerRequestAbstract): cardinal;
     function OnGetHeadLocalFolder(Ctxt: THttpServerRequest; const Uri: TUriMatchName): cardinal;
     function OnGetHeadRemoteUri(Ctxt: THttpServerRequest; var Uri: TUriMatchName): cardinal;
+    function OnFastCgi(Ctxt: THttpServerRequest; const Uri: TUriMatchName): cardinal;
     procedure OnBackgroundDeleteDeprecated(Sender: TObject);
   public
     /// initialize this forward proxy instance
@@ -500,6 +675,541 @@ function ToText(hps: THttpProxySource): PShortString; overload;
 implementation
 
 
+{ ******************** FastCGI Asynchronous Client Connections }
+
+procedure FastCgiAppendHeader(var Dest: TSynTempAdder;
+  RecType: TFastCgiRecordType; ContentLen: PtrInt);
+var
+  h: PFastCgiHeader;
+begin
+  h := Dest.Add(SizeOf(h^));
+  h^.Version := FCGI_VERSION_1;
+  h^.RecType := RecType;
+  h^.RequestID := $0100; // = 1 in network order: a single request per connection
+  h^.ContentLen := bswap16(ContentLen);
+  PWord(@h^.PaddingLen)^ := 0; // PaddingLen = Reserved = 0
+end;
+
+procedure FastCgiAppendLen(var Dest: TSynTempAdder; Len: PtrInt);
+begin
+  if Len < 128 then
+    Dest.Add(AnsiChar(Len)) // lengths up to 127 are stored as a single byte
+  else
+    Dest.Add32BigEndian(cardinal(Len) or $80000000); // or as 31-bit
+end;
+
+procedure FastCgiAppendName(var Dest: TSynTempAdder;
+  Name: PUtf8Char; NameLen, ValueLen: PtrInt);
+begin // the caller should then append ValueLen bytes of value
+  FastCgiAppendLen(Dest, NameLen);
+  FastCgiAppendLen(Dest, ValueLen);
+  Dest.Add(Name, NameLen);
+end;
+
+procedure FastCgiAppendParam(var Dest: TSynTempAdder;
+  Name: PUtf8Char; NameLen: PtrInt; Value: PUtf8Char; ValueLen: PtrInt);
+begin
+  FastCgiAppendName(Dest, Name, NameLen, ValueLen);
+  Dest.Add(Value, ValueLen);
+end;
+
+procedure FastCgiAppendParam(var Dest: TSynTempAdder;
+  const Name, Value: RawUtf8);
+begin
+  FastCgiAppendName(Dest, pointer(Name), length(Name), length(Value));
+  Dest.Add(Value);
+end;
+
+procedure FastCgiAppendPath(var Dest: TSynTempAdder; const Name, Folder: RawUtf8;
+  Path: PUtf8Char; PathLen: PtrInt);
+begin // append Folder + '/' + Path as value, with no temporary string
+  FastCgiAppendName(Dest, pointer(Name), length(Name),
+    length(Folder) + 1 + PathLen);
+  Dest.Add(Folder);
+  Dest.Add('/');
+  Dest.Add(Path, PathLen);
+end;
+
+procedure FastCgiAppendStream(var Dest: TSynTempAdder;
+  RecType: TFastCgiRecordType; Content: PAnsiChar; ContentLen: PtrInt);
+var
+  n: PtrInt;
+begin
+  while ContentLen > 0 do
+  begin
+    n := ContentLen;
+    if n > FCGI_MAXCONTENT then
+      n := FCGI_MAXCONTENT;
+    FastCgiAppendHeader(Dest, RecType, n);
+    Dest.Add(Content, n);
+    inc(Content, n);
+    dec(ContentLen, n);
+  end;
+  FastCgiAppendHeader(Dest, RecType, 0); // a void record ends the stream
+end;
+
+procedure FastCgiAppendRequest(var Dest: TSynTempAdder;
+  Params: PAnsiChar; ParamsLen: PtrInt; const Body: RawByteString);
+var
+  n: PtrInt;
+begin
+  // a single memory allocation, if any: each record has a 8 bytes header
+  n := ParamsLen + length(Body);
+  Dest.Prepare(n + (n div FCGI_MAXCONTENT + 6) * SizeOf(TFastCgiHeader));
+  // frtBeginRequest
+  FastCgiAppendHeader(Dest, frtBeginRequest, 8);
+  Dest.Add16BigEndian(1); // role = FCGI_RESPONDER
+  Dest.AddChars(#0, 6);   // flags = 0 i.e. no FCGI_KEEP_CONN, then 5 reserved
+  // frtParams and frtStdIn streams
+  FastCgiAppendStream(Dest, frtParams, Params, ParamsLen);
+  FastCgiAppendStream(Dest, frtStdIn, pointer(Body), length(Body));
+end;
+
+const
+  // the HTTP headers which should not be sent as HTTP_* variables
+  FCGI_NOHEADER: array[0..4] of PAnsiChar = (
+    'CONTENT-LENGTH:', // already sent as CONTENT_LENGTH
+    'CONTENT-TYPE:',   // already sent as CONTENT_TYPE
+    'USER-AGENT:',     // already sent as HTTP_USER_AGENT
+    'PROXY:',          // HTTP_PROXY is a setting for most applications (httpoxy)
+    nil);
+
+procedure FastCgiAppendHeaders(var Dest: TSynTempAdder; P, PEnd: PUtf8Char);
+var
+  len, n: PtrInt;
+  c: AnsiChar;
+  v: PUtf8Char;
+  name: TByteToAnsiChar; // 'HTTP_' + the header name in upper case
+begin // caller ensured P <> nil
+  PCardinal(@name)^ := HTTP_32;
+  name[4] := '_';
+  repeat
+    while P^ <= ' ' do
+      if P^ <> #0 then
+        inc(P) // ignore any kind of line feed or void line
+      else
+        exit;  // end of input
+    len := BufferLineLength(P, PEnd);
+    if IdemPPChar(P, @FCGI_NOHEADER) < 0 then
+    begin
+      // "Name-Two: value" is sent as HTTP_NAME_TWO = value
+      n := 0;
+      repeat
+        c := NormToUpperAnsi7[P[n]];
+        case c of
+          'A' .. 'Z',
+          '0' .. '9':
+            ;
+          '-':
+            c := '_';
+        else
+          break; // ':' ends the name - '_' could be confused with '-'
+        end;
+        name[n + 5] := c;
+        inc(n);
+      until n = SizeOf(name) - 5;
+      if (n <> 0) and
+         (P[n] = ':') then
+      begin
+        v := P + n + 1;
+        while v^ = ' ' do
+          inc(v);
+        FastCgiAppendParam(Dest, @name, n + 5, v, P + len - v);
+      end;
+    end;
+    inc(P, len);
+  until false;
+end;
+
+function FastCgiScriptLen(P: PUtf8Char; Len: PtrInt): PtrInt;
+var
+  s, e: PUtf8Char;
+  script: PtrInt;
+  dot: boolean;
+begin
+  // the script is the path up to its first segment with a dot
+  result := 0; // if there is no script, or if the path is unsafe
+  if P^ = '/' then
+    exit; // should be below the root folder
+  script := 0;
+  dot := false;
+  s := P; // start of the current segment
+  e := P;
+  repeat
+    case e^ of
+      '.':
+        dot := true;
+      ':',
+      '\':
+        exit; // no drive, stream or Windows path delimiter
+      #0,
+      '/':
+        begin
+          if (e - s = 2) and
+             (PWord(s)^ = ord('.') + ord('.') shl 8) then
+            exit; // no parent folder
+          if dot and
+             (script = 0) then
+            script := e - P; // but continue to validate the PATH_INFO
+          if e^ = #0 then
+            break;
+          s := e + 1;
+        end;
+    end;
+    inc(e);
+  until false;
+  if e - P = Len then // no #0 within the path
+    result := script;
+end;
+
+function FastCgiAppendParams(var Dest: TSynTempAdder;
+  Ctxt: THttpServerRequestAbstract; const Root, UriPrefix, ServerPort: RawUtf8;
+  Path: PUtf8Char; PathLen: PtrInt): boolean;
+var
+  name, p: PUtf8Char;
+  namelen, scriptlen, i: PtrInt;
+  tmp: TSynTempBuffer; // no heap allocation for a path up to 4KB
+  num: TTemp24;
+begin
+  result := false;
+  if PathLen <= 0 then
+    exit;
+  // decode the path in-place within its own copy - Path is not #0 terminated
+  tmp.Init(Path, PathLen);
+  name := tmp.buf;
+  namelen := DoUrlDecode(tmp.buf, tmp.buf, '+') - name;
+  name[namelen] := #0;
+  // locate the script, and validate the path
+  scriptlen := FastCgiScriptLen(name, namelen);
+  if scriptlen <> 0 then
+  begin
+    // the standard CGI/1.1 variables
+    FastCgiAppendParam(Dest, 'GATEWAY_INTERFACE', 'CGI/1.1');
+    FastCgiAppendParam(Dest, 'SERVER_SOFTWARE', 'mORMot2');
+    FastCgiAppendParam(Dest, 'SERVER_PROTOCOL', 'HTTP/1.1');
+    FastCgiAppendParam(Dest, 'REQUEST_METHOD', Ctxt.Method);
+    FastCgiAppendParam(Dest, 'REQUEST_URI', Ctxt.Url);
+    i := PosExChar('?', Ctxt.Url);
+    if i = 0 then
+      i := length(Ctxt.Url);
+    FastCgiAppendParam(Dest, 'QUERY_STRING', 12,
+      PUtf8Char(pointer(Ctxt.Url)) + i, length(Ctxt.Url) - i);
+    FastCgiAppendPath(Dest, 'SCRIPT_NAME', UriPrefix, name, scriptlen);
+    FastCgiAppendPath(Dest, 'SCRIPT_FILENAME', Root, name, scriptlen);
+    FastCgiAppendParam(Dest, 'DOCUMENT_ROOT', Root);
+    if scriptlen < namelen then
+      FastCgiAppendParam(Dest, 'PATH_INFO', 9,
+        name + scriptlen, namelen - scriptlen);
+    if Ctxt.RemoteIP = '' then
+      FastCgiAppendParam(Dest, 'REMOTE_ADDR', '127.0.0.1') // see RemoteIPLocalHostAsVoidInServers
+    else
+      FastCgiAppendParam(Dest, 'REMOTE_ADDR', Ctxt.RemoteIP);
+    i := length(Ctxt.Host);
+    while (i > 0) and
+          (Ctxt.Host[i] in ['0' .. '9']) do
+      dec(i);
+    if (i > 0) and
+       (Ctxt.Host[i] = ':') then
+      dec(i) // trim any :port
+    else
+      i := length(Ctxt.Host);
+    FastCgiAppendParam(Dest, 'SERVER_NAME', 11, pointer(Ctxt.Host), i);
+    FastCgiAppendParam(Dest, 'SERVER_PORT', ServerPort);
+    if hsrHttps in Ctxt.ConnectionFlags then
+      FastCgiAppendParam(Dest, 'HTTPS', 'on');
+    if Ctxt.InContentType <> '' then
+      FastCgiAppendParam(Dest, 'CONTENT_TYPE', Ctxt.InContentType);
+    if Ctxt.InContent <> '' then
+    begin
+      p := pointer(StrUInt32(@num[23], length(Ctxt.InContent)));
+      FastCgiAppendParam(Dest, 'CONTENT_LENGTH', 14, p, PUtf8Char(@num[23]) - p);
+    end;
+    if Ctxt.UserAgent <> '' then
+      FastCgiAppendParam(Dest, 'HTTP_USER_AGENT', Ctxt.UserAgent);
+    // each other request header as HTTP_NAME
+    p := pointer(Ctxt.InHeaders);
+    if p <> nil then
+      FastCgiAppendHeaders(Dest, p, p + length(Ctxt.InHeaders));
+    result := true;
+  end;
+  tmp.Done;
+end;
+
+const
+  // the CGI headers which are not sent back as such to the HTTP client
+  FCGI_CGIHEADER: array[0..4] of PAnsiChar = (
+    'STATUS:',
+    'CONTENT-TYPE:',
+    'CONTENT-LENGTH:',
+    'LOCATION:',
+    nil);
+
+function FastCgiParseOutput(var Output: RawByteString; out Status: integer;
+  var ContentType, Headers: RawUtf8): boolean;
+var
+  p, e, next, v: PUtf8Char;
+  len, body, known: PtrInt;
+  location: boolean;
+  h: TSynTempAdder; // no heap allocation up to 4KB of headers
+begin
+  result := false;
+  Status := 0;
+  location := false;
+  body := -1;
+  p := pointer(Output);
+  e := p + length(Output);
+  h.Init;
+  repeat
+    // each line could end with LF or CRLF
+    next := PosChar(p, e - p, #10);
+    if next = nil then
+      break; // the headers are not ended by a void line
+    len := next - p;
+    inc(next);
+    if (len <> 0) and
+       (p[len - 1] = #13) then
+      dec(len);
+    if len = 0 then
+    begin
+      body := next - PUtf8Char(pointer(Output)); // void line = end of headers
+      break;
+    end;
+    // parse this "Name: value" line
+    v := PosChar(p, len, ':');
+    if (v = nil) or
+       (v = p) then
+      break;
+    repeat
+      inc(v);
+    until v^ <> ' ';
+    known := IdemPPChar(p, @FCGI_CGIHEADER);
+    case known of
+      0:
+        Status := GetCardinal(v);
+      1:
+        FastSetString(ContentType, v, p + len - v);
+      2:
+        ; // ignored: computed by the HTTP server from the actual body
+    else
+      begin
+        if known = 3 then
+          location := true; // but still sent back to the HTTP client
+        h.Add(p, len);
+        h.AddDirect(#13, #10);
+      end;
+    end;
+    p := next;
+  until false;
+  if Status = 0 then
+    if location then
+      Status := HTTP_FOUND
+    else
+      Status := HTTP_SUCCESS;
+  if (body < 0) or
+     (Status < 100) or
+     (Status > 599) then
+  begin
+    h.Store.Done;
+    exit;
+  end;
+  if h.Size <> 0 then
+    h.Size := h.Size - 2; // no CRLF after the last header
+  h.Done(Headers);
+  delete(Output, 1, body); // in-place: the body is not copied to a new string
+  result := true;
+end;
+
+
+{ TFastCgiResponse }
+
+procedure TFastCgiResponse.Init;
+begin
+  Output := '';
+  Error := '';
+  AppStatus := 0;
+  ProtocolStatus := 0;
+  Done := false;
+end;
+
+function TFastCgiResponse.Parse(P: PAnsiChar; Len: PtrInt): PtrInt;
+var
+  h: PFastCgiHeader;
+  clen, total: PtrInt;
+begin
+  result := 0;
+  while (Len >= SizeOf(TFastCgiHeader)) and
+        not Done do
+  begin
+    h := pointer(P);
+    if h^.Version <> FCGI_VERSION_1 then
+    begin
+      result := -1;
+      exit;
+    end;
+    clen := bswap16(h^.ContentLen);
+    total := SizeOf(TFastCgiHeader) + clen + h^.PaddingLen;
+    if Len < total then
+      break; // wait for the whole record
+    inc(P, SizeOf(TFastCgiHeader));
+    case h^.RecType of
+      frtStdOut:
+        Append(Output, P, clen);
+      frtStdErr:
+        Append(Error, P, clen);
+      frtEndRequest:
+        begin
+          if clen < 8 then
+          begin
+            result := -1;
+            exit;
+          end;
+          AppStatus := bswap32(PCardinal(P)^);
+          ProtocolStatus := ord(P[4]);
+          Done := true;
+        end;
+    end; // any other record type is ignored
+    inc(P, total - SizeOf(TFastCgiHeader));
+    dec(Len, total);
+    inc(result, total);
+  end;
+end;
+
+
+{ TFastCgiAsyncConnection }
+
+procedure TFastCgiAsyncConnection.AfterCreate;
+begin
+  fHttpHandle := 0;
+  fResponse.Init;
+end;
+
+procedure TFastCgiAsyncConnection.HttpResponse(Status: integer);
+var
+  handle: PtrUInt;
+  server: THttpServerGeneric;
+  ctype, headers: RawUtf8;
+begin
+  // the HTTP client should be answered only once, but this method is called
+  // from several threads: by OnRead from the threads polling the sockets, by
+  // OnLastOperationIdle from the idle thread, and by OnClose from any thread
+  // closing this connection - Send may also reset fHttpHandle from a HTTP
+  // thread: so a compare-and-swap is needed to let a single caller continue
+  handle := fHttpHandle;
+  if (handle = 0) or
+     not LockedExc(fHttpHandle, 0, handle) or
+     TFastCgiAsyncConnections(fOwner).Terminated then // HTTP server may be gone
+    exit;
+  server := TFastCgiAsyncConnections(fOwner).fHttpServer;
+  if fResponse.Error <> '' then
+    TFastCgiAsyncConnections(fOwner).DoLog(sllDebug, 'HttpResponse(%) stderr=%',
+      [Status, EscapeToShort(fResponse.Error)], self);
+  if Status = HTTP_SUCCESS then
+    if (fResponse.ProtocolStatus = 0) and
+       FastCgiParseOutput(fResponse.Output, Status, ctype, headers) then
+    begin
+      // Output is now the body, and is sent with no copy
+      server.AsyncResponse(handle, RawUtf8(fResponse.Output), ctype, Status,
+        headers);
+      fResponse.Output := ''; // now owned by the HTTP server
+      exit;
+    end
+    else
+      Status := HTTP_BADGATEWAY; // invalid response from the application
+  server.AsyncResponseError(handle, 'FastCGI application failure', Status);
+end;
+
+function TFastCgiAsyncConnection.OnRead: TPollAsyncSocketOnReadWrite;
+var
+  n: PtrInt;
+begin
+  result := soClose;
+  n := fResponse.Parse(fRd.Buffer, fRd.Len);
+  if n < 0 then
+    exit; // protocol error: OnClose will answer 502
+  fRd.Remove(n);
+  if fResponse.Done then
+    HttpResponse(HTTP_SUCCESS) // then close, since FCGI_KEEP_CONN was not set
+  else
+    result := soContinue;
+end;
+
+procedure TFastCgiAsyncConnection.OnClose;
+begin
+  HttpResponse(HTTP_BADGATEWAY); // closed with no frtEndRequest
+end;
+
+function TFastCgiAsyncConnection.OnLastOperationIdle(
+  nowsec: TAsyncConnectionSec): boolean;
+begin
+  result := fHttpHandle <> 0;
+  if not result then
+    exit;
+  HttpResponse(HTTP_GATEWAYTIMEOUT); // no data from the application
+  fOwner.Sockets.Stop(self, 'fastcgi timeout');
+end;
+
+
+{ TFastCgiAsyncConnections }
+
+constructor TFastCgiAsyncConnections.Create(aHttpServer: THttpServerGeneric;
+  const aUri: TUri; aTimeoutSec: integer; aLog: TSynLogClass);
+begin
+  fHttpServer := aHttpServer;
+  fLayer := aUri.Layer;
+  fTimeoutSec := aTimeoutSec;
+  inherited Create(aUri.Server, aUri.Port, {clients=}0, aTimeoutSec, nil, nil,
+    TFastCgiAsyncConnection, 'fastcgi', aLog, ASYNC_OPTION_PROD, {threads=}1);
+end;
+
+function TFastCgiAsyncConnections.GetLastOperationIdleSeconds: cardinal;
+begin
+  result := fTimeoutSec;
+end;
+
+procedure TFastCgiAsyncConnections.Idle(NowTix: Int64);
+begin
+  {$ifdef USE_WINIOCP}
+  {$ifndef NO_ASYNC_WINIOCP}
+  ProcessIdleTix(self, NowTix); // on POSIX, is called from TAsyncClient.DoExecute
+  {$endif NO_ASYNC_WINIOCP}
+  {$endif USE_WINIOCP}
+end;
+
+function TFastCgiAsyncConnections.Send(aHttpHandle: TConnectionAsyncHandle;
+  aRequest: pointer; aRequestLen: PtrInt): boolean;
+var
+  sock: TNetSocket;
+  addr: TNetAddr;
+  c: TAsyncConnection;
+begin
+  result := false;
+  if Terminated then
+    exit;
+  // blocking connection, since the application is likely to be local
+  with fThreadClients do
+    if NewSocket(Address, Port, fLayer, {dobind=}false, Timeout, Timeout,
+         Timeout, {retry=}0, sock, @addr) <> nrOk then
+      exit;
+  if (sock.MakeAsync <> nrOk) or
+     not ConnectionCreate(sock, addr, c) then
+  begin
+    sock.ShutdownAndClose({rdwr=}false);
+    exit;
+  end;
+  // set the handle before any read: the response may come very quickly
+  TFastCgiAsyncConnection(c).fHttpHandle := aHttpHandle;
+  if not fSockets.Start(c) then
+  begin
+    TFastCgiAsyncConnection(c).fHttpHandle := 0; // the caller will answer
+    ConnectionAbortAndNil(c);
+    exit;
+  end;
+  // true if sent, or if OnClose did already answer to the HTTP client
+  result := Write(c, aRequest, aRequestLen) or
+            not LockedExc(TFastCgiAsyncConnection(c).fHttpHandle, 0, aHttpHandle);
+end;
+
+
 { ******************** THttpProxyServer HTTP Proxy with Cache }
 
 { THttpProxyMem }
@@ -533,6 +1243,7 @@ begin
   fHttpKeepAlive := 30;      // 30 seconds
   fHttpHeadCacheSec := 60;   // 1 minute
   fHttpDirectGetKB := 16;    // 16 KB
+  fFastCgiTimeoutSec := 60;  // 1 minute
 end;
 
 function THttpProxyUrlSettings.SetOptions(aOptions: THttpProxyUrlOptions): THttpProxyUrlSettings;
@@ -557,6 +1268,7 @@ end;
 destructor THttpProxyUrl.Destroy;
 begin
   inherited Destroy;
+  FreeAndNil(fFastCgi);
   FreeAndNil(fMemCache);
   FreeAndNil(fHashCache);
   FreeAndNil(fHeadCache);
@@ -1057,6 +1769,19 @@ begin
   result := AddUrl(result);
 end;
 
+function THttpProxyServerSettings.AddFastCgi(
+  const fcgiuri, localuri: RawUtf8): THttpProxyUrlSettings;
+begin
+  if not IdemPChar(pointer(fcgiuri), 'FCGI://') then
+    EHttpProxyServer.RaiseUtf8('%.AddFastCgi(%)', [self, fcgiuri]);
+  result := THttpProxyUrlSettings.Create;
+  result.Url := localuri;
+  result.Source := fcgiuri;
+  result.Methods := [urmGet, urmHead, urmPost, urmPut, urmDelete,
+    urmOptions, urmPatch];
+  result := AddUrl(result);
+end;
+
 function THttpProxyServerSettings.AddEvent(
   const request: TOnHttpProxyServerRequest; const uri: RawUtf8): THttpProxyUrlSettings;
 begin
@@ -1193,11 +1918,17 @@ begin
 end;
 
 procedure THttpProxyServer.Stop;
+var
+  i: PtrInt;
 begin
   if fServer <> nil then
     with fLog.Enter('Stop %', [fServer], self) do
     begin
       fServer.Shutdown;
+      // FastCGI connections do answer via fServer.AsyncResponse
+      for i := 0 to high(fUrl) do
+        if fUrl[i].fFastCgi <> nil then
+          fUrl[i].fFastCgi.Shutdown;
       FreeAndNil(fServer);
     end;
   // FreeAndNil(fServer) joined the request/idle threads, so the count
@@ -1248,7 +1979,25 @@ begin
         // execute a callback event
         hps := hpsEvent
       else if s.Source <> '' then
-        if IsHttp(s.Source) then
+        if IdemPChar(pointer(s.Source), 'FCGI://') then
+        begin
+          // FastCGI application as 'fcgi://server:port/folder'
+          if one.fRemoteUri.From(s.Source) and
+             (one.fRemoteUri.Layer in [nlTcp, nlUnix]) then
+          begin
+            hps := hpsFastCgi;
+            one.fFastCgiRoot := one.fRemoteUri.Address;
+            if (length(one.fFastCgiRoot) < 2) or
+               (one.fFastCgiRoot[2] <> ':') then // 'c:/www' on Windows
+              insert('/', one.fFastCgiRoot, 1);
+            while (length(one.fFastCgiRoot) > 1) and
+                  (one.fFastCgiRoot[length(one.fFastCgiRoot)] = '/') do
+              SetLength(one.fFastCgiRoot, length(one.fFastCgiRoot) - 1);
+            one.fFastCgi := TFastCgiAsyncConnections.Create(fServer,
+              one.fRemoteUri, s.FastCgiTimeoutSec, fLog);
+          end;
+        end
+        else if IsHttp(s.Source) then
         begin
           // detects also 'http://unix:/path/to/socket.sock:/url/path'
           if one.fRemoteUri.From(s.Source) then
@@ -1274,7 +2023,7 @@ begin
       fUrlOptions := fUrlOptions + s.fOptions;
       // normalize cache settings
       nfo := '';
-      if hps <> hpsEvent then
+      if not (hps in [hpsEvent, hpsFastCgi]) then
       begin
         if not (psoDisableMemCache in fSettings.Server.Options) then
         begin
@@ -1328,6 +2077,7 @@ begin
       if (uri <> '') and
          (uri[1] <> '/') then
         insert('/', uri, 1);
+      one.fFastCgiPrefix := uri;
       if uri <> '' then
         new.Run(s.Methods, uri, OnExecute, one);
       new.Run(s.Methods, uri + '/', OnExecute, one);
@@ -1364,6 +2114,8 @@ begin
     inc(mem,  one^.fMemCache.DeleteDeprecated(NowTix));
     inc(hash, one^.fHashCache.DeleteDeprecated(NowTix));
     inc(head, one^.fHeadCache.DeleteDeprecated(NowTix));
+    if one^.fFastCgi <> nil then
+      one^.fFastCgi.Idle(NowTix);
     inc(one);
   end;
   if mem + hash + head <> 0 then
@@ -1585,6 +2337,37 @@ begin
      req.localsize, req.loginfo, MicroSecFrom(start)], instance);
 end;
 
+function THttpProxyServer.OnFastCgi(Ctxt: THttpServerRequest;
+  const Uri: TUriMatchName): cardinal;
+var
+  one: THttpProxyUrl;
+  len: integer;
+  params, request: TSynTempAdder; // no heap allocation for most GET requests
+begin
+  // compute the CGI variables from this request
+  result := HTTP_NOTFOUND; // unsafe path or no script
+  len := 0;
+  one := Ctxt.RouteOpaque;
+  params.Init;
+  if FastCgiAppendParams(params, Ctxt, one.fFastCgiRoot,
+       one.fFastCgiPrefix, fServer.SockPort, Uri.Path.Text, Uri.Path.Len) then
+  begin
+    // send to the application: its response will come via fServer.AsyncResponse
+    request.Init;
+    FastCgiAppendRequest(request, params.Buffer, params.Size, Ctxt.InContent);
+    len := request.Size;
+    if one.fFastCgi.Send(Ctxt.AsyncHandle, request.Buffer, len) then
+      result := HTTP_ASYNCRESPONSE
+    else
+      result := HTTP_BADGATEWAY; // the application could not be reached
+    request.Store.Done;
+  end;
+  params.Store.Done;
+  if fHasLog in fFlags then
+    fLog.Add.Log(sllDebug, 'OnFastCgi: % % status=% len=%',
+      [Ctxt.Method, Ctxt.Url, result, len], self);
+end;
+
 function THttpProxyServer.OnExecute(Ctxt: THttpServerRequestAbstract): cardinal;
 var
   one: THttpProxyUrl;
@@ -1619,6 +2402,8 @@ begin
     hpsEvent:
       result := one.Settings.OnRequest(Ctxt, uri, met, one);
       // no cache nor method filtering for callback (by design)
+    hpsFastCgi:
+      result := OnFastCgi(THttpServerRequest(Ctxt), uri);
   else
     case met of
       urmGet,

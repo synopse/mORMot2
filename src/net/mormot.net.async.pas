@@ -1141,7 +1141,8 @@ type
     destructor Destroy; override;
     /// send an asynchronous response to the client, e.g. after slow DB process
     procedure AsyncResponse(Handle: TConnectionAsyncHandle;
-      const Content, ContentType: RawUtf8; Status: cardinal = HTTP_SUCCESS); override;
+      const Content, ContentType: RawUtf8; Status: cardinal = HTTP_SUCCESS;
+      const CustomHeaders: RawUtf8 = ''); override;
     /// access async connections to any remote HTTP server
     // - will reuse the threads pool and sockets polling of this instance
     function Clients: THttpAsyncClientConnections;
@@ -5250,7 +5251,8 @@ begin
 end;
 
 procedure THttpAsyncServer.AsyncResponse(Handle: TConnectionAsyncHandle;
-  const Content, ContentType: RawUtf8; Status: cardinal);
+  const Content, ContentType: RawUtf8; Status: cardinal;
+  const CustomHeaders: RawUtf8);
 var
   c: THttpAsyncServerConnection;
 begin
@@ -5272,6 +5274,8 @@ begin
     c.fRequest.OutContentStreamDiscard; // delayed Content replace any OutStream
     c.fRequest.OutContent := Content;
     c.fRequest.OutContentType := ContentType;
+    if CustomHeaders <> '' then
+      c.fRequest.OutCustomHeaders := CustomHeaders;
     if c.DoResponse(soContinue) = soClose then // don't involve hfConnectionClose
     begin
       if acoVerboseLog in fAsync.fOptions then

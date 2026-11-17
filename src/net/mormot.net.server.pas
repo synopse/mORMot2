@@ -634,8 +634,10 @@ type
     // DB request) has been executed
     // - warning: this void implementation will raise an EHttpServer exception -
     // inherited classes should override it, e.g. as in THttpAsyncServer
+    // - CustomHeaders could supply some CRLF separated response headers
     procedure AsyncResponse(Connection: TConnectionAsyncHandle;
-      const Content, ContentType: RawUtf8; Status: cardinal = HTTP_SUCCESS); virtual;
+      const Content, ContentType: RawUtf8; Status: cardinal = HTTP_SUCCESS;
+      const CustomHeaders: RawUtf8 = ''); virtual;
     /// send an asynchronous (JSON by default) response to the client
     procedure AsyncResponseFmt(Connection: TConnectionAsyncHandle;
       const ContentFmt: RawUtf8; const Args: array of const;
@@ -2658,7 +2660,8 @@ begin
 end;
 
 procedure THttpServerGeneric.AsyncResponse(Connection: TConnectionAsyncHandle;
-  const Content, ContentType: RawUtf8; Status: cardinal);
+  const Content, ContentType: RawUtf8; Status: cardinal;
+  const CustomHeaders: RawUtf8);
 begin
   EHttpServer.RaiseUtf8('%.AsyncResponse is not implemented: try to use ' +
     'another server class, e.g. THttpAsyncServer', [self]);
