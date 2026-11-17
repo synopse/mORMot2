@@ -3980,6 +3980,7 @@ function IsFixedWidthCodePage(aCodePage: cardinal): boolean;
 begin
   result := ((aCodePage >= 1250) and
              (aCodePage <= 1258)) or
+            (aCodePage = CP_437) or
             (aCodePage = CP_LATIN1) or
             (aCodePage >= CP_RAWBLOB);
 end;
@@ -4230,7 +4231,7 @@ type
   // maintain the thread-safe internal list of TSynAnsiConvert instances
   TSynAnsiConvertList = record
     Last: TSynAnsiConvert;
-    Lock: TRWLightLock;
+    Safe: TRWLightLock;
     Count: integer;
     CodePage: TWordDynArray; // for (SSE2) fast lookup in CPU L1 cache
     Engine: array of TSynAnsiConvert;
@@ -4248,14 +4249,14 @@ begin
       exit // very common case
     else
       result := nil;
-  List.Lock.ReadLock; // concurrent read lock
+  List.Safe.ReadLock; // concurrent read lock
   i := WordScanIndex(pointer(List.CodePage), List.Count, CodePage);
   if i >= 0 then
     result := List.Engine[i];
-  List.Lock.ReadUnLock;
+  List.Safe.ReadUnLock;
   if result = nil then // thread-safe register a new TSynAnsiConvert instance
   begin
-    List.Lock.WriteLock;
+    List.Safe.WriteLock;
     try
       i := WordScanIndex(pointer(List.CodePage), List.Count, CodePage);
       if i < 0 then // really need to create
@@ -4265,14 +4266,14 @@ begin
         else if IsFixedWidthCodePage(CodePage) then
           result := TSynAnsiFixedWidth.Create(CodePage) // use lookup table
         else
-          result := TSynAnsiConvert.Create(CodePage); // use system API
+          result := TSynAnsiConvert.Create(CodePage);   // use system API
         PtrArrayAdd(List.Engine, result);
         AddWord(List.CodePage, List.Count, CodePage);
       end
       else
         result := List.Engine[i];
     finally
-      List.Lock.WriteUnLock;
+      List.Safe.WriteUnLock;
     end;
   end;
   List.Last := result;
@@ -4638,6 +4639,20 @@ const
     8364, 129, 8218, 402, 8222, 8230, 8224, 8225, 710, 8240, 352, 8249, 338,
     141, 381, 143, 144, 8216, 8217, 8220, 8221, 8226, 8211, 8212, 732, 8482,
     353, 8250, 339, 157, 382, 376);
+  /// direct conversion from code page 437 to UTF-16, as PKware appnote requires
+  CP437W: array[128..255] of word = (
+    $00c7, $00fc, $00e9, $00e2, $00e4, $00e0, $00e5, $00e7, $00ea, $00eb, $00e8,
+    $00ef, $00ee, $00ec, $00c4, $00c5, $00c9, $00e6, $00c6, $00f4, $00f6, $00f2,
+    $00fb, $00f9, $00ff, $00d6, $00dc, $00a2, $00a3, $00a5, $20a7, $0192, $00e1,
+    $00ed, $00f3, $00fa, $00f1, $00d1, $00aa, $00ba, $00bf, $2310, $00ac, $00bd,
+    $00bc, $00a1, $00ab, $00bb, $2591, $2592, $2593, $2502, $2524, $2561, $2562,
+    $2556, $2555, $2563, $2551, $2557, $255d, $255c, $255b, $2510, $2514, $2534,
+    $252c, $251c, $2500, $253c, $255e, $255f, $255a, $2554, $2569, $2566, $2560,
+    $2550, $256c, $2567, $2568, $2564, $2565, $2559, $2558, $2552, $2553, $256b,
+    $256a, $2518, $250c, $2588, $2584, $258c, $2590, $2580, $03b1, $00df, $0393,
+    $03c0, $03a3, $03c3, $03bc, $03c4, $03a6, $0398, $03a9, $03b4, $221e, $03c6,
+    $03b5, $2229, $2261, $00b1, $2265, $2264, $2320, $2321, $00f7, $2248, $00b0,
+    $2219, $00b7, $221a, $207f, $00b2, $25a0, $00a0);
 
 procedure MakeLookupTable(w: PByteToWord; a: PWordToByte; min, max: PtrInt);
 var
@@ -4671,6 +4686,12 @@ begin
     if aCodePage = CP_WINANSI then
       // do not trust the Windows API for the 1252 code page :(
       MoveFast(CP1252W, fAnsiToWide[low(CP1252W)], SizeOf(CP1252W));
+  end
+  else if aCodePage = CP_437 then
+  begin
+    // no inconv/ICU needed just for TZipRead compatibility
+    FillIncreasingW(pointer(fAnsiToWide), 0, 128);
+    MoveFast(CP437W, fAnsiToWide[low(CP437W)], SizeOf(CP437W));
   end
   else
   begin

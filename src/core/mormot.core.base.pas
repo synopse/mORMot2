@@ -117,6 +117,9 @@ const
   /// the minimal possible Code Page (Cyrillic-Asian)
   CP_MIN = 154;
 
+  /// character set of the original IBM PC used e.g. for .zip encoding
+  CP_437 = 437;
+
   /// the RFC 1842 Code Page of HZ-GB2312 simplified Chinese
   CP_HZ = 52936;
 
