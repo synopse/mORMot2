@@ -142,4 +142,4 @@ Deprecated or Seldom Used Cryptographic Features
 Password Encryption for `mormot.core.zip` `TZipWrite`/`TZipRead`
 - `TZipCryptPkware` Class Implementing the Traditional PKWARE ZipCrypto
 - `TZipCryptAes` Class Implementing the WinZip AE-1/AE-2 Format
-
+- `TZipCryptGcm` Class Implementing AES-GCM-256 WinZip AE-3 Format

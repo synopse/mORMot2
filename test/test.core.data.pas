@@ -12308,6 +12308,87 @@ const
     $99, $07, $00, $02, $00, $41, $45, $03, $00, $00, $50, $4b, $05, $06,
     $00, $00, $00, $00, $01, $00, $01, $00, $3e, $00, $00, $00, $58, $00,
     $00, $00, $00, $00);
+  // Independent reference vectors from Xtro-ZIP's MIT-0 AE-3 profile:
+  // generated with Python PBKDF2/HKDF/AESGCM, not by mORMot itself.
+  // Key = "correct horse battery staple", salt = 00..0f; work factor 60/32.
+  // The legacy INFOZIP and SEVENZIP vectors above remain unchanged.
+  AE3_PASSWORD = 'correct horse battery staple';
+  AE3_STORED: array[0..214] of byte = (
+    $50, $4b, $03, $04, $14, $00, $01, $00, $63, $00, $00, $00, $00, $00,
+    $00, $00, $00, $00, $49, $00, $00, $00, $1d, $00, $00, $00, $09, $00,
+    $0d, $00, $68, $65, $6c, $6c, $6f, $2e, $74, $78, $74, $01, $99, $09,
+    $00, $03, $00, $41, $45, $03, $00, $00, $3c, $00, $00, $01, $02, $03,
+    $04, $05, $06, $07, $08, $09, $0a, $0b, $0c, $0d, $0e, $0f, $97, $3a,
+    $b5, $d7, $be, $45, $cb, $26, $c3, $3a, $74, $33, $04, $88, $97, $60,
+    $e4, $a8, $17, $75, $bb, $0b, $f2, $20, $ec, $04, $ca, $36, $88, $5c,
+    $7a, $b3, $1b, $2e, $f1, $b2, $08, $e0, $5e, $3d, $11, $8d, $eb, $76,
+    $93, $60, $e2, $67, $af, $72, $e5, $8b, $91, $24, $67, $48, $53, $50,
+    $4b, $01, $02, $14, $00, $14, $00, $01, $00, $63, $00, $00, $00, $00,
+    $00, $00, $00, $00, $00, $49, $00, $00, $00, $1d, $00, $00, $00, $09,
+    $00, $0d, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00,
+    $00, $00, $00, $68, $65, $6c, $6c, $6f, $2e, $74, $78, $74, $01, $99,
+    $09, $00, $03, $00, $41, $45, $03, $00, $00, $3c, $00, $50, $4b, $05,
+    $06, $00, $00, $00, $00, $01, $00, $01, $00, $44, $00, $00, $00, $7d,
+    $00, $00, $00, $00, $00);
+
+  AE3_DEFLATED: array[0..268] of byte = (
+    $50, $4b, $03, $04, $14, $00, $01, $00, $63, $00, $00, $00, $00, $00,
+    $00, $00, $00, $00, $7f, $00, $00, $00, $7a, $16, $00, $00, $09, $00,
+    $0d, $00, $68, $65, $6c, $6c, $6f, $2e, $74, $78, $74, $01, $99, $09,
+    $00, $03, $00, $41, $45, $03, $08, $00, $3c, $00, $00, $01, $02, $03,
+    $04, $05, $06, $07, $08, $09, $0a, $0b, $0c, $0d, $0e, $0f, $97, $3a,
+    $b5, $d7, $be, $45, $cb, $26, $6f, $b5, $e8, $09, $a4, $cc, $e6, $56,
+    $41, $4c, $1e, $d8, $d4, $3c, $d0, $dc, $0e, $25, $bc, $37, $ea, $f1,
+    $11, $37, $75, $4e, $6c, $dc, $e0, $1a, $81, $17, $ad, $a4, $ae, $db,
+    $7a, $a5, $a6, $34, $01, $20, $0f, $24, $e2, $95, $cb, $98, $3e, $28,
+    $65, $8b, $9d, $34, $dd, $a3, $7c, $1d, $a6, $27, $31, $80, $16, $38,
+    $7b, $e5, $d4, $59, $59, $dc, $64, $30, $00, $8c, $fc, $b2, $8e, $e7,
+    $49, $7d, $da, $d1, $30, $82, $71, $78, $b1, $50, $e7, $5f, $92, $76,
+    $a3, $1b, $18, $c4, $87, $6f, $84, $9d, $84, $66, $9f, $50, $4b, $01,
+    $02, $14, $00, $14, $00, $01, $00, $63, $00, $00, $00, $00, $00, $00,
+    $00, $00, $00, $7f, $00, $00, $00, $7a, $16, $00, $00, $09, $00, $0d,
+    $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00,
+    $00, $68, $65, $6c, $6c, $6f, $2e, $74, $78, $74, $01, $99, $09, $00,
+    $03, $00, $41, $45, $03, $08, $00, $3c, $00, $50, $4b, $05, $06, $00,
+    $00, $00, $00, $01, $00, $01, $00, $44, $00, $00, $00, $b3, $00, $00,
+    $00, $00, $00);
+
+  AE3_EMPTY: array[0..185] of byte = (
+    $50, $4b, $03, $04, $14, $00, $01, $00, $63, $00, $00, $00, $00, $00,
+    $00, $00, $00, $00, $2c, $00, $00, $00, $00, $00, $00, $00, $09, $00,
+    $0d, $00, $68, $65, $6c, $6c, $6f, $2e, $74, $78, $74, $01, $99, $09,
+    $00, $03, $00, $41, $45, $03, $00, $00, $3c, $00, $00, $01, $02, $03,
+    $04, $05, $06, $07, $08, $09, $0a, $0b, $0c, $0d, $0e, $0f, $97, $3a,
+    $b5, $d7, $be, $45, $cb, $26, $98, $81, $c8, $fe, $1a, $8d, $57, $8c,
+    $2c, $97, $1c, $6a, $b2, $3c, $02, $d9, $69, $54, $12, $f8, $50, $4b,
+    $01, $02, $14, $00, $14, $00, $01, $00, $63, $00, $00, $00, $00, $00,
+    $00, $00, $00, $00, $2c, $00, $00, $00, $00, $00, $00, $00, $09, $00,
+    $0d, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00,
+    $00, $00, $68, $65, $6c, $6c, $6f, $2e, $74, $78, $74, $01, $99, $09,
+    $00, $03, $00, $41, $45, $03, $00, $00, $3c, $00, $50, $4b, $05, $06,
+    $00, $00, $00, $00, $01, $00, $01, $00, $44, $00, $00, $00, $60, $00,
+    $00, $00, $00, $00);
+
+  AE3_320K: array[0..215] of byte = (
+    $50, $4b, $03, $04, $14, $00, $01, $00, $63, $00, $00, $00, $00, $00,
+    $00, $00, $00, $00, $4a, $00, $00, $00, $1e, $00, $00, $00, $09, $00,
+    $0d, $00, $68, $65, $6c, $6c, $6f, $2e, $74, $78, $74, $01, $99, $09,
+    $00, $03, $00, $41, $45, $03, $00, $00, $20, $00, $00, $01, $02, $03,
+    $04, $05, $06, $07, $08, $09, $0a, $0b, $0c, $0d, $0e, $0f, $30, $a6,
+    $82, $f9, $be, $45, $cb, $26, $6d, $73, $29, $24, $dc, $92, $dc, $ea,
+    $40, $35, $c7, $fa, $36, $9d, $33, $d6, $13, $b5, $e6, $66, $af, $ac,
+    $ff, $b3, $64, $0b, $60, $ac, $9b, $ea, $2d, $65, $6f, $9d, $0b, $42,
+    $c6, $7b, $53, $04, $b2, $d2, $22, $e5, $81, $10, $69, $44, $b2, $31,
+    $50, $4b, $01, $02, $14, $00, $14, $00, $01, $00, $63, $00, $00, $00,
+    $00, $00, $00, $00, $00, $00, $4a, $00, $00, $00, $1e, $00, $00, $00,
+    $09, $00, $0d, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00,
+    $00, $00, $00, $00, $68, $65, $6c, $6c, $6f, $2e, $74, $78, $74, $01,
+    $99, $09, $00, $03, $00, $41, $45, $03, $00, $00, $20, $00, $50, $4b,
+    $05, $06, $00, $00, $00, $00, $01, $00, $01, $00, $44, $00, $00, $00,
+    $7e, $00, $00, $00, $00, $00);
+  // If the first stored-fixture GCM tag byte is toggled, this is the
+  // independently recomputed valid FIN=HMAC(AUT,'FIN'#0||tamperedTag)[0..3].
+  AE3_CHANGED_TAG_FIN: array[0..3] of byte = ($d2, $21, $0e, $8a);
 var
   z: TZipRead;
   w: TZipWrite;
@@ -12340,20 +12421,92 @@ var
     end;
   end;
 
+  // Authenticate every reference vector once; run additional wrong-password,
+  // TestAll and streaming checks only on representative fixtures. Each AE-3
+  // operation costs a full 600k (or 320k) PBKDF2-HMAC-SHA256 derivation.
+  procedure CheckAe3Vector(p: pointer; len: integer;
+    const expected: RawByteString; method, iterations: word;
+    CheckPassword, CheckStream: boolean);
+  var
+    e: PZipReadEntry;
+    output: TRawByteStringStream;
+  begin
+    z := TZipRead.Create(p, len);
+    try
+      CheckEqual(z.Count, 1, 'AE-3 vector count');
+      if z.Count <> 1 then
+        exit;
+      e := @z.Entry[0];
+      Check(e^.aes <> nil, 'AE-3 vector extra');
+      if e^.aes <> nil then
+      begin
+        CheckEqual(e^.aes^.id, $9901, 'AE-3 extra ID');
+        CheckEqual(e^.aes^.size, 9, 'AE-3 extra payload size');
+        CheckEqual(e^.aes^.version, 3, 'AE-3 version');
+        CheckEqual(e^.aes^.vendor, $4541, 'AE-3 vendor');
+        CheckEqual(e^.aes^.strength, 3, 'AE-3 AES-256');
+        CheckEqual(e^.aes^.method, method, 'AE-3 inner method');
+        CheckEqual(e^.aes^.iterations, iterations, 'AE-3 PBKDF2 iterations');
+      end;
+      CheckEqual(e^.dir^.fileInfo.zzipMethod, 99, 'AE-3 outer method');
+      CheckEqual(e^.dir^.fileInfo.zcrc32, 0, 'AE-3 no CRC32');
+      Check(e^.fileinfo.zfullSize = QWord(length(expected)),
+        'AE-3 uncompressed size');
+      Check(e^.fileinfo.zzipSize >= 44, 'AE-3 entry overhead');
+      if method = 0 then
+        Check(e^.fileinfo.zzipSize = QWord(length(expected) + 44),
+          'AE-3 stored size');
+      if CheckPassword then
+      begin
+        Check(Raised(0), 'AE-3 password is required');
+        z.Password := 'wrong password';
+        Check(Raised(0), 'AE-3 wrong password');
+      end;
+      z.Password := AE3_PASSWORD;
+      if CheckPassword then
+        Check(z.TestAll, 'AE-3 reference authentication');
+      CheckEqual(z.UnZip(0), expected, 'AE-3 reference plaintext');
+      if CheckStream then
+      begin
+        output := TRawByteStringStream.Create;
+        try
+          Check(z.UnZip(0, output), 'AE-3 reference streaming');
+          CheckEqual(output.DataString, expected, 'AE-3 streamed plaintext');
+        finally
+          output.Free;
+        end;
+      end;
+    finally
+      z.Free;
+    end;
+  end;
+
   procedure CheckRead(reader: TZipRead; enc: TZipEncryption);
   begin
     z := reader;
     try
       CheckEqual(z.Count, 5, 'crypt count');
       Check(z.Entry[0].dir^.fileInfo.flags and 1 <> 0, 'encrypted');
-      Check((z.Entry[0].aes <> nil) = (enc = zeAes256), 'aes');
+      Check((z.Entry[0].aes <> nil) = (enc <> zeZipCrypto), 'aes');
+      if (enc = zeAes256Gcm) and (z.Entry[0].aes <> nil) then
+      begin
+        CheckEqual(z.Entry[0].aes^.version, 3, 'AE-3 version');
+        CheckEqual(z.Entry[0].aes^.size, 9, 'AE-3 extra length');
+        CheckEqual(z.Entry[0].aes^.strength, 3, 'AE-3 AES-256');
+        CheckEqual(z.Entry[0].aes^.iterations, 32, 'AE-3 test work factor');
+        CheckEqual(z.Entry[0].dir^.fileInfo.zcrc32, 0, 'AE-3 CRC32');
+      end;
       Check(z.Entry[4].dir^.fileInfo.flags and 1 = 0, 'plain');
       Check(Raised(0), 'no password');
       z.Password := 'mormot';
-      Check(Raised(1), 'wrong password');
+      // The AE-3 reference vector tests wrong passwords and TestAll already.
+      // Each UnZip below independently verifies the generated entry's GCM.
+      if enc <> zeAes256Gcm then
+        Check(Raised(1), 'wrong password');
       Check(not Raised(4), 'plain with password');
       z.Password := 'mORMot';
-      Check(z.TestAll, 'crypt testall');
+      if enc <> zeAes256Gcm then
+        Check(z.TestAll, 'crypt testall');
       CheckEqual(z.UnZip('crypt\deflated'), Data, 'crypt1');
       CheckEqual(z.UnZip('crypt\stored'), Data, 'crypt2');
       CheckEqual(z.UnZip('crypt\file'), Data, 'crypt3');
@@ -12365,6 +12518,9 @@ var
   end;
 
   procedure RoundTrip(enc: TZipEncryption);
+  var
+    off: PtrInt;
+    sink: TMemoryStream;
   begin
     S := TRawByteStringStream.Create;
     try
@@ -12372,6 +12528,8 @@ var
       try
         w.Password := 'mORMot';
         w.Encryption := enc;
+        if enc = zeAes256Gcm then
+          w.Ae3Iterations := 320000; // exercise the valid minimum for bulk tests
         w.AddDeflated('crypt\deflated', pointer(Data), length(Data));
         w.AddStored('crypt\stored', pointer(Data), length(Data));
         w.AddDeflated(DataFile, true, Z_USUAL_COMPRESSION, 'crypt\file');
@@ -12387,21 +12545,92 @@ var
     end;
     FileFromString(zip, zipfn);
     CheckRead(TZipRead.Create(pointer(zip), length(zip)), enc);
-    CheckRead(TZipRead.Create(zipfn), enc);
-    CheckRead(TZipRead.Create(zipfn, 0, 0, 1024), enc); // force fSource
-    // detect tampered content (via crc32 or HMAC-SHA1)
-    zip[length(zip) shr 2] := AnsiChar(ord(zip[length(zip) shr 2]) xor 1);
-    z := TZipRead.Create(pointer(zip), length(zip));
-    try
-      z.Password := 'mORMot';
-      Check(not z.TestAll, 'tampered');
-    finally
-      z.Free;
+    if enc = zeAes256Gcm then
+    begin
+      // All four AE-3 writer paths are checked above using the memory reader.
+      // Verify both file-backed reader paths with one authenticated entry each,
+      // rather than decrypting four entries twice and running TestAll twice.
+      z := TZipRead.Create(zipfn);
+      try
+        CheckEqual(z.Count, 5, 'AE-3 file-backed count');
+        z.Password := 'mORMot';
+        CheckEqual(z.UnZip('crypt\stored'), Data, 'AE-3 file-backed stored');
+      finally
+        z.Free;
+      end;
+      z := TZipRead.Create(zipfn, 0, 0, 1024); // force fSource
+      try
+        CheckEqual(z.Count, 5, 'AE-3 source-backed count');
+        z.Password := 'mORMot';
+        CheckEqual(z.UnZip('crypt\deflated'), Data,
+          'AE-3 source-backed deflated');
+      finally
+        z.Free;
+      end;
+    end
+    else
+    begin
+      // Keep all original AE-1/2 and ZipCrypto regression checks intact.
+      CheckRead(TZipRead.Create(zipfn), enc);
+      CheckRead(TZipRead.Create(zipfn, 0, 0, 1024), enc);
+    end;
+    // Corrupt the *first* AE-3 ciphertext, not an arbitrary ZIP offset.
+    if enc = zeAes256Gcm then
+    begin
+      z := TZipRead.Create(pointer(zip), length(zip));
+      try
+        Check(z.Entry[0].local <> nil, 'AE-3 first entry in memory');
+        if z.Entry[0].local = nil then
+          exit;
+        off := PtrInt(PtrUInt(z.Entry[0].local^.Data) -
+          PtrUInt(pointer(zip))) + 24; // AE-3 header is 24 bytes
+      finally
+        z.Free;
+      end;
+      Check((off > 0) and (off < length(zip)), 'AE-3 ciphertext offset');
+      if (off <= 0) or (off >= length(zip)) then
+        exit;
+      zip[off + 1] := AnsiChar(ord(zip[off + 1]) xor 1);
+    end
+    else
+      // Preserve the original AE-1/2 and ZipCrypto regression check.
+      zip[length(zip) shr 2] := AnsiChar(ord(zip[length(zip) shr 2]) xor 1);
+    // AE-3 corrupted vectors already exercise memory-backed TestAll.
+    // This generated archive is checked via the distinct file-backed stream.
+    if enc <> zeAes256Gcm then
+    begin
+      z := TZipRead.Create(pointer(zip), length(zip));
+      try
+        z.Password := 'mORMot';
+        Check(not z.TestAll, 'tampered');
+      finally
+        z.Free;
+      end;
+    end;
+    if enc = zeAes256Gcm then
+    begin
+      // Exercise CryptAuthenticate() against a file-backed invalid GCM tag.
+      Check(FileFromString(zip, zipfn), 'AE-3 corrupted file');
+      z := TZipRead.Create(zipfn, 0, 0, 1024);
+      try
+        z.Password := 'mORMot';
+        // Memory-backed TestAll rejected the same corrupted entry above.
+        // Here the distinct property is that streaming returns no plaintext.
+        sink := TMemoryStream.Create;
+        try
+          Check(not z.UnZip(0, sink), 'AE-3 reject before streamed output');
+          CheckEqual(sink.Size, 0, 'AE-3 no unauthenticated plaintext');
+        finally
+          sink.Free;
+        end;
+      finally
+        z.Free;
+      end;
     end;
   end;
 
   procedure CheckAesWritePolicy(const Plain: RawByteString;
-    Mode: integer);
+    Mode: integer; enc: TZipEncryption);
   var
     s: TRawByteStringStream;
     w: TZipWrite;
@@ -12418,6 +12647,12 @@ var
       w := TZipWrite.Create(s);
       try
         w.Password := 'mORMot';
+        w.Encryption := enc;
+        // Preserve one default-600k writer assertion. The other generated
+        // fixtures use the AE-3 minimum (320k), without changing defaults.
+        if (enc = zeAes256Gcm) and
+           not ((Mode = 0) and (length(Plain) = 1)) then
+          w.Ae3Iterations := 320000;
         case Mode of
           0:
             w.AddStored('data', pointer(Plain), length(Plain));
@@ -12451,7 +12686,19 @@ var
     try
       CheckEqual(z.Count, 1, 'AE count');
       Check(z.Entry[0].aes <> nil, 'AE extra');
-      if length(Plain) < 20 then
+      if enc = zeAes256Gcm then
+      begin
+        expected := 3;
+        CheckEqual(z.Entry[0].aes^.size, 9, 'AE-3 extra length');
+        if (Mode = 0) and (length(Plain) = 1) then
+          CheckEqual(z.Entry[0].aes^.iterations, 60,
+            'AE-3 default 600k work factor')
+        else
+          CheckEqual(z.Entry[0].aes^.iterations, 32,
+            'AE-3 minimum 320k test work factor');
+        Check(z.Entry[0].fileinfo.zzipSize >= 44, 'AE-3 overhead');
+      end
+      else if length(Plain) < 20 then
         expected := 2
       else
         expected := 1;
@@ -12474,13 +12721,300 @@ var
     end;
   end;
 
+  // Reject malformed AE-3 metadata and payloads, including empty plaintext.
+  // A rejection is either an ESynZip or a false result from TestAll.
+  procedure Ae3MustReject(const damaged: RawByteString;
+    const description: RawUtf8);
+  var
+    reader: TZipRead;
+    rejected: boolean;
+  begin
+    rejected := false;
+    try
+      reader := TZipRead.Create(pointer(damaged), length(damaged));
+      try
+        reader.Password := AE3_PASSWORD;
+        rejected := not reader.TestAll;
+      finally
+        reader.Free;
+      end;
+    except
+      on ESynZip do
+        rejected := true;
+    end;
+    Check(rejected, description);
+  end;
+
+  procedure Ae3ChangeByte(offset: PtrInt; newbyte: byte;
+    const description: RawUtf8);
+  var
+    damaged: RawByteString;
+  begin
+    SetString(damaged, PAnsiChar(@AE3_320K[0]), SizeOf(AE3_320K));
+    Check((offset >= 0) and (offset < length(damaged)),
+      'AE-3 fixture offset');
+    if (offset < 0) or (offset >= length(damaged)) then
+      exit;
+    damaged[offset + 1] := AnsiChar(newbyte); // RawByteString is 1-based
+    Ae3MustReject(damaged, description);
+  end;
+
+  procedure CheckAe3Tampering;
+  var
+    original, damaged: RawByteString;
+    reader: TZipRead;
+    dataofs, extraofs, sizeofs, packedlen, tagofs: PtrInt;
+  begin
+    SetString(original, PAnsiChar(@AE3_320K[0]), SizeOf(AE3_320K));
+    reader := TZipRead.Create(pointer(original), length(original));
+    try
+      Check(reader.Entry[0].local <> nil, 'AE-3 local header in memory');
+      Check(reader.Entry[0].aes <> nil, 'AE-3 central AES extra');
+      if (reader.Entry[0].local = nil) or
+         (reader.Entry[0].aes = nil) then
+        exit;
+      dataofs := PtrInt(PtrUInt(reader.Entry[0].local^.Data) -
+        PtrUInt(pointer(original)));
+      extraofs := PtrInt(PtrUInt(reader.Entry[0].aes) -
+        PtrUInt(pointer(original)));
+      sizeofs := PtrInt(PtrUInt(@reader.Entry[0].dir^.fileInfo.zzipSize) -
+        PtrUInt(pointer(original)));
+      packedlen := PtrInt(reader.Entry[0].fileinfo.zzipSize);
+    finally
+      reader.Free;
+    end;
+    Check((dataofs >= 0) and (dataofs + packedlen <= length(original)) and
+      (packedlen >= 44) and (extraofs > 0) and
+      (extraofs + 13 <= length(original)) and
+      (sizeofs >= 0) and (sizeofs + 4 <= length(original)),
+      'AE-3 fixture bounds');
+    if (dataofs < 0) or (packedlen < 44) or
+       (dataofs + packedlen > length(original)) or
+       (extraofs <= 0) or (extraofs + 13 > length(original)) or
+       (sizeofs < 0) or (sizeofs + 4 > length(original)) then
+      exit;
+    tagofs := dataofs + packedlen - 20;
+    // Authentication and decryption must cover *all* ciphertext bytes.
+    Ae3ChangeByte(dataofs, ord(original[dataofs + 1]) xor 1,
+      'AE-3 modified salt');
+    Ae3ChangeByte(dataofs + 16, ord(original[dataofs + 17]) xor 1,
+      'AE-3 modified password verifier');
+    Ae3ChangeByte(dataofs + 20, ord(original[dataofs + 21]) xor 1,
+      'AE-3 modified nonce counter');
+    Ae3ChangeByte(dataofs + 24, ord(original[dataofs + 25]) xor 1,
+      'AE-3 modified ciphertext');
+    Ae3ChangeByte(tagofs, ord(original[tagofs + 1]) xor 1,
+      'AE-3 modified GCM tag');
+    Ae3ChangeByte(tagofs + 19, ord(original[tagofs + 20]) xor 1,
+      'AE-3 modified FIN');
+    // Recompute FIN for a tampered tag: FIN must pass but GCM must fail.
+    SetString(damaged, PAnsiChar(@AE3_320K[0]), SizeOf(AE3_320K));
+    damaged[tagofs + 1] := AnsiChar(ord(damaged[tagofs + 1]) xor 1);
+    MoveFast(AE3_CHANGED_TAG_FIN, damaged[tagofs + 17], 4);
+    Ae3MustReject(damaged, 'AE-3 GCM check with valid FIN');
+    // Central-directory AES metadata must be strictly validated before KDF.
+    Ae3ChangeByte(extraofs + 2, 7, 'AE-3 wrong extra length');
+    Ae3ChangeByte(extraofs + 4, 4, 'AE-3 unknown AES version');
+    Ae3ChangeByte(extraofs + 6, 0, 'AE-3 wrong vendor');
+    Ae3ChangeByte(extraofs + 8, 2, 'AE-3 wrong strength');
+    Ae3ChangeByte(extraofs + 9, 99, 'AE-3 recursive ZIP method');
+    Ae3ChangeByte(extraofs + 11, 0, 'AE-3 zero PBKDF2 iterations');
+    Ae3ChangeByte(extraofs + 11, 31, 'AE-3 PBKDF2 below minimum');
+    Ae3ChangeByte(extraofs + 12, 2, 'AE-3 excessive PBKDF2 iterations');
+    // Truncated encrypted entry: underflow must not reach AES-GCM.
+    SetString(damaged, PAnsiChar(@AE3_320K[0]), SizeOf(AE3_320K));
+    PCardinal(@damaged[sizeofs + 1])^ := 43;
+    Ae3MustReject(damaged, 'AE-3 less than 44-byte overhead');
+    // An empty encrypted entry still requires its final authentication.
+    SetString(damaged, PAnsiChar(@AE3_EMPTY[0]), SizeOf(AE3_EMPTY));
+    // The vector has a 52-byte local header, then 24-byte AE-3 header,
+    // no ciphertext, then 16-byte tag and four-byte FIN.
+    Check(PCardinal(pointer(damaged))^ = $04034b50,
+      'AE-3 empty local signature');
+    damaged[52 + 44] := AnsiChar(ord(damaged[52 + 44]) xor 1);
+    Ae3MustReject(damaged, 'AE-3 empty entry FIN corruption');
+  end;
+
+  // Copy an existing encrypted entry *without* re-encryption. This guards
+  // the 11-byte AE-1/2 and 13-byte AE-3 variable-length AES extra fields.
+  procedure CheckAe3Copy(p: pointer; len: integer;
+    const expected, password: RawByteString; version, extrasize: word);
+  var
+    source, output: TZipRead;
+    writer: TZipWrite;
+    memory: TRawByteStringStream;
+    copied, pack: RawByteString;
+  begin
+    source := TZipRead.Create(p, len);
+    try
+      if (version = 3) and (source.Count = 1) and
+         (source.Entry[0].local <> nil) then
+        SetString(pack, PAnsiChar(source.Entry[0].local^.Data),
+          PtrInt(source.Entry[0].fileinfo.zzipSize));
+      memory := TRawByteStringStream.Create;
+      try
+        writer := TZipWrite.Create(memory);
+        try
+          writer.AddFromZip(source, 0);
+        finally
+          writer.Free;
+        end;
+        copied := memory.DataString;
+      finally
+        memory.Free;
+      end;
+    finally
+      source.Free;
+    end;
+    output := TZipRead.Create(pointer(copied), length(copied));
+    try
+      CheckEqual(output.Count, 1, 'AES copy entry count');
+      Check(output.Entry[0].aes <> nil, 'AES copy extra');
+      if output.Entry[0].aes <> nil then
+      begin
+        CheckEqual(output.Entry[0].aes^.version, version,
+          'AES copy version');
+        CheckEqual(output.Entry[0].aes^.size, extrasize,
+          'AES copy extra length');
+        if version = 3 then
+          CheckEqual(output.Entry[0].aes^.iterations, 60,
+            'AE-3 copy work factor');
+      end;
+      if version = 3 then
+      begin
+        // The original AE-3 vectors are authenticated separately. Byte-for-
+        // byte equality is a stronger check that AddFromZip did not modify
+        // the encrypted header, ciphertext, GCM tag or FIN while copying.
+        Check(length(pack) >= 44, 'AE-3 copy input ciphertext');
+        Check(output.Entry[0].local <> nil, 'AE-3 copy local data');
+        Check(output.Entry[0].fileinfo.zzipSize = QWord(length(pack)),
+          'AE-3 copy ciphertext length');
+        if (length(pack) >= 44) and (output.Entry[0].local <> nil) and
+           (output.Entry[0].fileinfo.zzipSize = QWord(length(pack))) then
+          Check(CompareMem(output.Entry[0].local^.Data, pointer(pack),
+            length(pack)), 'AE-3 copied encrypted payload intact');
+      end
+      else
+      begin
+        output.Password := password;
+        Check(output.TestAll, 'AES copy authentication');
+        CheckEqual(output.UnZip(0), expected, 'AES copy plaintext');
+      end;
+    finally
+      output.Free;
+    end;
+  end;
+
+  // Remove a preceding plain entry and move the encrypted entry in-place.
+  // This covers CreateFromIgnore() compaction and AES extra field rewrites.
+  procedure CheckAe3Compact(p: pointer; len: integer;
+    const expected, password: RawByteString; version, extrasize: word);
+  var
+    source, output: TZipRead;
+    writer: TZipWrite;
+    memory: TRawByteStringStream;
+    input, plain, pack: RawByteString;
+    filename: TFileName;
+  begin
+    plain := 'entry to be removed';
+    source := TZipRead.Create(p, len);
+    try
+      if (version = 3) and (source.Count = 1) and
+         (source.Entry[0].local <> nil) then
+        SetString(pack, PAnsiChar(source.Entry[0].local^.Data),
+          PtrInt(source.Entry[0].fileinfo.zzipSize));
+      memory := TRawByteStringStream.Create;
+      try
+        writer := TZipWrite.Create(memory);
+        try
+          writer.AddStored('discard.txt', pointer(plain), length(plain));
+          writer.AddFromZip(source, 0);
+        finally
+          writer.Free;
+        end;
+        input := memory.DataString;
+      finally
+        memory.Free;
+      end;
+    finally
+      source.Free;
+    end;
+    filename := WorkDir + 'ae3-compact.zip';
+    Check(FileFromString(input, filename), 'AES compact fixture');
+    try
+      writer := TZipWrite.CreateFromIgnore(filename, ['discard.txt']);
+      try
+        CheckEqual(writer.Count, 1, 'AES compact writer count');
+      finally
+        writer.Free;
+      end;
+      output := TZipRead.Create(filename);
+      try
+        CheckEqual(output.Count, 1, 'AES compact reader count');
+        Check(output.Entry[0].aes <> nil, 'AES compact metadata');
+        if output.Entry[0].aes <> nil then
+        begin
+          CheckEqual(output.Entry[0].aes^.version, version,
+            'AES compact version');
+          CheckEqual(output.Entry[0].aes^.size, extrasize,
+            'AES compact extra size');
+        end;
+        if version = 3 then
+        begin
+          // Compaction must preserve the complete authenticated payload.
+          // AE-3 plaintext is independently verified by its reference vector.
+          Check(length(pack) >= 44, 'AE-3 compact input ciphertext');
+          Check(output.Entry[0].local <> nil, 'AE-3 compact local data');
+          Check(output.Entry[0].fileinfo.zzipSize = QWord(length(pack)),
+            'AE-3 compact ciphertext length');
+          if (length(pack) >= 44) and (output.Entry[0].local <> nil) and
+             (output.Entry[0].fileinfo.zzipSize = QWord(length(pack))) then
+            Check(CompareMem(output.Entry[0].local^.Data, pointer(pack),
+              length(pack)), 'AE-3 compacted encrypted payload intact');
+        end
+        else
+        begin
+          output.Password := password;
+          Check(output.TestAll, 'AES compact authentication');
+          CheckEqual(output.UnZip(0), expected, 'AES compact plaintext');
+        end;
+      finally
+        output.Free;
+      end;
+    finally
+      DeleteFile(filename);
+    end;
+  end;
+
 begin
-  CheckEqual(SizeOf(TFileInfoExtraAes), 11, 'AES extra size');
+  CheckEqual(SizeOf(TFileInfoExtraAes), 13, 'AES extra size');
   Vector(@INFOZIP, SizeOf(INFOZIP), 'mORMot ZipCrypto');
   Vector(@SEVENZIP, SizeOf(SEVENZIP), 'mORMot AES-256');
   zipfn := WorkDir + 'zipcrypt.zip';
   TSynLog.Family.ExceptionIgnoreCurrentThread := true;
   try
+    CheckAe3Vector(@AE3_STORED, SizeOf(AE3_STORED),
+      'AE-3 test: small stored file' + #10, 0, 60, true, false);
+    CheckAe3Vector(@AE3_EMPTY, SizeOf(AE3_EMPTY), '', 0, 60,
+      false, false);
+    CheckAe3Vector(@AE3_320K, SizeOf(AE3_320K),
+      'AE-3 custom iterations=320000' + #10, 0, 32, false, false);
+    zip := '';
+    for mode := 1 to 137 do
+      Append(zip, 'AE-3 zipped data from mORMot test fixture' + #10);
+    CheckAe3Vector(@AE3_DEFLATED, SizeOf(AE3_DEFLATED), zip, 8, 60,
+      false, true);
+    CheckAe3Copy(@SEVENZIP, SizeOf(SEVENZIP), 'mORMot AES-256',
+      'mormot', 2, 7);
+    CheckAe3Copy(@AE3_STORED, SizeOf(AE3_STORED),
+      'AE-3 test: small stored file' + #10, AE3_PASSWORD, 3, 9);
+    CheckAe3Copy(@AE3_DEFLATED, SizeOf(AE3_DEFLATED),
+      zip, AE3_PASSWORD, 3, 9);
+    CheckAe3Compact(@SEVENZIP, SizeOf(SEVENZIP), 'mORMot AES-256',
+      'mormot', 2, 7);
+    CheckAe3Compact(@AE3_STORED, SizeOf(AE3_STORED),
+      'AE-3 test: small stored file' + #10, AE3_PASSWORD, 3, 9);
+    CheckAe3Tampering;
     S := TRawByteStringStream.Create;
     try
       w := TZipWrite.Create(S);
@@ -12519,16 +13053,22 @@ begin
     end;
     RoundTrip(zeAes256);
     RoundTrip(zeZipCrypto);
+    RoundTrip(zeAes256Gcm);
   finally
     TSynLog.Family.ExceptionIgnoreCurrentThread := false;
   end;
   Check(DeleteFile(zipfn));
   for mode := 0 to 3 do
   begin
-    CheckAesWritePolicy(RawUtf8OfChar('x', 19), mode);
-    CheckAesWritePolicy(RawUtf8OfChar('x', 20), mode);
-    CheckAesWritePolicy(RawUtf8OfChar('x', 300), mode);
+    CheckAesWritePolicy(RawUtf8OfChar('x', 19), mode, zeAes256);
+    CheckAesWritePolicy(RawUtf8OfChar('x', 20), mode, zeAes256);
+    CheckAesWritePolicy(RawUtf8OfChar('x', 300), mode, zeAes256);
   end;
+  // RoundTrip(zeAes256Gcm) covers stored/deflated data and file writers.
+  // Retain the small-payload AE-3 version policy and the distinct streaming
+  // writer API, without repeating all four expensive encryption/decryptions.
+  CheckAesWritePolicy(RawUtf8OfChar('g', 1), 0, zeAes256Gcm);
+  CheckAesWritePolicy(RawUtf8OfChar('g', 201), 2, zeAes256Gcm);
 end;
 
 function By1(pattern: byte; n: integer): RawUtf8;

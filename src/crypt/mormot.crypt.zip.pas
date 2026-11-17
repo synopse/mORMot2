@@ -9,10 +9,11 @@ unit mormot.crypt.zip;
    Password Encryption for mormot.core.zip TZipWrite/TZipRead
     - TZipCryptPkware Class Implementing the Traditional PKWARE ZipCrypto
     - TZipCryptAes Class Implementing the WinZip AE-1/AE-2 Format
+    - TZipCryptGcm Class Implementing AES-GCM-256 WinZip AE-3 Format
 
    Just include this unit in your project to enable the zeAes256 (default)
-   and zeZipCrypto algorithms of TZipWrite.Encryption, and the decryption of
-   any encrypted TZipRead entry.
+   and zeZipCrypto or zeAes256Gcm algorithms of TZipWrite.Encryption, and the
+   decryption of any encrypted TZipRead entry
 
   *****************************************************************************
 }
@@ -54,7 +55,7 @@ type
 { ************ TZipCryptAes Class Implementing the WinZip AE-1/AE-2 Format }
 
 const
-  // WinZip AES-CTR uses 64 * 128-bit = 1KB of pre-computed AES blocks
+  /// WinZip AES-CTR uses 64 * 128-bit = 1KB of pre-computed AES blocks
   ZIP_AESCTR = 64;
 
 type
@@ -92,6 +93,43 @@ type
     /// in-place AES-CTR decryption with HMAC-SHA1 authentication
     procedure Decrypt(Data: PByteArray; Len: PtrInt; AuthOnly: boolean); override;
     /// validate the 80-bit HMAC-SHA1 authentication code
+    function DecryptDone(Trailer: PByteArray): boolean; override;
+  end;
+
+
+{ ************ TZipCryptGcm Class Implementing AES-GCM-256 WinZip AE-3 Format }
+
+type
+  /// WinZip AE-3 (2026) AES-256-GCM ZIP entry encryption.
+  // - 16-byte salt + 4-byte key check + 4-byte counter as header
+  // - 16-byte GCM tag + 4-byte FIN authentication as trailer
+  // - 600,000 PBKDF2-HMAC-SHA256 iterations (HKDF-SHA256 subkeys)
+  // - uses mormot.crypt.core TAesGcmEngine, including Intel AES-NI/CLMUL
+  TZipCryptGcm = class(TZipCrypt)
+  protected
+    fGcm: TAesGcmEngine;
+    fAut: THash256;
+    fProcessed: QWord;
+    function Setup(const Password: RawByteString; Header: PByteArray): cardinal;
+    procedure CheckSize(Len: PtrInt);
+  public
+    /// initialize the AES-256-GCM engine (AesStrength=4)
+    constructor Create(AesStrength: integer); override;
+    /// finalize this instance, and its sensitive information
+    destructor Destroy; override;
+    /// generate a random salt and the password verification value
+    procedure EncryptInit(const Password: RawByteString; Crc: cardinal;
+      Header: PByteArray); override;
+    /// in-place AES-GCM encryption with authentication
+    procedure Encrypt(Data: PByteArray; Len: PtrInt); override;
+    /// write the AES-GCM authentication code
+    procedure EncryptDone(Trailer: PByteArray); override;
+    /// derivate the keys from the stored salt and check the password
+    function DecryptInit(const Password: RawByteString; const Info: TFileInfo;
+      Header: PByteArray): boolean; override;
+    /// in-place AES-GCM decryption with authentication
+    procedure Decrypt(Data: PByteArray; Len: PtrInt; AuthOnly: boolean); override;
+    /// validate the AES-GCM authentication code
     function DecryptDone(Trailer: PByteArray): boolean; override;
   end;
 
@@ -159,14 +197,10 @@ end;
 
 procedure TZipCryptPkware.EncryptInit(const Password: RawByteString;
   Crc: cardinal; Header: PByteArray);
-var
-  rnd: TAesBlock;
 begin
   Init(Password);
   // appnote: 11 random bytes, then the high byte of the crc32 as check byte
-  Random128(@rnd);
-  MoveFast(rnd, Header^, ZIP_CRYPTHEAD - 1);
-  FillZero(rnd);
+  Random128(PAesBlock(Header)); // Header is a THash512 of 64 bytes
   Header^[ZIP_CRYPTHEAD - 1] := Crc shr 24;
   Encrypt(Header, ZIP_CRYPTHEAD);
 end;
@@ -288,15 +322,12 @@ end;
 procedure TZipCryptAes.EncryptInit(const Password: RawByteString;
   Crc: cardinal; Header: PByteArray);
 var
-  rnd: TAesBlock;
   saltlen: PtrInt;
 begin
-  Random128(@rnd);
   saltlen := fHeaderLen - AES_PWV;
-  if saltlen > SizeOf(rnd) then
+  if saltlen > SizeOf(TAesBlock) then
     ESynZip.RaiseUtf8('%.EncryptInit: saltlen=%', [self, saltlen]);
-  MoveFast(rnd, Header^, saltlen); // cryptographic random salt
-  FillZero(rnd);
+  Random128(PAesBlock(Header)); // Header is a THash512 of 64 bytes
   PWord(@Header[saltlen])^ := Setup(Password, Header);
 end;
 
@@ -336,8 +367,224 @@ begin
 end;
 
 
+{ ************ TZipCryptGcm Class Implementing AES-GCM-256 WinZip AE-3 Format }
+
+const
+  // AE-3 units are 10,000 PBKDF2 iterations. WinZip 77.2 uses 60 units.
+  ZIP_AE3_ITERATIONS = 600000;
+  ZIP_AE3_HEADER = 24;  // salt16 + KCV4 + counter4
+  ZIP_AE3_TRAILER = 20; // GCM tag16 + FIN4
+  // NIST SP 800-38D: at most 2^39-256 ciphertext bits per key.
+  ZIP_AE3_MAX_DATA = (QWord(1) shl 36) - 32;
+  ZIP_AE3_AUT: array[0..3] of byte = (65, 85, 84, 0); // 'AUT'#0
+  ZIP_AE3_DEK: array[0..3] of byte = (68, 69, 75, 0); // 'DEK'#0
+  ZIP_AE3_NCE: array[0..3] of byte = (78, 67, 69, 0); // 'NCE'#0
+  ZIP_AE3_KCV: array[0..3] of byte = (75, 67, 86, 0); // 'KCV'#0
+  ZIP_AE3_FIN: array[0..3] of byte = (70, 73, 78, 0); // 'FIN'#0;
+
+// HKDF-Expand block #1; PRK comes directly from PBKDF2-HMAC-SHA256.
+procedure ZipAe3Expand(const Prk: THash256; Info: pointer; InfoLen: integer;
+  out Value: THash256);
+var
+  h: THmacSha256;
+  one: byte;
+begin
+  one := 1;
+  h.Init(@Prk, SizeOf(Prk));
+  h.Update(Info, InfoLen);
+  h.Update(@one, 1);
+  h.Done(Value);
+end;
+
+// 4-byte password check value (key confirmation) = HMAC(AUT, 'KCV'#0)[0..3]
+procedure ZipAe3Check(const Aut: THash256; out Digest: THash256);
+var
+  h: THmacSha256;
+begin
+  h.Init(@Aut, SizeOf(Aut));
+  h.Update(@ZIP_AE3_KCV, SizeOf(ZIP_AE3_KCV));
+  h.Done(Digest);
+end;
+
+procedure ZipAe3Fin(const Aut: THash256; const Tag: TAesBlock;
+  out Digest: THash256);
+var
+  h: THmacSha256;
+begin
+  h.Init(@Aut, SizeOf(Aut));
+  h.Update(@ZIP_AE3_FIN, SizeOf(ZIP_AE3_FIN));
+  h.Update(@Tag, SizeOf(Tag));
+  h.Done(Digest);
+end;
+
+constructor TZipCryptGcm.Create(AesStrength: integer);
+begin
+  inherited Create(4); // internal mode selector; wire strength stays 3
+  fHeaderLen := ZIP_AE3_HEADER;
+  fTrailerLen := ZIP_AE3_TRAILER;
+  fAesIterations := ZIP_AE3_ITERATIONS;
+end;
+
+destructor TZipCryptGcm.Destroy;
+begin
+  fGcm.Done;
+  FillZero(fAut);
+  inherited Destroy;
+end;
+
+function TZipCryptGcm.Setup(const Password: RawByteString;
+  Header: PByteArray): cardinal;
+var
+  signer: TSynSigner;
+  salt: RawByteString;
+  prk: THash512Rec; // Pbkdf2() writes a 32-byte HMAC-SHA256 output
+  dek, digest: THash256;
+  info: array[0..7] of byte;
+  nonce: TAesBlock;
+  checkValue: cardinal;
+begin
+  // Reject unbounded password KDF work when processing hostile archives.
+  if (fAesIterations < 320000) or
+     (fAesIterations > 5000000) or
+     (fAesIterations mod 10000 <> 0) then
+    ESynZip.RaiseUtf8('%.Setup: invalid AE-3 work factor %',
+      [self, fAesIterations]);
+  SetString(salt, PAnsiChar(Header), 16); // 16 arbitrary binary salt bytes
+  FillZero(prk.b);
+  if signer.Pbkdf2(saSha256, Password, salt, fAesIterations, @prk) <> 32 then
+    ESynZip.RaiseUtf8('%.Setup: AE-3 PBKDF2 failed', [self]);
+  FillZero(salt);
+  ZipAe3Expand(PHash256(@prk)^, @ZIP_AE3_AUT, 4, fAut);
+  // KCV = HMAC-SHA256(AUT, 'KCV' + NUL)[0..3]
+  ZipAe3Check(fAut, digest);
+  checkValue := PCardinal(@digest)^;
+  // prepare the data-encryption key independently
+  MoveFast(ZIP_AE3_DEK, info, 4);
+  MoveFast(Header^[20], info[4], 4);
+  ZipAe3Expand(PHash256(@prk)^, @info, 8, dek);
+  MoveFast(ZIP_AE3_NCE, info, 4);
+  ZipAe3Expand(PHash256(@prk)^, @info, 8, digest);
+  FillZero(nonce);
+  MoveFast(digest, nonce, 12);
+  fGcm.Done;
+  if not fGcm.Init(dek, 256) or
+     not fGcm.Reset(PHash128Rec(@nonce), 12) then
+    ESynZip.RaiseUtf8('%.Setup: AES-256-GCM initialization failed', [self]);
+  fProcessed := 0;
+  result := checkValue;
+  FillZero(digest);
+  FillZero(dek);
+  FillZero(nonce);
+  PInt64(@info)^ := 0;
+  FillZero(prk.b);
+end;
+
+procedure TZipCryptGcm.CheckSize(Len: PtrInt);
+begin
+  if (Len < 0) or
+     (QWord(Len) > ZIP_AE3_MAX_DATA - fProcessed) then
+    ESynZip.RaiseUtf8('%.Crypt: AE-3 GCM data limit reached', [self]);
+  fProcessed := fProcessed + QWord(Len);
+end;
+
+procedure TZipCryptGcm.EncryptInit(const Password: RawByteString;
+  Crc: cardinal; Header: PByteArray);
+var
+  sha: TSha256;
+  digest: THash256;
+  kcv: cardinal;
+begin
+  Random128(PAesBlock(Header)); // independent fresh 16-byte salt per ZIP entry
+  sha.Full(Header, 16, digest);
+  MoveFast(digest, Header^[20], 4); // counter4 := SHA256(salt)[0..3]
+  kcv := Setup(Password, Header);
+  MoveFast(kcv, Header^[16], 4);
+  FillZero(digest);
+end;
+
+procedure TZipCryptGcm.Encrypt(Data: PByteArray; Len: PtrInt);
+begin
+  CheckSize(Len);
+  if (Len <> 0) and
+     not fGcm.Encrypt(Data, Data, Len) then
+    ESynZip.RaiseUtf8('%.Encrypt: AES-256-GCM failed', [self]);
+end;
+
+procedure TZipCryptGcm.EncryptDone(Trailer: PByteArray);
+var
+  tag: TAesBlock;
+  fin: THash256;
+begin
+  if not fGcm.Final(tag) then
+    ESynZip.RaiseUtf8('%.EncryptDone: AES-256-GCM failed', [self]);
+  ZipAe3Fin(fAut, tag, fin);
+  MoveFast(tag, Trailer^, 16);
+  MoveFast(fin, Trailer^[16], 4);
+  FillZero(fin);
+  FillZero(tag);
+end;
+
+function TZipCryptGcm.DecryptInit(const Password: RawByteString;
+  const Info: TFileInfo; Header: PByteArray): boolean;
+var
+  kcv: cardinal;
+begin
+  kcv := Setup(Password, Header);
+  result := IsEqual(kcv, Header^[16], 4);
+  if not result then
+    fGcm.Done;
+end;
+
+procedure TZipCryptGcm.Decrypt(Data: PByteArray; Len: PtrInt;
+  AuthOnly: boolean);
+var
+  temp: TBuffer32K;
+  n: PtrInt;
+begin
+  CheckSize(Len);
+  if Len = 0 then
+    exit;
+  if not AuthOnly then
+  begin
+    if not fGcm.Decrypt(Data, Data, Len) then
+      ESynZip.RaiseUtf8('%.Decrypt: AES-256-GCM failed', [self]);
+    exit;
+  end;
+  // TZipRead.CryptAuthenticate() must not expose plaintext before tag check.
+  // Decrypt into discard-only scratch space; CryptHeader() resets for pass #2.
+  while Len > 0 do
+  begin
+    n := Len;
+    if n > SizeOf(temp) then
+      n := SizeOf(temp);
+    if not fGcm.Decrypt(Data, @temp, n) then
+      ESynZip.RaiseUtf8('%.Decrypt: AES-256-GCM failed', [self]);
+    inc(PByte(Data), n);
+    dec(Len, n);
+  end;
+  FillZero(temp, SizeOf(temp));
+end;
+
+function TZipCryptGcm.DecryptDone(Trailer: PByteArray): boolean;
+var
+  tag: TAesBlock;
+  fin: THash256;
+begin
+  if not fGcm.Final(tag) then
+    ESynZip.RaiseUtf8('%.DecryptDone: AES-256-GCM failed', [self]);
+  ZipAe3Fin(fAut, tag, fin);
+  // Constant-time checks of BOTH the GCM tag and the authenticated FIN field.
+  // Compare the two independent checks even if the first one fails.
+  result := IsEqual(tag, Trailer^, 16);
+  if not IsEqual(fin, Trailer^[16], 4) then
+    result := false;
+  FillZero(fin);
+  FillZero(tag);
+end;
+
 initialization
   ZipCryptClass[zeAes256]    := TZipCryptAes;
   ZipCryptClass[zeZipCrypto] := TZipCryptPkware;
+  ZipCryptClass[zeAes256Gcm] := TZipCryptGcm;
 
 end.

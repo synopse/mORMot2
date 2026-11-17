@@ -262,7 +262,7 @@ type
       {$ifdef HASINLINE}inline;{$endif}
   end;
 
-  //// extra file information structure header
+  /// extra file information structure header
   TFileInfoExtra = record
     /// contains the ID of the block, e.g. ZIP64_EXTRA_ID or UNICODEPATH_EXTRA_ID
     id: word;
@@ -271,7 +271,7 @@ type
   end;
   PFileInfoExtra = ^TFileInfoExtra;
 
-  //// extra file information structure, as used in zip64 file format
+  /// extra file information structure, as used in zip64 file format
   // - warning: some fields may be missing on disk - here only if ZIP32_MAXSIZE
   TFileInfoExtra64 = record
     /// contains ZIP64_EXTRA_ID = 0x0001
@@ -288,7 +288,7 @@ type
   end;
   PFileInfoExtra64 = ^TFileInfoExtra64;
 
-  //// extra file information structure, storing UTF-8 path name
+  /// extra file information structure, storing UTF-8 path name
   // - as generated e.g. by the build-in zip on latest Windows 10 Home
   // - see 'Unicode Path Extra Field' in PKware appnote
   TFileInfoExtraName = record
@@ -305,14 +305,15 @@ type
   end;
   PFileInfoExtraName = ^TFileInfoExtraName;
 
-  //// extra file information structure, as used by WinZip AES encryption
+  /// WinZip AES extra field ($9901), AE-1/2 or AE-3 AES-256-GCM
   // - see https://www.winzip.com/en/support/aes-encryption
+  // - AE-3's extra field is 2 bytes longer (13 bytes) than AE-1/2 (11 bytes)
   TFileInfoExtraAes = record
     /// contains AES_EXTRA_ID = $9901
     id: word;
-    /// block size = 7
+    /// 7 bytes for AE-1/2, 9 for AE-3
     size: word;
-    /// 1 for AE-1 (with crc32), or 2 for AE-2 (crc32 = 0)
+    /// 1=AE-1 (crc32), 2=AE-2 (no crc32), 3=AE-3 (AES-256-GCM)
     version: word;
     /// 'AE' as vendor ID
     vendor: word;
@@ -320,6 +321,9 @@ type
     strength: byte;
     /// the actual compression method, e.g. Z_STORED or Z_DEFLATED
     method: word;
+    /// AE-3 only: PBKDF2 iteration count in units of 10,000 (60 = 600,000)
+    // - won't read this field when size = 7 (AE-1 or AE-2)
+    iterations: word;
   end;
   PFileInfoExtraAes = ^TFileInfoExtraAes;
 
@@ -335,7 +339,7 @@ type
     localsize: PtrInt;
   end;
 
-  //// directory file information structure, as used in .zip file format
+  /// directory file information structure, as used in .zip file format
   // - used at the end of the zip file to recap all entries
   {$ifdef USERECORDWITHMETHODS}
   TFileHeader = record
@@ -371,7 +375,7 @@ type
   end;
   PFileHeader = ^TFileHeader;
 
-  //// internal file information structure, as used in .zip file format
+  /// internal file information structure, as used in .zip file format
   // - used locally inside the file stream, followed by the name and the data
   {$ifdef USERECORDWITHMETHODS}
   TLocalFileHeader = record
@@ -398,7 +402,7 @@ type
   end;
   PLocalFileHeader = ^TLocalFileHeader;
 
-  //// last header structure, as used in .zip file format
+  /// last header structure, as used in .zip file format
   // - those 22 bytes end the file and are used to find the TFileHeader entries
   // - in practice, this is the minimal size of a valid but void .zip file
   TLastHeader = record
@@ -421,7 +425,7 @@ type
   end;
   PLastHeader = ^TLastHeader;
 
-  //// last header structure, as used in zip64 file format
+  /// last header structure, as used in zip64 file format
   // - this header ends the file and is used to find the TFileHeader entries
   TLastHeader64 = record
     /// $06064b50 PK#6#6 = LASTHEADER64_SIGNATURE_INC - 1
@@ -520,9 +524,11 @@ type
   TZipCrypt = class
   protected
     fHeaderLen, fTrailerLen, fAesStrength: byte;
+    fAesIterations: cardinal;
   public
     /// initialize this encryption instance
-    // - AesStrength is 0 for ZipCrypto, or 1/2/3 for AES-128/AES-192/AES-256
+    // - AesStrength is 0 for ZipCrypto, or 1/2/3 for AES-128/AES-192/AES-256,
+    // or 4 as an internal discriminator for AE-3 AES-256-GCM
     constructor Create(AesStrength: integer); virtual;
     /// initialize the encryption of a new entry
     // - fill HeaderLen bytes into Header, to be written before the data
@@ -549,9 +555,12 @@ type
     /// number of bytes stored after the encrypted data
     property TrailerLen: byte
       read fTrailerLen;
-    /// 0 for ZipCrypto, or 1/2/3 for AES-128/AES-192/AES-256
+    /// 0 for ZipCrypto, 1/2/3 for AES-128/AES-192/AES-256, or 4 for AE-3
     property AesStrength: byte
       read fAesStrength;
+    /// AE-3 PBKDF2 work factor, set from the entry's validated extra field
+    property AesIterations: cardinal
+      read fAesIterations write fAesIterations;
   end;
 
   /// meta-class of the .zip encryption algorithms
@@ -561,10 +570,12 @@ type
   // - zeAes256 is the WinZip AE-2 format, supported e.g. by 7-Zip, WinZip,
   // WinRAR or libarchive/bsdtar - this is the default and secure algorithm
   // - zeZipCrypto is the only one supported by the Windows Explorer, but is weak
-  // - both algorithms require the mormot.crypt.zip unit to be used
+  // - zeAes256Gcm is WinZip's 2026 AE-3 format, not understood by old unzip
+  // - all those algorithms require the mormot.crypt.zip unit to be used
   TZipEncryption = (
     zeAes256,
-    zeZipCrypto);
+    zeZipCrypto,
+    zeAes256Gcm);
 
 var
   /// the encryption classes, as registered by the mormot.crypt.zip unit
@@ -773,8 +784,10 @@ type
     fOnCreateFromFilesIgnore: TFileNameDynArray;
     fOnProgressStep: TOnZipWriteStep;
     fEncryption: TZipEncryption;
+    fAe3Iterations: cardinal; // 0 = the secure 600k-iteration default
     fCryptWriter: TStream;
     procedure SetEncryption(Value: TZipEncryption);
+    procedure SetAe3Iterations(Value: cardinal);
     function OnCreateFrom(const Entry: TZipReadEntry): boolean;
     // returns @Entry[Count], allocating if necessary
     function NextEntry: PZipWriteEntry;
@@ -905,11 +918,18 @@ type
       read fForceZip64 write fForceZip64;
     /// the encryption algorithm used when Password is set
     // - default zeAes256 is secure - zeZipCrypto is weak, but the only one
-    // the Windows Explorer can extract
-    // - both algorithms require the mormot.crypt.zip unit: setting an
-    // unavailable algorithm will raise an ESynZip
+    // the Windows Explorer can extract - zeAes256Gcm selects AE-3 (AES-256-GCM),
+    // introduced with WinZip 77.2 in 2026, safer much less widely adopted
+    // - all those algorithms require the mormot.crypt.zip unit in your project
+    // "uses" clause, otherwise it will raise an ESynZip
     property Encryption: TZipEncryption
       read fEncryption write SetEncryption;
+    /// optional AE-3 PBKDF2 iterations for newly encrypted ZIP entries
+    // - 0 (default) means 600,000 iterations
+    // - otherwise, valid values are 320,000..5,000,000, in 10,000 steps
+    // - use only with zeAes256Gcm; it does not affect AE-1/2 or ZipCrypto
+    property Ae3Iterations: cardinal
+      read fAe3Iterations write SetAe3Iterations;
     /// some details about the context when OnProgress is called
     property OnProgressStep: TOnZipWriteStep
       read fOnProgressStep;
@@ -1676,10 +1696,12 @@ const
   Z_AES = 99;
   AES_EXTRA_ID = $9901;
   AES_EXTRA_SIZE = 7;
+  AES_EXTRA_SIZE_AE3 = AES_EXTRA_SIZE + 2;
   AES_VENDOR = ord('A') + ord('E') shl 8;
-  AES_STRENGTH: array[TZipEncryption] of byte = (3, 0);
+  // strength 4 is a TZipCrypt-internal mode selector, not a ZIP strength byte
+  AES_STRENGTH: array[TZipEncryption] of byte = (3, 0, 4);
   ENCRYPTION_NAME: array[TZipEncryption] of RawUtf8 = (
-    'WinZip AES', 'ZipCrypto');
+    'WinZip AES', 'ZipCrypto', 'WinZip AES-GCM');
 
 
 { TZipCrypt }
@@ -1886,10 +1908,14 @@ begin
      (fCrypt.AesStrength <> AesStrength) then
   begin
     FreeAndNil(fCrypt);
-    if AesStrength = 0 then
-      enc := zeZipCrypto
+    case AesStrength of
+      0:
+        enc := zeZipCrypto;
+      4:
+        enc := zeAes256Gcm;
     else
-      enc := zeAes256;
+      enc := zeAes256; // 1/2/3
+    end;
     if ZipCryptClass[enc] = nil then
       ESynZip.RaiseUtf8('%.GetCrypt: % requires the mormot.crypt.zip unit',
         [self, ENCRYPTION_NAME[enc]]);
@@ -2026,7 +2052,9 @@ begin
           d^.h32.fileInfo := info.f32;
           if s^.aes <> nil then
           begin
-            d^.aes := s^.aes^;
+            // AE-1/2 contains only 11 bytes; never over-read the trailing 2
+            FillCharFast(d^.aes, SizeOf(d^.aes), 0);
+            MoveFast(s^.aes^, d^.aes, SizeOf(TFileInfoExtra) + s^.aes^.size);
             include(d^.flags, zweAes);
           end;
           if tomove then
@@ -2077,14 +2105,14 @@ begin
               d^.h32.localHeadOff := writepos;
               d^.h32.fileInfo.extraLen := 0; // FinalFlush writes our extras
               if zweAes in d^.flags then
-                d^.h32.fileInfo.extraLen := SizeOf(d^.aes);
+                d^.h32.fileInfo.extraLen := SizeOf(TFileInfoExtra) + d^.aes.size;
             end
             else
             begin
               // zip64 input
               len := SizeOf(d^.h64);
               if zweAes in d^.flags then
-                inc(len, SizeOf(d^.aes));
+                inc(len, SizeOf(TFileInfoExtra) + d^.aes.size);
               if d^.h32.fileInfo.extraLen <> len then
                 // e.g. TFileInfoExtra64 with TFileInfoExtraName extension
                 ESynZip.RaiseUtf8(
@@ -2149,6 +2177,16 @@ begin
   fEncryption := Value;
 end;
 
+procedure TZipWrite.SetAe3Iterations(Value: cardinal);
+begin
+  if (Value <> 0) and
+     ((Value < 320000) or (Value > 5000000) or
+      (Value mod 10000 <> 0)) then
+    ESynZip.RaiseUtf8('%.Ae3Iterations: invalid work factor %',
+      [self, Value]);
+  fAe3Iterations := Value;
+end;
+
 destructor TZipWrite.Destroy;
 begin
   if fDest <> nil then
@@ -2209,7 +2247,7 @@ begin
       h32.fileInfo.extraLen  := 0; // AddFromZip() source may have something here
     end;
     if zweAes in flags then
-      inc(h32.fileInfo.extraLen, SizeOf(aes));
+      inc(h32.fileInfo.extraLen, SizeOf(TFileInfoExtra) + aes.size);
     {$ifdef UNICODE}
     if IsAnsiCompatibleW(pointer(zipName)) then
     {$else}
@@ -2254,7 +2292,7 @@ begin
       inc(P, SizeOf(h64) - SizeOf(h64.offset));
     end;
     if zweAes in flags then
-      MoveFast(aes, P^, SizeOf(aes));
+      MoveFast(aes, P^, SizeOf(TFileInfoExtra) + aes.size);
     fDest.WriteBuffer(tmp.buf^, tmp.len); // write once to disk/stream
     result := tmp.Len; // returns the number of bytes written
     tmp.Done;
@@ -2266,7 +2304,7 @@ function TZipWrite.WriteHeaderDest(const zipName: TFileName;
 var
   c: TZipCrypt;
   e: PZipWriteEntry;
-  head: TTemp64;
+  head: THash512;
 begin
   result := fDest;
   if fPassword = '' then
@@ -2275,24 +2313,41 @@ begin
     exit;
   end;
   c := GetCrypt(AES_STRENGTH[fEncryption]);
+  if c.AesStrength = 4 then
+    if fAe3Iterations = 0 then
+      c.AesIterations := 600000 // restore the default if previously customized
+    else
+      c.AesIterations := fAe3Iterations;
   e := @Entry[Count];
   e^.h32.fileInfo.flags := e^.h32.fileInfo.flags or FLAG_ENCRYPTED;
   inc(e^.h64.zzipSize, c.HeaderLen + c.TrailerLen);
   if c.AesStrength <> 0 then
   begin
     e^.aes.id := AES_EXTRA_ID;
-    e^.aes.size := SizeOf(e^.aes) - 4;
-    if e^.h64.zfullSize >= 20 then
-      // follow WinZip 11: use AE-1 for files >= 20 bytes
-      e^.aes.version := 1
+    if c.AesStrength = 4 then
+    begin
+      // AE-3: 9 bytes of extra data and no unencrypted CRC32
+      e^.aes.size := AES_EXTRA_SIZE_AE3;
+      e^.aes.version := 3;
+      e^.aes.strength := 3; // wire format uses AES-256 strength 3
+      e^.aes.iterations := c.AesIterations div 10000;
+      e^.h32.fileInfo.zcrc32 := 0;
+    end
     else
     begin
-      // AE-2 prevents CRC-based plaintext disclosure on tiny files
-      e^.aes.version := 2;
-      e^.h32.fileInfo.zcrc32 := 0;
+      e^.aes.size := AES_EXTRA_SIZE;
+      if e^.h64.zfullSize >= 20 then
+        // follow WinZip 11: use AE-1 for files >= 20 bytes
+        e^.aes.version := 1
+      else
+      begin
+        // AE-2 prevents CRC-based plaintext disclosure on tiny files
+        e^.aes.version := 2;
+        e^.h32.fileInfo.zcrc32 := 0;
+      end;
+      e^.aes.strength := c.AesStrength;
     end;
     e^.aes.vendor := AES_VENDOR;
-    e^.aes.strength := c.AesStrength;
     e^.aes.method := e^.h32.fileInfo.zzipMethod;
     e^.h32.fileInfo.zzipMethod := Z_AES;
     include(e^.flags, zweAes);
@@ -2517,7 +2572,7 @@ begin
             WriteTrailer(dest);
             if zweAes in flags then
             begin
-              if aes.version = 2 then // default AE-1 retains the computed CRC32
+              if aes.version in [2, 3] then // AE-2/3 never store a CRC32
                 h32.fileInfo.zcrc32 := 0;
             end
             else if h32.fileInfo.zcrc32 <> crc then
@@ -2578,9 +2633,11 @@ begin
       h32.fileInfo.zzipSize  := fSizeOut;
     end;
     if zweAes in flags then
-      // follow WinZip 11 behavior: favor AE-1 with crc
-      if fSizeIn >= 20 then
+      if aes.version = 3 then
+        h32.fileInfo.zcrc32 := 0 // AE-3 never includes a ZIP CRC32
+      else if fSizeIn >= 20 then
       begin
+        // follow WinZip 11 behavior: favor AE-1 with crc
         aes.version := 1; // AE-1
         h32.fileInfo.zcrc32 := fCrc;
       end
@@ -2716,7 +2773,8 @@ begin
       flags := [];
       if z^.aes <> nil then
       begin
-        aes := z^.aes^;
+        FillCharFast(aes, SizeOf(aes), 0);
+        MoveFast(z^.aes^, aes, SizeOf(TFileInfoExtra) + z^.aes^.size);
         include(flags, zweAes);
       end;
       // append new header and file content
@@ -2773,7 +2831,7 @@ begin
         inc(lh64.headerSize, SizeOf(h64));
       end;
       if zweAes in flags then
-        inc(lh64.headerSize, SizeOf(aes));
+        inc(lh64.headerSize, SizeOf(TFileInfoExtra) + aes.size);
     end;
   P := FastNewString(lh64.headerSize + SizeOf(lh) + SizeOf(lh64) + SizeOf(loc64));
   pointer(tmp) := P;
@@ -2791,8 +2849,8 @@ begin
       end;
       if zweAes in flags then
       begin
-        MoveFast(aes, P^, SizeOf(aes));
-        inc(P, SizeOf(aes));
+        MoveFast(aes, P^, SizeOf(TFileInfoExtra) + aes.size);
+        inc(P, SizeOf(TFileInfoExtra) + aes.size);
       end;
     end;
   assert(P - pointer(tmp) = lh64.headerSize);
@@ -2939,7 +2997,7 @@ end;
 function TZipReadEntry.HasCrc: boolean;
 begin
   result := (aes = nil) or
-            (aes^.version <> 2); // WinZip AE-2 stores no crc32
+            (aes^.version = 1); // WinZip AE-2/3 stores no crc32
 end;
 
 
@@ -3068,13 +3126,24 @@ begin
          (h^.fileInfo.flags and FLAG_ENCRYPTED = 0) then
         ESynZip.RaiseUtf8('%.Create: invalid AES header for %',
           [self, e^.zipName]);
-      if e^.aes^.size <> AES_EXTRA_SIZE then
-        ESynZip.RaiseUtf8('%.Create: invalid AES extra size for %',
-          [self, e^.zipName]);
-      if not (e^.aes^.version in [1, 2]) or
-         (e^.aes^.vendor <> AES_VENDOR) or
-         not (e^.aes^.strength in [1 .. 3]) or
+      if (e^.aes^.vendor <> AES_VENDOR) or
          not (e^.aes^.method in [Z_STORED, Z_DEFLATED]) then
+        ESynZip.RaiseUtf8('%.Create: unsupported AES format for %',
+          [self, e^.zipName]);
+      if e^.aes^.version = 3 then
+      begin
+        // Check size before reading AE-3-only iterations (absent from AE-1/2).
+        if (e^.aes^.size <> AES_EXTRA_SIZE_AE3) or
+           (e^.aes^.strength <> 3) or
+           // bound KDF work when archives are supplied by untrusted parties
+           (e^.aes^.iterations < 32) or
+           (e^.aes^.iterations > 500) then
+          ESynZip.RaiseUtf8('%.Create: unsupported AES-3 format for %',
+            [self, e^.zipName]);
+      end
+      else if not (e^.aes^.version in [1, 2]) or
+              (e^.aes^.size <> AES_EXTRA_SIZE) or
+              not (e^.aes^.strength in [1 .. 3]) then
         ESynZip.RaiseUtf8('%.Create: unsupported AES format for %',
           [self, e^.zipName]);
     end
@@ -3464,7 +3533,10 @@ begin
   if e^.aes <> nil then
   begin
     method := e^.aes^.method;
-    strength := e^.aes^.strength;
+    if e^.aes^.version = 3 then
+      strength := 4 // TZipCryptGcm internal discriminator
+    else
+      strength := e^.aes^.strength;
   end;
   if not (method in [Z_STORED, Z_DEFLATED]) then
     ESynZip.RaiseUtf8('%.UnZip: Unsupported method % for % %',
@@ -3476,6 +3548,8 @@ begin
       ESynZip.RaiseUtf8('%.UnZip: % is encrypted: missing Password',
         [self, e^.zipName]);
     result := GetCrypt(strength);
+    if strength = 4 then
+      result.AesIterations := cardinal(e^.aes^.iterations) * 10000;
     if info.f64.zzipSize < result.HeaderLen + result.TrailerLen then
       ESynZip.RaiseUtf8('%.UnZip: truncated %', [self, e^.zipName]);
   end;
