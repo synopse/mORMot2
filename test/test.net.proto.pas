@@ -8801,6 +8801,9 @@ begin
     url.FastCgiTimeoutSec := 1;
     url := settings.AddFastCgi('fcgi://127.0.0.1:8880/var/www', 'getonly');
     url.Methods := [urmGet];
+    // WSGI uses the same FastCGI backend, with virtual SCRIPT_NAME/PATH_INFO.
+    url := settings.AddFastCgi('fcgi://127.0.0.1:8880', 'api');
+    url.SetOptions([hpoFastCgiWsgi]);
     proxy := THttpProxyServer.Create(settings);
     proxy.Start;
     clt := THttpClientSocket.Open('127.0.0.1', '8881');
@@ -8899,6 +8902,44 @@ begin
     Expect('GET', '/app/my%20echo.php/x%2By+z', HTTP_SUCCESS);
     CheckEqual(Field(1), '/var/www/my echo.php', 'decoded script');
     CheckEqual(Field(2), '/x+y+z', 'decoded path info');
+    // WSGI mapping: no physical script is needed and PHP mode is unchanged
+    Expect('GET', '/api', HTTP_SUCCESS);
+    CheckEqual(Field(19), '/api', 'wsgi root script name');
+    CheckEqual(Field(2), '', 'wsgi root path info');
+    CheckEqual(Field(1), '<none>', 'wsgi no script filename');
+    CheckEqual(Field(12), '<none>', 'wsgi no document root');
+    Expect('GET', '/api/', HTTP_SUCCESS);
+    CheckEqual(Field(19), '/api', 'wsgi slash script name');
+    CheckEqual(Field(2), '/', 'wsgi slash path info');
+    Expect('GET', '/api/users/42?full=1&active=1', HTTP_SUCCESS,
+      'X-Test: wsgi');
+    CheckEqual(Field(0), 'GET', 'wsgi method');
+    CheckEqual(Field(1), '<none>', 'wsgi no physical script');
+    CheckEqual(Field(2), '/users/42', 'wsgi route path info');
+    CheckEqual(Field(3), 'full=1&active=1', 'wsgi query');
+    CheckEqual(Field(4), 'wsgi', 'wsgi custom header');
+    CheckEqual(Field(13), '/api/users/42?full=1&active=1', 'wsgi request uri');
+    CheckEqual(Field(19), '/api', 'wsgi mounted script name');
+    Expect('GET', '/api/route.py/next', HTTP_SUCCESS);
+    CheckEqual(Field(1), '<none>', 'wsgi route is not a file');
+    CheckEqual(Field(2), '/route.py/next', 'wsgi dot in route');
+    Expect('GET', '/api/a%20b/x%2By+z', HTTP_SUCCESS);
+    CheckEqual(Field(2), '/a b/x+y+z', 'wsgi decoded path');
+    bin := 'hello wsgi';
+    Expect('POST', '/api/submit?mode=json', HTTP_SUCCESS, '', bin);
+    CheckEqual(Field(0), 'POST', 'wsgi post method');
+    CheckEqual(Field(2), '/submit', 'wsgi post path');
+    CheckEqual(Field(3), 'mode=json', 'wsgi post query');
+    CheckEqual(Field(7), '10', 'wsgi post length');
+    CheckEqual(Field(8), 'application/x-test', 'wsgi post content type');
+    CheckEqual(Field(9), '1', 'wsgi post stdin records');
+    CheckEqual(Field(10), CardinalToHexShort(crc32cHash(bin)),
+      'wsgi post stdin content');
+    n := fcgirequests;
+    Expect('GET', '/api/a%00b', HTTP_NOTFOUND);
+    CheckEqual(fcgirequests, n, 'wsgi NUL must not reach the application');
+    Expect('GET', '/app/echo.php', HTTP_SUCCESS);
+    CheckEqual(Field(1), '/var/www/echo.php', 'php script mapping unchanged');
     // an application which never answers
     start := GetTickCount64;
     Expect('GET', '/slow/x.php', HTTP_GATEWAYTIMEOUT);
