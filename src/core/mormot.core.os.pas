@@ -3458,7 +3458,11 @@ type
     constructor CreateRead(const aFileName: TFileName);
     /// open for writing or create a non-existing file from its name
     // - use fmCreate if aFileName does not exists, or fmOpenWrite otherwise
-    constructor CreateWrite(const aFileName: TFileName);
+    // - aShareMode is applied in both cases, and defaults to fmShareRead
+    // - the additional parameter also makes this signature distinct from
+    // CreateRead(), so that C++Builder can reach both (avoid Delphi W1029)
+    constructor CreateWrite(const aFileName: TFileName;
+      aShareMode: cardinal = fmShareRead);
     /// explictely close the handle if needed
     destructor Destroy; override;
     /// overriden to use our FileSeek64() function
@@ -8211,13 +8215,14 @@ begin // raise EOSException on invalid handle/aFileName
   CreateFromHandle(FileOpenSequentialRead(aFileName), aFileName);
 end;
 
-constructor TFileStreamEx.CreateWrite(const aFileName: TFileName);
+constructor TFileStreamEx.CreateWrite(const aFileName: TFileName;
+  aShareMode: cardinal);
 var
   h: THandle;
 begin
-  h := FileOpen(aFileName, fmOpenReadWrite or fmShareRead);
+  h := FileOpen(aFileName, fmOpenReadWrite or aShareMode);
   if not ValidHandle(h) then // we may need to create the file
-    h := FileCreate(aFileName, fmShareRead);
+    h := FileCreate(aFileName, aShareMode);
   CreateFromHandle(h, aFileName); // raise EOSException on invalid h
 end;
 
