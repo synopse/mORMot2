@@ -12911,6 +12911,7 @@ var
     rawzip: RawByteString;
     inname, outname, tmpname: TFileName;
     reader: TZipRead;
+    output: TRawByteStringStream;
   begin
     SetString(rawzip, PAnsiChar(@AE3_320K), SizeOf(AE3_320K));
     inname := WorkDir + 'ae3-partial-fixture.zip';
@@ -12944,6 +12945,17 @@ var
       reader := TZipRead.Create(inname, 0, 0, 128);
       try
         reader.Password := AE3_PASSWORD;
+        // Force CryptAuthenticate() + DecryptReset() + actual decryption.
+        Check(reader.Entry[0].local = nil, 'AE-3 source-backed stream');
+        output := TRawByteStringStream.Create;
+        try
+          Check(reader.UnZip(0, output), 'AE-3 valid two-pass stream');
+          CheckEqual(output.DataString,
+            'AE-3 custom iterations=320000' + #10,
+            'AE-3 two-pass plaintext');
+        finally
+          output.Free;
+        end;
         Check(not reader.UnZip(0, outname, {DestDirIsFileName=}true),
           'AE-3 reject corrupted tag before rename');
         CheckEqual(StringFromFile(outname), 'keep existing',

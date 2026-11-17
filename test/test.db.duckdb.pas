@@ -704,8 +704,8 @@ begin
     TSynLog.Family.ExceptionIgnoreCurrentThread := false;
   end;
   // XLSX needs the excel extension, which may not be installed
-  (fProps.ThreadSafeConnection as TSqlDBDuckDBConnection)
-    .ExecuteScript('INSTALL excel; LOAD excel;'); // needed on some systems
+  {(fProps.ThreadSafeConnection as TSqlDBDuckDBConnection)
+    .ExecuteScript('INSTALL excel; LOAD excel;'); // requires online system}
   rows := fProps.Execute('select count(*) from duckdb_extensions() ' +
     'where extension_name = ? and installed', ['excel']);
   hasexcel := rows.Step and
