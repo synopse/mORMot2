@@ -496,6 +496,7 @@ type
     function aad_pending: PAesBlock; inline; // = @gf_t4k[255]
     /// redirected from Encrypt() and Decrypt() in flagAVX mode
     procedure AvxProcess(BufIn, BufOut: PByte; Count: cardinal; Encrypt: boolean);
+    procedure AvxAuth(p: PByte; len: PtrInt; pending: PAesBlock; var count: TQWordRec);
     {$endif USEGCMAVX}
   public
     /// initialize the AES-GCM structure for the supplied Key
@@ -515,7 +516,7 @@ type
     function Decrypt(ctp, ptp: pointer; ILen: PtrInt;
       ptag: pointer = nil; tlen: PtrInt = 0): boolean;
     /// update the authentication data of the cipher text
-    // - same as Decrypt() without the AES-CTR phase
+    // - same as Decrypt() without the AES-CTR phase - but also requires a Reset
     function Auth(ctp: pointer; ILen: PtrInt): boolean;
     /// append some data to be authenticated, but not encrypted
     function Add_AAD(pAAD: pointer; aLen: PtrInt): boolean;
@@ -4837,6 +4838,41 @@ begin
   state.blen := Count;
 end;
 
+procedure TAesGcmEngine.AvxAuth(p: PByte; len: PtrInt;
+  pending: PAesBlock; var count: TQWordRec);
+var
+  used, n: PtrInt;
+begin
+  used := count.L and AES_MOD;
+  inc(count.V, len);
+
+  // Complete a pending block from the previous call.
+  if used <> 0 then
+  begin
+    n := MinPtrInt(len, SizeOf(TAesBlock) - used);
+    MoveFast(p^, pending^[used], n);
+    inc(p, n);
+    dec(len, n);
+    inc(used, n);
+    if used = SizeOf(TAesBlock) then
+      GcmAvxAuth(@gf_t4k, pending, SizeOf(TAesBlock),
+        @state.txt_ghv);
+  end;
+
+  // Authenticate complete blocks directly.
+  if len >= SizeOf(TAesBlock) then
+  begin
+    n := len and not PtrInt(AES_MOD);
+    GcmAvxAuth(@gf_t4k, p, n, @state.txt_ghv);
+    inc(p, n);
+    dec(len, n);
+  end;
+
+  // Leave an incomplete block for the next call or Final().
+  if len <> 0 then
+    MoveFast(p^, pending^, len);
+end;
+
 function HasAesGcmAvx: boolean;
 begin
   result := (cpuAESGCM in X64CpuFeatures) and
@@ -5067,57 +5103,49 @@ begin
 end;
 
 function TAesGcmEngine.Auth(ctp: pointer; ILen: PtrInt): boolean;
+{$ifdef USEGCMAVX}
+var
+  n: PtrInt;
+{$endif USEGCMAVX}
 begin
   result := (ILen >= 0) and
             ((ILen = 0) or (ctp <> nil)) and
             not (flagFinalComputed in state.flags);
-  if result then
-    internal_auth(ctp, ILen, state.txt_ghv, state.atx_cnt);
+  if not result or (ILen = 0) then
+    exit;
+  {$ifdef USEGCMAVX}
+  if flagAVX in state.flags then
+  begin
+    if state.atx_cnt.V = 0 then // flush any partial AAD
+    begin
+      n := state.aad_cnt.L and AES_MOD;
+      if n <> 0 then
+        GcmAvxAuth(@gf_t4k, aad_pending, n, @state.txt_ghv);
+    end;
+    AvxAuth(ctp, ILen, txt_pending, state.atx_cnt);
+    state.blen := state.atx_cnt.L and AES_MOD; // as used by Final()
+    exit;
+  end;
+  {$endif USEGCMAVX}
+  internal_auth(ctp, ILen, state.txt_ghv, state.atx_cnt);
 end;
 
 function TAesGcmEngine.Add_AAD(pAAD: pointer; aLen: PtrInt): boolean;
-{$ifdef USEGCMAVX}
-var
-  used, n, full: PtrInt;
-{$endif USEGCMAVX}
 begin
-  if aLen > 0 then
-  begin
-    result := false;
-    if (pAAD = nil) or
-       (flagFinalComputed in state.flags) or
-       (state.atx_cnt.V <> 0) then // too late: ciphertext has started
-      exit;
-    {$ifdef USEGCMAVX}
-    if flagAVX in state.flags then
-    begin
-      used := state.aad_cnt.L and AES_MOD;
-      inc(state.aad_cnt.V, aLen);
-      if used <> 0 then // complete partial AAD from earlier call
-      begin
-        n := MinPtrInt(aLen, SizeOf(TAesBlock) - used);
-        MoveFast(pAAD^, aad_pending^[used], n);
-        inc(PByte(pAAD), n);
-        dec(aLen, n);
-        inc(used, n);
-        if used = SizeOf(TAesBlock) then
-          GcmAvxAuth(@gf_t4k, aad_pending, SizeOf(TAesBlock), @state.txt_ghv);
-      end;
-      if aLen >= SizeOf(TAesBlock) then // fast GHASH for complete AAD blocks
-      begin
-        full := aLen and not AES_MOD;
-        GcmAvxAuth(@gf_t4k, pAAD, full, @state.txt_ghv);
-        inc(PByte(pAAD), full);
-        dec(aLen, full);
-      end;
-      if aLen <> 0 then
-        MoveFast(pAAD^, aad_pending^[0], aLen); // keep last partial AAD block
-    end
-    else
-    {$endif USEGCMAVX}
-      internal_auth(pAAD, aLen, state.aad_ghv, state.aad_cnt);
-  end;
   result := true;
+  if aLen <= 0 then
+    exit;
+  result := (pAAD <> nil) and
+            not (flagFinalComputed in state.flags) and
+            (state.atx_cnt.V = 0);
+  if not result then
+    exit;
+  {$ifdef USEGCMAVX}
+  if flagAVX in state.flags then
+    AvxAuth(pAAD, aLen, aad_pending, state.aad_cnt)
+  else
+  {$endif USEGCMAVX}
+    internal_auth(pAAD, aLen, state.aad_ghv, state.aad_cnt);
 end;
 
 function TAesGcmEngine.Final(out tag: TAesBlock; andDone: boolean): boolean;
