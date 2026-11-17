@@ -1875,14 +1875,16 @@ SYSV aarch64:
     {$endif OSANDROID}
   {$endif ABIA32}
   {$ifdef ABIA64}
-    {$if defined(OSANDROID) or defined(IOS)}
+    {$if defined(OSANDROID) or defined(OSDARWIN)}
       // Delphi's LLVM aarch64 compiler follows AAPCS64 and passes a by-ref
       // result in the dedicated X8 register, so it does not consume X1 as FPC
       // does: the external aarch64fakestub (assembled from delphi-aarch64.s)
       // saves X8 into TFakeCallStack.Frame, and no integer register is
       // reserved for the result
       // - the very same code is used as ELF for Android and as Mach-O for iOS
-      // - macOS/Windows aarch64 would need their own object: not done yet
+      // - macOS aarch64 links the very same Mach-O code (delphi-macos-arm64.o:
+      // delphi-ios-arm64.o with LC_BUILD_VERSION retargeted to macOS 11.0)
+      // - Windows aarch64 would need its own object: not done yet
       {$define DELPHI_AARCH64_RESULT_X8}
       // iOS terminates an app which runs code it wrote itself, so the VMT
       // entry points come compiled in (aarch64fakethunks) instead of JITted
@@ -4925,6 +4927,8 @@ const
       '../../res/static/delphillvm/delphi-android-arm64.o'  // ELF
     {$elseif defined(IOSSIMULATOR)}
       '../../res/static/delphillvm/delphi-iossim-arm64.o'   // Mach-O
+    {$elseif not defined(IOS)}
+      '../../res/static/delphillvm/delphi-macos-arm64.o'    // Mach-O macOS
     {$else}
       '../../res/static/delphillvm/delphi-ios-arm64.o'      // Mach-O
     {$ifend};
