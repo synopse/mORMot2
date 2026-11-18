@@ -639,8 +639,8 @@ type
     fGCLast, fGCTix1, fGCTix2: integer;
     fOnIdle: array of TOnPollSocketsIdle;
     fThreadClients: record // used by TAsyncClient
-      Count, Timeout: integer;
-      Address, Port: RawUtf8;
+      Count: integer;         // how many clients should be created at startup
+      Address, Port: RawUtf8; // the remote server to connect to
     end;
     function AllThreadsStarted: boolean; virtual;
     procedure AddGC(aConnection: TPollAsyncConnection; const aContext: ShortString);
@@ -880,8 +880,9 @@ type
       read fMaxPending write fMaxPending;
   end;
 
-  /// implements thread-pooled high-performance TCP multiple clients
-  // - e.g. to run some load stress tests with optimized resource use
+  /// thread-pooled high-performance multiple TCP clients to a single server
+  // - e.g. to run some load stress tests with optimized resource use, or to
+  // connect to a FastCgi server on localhost (as TFastCgiAsyncConnections)
   // - will use a TAsyncConnection inherited class to maintain connection state
   // of each connected client
   TAsyncClient = class(TAsyncConnections)
@@ -889,11 +890,9 @@ type
     procedure DoExecute; override;
   public
     /// start the TCP client connections, connecting to the supplied IP server
-    constructor Create(const aServer, aPort: RawUtf8;
-      aClientsCount, aClientsTimeoutSecs: integer;
-      const OnStart, OnStop: TOnNotifyThread;
-      aConnectionClass: TAsyncConnectionClass; const ProcessName: RawUtf8;
-      aLog: TSynLogClass; aOptions: TAsyncConnectionsOptions;
+    constructor Create(const aServer, aPort: RawUtf8; aClientsCount: integer;
+      const OnStart, OnStop: TOnNotifyThread; aConnectionClass: TAsyncConnectionClass;
+      const ProcessName: RawUtf8; aLog: TSynLogClass; aOptions: TAsyncConnectionsOptions;
       aThreadPoolCount: integer = 1); reintroduce; virtual;
   published
     /// server IP address
@@ -2909,7 +2908,8 @@ begin
   if Terminated then
     exit;
   with fThreadClients do
-    res := NewTcpClientSocket(Address, Port, Timeout, client, @addr);
+    // connect to the server with no timeout specified
+    res := NewTcpClientSocket(Address, Port, {timeout=}0, client, @addr);
   if res = nrOk then
     res := client.MakeAsync;
   if res <> nrOK then
@@ -4111,14 +4111,12 @@ end;
 
 { TAsyncClient }
 
-constructor TAsyncClient.Create(const aServer, aPort: RawUtf8;
-  aClientsCount, aClientsTimeoutSecs: integer;
+constructor TAsyncClient.Create(const aServer, aPort: RawUtf8; aClientsCount: integer;
   const OnStart, OnStop: TOnNotifyThread; aConnectionClass: TAsyncConnectionClass;
   const ProcessName: RawUtf8; aLog: TSynLogClass;
   aOptions: TAsyncConnectionsOptions; aThreadPoolCount: integer);
 begin
   fThreadClients.Count := aClientsCount;
-  fThreadClients.Timeout := aClientsTimeoutSecs * 1000;
   fThreadClients.Address := aServer;
   fThreadClients.Port := aPort;
   fProcessName := Join(['=W:', ProcessName]); // for DoExecute main thread
