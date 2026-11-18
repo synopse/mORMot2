@@ -3596,25 +3596,25 @@ begin
       continue // last 1..3 chars
     else if (c > UTF8_MAX) or // over RFC 3629 / Unicode range
             (source + c > PUtf8Char(len) + 4) then
-    begin // UTF8_ZERO or does not follows RFC 3629 or truncated
+    begin // early UTF8_ZERO or does not follows RFC 3629 or truncated
       source := nil; // force result = false
       break;
     end;
     case byte(source[-1]) of // match RFC 3629 restrictions enforced by AVX2
       $c0, $c1, $f5 .. $f7:
-        goto done;
+        break;
       $e0:
         if byte(source^) < $a0 then
-          goto done;
+          break;
       $ed:
         if byte(source^) >= $a0 then
-          goto done;
+          break;
       $f0:
         if byte(source^) < $90 then
-          goto done;
+          break;
       $f4:
         if byte(source^) >= $90 then
-          goto done;
+          break;
     end;
     repeat
       if byte(source^) and $c0 <> $80 then
