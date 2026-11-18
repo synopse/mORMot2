@@ -191,6 +191,8 @@ type
     procedure DoTWebSocketAsyncServer(Sender: TObject);
     /// validate that THttpAsyncServer shutdown does close all its connections
     procedure DoHttpAsyncShutdown(Sender: TObject);
+    /// regressions #743 and #750: early async replies and failed sends
+    procedure DoHttpAsyncResponses(Sender: TObject);
     /// validate that hsoHeadersUnfiltered applies to kept-alive requests
     procedure DoHttpKeepAliveOptions(Sender: TObject);
     function DoKeepAliveOptionsRequest(Ctxt: THttpServerRequestAbstract): cardinal;
@@ -667,6 +669,7 @@ begin
   Run(DoTFTPServer, self, 'TFTPServer', true, false);
   Run(DoTWebSocketAsyncServer, self, 'WSBroadcast', true, false);
   Run(DoHttpAsyncShutdown, self, 'HttpAsyncShutdown', true, false);
+  Run(DoHttpAsyncResponses, self, 'HttpAsyncResponses', true, false);
   Run(DoHttpKeepAliveOptions, self, 'HttpKeepAliveOptions', true, false);
   Run(DoHttpLongLine, self, 'HttpLongLine', true, false);
   Run(DoHttpReadMaxBytes, self, 'HttpReadMaxBytes', true, false);
@@ -1380,6 +1383,243 @@ begin
     // a task blocked inside WebSocketBroadcast() still references both.
     // Trying to destroy the server here could reproduce the same deadlock
     // on the test thread and prevent the test suite from reporting it.
+  end;
+end;
+
+// Regression tests for #743 and #750: early async replies and reset peers.
+type
+  THttpAsyncResponseRegression = class
+  public
+    Server: THttpAsyncServer;
+    Worker: TLoggedWorkThread;
+    ReadStarted, AnswerStarted, ReleaseRead, ReleaseAnswer, AnswerDone: TSynEvent;
+    Handle: TConnectionAsyncHandle;
+    DelayMS: integer;
+    ResetPeer: boolean;
+    BigBody, RequestError, AnswerError: RawUtf8;
+    constructor Create;
+    destructor Destroy; override;
+    procedure Reset;
+    function OnRequest(Ctxt: THttpServerRequestAbstract): cardinal;
+    procedure Answer(Sender: TObject);
+  end;
+
+constructor THttpAsyncResponseRegression.Create;
+begin
+  inherited Create;
+  ReadStarted := TSynEvent.Create;
+  AnswerStarted := TSynEvent.Create;
+  ReleaseRead := TSynEvent.Create;
+  ReleaseAnswer := TSynEvent.Create;
+  AnswerDone := TSynEvent.Create;
+end;
+
+destructor THttpAsyncResponseRegression.Destroy;
+begin
+  // The caller has joined and freed Worker before destroying this context.
+  AnswerDone.Free;
+  ReleaseAnswer.Free;
+  ReleaseRead.Free;
+  AnswerStarted.Free;
+  ReadStarted.Free;
+  inherited Destroy;
+end;
+
+procedure THttpAsyncResponseRegression.Reset;
+begin
+  ReadStarted.ResetEvent;
+  AnswerStarted.ResetEvent;
+  ReleaseRead.ResetEvent;
+  ReleaseAnswer.ResetEvent;
+  AnswerDone.ResetEvent;
+  RequestError := '';
+  AnswerError := '';
+end;
+
+procedure THttpAsyncResponseRegression.Answer(Sender: TObject);
+begin
+  try
+    AnswerStarted.SetEvent;
+    if ResetPeer and
+       not ReleaseAnswer.WaitFor(5000) then
+      raise Exception.Create('reset was not signaled to answer worker');
+    if ResetPeer then
+      Server.AsyncResponse(Handle, BigBody, BINARY_CONTENT_TYPE)
+    else
+      Server.AsyncResponse(Handle, 'early', TEXT_CONTENT_TYPE);
+  except
+    on E: Exception do
+      StringToUtf8(E.Message, AnswerError);
+  end;
+  AnswerDone.SetEvent;
+end;
+
+function THttpAsyncResponseRegression.OnRequest(
+  Ctxt: THttpServerRequestAbstract): cardinal;
+begin
+  result := HTTP_SUCCESS;
+  if Ctxt.Url = '/alive' then
+  begin
+    Ctxt.OutContent := 'alive';
+    exit;
+  end;
+  Handle := (Ctxt as THttpServerRequest).AsyncHandle;
+  Worker := TLoggedWorkThread.Create(TSynLog, 'async-response-regression',
+    self, Answer, {suspended=}false, {ManualWaitForAndFree=}true);
+  // The read lock is still held throughout this handler. Make sure the
+  // answering worker was actually scheduled before holding it for > 40ms.
+  if not AnswerStarted.WaitFor(5000) then
+    RequestError := 'answer worker did not start';
+  ReadStarted.SetEvent;
+  if ResetPeer and
+     not ReleaseRead.WaitFor(5000) then
+    RequestError := 'client reset was not signaled to handler';
+  SleepHiRes(DelayMS);
+  result := HTTP_ASYNCRESPONSE;
+end;
+
+procedure TNetworkProtocols.DoHttpAsyncResponses(Sender: TObject);
+const
+  RESET_ROUNDS = 24;
+var
+  srv: THttpAsyncServer;
+  ctx: THttpAsyncResponseRegression;
+  raw: TCrtSocket;
+  i, tested: integer;
+  wedged: boolean;
+
+  function ReadOk(const uri, expected: RawUtf8): boolean;
+  var
+    client: TCrtSocket;
+    line, status, body: RawUtf8;
+    len: integer;
+  begin
+    result := false;
+    client := TCrtSocket.Open('127.0.0.1', srv.SockPort, nlTcp, 5000);
+    try
+      try
+        client.CreateSockIn;
+        client.SockSend(['GET ', uri, ' HTTP/1.1'#13#10,
+          'Host: 127.0.0.1'#13#10, 'Connection: close'#13#10]);
+        client.SockSendFlush;
+        if not Check(client.SockReceivePending(3000) = cspDataAvailable,
+            'async response pending') then
+          exit;
+        client.SockRecvLn(status);
+        if not CheckUtf8(PosEx(' 200 ', status) > 0,
+            '% status %', [uri, status]) then
+          exit;
+        len := -1;
+        repeat
+          client.SockRecvLn(line);
+          if IdemPChar(pointer(line), 'CONTENT-LENGTH:') then
+            len := Utf8ToInteger(TrimU(copy(line, 16, 20)), -1);
+        until line = '';
+        CheckEqual(len, length(expected), 'async content length');
+        if len <> length(expected) then
+          exit;
+        body := client.SockInRead(len);
+        CheckEqual(body, expected, 'async content');
+        result := body = expected;
+      except
+        on E: ENetSock do
+          CheckUtf8(false, '% network error: %', [uri, E.Message]);
+      end;
+    finally
+      client.Free;
+    end;
+  end;
+
+  function JoinWorker(const stage: RawUtf8): boolean;
+  begin
+    result := CheckUtf8(ctx.AnswerDone.WaitFor(8000),
+      '% response worker timeout', [stage]);
+    if not result then
+    begin
+      wedged := true; // do not free objects referenced by a stuck worker
+      exit;
+    end;
+    ctx.Worker.WaitFor;
+    FreeAndNil(ctx.Worker);
+    CheckUtf8(ctx.RequestError = '', '% handler: %', [stage, ctx.RequestError]);
+    CheckUtf8(ctx.AnswerError = '', '% answer: %', [stage, ctx.AnswerError]);
+  end;
+
+begin
+  TSynLog.Family.ExceptionIgnore.Add(ENetSock); // expected after TCP RST
+  ctx := THttpAsyncResponseRegression.Create;
+  srv := nil;
+  wedged := false;
+  try
+    srv := THttpAsyncServer.Create('8878', nil, nil, 'asyncissues', 1);
+    ctx.Server := srv;
+    srv.OnRequest := ctx.OnRequest;
+    srv.WaitStarted(10);
+
+    // #743: the answer is produced before OnRequest has released its read
+    // lock. The previous 40ms single attempt lost it without any HTTP reply.
+    ctx.Reset;
+    ctx.ResetPeer := false;
+    ctx.DelayMS := 150;
+    ReadOk('/early', 'early');
+    if not JoinWorker('#743') then
+      exit;
+
+    // #750: repeat large AsyncResponse writes after an abortive client close.
+    // A single server read thread remains in OnRequest while RST is sent,
+    // keeping the connection available for the response worker to race with
+    // the failed send. Check that later, unrelated connections still work.
+    ctx.BigBody := RawUtf8OfChar('x', 4 shl 20);
+    tested := 0;
+    for i := 1 to RESET_ROUNDS do
+    begin
+      ctx.Reset;
+      ctx.ResetPeer := true;
+      ctx.DelayMS := 80;
+      raw := TCrtSocket.Open('127.0.0.1', srv.SockPort, nlTcp, 5000);
+      try
+        raw.SockSend(['GET /reset HTTP/1.1'#13#10,
+          'Host: 127.0.0.1'#13#10]);
+        raw.SockSendFlush;
+        if not Check(ctx.ReadStarted.WaitFor(5000),
+            '#750 handler entered') then
+        begin
+          wedged := true;
+          break;
+        end;
+        raw.Sock.SetLinger(0); // abortive close: send TCP RST
+      finally
+        raw.Free;
+        ctx.ReleaseRead.SetEvent;
+        ctx.ReleaseAnswer.SetEvent;
+      end;
+      if not JoinWorker('#750') then
+        break;
+      SleepHiRes(120); // allow the 100ms first GC generation to expire
+      if not ReadOk('/alive', 'alive') then
+        break;
+      inc(tested);
+    end;
+    CheckEqual(tested, RESET_ROUNDS, '#750 reset rounds');
+  finally
+    ctx.ReleaseRead.SetEvent;
+    ctx.ReleaseAnswer.SetEvent;
+    if not wedged and
+       (ctx.Worker <> nil) then
+      if ctx.AnswerDone.WaitFor(8000) then
+      begin
+        ctx.Worker.WaitFor;
+        FreeAndNil(ctx.Worker);
+      end
+      else
+        wedged := true;
+    if not wedged then
+    begin
+      srv.Free;
+      ctx.Free;
+    end;
+    // On a genuine deadlock, leaking the server and its worker is safer than
+    // freeing objects still used by that worker (as in WSBroadcast above).
   end;
 end;
 
