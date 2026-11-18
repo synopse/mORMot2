@@ -212,7 +212,7 @@ type
     procedure CrtSocketAbortRecv(Sender: TObject);
     {$ifdef OSWINDOWS}
     /// validate that TWinIocp won't call closesocket() twice on Unsubscribe
-    procedure WinIocpUnsubscribe;
+    procedure WinIocpUnsubscribe(Sender: TObject);
     procedure WinIocpWorker(Sender: TObject);
     procedure WinIocpLog(Level: TSynLogLevel; const Format: RawUtf8;
       const Args: array of const; Instance: TObject = nil);
@@ -664,6 +664,8 @@ begin
   Run(DoHttpReadMaxBytes, self, 'HttpReadMaxBytes', true, false);
   {$ifdef OSPOSIX}
   Run(DoUnixDomainSocket, self, 'UnixDomainSocket', true, false);
+  {$else}
+  Run(WinIocpUnsubscribe, self, 'iocp', true, false);
   {$endif OSPOSIX}
 end;
 
@@ -1188,7 +1190,7 @@ const
 
 procedure TNetworkProtocols.RTSPOverHTTP;
 begin
-  RunWait; // let the Tunnel stuff close down
+  //RunWait; // let the Tunnel stuff close down
   DoRtspOverHttp(ASYNC_OPTION, '3997', '3996');
 end;
 
@@ -6431,9 +6433,6 @@ begin
     ms.Free;
   end;
   CrtSocketAbort;
-  {$ifdef OSWINDOWS}
-  WinIocpUnsubscribe;
-  {$endif OSWINDOWS}
 end;
 
 procedure TNetworkProtocols.CrtSocketAbortRecv(Sender: TObject);
@@ -6546,6 +6545,7 @@ procedure TNetworkProtocols.WinIocpLog(Level: TSynLogLevel;
 begin
   if PosEx('unsub closesocket=', Format) > 0 then
     LockedInc32(@iocpclosed); // one logged close from FinishNext()
+  //TSynLogTestLog.Add.Log(Level, Format, Args, Instance);
 end;
 
 procedure TNetworkProtocols.WinIocpWorker(Sender: TObject);
@@ -6564,7 +6564,7 @@ begin
   end;
 end;
 
-procedure TNetworkProtocols.WinIocpUnsubscribe;
+procedure TNetworkProtocols.WinIocpUnsubscribe(Sender: TObject);
 const
   LOOPS = 1000;
   WORKERS = 4;
@@ -6593,8 +6593,9 @@ begin
       n := 0;
       for i := 0 to LOOPS - 1 do
       begin
+        fOwner.DoLog(sllDebug, 'WinIocpUnsubscribe #%', [i]);
         if (NewSocket(cLocalHost, srv.Port, nlTcp, {bind=}false,
-              1000, 1000, 1000, 0, cli) <> nrOk) or
+              0, 1000, 1000, 0, cli) <> nrOk) or
            (srv.Sock.Accept(acc, addr, {async=}false) <> nrOk) then
           break;
         // as mormot.net.async: a 'next' wieRecv is pending after ProcessRead,
@@ -6606,7 +6607,7 @@ begin
         cli.Close; // both wieRecv complete, maybe on two threads at once
         // a new connection may reuse the handle: it should never be closed
         if (NewSocket(cLocalHost, srv.Port, nlTcp, {bind=}false,
-              1000, 1000, 1000, 0, next) <> nrOk) or
+              0, 1000, 1000, 0, next) <> nrOk) or
            (srv.Sock.Accept(kept[n], addr, {async=}false) <> nrOk) then
           break;
         inc(n);
