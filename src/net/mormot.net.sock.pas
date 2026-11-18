@@ -1765,8 +1765,12 @@ type
     // - for wieAccept, call then GetNextAccept() and PrepareNext()
     // - for wieConnect, start using the socket, e.g. with wieRecv/wieSend events
     // - for wieCustom*, it depends on your own custom logic
+    // - every non-nil result owns an active reference until FinishNext()
     function GetNext(timeoutms: cardinal;
       out event: TWinIocpEvent; out bytes: cardinal): PWinIocpSubscription;
+    /// release a non-nil GetNext() result exactly once, in a finally block
+    // - also required for direct Enqueue events, possibly on another IOCP
+    procedure FinishNext(one: PWinIocpSubscription);
     /// retrieve the new socket and remote address after a GetNext(wieAccept)
     function GetNextAccept(one: PWinIocpSubscription;
       out Socket: TNetSocket; out Remote: TNetAddr): boolean;

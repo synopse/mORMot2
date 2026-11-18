@@ -6543,16 +6543,23 @@ procedure TNetworkProtocols.WinIocpLog(Level: TSynLogLevel;
   const Format: RawUtf8; const Args: array of const; Instance: TObject);
 begin
   if PosEx('unsub closesocket=', Format) > 0 then
-    LockedInc32(@iocpclosed); // one per actual closesocket() in GetNext()
+    LockedInc32(@iocpclosed); // one logged close from FinishNext()
 end;
 
 procedure TNetworkProtocols.WinIocpWorker(Sender: TObject);
 var
   ev: TWinIocpEvent;
   bytes: cardinal;
+  iocp: TWinIocp;
+  sub: PWinIocpSubscription;
 begin
+  iocp := TWinIocp(Sender);
   while not iocpstop do
-    TWinIocp(Sender).GetNext(50, ev, bytes);
+  begin
+    sub := iocp.GetNext(50, ev, bytes);
+    if sub <> nil then
+      iocp.FinishNext(sub);
+  end;
 end;
 
 procedure TNetworkProtocols.WinIocpUnsubscribe;

@@ -2408,31 +2408,35 @@ begin
       sub := fOwner.fSockets.fIocpRecvSend.GetNext(INFINITE, e, bytes);
       if sub = nil then
         break; // Terminated
-      case e of
-        wieRecv:
-          begin
-            if sub^.Tag <> 0 then // not needed outside IOCP
-              TPollAsyncConnection(sub^.Tag).BeforeProcessRead;
-            SetRes(notif, sub^.Tag, [pseRead]);
-            fOwner.fSockets.ProcessRead(self, notif);
-          end;
-        wieSend:
-          if acoIocpWriteDirect in fOwner.fOptions then
-          begin
-            // use this thread of the poll to try to lock and send with no delay
-            SetRes(notif, sub^.Tag, [pseWrite]);
-            fOwner.fSockets.ProcessWrite(notif, bytes, {waitms=}0);
-          end
-          else
-            // writes are done in the single (and main) fOwner.Execute thread
-            // -> just relay this event to the IOCP queue handling acceptex()
-            // process, i.e. TAsyncServer.DoExecute
-            fOwner.fIocpAccept.Enqueue(sub, e, bytes);
-        wieConnect: // from THttpAsyncClientConnections.StartRequest
-          begin
-            SetRes(notif, sub^.Tag, [pseWrite]);
-            fOwner.fSockets.ProcessWrite(notif, {sent=}0, {waitms=}0);
-          end;
+      try
+        case e of
+          wieRecv:
+            begin
+              if sub^.Tag <> 0 then // not needed outside IOCP
+                TPollAsyncConnection(sub^.Tag).BeforeProcessRead;
+              SetRes(notif, sub^.Tag, [pseRead]);
+              fOwner.fSockets.ProcessRead(self, notif);
+            end;
+          wieSend:
+            if acoIocpWriteDirect in fOwner.fOptions then
+            begin
+              // use this thread of the poll to try to lock and send with no delay
+              SetRes(notif, sub^.Tag, [pseWrite]);
+              fOwner.fSockets.ProcessWrite(notif, bytes, {waitms=}0);
+            end
+            else
+              // writes are done in the single (and main) fOwner.Execute thread
+              // -> just relay this event to the IOCP queue handling acceptex()
+              // process, i.e. TAsyncServer.DoExecute
+              fOwner.fIocpAccept.Enqueue(sub, e, bytes);
+          wieConnect: // from THttpAsyncClientConnections.StartRequest
+            begin
+              SetRes(notif, sub^.Tag, [pseWrite]);
+              fOwner.fSockets.ProcessWrite(notif, {sent=}0, {waitms=}0);
+            end;
+        end;
+      finally
+        fOwner.fSockets.fIocpRecvSend.FinishNext(sub);
       end;
     end;
     {$else}
@@ -3916,6 +3920,7 @@ begin
       sub := fIocpAccept.GetNext(INFINITE, e, bytes);
       if sub = nil then
         break; // terminated
+      try
       res := nrFatalError;
       case e of
         wieAccept:
@@ -4063,6 +4068,11 @@ begin
         // here connection = TObject(notif.tag)
         // - never executed if fExecuteAcceptOnly=true (POSIX THttpAsyncServer)
         fSockets.ProcessWrite(notif, bytes);
+      {$ifdef USE_WINIOCP}
+      finally
+        fIocpAccept.FinishNext(sub);
+      end;
+      {$endif USE_WINIOCP}
     end;
   except
     on E: Exception do
@@ -4116,15 +4126,20 @@ begin
       sub := fIocpAccept.GetNext(INFINITE, e, bytes);
       if sub = nil then
         break; // terminated
-      if e <> wieSend then
-        continue;
-      SetRes(notif, sub^.Tag, [pseWrite]);
+      try
+        if e <> wieSend then
+          continue;
+        SetRes(notif, sub^.Tag, [pseWrite]);
+        fSockets.ProcessWrite(notif, bytes);
+      finally
+        fIocpAccept.FinishNext(sub);
+      end;
       {$else}
       bytes := 0;
       if fSockets.fWrite.GetOne(1000, 'W', notif) and
          not Terminated then
-      {$endif USE_WINIOCP}
         fSockets.ProcessWrite(notif, bytes);
+      {$endif USE_WINIOCP}
     end;
     DoLog(sllInfo, 'Execute: done % C', [fProcessName], self);
   except
