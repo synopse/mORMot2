@@ -87,10 +87,14 @@ type
   TFastCgiResponse = object
   {$endif USERECORDWITHMETHODS}
   public
-    /// the frtStdOut content received so far, i.e. CGI headers and body
-    // - is appended by each record, as THttpRequestContext does for chunks,
-    // then FastCgiParseOutput() makes it the HTTP response body with no copy
+    /// the frtStdOut content, i.e. CGI headers and body
+    // - is appended by each record, then FastCgiParseOutput() makes it the HTTP
+    // response body with no copy
+    // - is allocated by chunks to avoid a reallocation per record: its actual
+    // length is OutputLen until Done
     Output: RawByteString;
+    /// the frtStdOut bytes received so far within Output
+    OutputLen: PtrInt;
     /// the frtStdErr content received so far
     Error: RawUtf8;
     /// the application exit code, as received with frtEndRequest
@@ -319,7 +323,7 @@ type
     fMethods: TUriRouterMethods;
     fCacheControlMaxAgeSec: integer;
     fHttpKeepAlive, fHttpHeadCacheSec, fHttpDirectGetKB, fHttpLimitPerSecond: integer;
-    fFastCgiTimeoutSec: integer;
+    fFastCgiTimeoutSec, fFastCgiClients: integer;
     fMemCache: THttpProxyMem; // owned as TSynAutoCreateFields
     fDiskCache: THttpProxyDisk;
     fRejectCsv: RawUtf8;
@@ -379,6 +383,12 @@ type
     // - default is 60 seconds
     property FastCgiTimeoutSec: integer
       read fFastCgiTimeoutSec write fFastCgiTimeoutSec;
+    /// how many TFastCgiAsyncConnections are used in turn for a fcgi:// Source
+    // - each has its own thread to read and parse the responses, so that
+    // several responses are processed in parallel, e.g. big ones
+    // - default 0 will use as many as CPU cores, up to 8
+    property FastCgiClients: integer
+      read fFastCgiClients write fFastCgiClients;
     /// how many seconds HEAD requests could be cached in memory
     // - 0 would disable head caching
     // - default is 60, i.e. cache HEAD response for 1 minute
@@ -465,8 +475,11 @@ type
     property Options: THttpProxyServerOptions
       read fOptions write fOptions;
     /// the number of threads of the HTTP/HTTPS content delivery
-    // - default value is 4 sub-threads which is enough to scale well if no
-    // content is to be generated
+    // - default value is the number of CPU cores + 1, which is enough to scale
+    // well if no content is to be generated
+    // - with fcgi:// Sources, each request connects to the application from a
+    // HTTP thread, so more threads (e.g. 4 times the CPU cores) may be needed
+    // for small responses
     property ThreadCount: integer
       read fThreadCount write fThreadCount;
     /// custom log settings for the psoEnableLogging option
@@ -586,7 +599,8 @@ type
     fSource: THttpProxySource;
     fAlgos: THashAlgos; // may be in [hfMD5, hfSha1, hfSha256] range
     fRemoteUri: TUri;
-    fFastCgi: TFastCgiAsyncConnections; // for hpsFastCgi
+    fFastCgi: array of TFastCgiAsyncConnections; // for hpsFastCgi
+    fFastCgiNext: integer; // round robin
     fFastCgiRoot, fFastCgiPrefix: RawUtf8;
     fHeadCache: TSynDictionary; // THash160 / THeadCache
     fMemCache: TSynDictionary;  // THash160 / Content:RawByteString
@@ -1077,6 +1091,7 @@ end;
 procedure TFastCgiResponse.Init;
 begin
   Output := '';
+  OutputLen := 0;
   Error := '';
   AppStatus := 0;
   ProtocolStatus := 0;
@@ -1105,7 +1120,13 @@ begin
     inc(P, SizeOf(TFastCgiHeader));
     case h^.RecType of
       frtStdOut:
-        Append(Output, P, clen);
+        if clen <> 0 then
+        begin
+          if OutputLen + clen > length(Output) then
+            SetLength(Output, NextGrow(OutputLen + clen)); // few reallocations
+          MoveFast(P^, PByteArray(Output)[OutputLen], clen);
+          inc(OutputLen, clen);
+        end;
       frtStdErr:
         Append(Error, P, clen);
       frtEndRequest:
@@ -1118,6 +1139,10 @@ begin
           AppStatus := bswap32(PCardinal(P)^);
           ProtocolStatus := ord(P[4]);
           Done := true;
+          if OutputLen = 0 then
+            Output := ''
+          else if OutputLen <> length(Output) then
+            FakeLength(Output, OutputLen); // no reallocation
         end;
     end; // any other record type is ignored
     inc(P, total - SizeOf(TFastCgiHeader));
@@ -1327,7 +1352,7 @@ end;
 destructor THttpProxyUrl.Destroy;
 begin
   inherited Destroy;
-  FreeAndNil(fFastCgi);
+  ObjArrayClear(fFastCgi);
   FreeAndNil(fMemCache);
   FreeAndNil(fHashCache);
   FreeAndNil(fHeadCache);
@@ -1978,7 +2003,7 @@ end;
 
 procedure THttpProxyServer.Stop;
 var
-  i: PtrInt;
+  i, j: PtrInt;
 begin
   if fServer <> nil then
     with fLog.Enter('Stop %', [fServer], self) do
@@ -1986,8 +2011,11 @@ begin
       fServer.Shutdown;
       // FastCGI connections do answer via fServer.AsyncResponse
       for i := 0 to high(fUrl) do
-        if fUrl[i].fFastCgi <> nil then
-          fUrl[i].fFastCgi.Shutdown;
+        for j := 0 to high(fUrl[i].fFastCgi) do
+          fUrl[i].fFastCgi[j].Terminate; // their threads finish in parallel
+      for i := 0 to high(fUrl) do
+        for j := 0 to high(fUrl[i].fFastCgi) do
+          fUrl[i].fFastCgi[j].Shutdown;
       FreeAndNil(fServer);
     end;
   // FreeAndNil(fServer) joined the request/idle threads, so the count
@@ -2016,7 +2044,7 @@ var
   one: THttpProxyUrl;
   s: THttpProxyUrlSettings;
   hps: THttpProxySource;
-  i: PtrInt;
+  i, j, n: PtrInt;
 begin
   fSources := [];
   fUrlOptions := [];
@@ -2052,8 +2080,17 @@ begin
             while (length(one.fFastCgiRoot) > 1) and
                   (one.fFastCgiRoot[length(one.fFastCgiRoot)] = '/') do
               SetLength(one.fFastCgiRoot, length(one.fFastCgiRoot) - 1);
-            one.fFastCgi := TFastCgiAsyncConnections.Create(fServer,
-              one.fRemoteUri, s.FastCgiTimeoutSec, fLog);
+            n := s.FastCgiClients;
+            if n <= 0 then
+            begin
+              n := SystemInfo.dwNumberOfProcessors;
+              if n > 8 then
+                n := 8;
+            end;
+            SetLength(one.fFastCgi, n);
+            for j := 0 to n - 1 do
+              one.fFastCgi[j] := TFastCgiAsyncConnections.Create(fServer,
+                one.fRemoteUri, s.FastCgiTimeoutSec, fLog);
           end;
         end
         else if IsHttp(s.Source) then
@@ -2156,7 +2193,7 @@ end;
 
 procedure THttpProxyServer.OnIdle(Sender: TObject; NowTix: Int64);
 var
-  i, mem, hash, head: integer;
+  i, j, mem, hash, head: integer;
   tixmin: cardinal;
   one: ^THttpProxyUrl;
   tmp: TSynLogClass; // for Delphi 7 compilation
@@ -2173,8 +2210,8 @@ begin
     inc(mem,  one^.fMemCache.DeleteDeprecated(NowTix));
     inc(hash, one^.fHashCache.DeleteDeprecated(NowTix));
     inc(head, one^.fHeadCache.DeleteDeprecated(NowTix));
-    if one^.fFastCgi <> nil then
-      one^.fFastCgi.Idle(NowTix);
+    for j := 0 to high(one^.fFastCgi) do
+      one^.fFastCgi[j].Idle(NowTix);
     inc(one);
   end;
   if mem + hash + head <> 0 then
@@ -2418,7 +2455,9 @@ begin
     request.Init;
     FastCgiAppendRequest(request, params.Buffer, params.Size, Ctxt.InContent);
     len := request.Size;
-    if one.fFastCgi.Send(Ctxt.AsyncHandle, request.Buffer, len) then
+    // several clients are used in turn, each with its own reading thread
+    if one.fFastCgi[cardinal(InterlockedIncrement(one.fFastCgiNext)) mod
+         cardinal(length(one.fFastCgi))].Send(Ctxt.AsyncHandle, request.Buffer, len) then
       result := HTTP_ASYNCRESPONSE
     else
       result := HTTP_BADGATEWAY; // the application could not be reached

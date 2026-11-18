@@ -9234,6 +9234,31 @@ begin
   resp.Init;
   CheckEqual(resp.Parse(#1#6#0#1#0#5#0#0'hel', 11), 0, 'incomplete record');
   Check(not resp.Done, 'not done');
+  // a big stdout stream, received as many records in several calls
+  bin := RandomWinAnsi(300000);
+  buf.Init;
+  FastCgiAppendStream(buf, frtStdOut, pointer(bin), length(bin));
+  buf.AddHex('01030001000800000000000000000000'); // endrequest
+  resp.Init;
+  body := ''; // the bytes not parsed yet, as a connection would keep them
+  n := 0;
+  while n < buf.Size do
+  begin
+    i := buf.Size - n;
+    if i > 50000 then
+      i := 50000; // record boundaries are not aligned with the calls
+    Append(body, PAnsiChar(buf.Buffer) + n, i);
+    inc(n, i);
+    status := resp.Parse(pointer(body), length(body));
+    if CheckFailed(status >= 0, 'big parse') then
+      break;
+    delete(body, 1, status);
+  end;
+  CheckEqual(length(body), 0, 'big consumed');
+  buf.Store.Done;
+  Check(resp.Done, 'big done');
+  CheckEqual(length(resp.Output), length(bin), 'big length');
+  Check(EqualBuf(resp.Output, bin), 'big content');
   // CGI output: headers ended by LF or CRLF, then the body
   ParseOutput('Content-Type: text/plain'#13#10'X-One: 1'#13#10#13#10'body', true);
   CheckEqual(status, HTTP_SUCCESS, 'default status');
@@ -9273,7 +9298,8 @@ begin
       DoFastCgiApp, {suspended=}false, {ManualWaitForAndFree=}true);
     settings.Server.Port := '8881';
     settings.Server.ThreadCount := 2;
-    settings.AddFastCgi('fcgi://127.0.0.1:8880/var/www', 'app');
+    // requests to 'app' are sent in turn to 3 clients, i.e. 3 reading threads
+    settings.AddFastCgi('fcgi://127.0.0.1:8880/var/www', 'app').FastCgiClients := 3;
     url := settings.AddFastCgi('fcgi://127.0.0.1:8880/var/www', 'slow');
     url.FastCgiTimeoutSec := 1;
     url := settings.AddFastCgi('fcgi://127.0.0.1:8880/var/www', 'getonly');
@@ -9449,7 +9475,11 @@ begin
               (GetTickCount64 < start) do
           SleepHiRes(1);
         CheckEqual(fcgirequests, n + 1, 'pending request');
+        start := GetTickCount64;
         proxy.Stop;
+        // all FastCGI clients are stopped at once, not one after the other: each
+        // may wait up to one second for its thread, with several per Source
+        Check(GetTickCount64 - start < 5000, 'stop delay');
       finally
         raw.Free;
       end;
