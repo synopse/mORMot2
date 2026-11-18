@@ -3461,8 +3461,10 @@ type
     // - aShareMode is applied in both cases, and defaults to fmShareRead
     // - the additional parameter also makes this signature distinct from
     // CreateRead(), so that C++Builder can reach both (avoid Delphi W1029)
+    // - aShareMode is an integer, as for FileOpen/FileCreate, and not a
+    // cardinal, which would collide with Create(aFileName, Mode) instead
     constructor CreateWrite(const aFileName: TFileName;
-      aShareMode: cardinal = fmShareRead);
+      aShareMode: integer = fmShareRead);
     /// explictely close the handle if needed
     destructor Destroy; override;
     /// overriden to use our FileSeek64() function
@@ -8216,7 +8218,7 @@ begin // raise EOSException on invalid handle/aFileName
 end;
 
 constructor TFileStreamEx.CreateWrite(const aFileName: TFileName;
-  aShareMode: cardinal);
+  aShareMode: integer);
 var
   h: THandle;
 begin
