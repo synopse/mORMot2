@@ -1155,20 +1155,31 @@ end;
 
 procedure TSynTestCase.Run(const OnTask: TNotifyEvent; Sender: TObject;
   const TaskName: RawUtf8; Threaded, NotifyTask, ForcedThreaded: boolean);
+var
+  start: int64;
+  log: ISynLog;
 begin
   if NotifyTask or
      ((not fOwner.fMultiThread) and
       (not ForcedThreaded)) or
      not Threaded then
+  begin
     NotifyProgress([TaskName]);
+    NotifyTask := true;
+  end;
   if not Assigned(OnTask) then
     exit;
   if ((not fOwner.fMultiThread) or // avoid timeout e.g. on slow VMs
       (not Threaded)) and
      not ForcedThreaded then
   begin
-    fOwner.DoLog(sllDebug, 'Run [%]', [TaskName]);
+    TSynLogTestLog.EnterLocal(log, 'Run [%] direct', [TaskName], self);
+    if NotifyTask then
+      QueryPerformanceMicroSeconds(start);
     OnTask(Sender); // run in main thread
+    if NotifyTask then
+      NotifyProgress([MicroSecFrom(start)]);
+    log := nil;
   end
   else
   begin
