@@ -5341,10 +5341,27 @@ procedure THttpAsyncServer.AsyncResponse(Handle: TConnectionAsyncHandle;
   const CustomHeaders: RawUtf8);
 var
   c: THttpAsyncServerConnection;
+  tix, endtix: cardinal;
 begin
   // thread-safe locate the connection using O(log(n)) Handle binary search
-  c := fAsync.ConnectionFindAndWaitLock(Handle, {LockWrite=}false, {ms=}40);
-  if c <> nil then
+  endtix := 0;
+  repeat
+    c := fAsync.ConnectionFindAndWaitLock(Handle, {LockWrite=}false, {ms=}40);
+    if c <> nil then
+      break;
+    if acoVerboseLog in fAsync.fOptions then
+      fAsync.DoLog(sllTrace, 'AsyncResponse on locked #%', [Handle], self);
+    if fAsync.ConnectionFind(Handle) = nil then
+    begin
+      fAsync.DoLog(sllWarning, 'AsyncResponse on closed #%', [Handle], self);
+      exit;
+    end;
+    tix := GetTickSec;
+    if endtix = 0 then
+      endtix := tix + 5 // never retry forever
+    else if tix > endtix then
+      EHttpAsyncConnections.RaiseUtf8('%.AsyncResponse lock timeout', [self]);
+  until false;
   // process within the read lock, since may respond before state is set
   try
     // verify expected connection state
@@ -5370,9 +5387,7 @@ begin
     end;
   finally
     c.UnLock({LockWrite=}false); // unless CloseConnection set c := nil
-  end
-  else if acoVerboseLog in fAsync.fOptions then
-    fAsync.DoLog(sllTrace, 'late AsyncResponse on closed #%', [Handle], self);
+  end;
 end;
 
 function THttpAsyncServer.Clients: THttpAsyncClientConnections;
