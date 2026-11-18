@@ -3862,6 +3862,8 @@ type
     /// add one AnsiChar to the internal buffer
     procedure Add(c: AnsiChar); overload;
       {$ifdef HASINLINE}inline;{$endif}
+    /// append some bytes encoded as hexadecimal to the internal buffer
+    procedure AddHex(const hex: RawUtf8);
     /// add one repeated AnsiChar to the internal buffer
     procedure AddChars(c: AnsiChar; n: PtrInt);
     /// append some bytes to the internal buffer
@@ -12971,6 +12973,19 @@ procedure TSynTempAdder.AddShort(const s: ShortString);
 begin
   if s[0] <> #0 then
     MoveFast(s[1], Add(ord(s[0]))^, ord(s[0]));
+end;
+
+procedure TSynTempAdder.AddHex(const hex: RawUtf8);
+var
+  n: PtrInt;
+  p: pointer;
+begin
+  n := length(hex);
+  if (n = 0) or
+     ((n and 1) <> 0) then
+    exit;
+  p := Prepare(n shr 1);
+  inc(Store.added, (ParseHex(pointer(hex), p, n) - pointer(hex)) shr 1);
 end;
 
 procedure TSynTempAdder.AddDirect(c: AnsiChar);

@@ -5889,7 +5889,7 @@ procedure TTestCoreBase.Integers;
     w: TBufferWriter;
     tmp, buf: TTemp16;
   begin
-    bin := HexToBin(hex);
+    bin := mormot.core.text.HexToBin(hex);
     CheckEqual(length(bin), length(hex) shr 1, 'HexToBin');
     // standard signed LEB128: compare with known encoding
     p := ToVarLeb64(expected, @tmp[0]);
@@ -5927,7 +5927,7 @@ procedure TTestCoreBase.Integers;
     r: TFastReader;
     failed: boolean;
   begin
-    bin := HexToBin(hex);
+    bin := mormot.core.text.HexToBin(hex);
     r.Init(bin);
     failed := false;
     // TSynLog.Family.ExceptionIgnoreCurrentThread := true; made by caller
@@ -7847,10 +7847,15 @@ procedure TTestCoreBase.Utf8Slow(Context: TObject);
 
   procedure CheckUtf8Hex(const Hex: RawUtf8; ValidUtf8, HasZero: boolean);
   var
-    s: RawByteString;
+    s, s2: RawByteString;
     expectedText, expectedBuffer: boolean;
+    a: TSynTempAdder;
   begin
-    s := HexToBin(Hex);
+    s := mormot.core.text.HexToBin(Hex);
+    a.Init;
+    a.AddHex(hex);
+    a.Done(s2);
+    CheckEqual(s, s2, 'a.AddHex');
     CheckEqual(length(s), length(Hex) shr 1);
     // Pascal and NotVoid always reject #0
     expectedText := ValidUtf8 and not HasZero;
@@ -8965,7 +8970,7 @@ begin
   PB := pointer(res);
   FromVarString(PB, U2);
   check(U2 = U);
-  U := HexTobin('2800541D251D541D2900'); // a nice Unicode mORMot glyph
+  U := mormot.core.text.HexTobin('2800541D251D541D2900'); // Unicode mORMot glyph
   {$ifdef HASCODEPAGE}
   CheckEqual(GetCodePage(U), CP_RAWBYTESTRING);
   {$endif HASCODEPAGE}
