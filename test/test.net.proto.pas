@@ -85,6 +85,7 @@ type
   /// this test case will validate several low-level protocols
   TNetworkProtocols = class(TSynTestCase)
   protected
+    safe: TLightLock;
     TempDir: TFileName;
     // for DNSAndLDAP
     synopsednsip: RawUtf8;
@@ -5355,10 +5356,10 @@ begin
     end;
   finally
     WaitNotProcessing('hpcStateFinal');
+    localserver.Free;
     peercachedirect := nil;
     hpc.Settings.Free;
     hpc.Free;
-    localserver.Free;
   end;
 end;
 
@@ -6878,7 +6879,7 @@ begin
     else
       result := TFileStreamEx.Create(bodyfile, fmCreate or fmShareRead);
   end;
-  inc(bodystreamed); // increment last: the tests poll on this counter
+  LockedInc32(@bodystreamed); // increment last: the tests poll on this counter
 end;
 
 function TNetworkProtocols.DoBodyRequest(Ctxt: THttpServerRequestAbstract): cardinal;
@@ -7779,9 +7780,11 @@ function TNetworkProtocols.DoHttpAsyncClientState(Sender: TObject;
   State: TOnHttpClientState; Connection: THttpAsyncClientConnection): TPollAsyncSocketOnReadWrite;
 begin
   // called from the threads of the THttpAsyncServer
+  safe.Lock;
   if State in [hcsFinished, hcsFailed] then
     asyncstatus := Connection.ResponseStatus;
   include(asyncstates, State); // last, since the test thread waits for it
+  safe.UnLock;
   result := soContinue;
 end;
 
@@ -7791,7 +7794,23 @@ var
   async: THttpAsyncServer;
   uri: TUri;
   i: integer;
-  endtix: Int64;
+  st: TOnHttpClientStates;
+
+  procedure SetSt;
+  var
+    endtix: Int64;
+  begin
+    endtix := GetTickCount64 + 5000;
+    repeat
+      safe.Lock;
+      st := asyncstates;
+      safe.UnLock;
+      if [hcsFinished, hcsFailed] * st <> [] then
+        break;
+      SleepHiRes(1);
+    until GetTickCount64 > endtix;
+  end;
+
 begin
   // THttpAsyncServer.Clients.StartRequest() to a THttpServer on the same host
   origin := THttpServer.Create('8876', nil, nil, 'origin', 2);
@@ -7802,33 +7821,29 @@ begin
     async.WaitStarted;
     for i := 1 to 3 do
     begin
+      st := [];
       asyncstates := [];
       asyncstatus := 0;
       CheckUtf8(uri.From('http://127.0.0.1:8876/x'), 'uri');
       Check(async.Clients.StartRequest(self, uri, 'GET', '', '', nil,
         DoHttpAsyncClientState) = nrOk, 'start');
-      endtix := GetTickCount64 + 5000;
-      while ([hcsFinished, hcsFailed] * asyncstates = []) and
-            (GetTickCount64 < endtix) do
-        SleepHiRes(1);
-      Check(hcsBeforeSendHeaders in asyncstates, 'request sent');
-      Check(hcsHeadersReceived in asyncstates, 'headers received');
-      Check(hcsFinished in asyncstates, 'finished');
-      Check(not (hcsFailed in asyncstates), 'not failed');
+      SetSt;
+      Check(hcsBeforeSendHeaders in st, 'request sent');
+      Check(hcsHeadersReceived in st, 'headers received');
+      Check(hcsFinished in st, 'finished');
+      Check(not (hcsFailed in st), 'not failed');
       CheckEqual(asyncstatus, HTTP_SUCCESS, 'status');
     end;
     // nobody listens on this port: the request should be notified as failed
+    st := [];
     asyncstates := [];
     CheckUtf8(uri.From('http://127.0.0.1:8875/x'), 'uri');
     if async.Clients.StartRequest(self, uri, 'GET', '', '', nil,
          DoHttpAsyncClientState) = nrOk then
     begin
-      endtix := GetTickCount64 + 5000;
-      while ([hcsFinished, hcsFailed] * asyncstates = []) and
-            (GetTickCount64 < endtix) do
-        SleepHiRes(1);
-      Check(hcsFailed in asyncstates, 'refused is failed');
-      Check(not (hcsFinished in asyncstates), 'refused is not finished');
+      SetSt;
+      Check(hcsFailed in st, 'refused is failed');
+      Check(not (hcsFinished in st), 'refused is not finished');
     end;
   finally
     async.Free;
@@ -8454,7 +8469,10 @@ begin
     settings.AddProxy(ORIGIN, 'remote');
     settings.AddProxy('http://127.0.0.1:8882/files', 'noslash');
     url := settings.AddProxy(ORIGIN, 'slow');
-    url.HttpLimitPerSecond := 200 shl 10; // big.bin download takes 1.5 second
+    if fOwner.MultiThread then
+      url.HttpLimitPerSecond := 1024 shl 10 // big.bin download at 1MB/s
+    else
+      url.HttpLimitPerSecond := 200 shl 10; // big.bin download takes 1.5 second
     url.DiskCache.Path := cacheslow;
     url := settings.AddProxy(ORIGIN, 'fresh');
     url.HttpHeadCacheSec := 0; // always ask the origin for its validator
@@ -9151,29 +9169,37 @@ begin
     CheckEqual(fcgirequests, n, 'wsgi NUL must not reach the application');
     Expect('GET', '/app/echo.php', HTTP_SUCCESS);
     CheckEqual(Field(1), '/var/www/echo.php', 'php script mapping unchanged');
-    // an application which never answers
-    start := GetTickCount64;
-    Expect('GET', '/slow/x.php', HTTP_GATEWAYTIMEOUT);
-    Check(GetTickCount64 - start >= 900, 'timeout delay');
-    Expect('GET', '/app/echo.php', HTTP_SUCCESS); // the other requests still work
-    CheckEqual(Field(0), 'GET', 'after timeout');
-    // stop the proxy while a request is still waiting for its application
-    FreeAndNil(clt);
-    n := fcgirequests;
-    raw := TCrtSocket.Open('127.0.0.1', '8881', nlTcp, 10000);
-    try
-      raw.SockSend('GET /slow/x.php HTTP/1.1');
-      raw.SockSend('Host: 127.0.0.1:8881');
-      raw.SockSendCRLF;
-      raw.SockSendFlush;
-      start := GetTickCount64 + 5000;
-      while (fcgirequests = n) and
-            (GetTickCount64 < start) do
-        SleepHiRes(1);
-      CheckEqual(fcgirequests, n + 1, 'pending request');
+    if not fOwner.MultiThread then
+    begin
+      // an application which never answers (not validated in --multithread path)
+      start := GetTickCount64;
+      Expect('GET', '/slow/x.php', HTTP_GATEWAYTIMEOUT);
+      Check(GetTickCount64 - start >= 900, 'timeout delay');
+      Expect('GET', '/app/echo.php', HTTP_SUCCESS); // the other requests still work
+      CheckEqual(Field(0), 'GET', 'after timeout');
+      // stop the proxy while a request is still waiting for its application
+      FreeAndNil(clt);
+      n := fcgirequests;
+      raw := TCrtSocket.Open('127.0.0.1', '8881', nlTcp, 10000);
+      try
+        raw.SockSend('GET /slow/x.php HTTP/1.1');
+        raw.SockSend('Host: 127.0.0.1:8881');
+        raw.SockSendCRLF;
+        raw.SockSendFlush;
+        start := GetTickCount64 + 5000;
+        while (fcgirequests = n) and
+              (GetTickCount64 < start) do
+          SleepHiRes(1);
+        CheckEqual(fcgirequests, n + 1, 'pending request');
+        proxy.Stop;
+      finally
+        raw.Free;
+      end;
+    end
+    else
+    begin
+      FreeAndNil(clt);
       proxy.Stop;
-    finally
-      raw.Free;
     end;
     // restart with the same settings
     proxy.Start;

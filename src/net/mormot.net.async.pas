@@ -4350,6 +4350,7 @@ begin
   fOwner.DoLog(sllWarning, 'AfterWrite=%: state=%',
     [ToText(result)^, HTTP_STATE[fHttp.State]], self);
   NotifyStateChange(hcsFailed);
+  result := soClose; // mandatory: let ProcessWrite close the connection
 end;
 
 function THttpAsyncClientConnection.NotifyStateChange(

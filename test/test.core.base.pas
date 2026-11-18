@@ -4234,6 +4234,8 @@ begin
   finally
     p.Free;
   end;
+  if IsDebuggerPresent then
+    exit; // those last tests are not debugger friendly
   // writing to an ended process returns false, and raises no SIGPIPE
   p := TExternalProcess.Create;
   try
@@ -4248,6 +4250,8 @@ begin
   finally
     p.Free;
   end;
+  if fOwner.MultiThread then
+    exit; // another thread is likely to open handles
   // no handle nor zombie leak
   files := OpenedHandles;
   pid := 0;
