@@ -1190,6 +1190,8 @@ end;
 procedure TFastCgiAsyncConnection.OnClose;
 begin
   HttpResponse(HTTP_BADGATEWAY); // closed with no frtEndRequest
+  fRd.Clear; // one request per connection: don't keep this buffer in the GC
+  fResponse.Init;
 end;
 
 function TFastCgiAsyncConnection.OnLastOperationIdle(
@@ -1213,6 +1215,7 @@ begin
   fTimeoutSec := aTimeoutSec;
   inherited Create(aUri.Server, aUri.Port, {clients=}0, aTimeoutSec, nil, nil,
     TFastCgiAsyncConnection, 'fastcgi', aLog, ASYNC_OPTION_PROD, {threads=}1);
+  fSockets.ReadMaxBytes := 128 shl 10; // parse 64KB records as they come
 end;
 
 function TFastCgiAsyncConnections.GetLastOperationIdleSeconds: cardinal;
