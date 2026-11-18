@@ -6986,11 +6986,10 @@ begin
   case osv.win of
     wTen, wTen_64, wEleven, wEleven_64: // desktop versions
       txt4 := FindOsBuild(txt4, high(DESKTOP_INT), @DESKTOP_INT, @DESKTOP_TXT);
-    wServer2016, wServer2016_64, wServer2019_64, wServer2022_64, wServer2025_64,
-    wServer2028_64:
+    wServer2016, wServer2016_64, wServer2019_64, wServer2022_64, wServer2025_64:
       txt4 := FindOsBuild(txt4, high(SERVER_INT), @SERVER_INT, @SERVER_TXT);
   else
-    exit;
+    exit; // wServer2028_64 has no confirmed feature-release designation
   end;
   if txt4 = 0 then
     exit;
