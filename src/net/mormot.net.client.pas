@@ -4168,6 +4168,13 @@ procedure THttpClientSocket.RequestInternal(var ctxt: THttpClientRequest);
          [msg, fSock.Socket, FatalErrorCode, BOOL_STR[rMain in ctxt.Retry]], self);
     if Aborted then
       ctxt.Status := HTTP_CLIENTERROR
+    else if (ctxt.OutStream <> nil) and
+            (ctxt.OutStream.Position <> ctxt.OutStreamInitialPos) then
+    begin
+      // partial response already written: retry would corrupt the stream
+      Close;
+      ctxt.Status := FatalErrorCode;
+    end
     else if rMain in ctxt.Retry then
       // we should retry once -> return error only if failed twice
       ctxt.Status := FatalErrorCode
