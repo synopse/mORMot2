@@ -1213,7 +1213,7 @@ begin
   fHttpServer := aHttpServer;
   fLayer := aUri.Layer;
   fTimeoutSec := aTimeoutSec;
-  inherited Create(aUri.Server, aUri.Port, {clients=}0, aTimeoutSec, nil, nil,
+  inherited Create(aUri.Server, aUri.Port, {clients=}0, nil, nil,
     TFastCgiAsyncConnection, 'fastcgi', aLog, ASYNC_OPTION_PROD, {threads=}1);
   fSockets.ReadMaxBytes := 128 shl 10; // parse 64KB records as they come
 end;
@@ -1243,10 +1243,11 @@ begin
   result := false;
   if Terminated then
     exit;
-  // blocking connection, since the application is likely to be local
+  // connect as blocking connection, since the application is likely to be local,
+  // but with all timeout=0 to speed up the process especially on Windows
   with fThreadClients do
-    if NewSocket(Address, Port, fLayer, {dobind=}false, Timeout, Timeout,
-         Timeout, {retry=}0, sock, @addr) <> nrOk then
+    if NewSocket(Address, Port, fLayer, {dobind=}false, {timeout=}0, 0, 0,
+         {retry=}0, sock, @addr) <> nrOk then
       exit;
   if (sock.MakeAsync <> nrOk) or
      not ConnectionCreate(sock, addr, c) then
@@ -2400,8 +2401,10 @@ function THttpProxyServer.OnFastCgi(Ctxt: THttpServerRequest;
 var
   one: THttpProxyUrl;
   len: integer;
+  start: Int64;
   params, request: TSynTempAdder; // no heap allocation for most GET requests
 begin
+  QueryPerformanceMicroSeconds(start);
   // compute the CGI variables from this request
   result := HTTP_NOTFOUND; // unsafe path or no script
   len := 0;
@@ -2423,8 +2426,8 @@ begin
   end;
   params.Store.Done;
   if fHasLog in fFlags then
-    fLog.Add.Log(sllDebug, 'OnFastCgi: % % status=% len=%',
-      [Ctxt.Method, Ctxt.Url, result, len], self);
+    fLog.Add.Log(sllDebug, 'OnFastCgi: % % status=% len=% in %',
+      [Ctxt.Method, Ctxt.Url, result, len, MicroSecFrom(start)], self);
 end;
 
 function THttpProxyServer.OnExecute(Ctxt: THttpServerRequestAbstract): cardinal;
