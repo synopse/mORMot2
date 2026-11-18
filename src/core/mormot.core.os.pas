@@ -451,7 +451,8 @@ type
     wEleven_64,
     wServer2019_64,
     wServer2022_64,
-    wServer2025_64);
+    wServer2025_64,
+    wServer2028_64);
 
   /// the running Operating System, encoded as a 32-bit integer
   TOperatingSystemVersion = packed record
@@ -536,7 +537,8 @@ const
     '11 64bit',             // wEleven_64
     'Server 2019 64bit',    // wServer2019_64
     'Server 2022 64bit',    // wServer2022_64
-    'Server 2025 64bit');   // wServer2025_64
+    'Server 2025 64bit',    // wServer2025_64
+    'Server 2028 64bit');   // wServer2028_64
 
   /// the recognized Windows versions which are 32-bit
   WINDOWS_32 = [
@@ -6945,20 +6947,20 @@ end;
 { ****************** Gather Operating System Information }
 
 const // cf https://preview.changewindows.org/platforms/pc
-  DESKTOP_INT: array[0 .. 20] of cardinal = (
+  DESKTOP_INT: array[0 .. 21] of cardinal = (
      10240,  10586,  14393,  15063,  16299,  17134,  17763,  18362,  18363,
      19041,  19042,  19043,  19044,  19045,  22000,  22621,  22631,  26100,
-     26200,  26300, 29570); // detect 27H2 Canary builds since 17/4/2026
+     26200,  26300,  28000,  29570);
   DESKTOP_TXT: array[0 .. high(DESKTOP_INT)] of TTemp4  = (
     '1507', '1511', '1607', '1703', '1709', '1803', '1809', '1903', '1909',
     '2004', '20H2', '21H1', '21H2', '22H2', '21H2', '22H2', '23H2', '24H2',
-    '25H2', '26H2', '27H2'); // stored as 32-bit cardinal = TTemp4
-  SERVER_INT: array[0 .. 11] of cardinal = (
+    '25H2', '26H2', '26H1', '27H2'); // stored as 32-bit cardinal = TTemp4
+  SERVER_INT: array[0 .. 12] of cardinal = (
     14393,  16299,  17134,  17763,  18362,  18363,  19041,  19042,  20348,
-    25398,  26100, 29651);   // detect 26H2 Canary builds since 24/8/2026
+    25398,  26100,  29651,  29706);
   SERVER_TXT: array[0 .. high(SERVER_INT), 0 .. 3] of AnsiChar = (
     '1607', '1709', '1803', '1809', '1903', '1909', '2004', '20H2', '21H2',
-    '23H2', '24H2', '26H2');
+    '23H2', '24H2', '26H2', '27H2');
 
 function FindOsBuild(c: cardinal; hi: PtrInt; b, t: PCardinalArray): cardinal;
 begin
@@ -6984,7 +6986,8 @@ begin
   case osv.win of
     wTen, wTen_64, wEleven, wEleven_64: // desktop versions
       txt4 := FindOsBuild(txt4, high(DESKTOP_INT), @DESKTOP_INT, @DESKTOP_TXT);
-    wServer2016, wServer2016_64, wServer2019_64, wServer2022_64, wServer2025_64:
+    wServer2016, wServer2016_64, wServer2019_64, wServer2022_64, wServer2025_64,
+    wServer2028_64:
       txt4 := FindOsBuild(txt4, high(SERVER_INT), @SERVER_INT, @SERVER_TXT);
   else
     exit;

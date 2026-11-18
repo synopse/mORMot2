@@ -5763,7 +5763,10 @@ begin
         if OSVersionInfo.dwBuildNumber >= 17609 then     // up to 17763 RTM
           if OSVersionInfo.dwBuildNumber >= 19504 then   // up to 20348 Preview
             if OSVersionInfo.dwBuildNumber >= 25871 then // up to 26100 Preview
-              Vers := wServer2025_64
+              if OSVersionInfo.dwBuildNumber >= 29531 then
+                Vers := wServer2028_64
+              else
+                Vers := wServer2025_64
             else
               Vers := wServer2022_64
           else
