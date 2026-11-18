@@ -8594,6 +8594,15 @@ begin
             text := 'Location: /other'#13#10#13#10
           else if script = '/app/nohead.php' then
             text := 'no header at all'
+          else if script = '/app/eof.php' then
+          begin
+            // the whole FastCGI stream is ?total bytes: 28 bytes of headers,
+            // then the body, one stdout record and the void one (2 x 8 bytes)
+            // and the end request record (16 bytes)
+            text := 'Content-Type: text/plain'#13#10#13#10;
+            Append(text, RawUtf8OfChar('x',
+              GetInteger(pointer(Param('QUERY_STRING'))) - 28 - 32));
+          end
           else if script = '/app/big.php' then
           begin
             text := 'Content-Type: application/octet-stream'#13#10#13#10;
@@ -8871,6 +8880,15 @@ begin
     Expect('GET', '/app/big.php', HTTP_SUCCESS);
     CheckEqual(length(clt.Content), length(fcgibig), 'big length');
     CheckEqual(crc32cHash(clt.Content), crc32cHash(fcgibig), 'big');
+    // a response which fills exactly the 32KB reading buffer of the proxy
+    // just before the application closes the connection
+    for i := 1 to 3 do
+    begin
+      Expect('GET', '/app/eof.php?32768', HTTP_SUCCESS);
+      CheckEqual(length(clt.Content), 32768 - 28 - 32, 'eof 32KB');
+      Expect('GET', '/app/eof.php?65536', HTTP_SUCCESS);
+      CheckEqual(length(clt.Content), 65536 - 28 - 32, 'eof 64KB');
+    end;
     // the output is sent back whatever the application exit code or stderr is
     Expect('GET', '/app/exit.php', HTTP_SUCCESS);
     CheckEqual(Field(0), 'GET', 'exit code');
