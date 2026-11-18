@@ -1644,6 +1644,35 @@ end;
 
 { TWinIocp }
 
+// discard an IOCP completion without invoking the application callback
+// - used when GetNext() races Terminate and when Destroy drains the queue
+// - for Enqueue(), ov is directly the subscription. For Winsock completions,
+// ov points to an embedded TOverlapped, as decoded in GetNext()
+function IocpFinishDiscarded(ov, completionkey: pointer): boolean;
+var
+  one: PIocpSubscription;
+  event: TWinIocpEvent;
+begin
+  result := false;
+  if (ov = nil) or
+     (completionkey = nil) then
+    exit; // timeout or Terminate() notification: no owned reference
+  one := ov;
+  if (PtrUInt(completionkey) - 1) > PtrUInt(high(TWinIocpEvent)) then
+  begin
+    inc(POverlapped(one));
+    event := wieRecv;
+    PByte(@event)^ := PByte(one)^;
+    if event > wieConnect then
+      exit; // corrupt overlapped structure: never release an unknown slot
+    dec(PByte(one), PtrUInt(@PIocpSubscription(nil)^.over[event].event));
+    if pointer(one^.head.sequence) <> completionkey then
+      exit; // stale completion: do not release a recycled slot
+  end;
+  one^.owner.FinishNext(pointer(one)); // may be forwarded to another IOCP
+  result := true;
+end;
+
 constructor TWinIocp.Create(processing: integer; options: TWinIocpOptions);
 begin
   if processing = 0 then
@@ -1669,83 +1698,127 @@ begin
     IocpPostQueuedStatus(fIocp, 0, nil, nil); // notify threads/queue
 end;
 
+var // resolve dynamically to preserve compatibility with XP
+  CancelIoEx: function(hFile: THandle; lpOverlapped: POverlapped): BOOL; stdcall;
+
 destructor TWinIocp.Destroy;
 var
-  tix, endtix, tmp, err: cardinal;
+  tix, endtix, tmp, err, bytes: cardinal;
   tmplen: integer;
   res: TNetResult;
   txt: PAnsiChar;
   sub: PIocpSubscription;
+  ov, completionkey: pointer;
 begin
   if Assigned(fOnLog) then
-    fOnLog(sllDebug, 'Destroy count=%', [fOne.Count], self);
-  // notify the queue we are about to close
+    fOnLog(sllDebug, 'Destroy count=% posted=%', [fOne.Count, fPosted], self);
   if not fTerminated then
     Terminate;
-  // wait for all pending GetNext() termination
-  endtix := 0;
-  if fWaiting <> 0 then
-    repeat
-      if Assigned(fOnLog) then
-        fOnLog(sllDebug, 'Destroy waiting=%', [fWaiting], self);
-      IocpPostQueuedStatus(fIocp, 0, nil, nil); // notify again (paranoid)
-      SleepHiRes(10);
-      tix := GetTickSec;
-      if endtix = 0 then
-        endtix := tix + 5
-      else if tix > endtix then
-        break; // never wait forever
-    until fWaiting = 0;
-  // delete the queue
-  if fIocp <> 0 then
-    CloseHandle(fIocp);
-  // close and/or log remainining sockets
-  if Assigned(fOnLog) or
-     (wioUnsubscribeShutdownSocket in fOptions) then
+  // mormot.net.async joins all GetNext()/FinishNext() workers before Free.
+  // Other callers must ensure the same: fWaiting only counts blocked waits,
+  // not callbacks already returned by GetNext(). Do not free a live waiter.
+  endtix := GetTickSec + 5;
+  while fWaiting <> 0 do
   begin
-    sub := fOne.Head;
-    while sub <> nil do
+    IocpPostQueuedStatus(fIocp, 0, nil, nil);
+    SleepHiRes(10);
+    tix := GetTickSec;
+    if tix >= endtix then
     begin
       if Assigned(fOnLog) then
+        fOnLog(sllWarning, 'Destroy waiting=%', [fWaiting], self);
+      endtix := tix + 5;
+    end;
+  end;
+  // stop kernel I/O *before* closing the IOCP or releasing OVERLAPPED memory
+  // - CancelIoEx is needed for non-owning queues (e.g. fIocpAccept): they must
+  // not call closesocket() on the listening socket or a client-owned socket
+  if not Assigned(CancelIoEx) then
+    CancelIoEx := LibraryResolve(kernelHandle, 'CancelIoEx');
+  sub := fOne.Head;
+  while sub <> nil do
+  begin
+    if Assigned(fOnLog) then
+    begin
+      tmplen := 0;
+      err := NO_ERROR;
+      if sub^.recvclosing then
+        txt := 'eventual close'
+      else
       begin
-        tmplen := 0;
-        err := NO_ERROR;
-        if sub^.recvclosing then  // expected behavior - not a leak
-          txt := 'eventual close' // shutdown() was made: no recv()
+        if wioUnsubscribeShutdownSocket in fOptions then
+          txt := 'close'
         else
-        begin
-          if wioUnsubscribeShutdownSocket in fOptions then
-            txt := 'close'
-          else
-            txt := 'leak';
-          // check the socket state
-          tmplen := mormot.net.sock.recv(sub^.socket, @tmp, tmplen, 0);
-          // return usually recv=-1 + WSAEWOULDBLOCK so not recoverable
-          if tmplen < 0 then
-            err := RawSocketErrNo;
-        end;
-        if (err = NO_ERROR) or
-           (err = WSAEWOULDBLOCK) then
-          fOnLog(sllTrace, 'Destroy: % sock=%', [txt, pointer(sub^.socket)], self)
-        else
-          fOnLog(sllWarning, 'Destroy: % sock=% unexpected recv=% %', [txt,
-            pointer(sub^.socket), tmplen, WinErrorShort(err)], self);
+          txt := 'cancel';
+        tmplen := mormot.net.sock.recv(sub^.socket, @tmp, tmplen, 0);
+        if tmplen < 0 then
+          err := RawSocketErrNo;
       end;
-      if (wioUnsubscribeShutdownSocket in fOptions) and
-         not sub^.closed then
+      if (err = NO_ERROR) or
+         (err = WSAEWOULDBLOCK) then
+        fOnLog(sllTrace, 'Destroy: % sock=%', [txt, pointer(sub^.socket)], self)
+      else
+        fOnLog(sllWarning, 'Destroy: % sock=% unexpected recv=% %',
+          [txt, pointer(sub^.socket), tmplen, WinErrorShort(err)], self);
+    end;
+    if wioUnsubscribeShutdownSocket in fOptions then
+    begin
+      if not sub^.closed then
       begin
-        res := TNetSocket(sub^.socket).Close;
+        sub^.closed := true; // FinishNext must never close this handle again
+        res := TNetSocket(sub^.socket).Close; // cancels pending I/O
         if Assigned(fOnLog) and
-           (res <> nrOk) then // brutal abort
+           (res <> nrOk) then
           fOnLog(sllWarning, 'Destroy: Close(%) failed as %',
             [pointer(sub^.socket), _NR[res]], self);
       end;
-      sub := sub.head.next;
+    end
+    else if Assigned(CancelIoEx) and
+            not sub^.retired then
+      CancelIoEx(THandle(sub^.socket), nil); // borrowed socket stays open
+    sub := sub.head.next;
+  end;
+  // An in-flight AcceptEx may also own an accepted-but-not-yet-published
+  // socket. Closing it cancels AcceptEx without closing the listening socket.
+  if fAcceptSocket <> nil then
+  begin
+    fAcceptSocket^.Close;
+    fAcceptSocket := nil;
+  end;
+  // No application workers remain. Drain real, failed and forwarded IOCP
+  // completions, releasing the reference of each successfully posted task.
+  // fPosted was incremented for both PrepareNext and Enqueue.
+  // A missing completion must NOT be papered over with fOne.Done: that would
+  // free memory still potentially referenced by a Winsock operation.
+  endtix := GetTickSec + 5;
+  while fPosted <> 0 do // never release buffers with unmatched I/O
+  begin
+    bytes := 0;
+    completionkey := nil;
+    ov := nil;
+    IocpGetQueuedStatus(fIocp, bytes, completionkey, ov, 1000);
+    if (ov <> nil) and
+       (completionkey <> nil) then
+    begin
+      LockedDec32(@fPosted);
+      if not IocpFinishDiscarded(ov, completionkey) and
+         Assigned(fOnLog) then
+        fOnLog(sllWarning, 'Destroy: invalid completion % %',
+          [ov, completionkey], self);
+    end;
+    tix := GetTickSec;
+    if tix >= endtix then
+    begin
+      if Assigned(fOnLog) then
+        fOnLog(sllWarning, 'Destroy drain pending=% subscriptions=%',
+          [fPosted, fOne.Count], self);
+      endtix := tix + 5;
     end;
   end;
-  if fAcceptSocket <> nil then
-    fAcceptSocket^.Close;
-  // release all memory slots
+  if Assigned(fOnLog) then
+    fOnLog(sllDebug, 'Destroy drained posted=%', [fPosted], self);
+  if fIocp <> 0 then
+    CloseHandle(fIocp); // only after all tracked completions were consumed
   fOne.Done;
   inherited Destroy;
 end;
@@ -2012,11 +2085,20 @@ begin
       if ov <> nil then
         err := GetLastError; // decoded by WSAGetOverlappedResult() below
     LockedDec32(@fWaiting);
-    if fTerminated or
-       (ov = nil) or // no overlapped: fIocp handle is likely to be closed
-       (completionkey = nil) then // nil from Terminate
+    if (ov = nil) or // timeout or wake-up from Terminate()
+       (completionkey = nil) then
       exit;
     LockedDec32(@fPosted);
+    if fTerminated then
+    begin
+      // A real completion may win the race against Terminate(). Its
+      // reference belongs to this worker and must not be lost at shutdown.
+      if not IocpFinishDiscarded(ov, completionkey) and
+         Assigned(fOnLog) then
+        fOnLog(sllWarning, 'GetNext: invalid shutdown completion % %',
+          [ov, completionkey], self);
+      exit;
+    end;
     // check first if was not a direct event from Enqueue()
     e := PtrUInt(completionkey) - 1;
     if e <= PtrUInt(ord(high(event))) then

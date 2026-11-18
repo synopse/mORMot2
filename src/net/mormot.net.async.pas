@@ -2797,12 +2797,12 @@ begin
   if fFlag1 <> 0 then // fFlag2 used by TAsyncServer.Shutdown
     exit;             // use this counter to avoid duplicated calls
   inc(fFlag1);
+  Terminate; // mark the accept thread as terminating BEFORE waking its IOCP
   {$ifdef USE_WINIOCP}
   fIocpAccept.Terminate;  // notify the IOCP queue - no Unsubscribe(fIocpAcceptSub)
   {$endif USE_WINIOCP}
   if fSockets <> nil then
     fSockets.fTerminated := true; // shutdown ASAP
-  Terminate;
   // terminate the main clients asynchronous logic
   if fSockets <> nil then
   begin
@@ -2850,7 +2850,11 @@ begin
   if (GetCurrentThreadId <> ThreadID) and
      not Suspended then
     WaitFor;                   // eventual end of main accept/connect loop
-  {$ifndef USE_WINIOCP}
+  {$ifdef USE_WINIOCP}
+  // fIocpAccept may still contain Enqueue() events owning references into
+  // fSockets.fIocpRecvSend: drain it while their original owner is alive
+  FreeAndNil(fIocpAccept);
+  {$else}
   if fSockets <> nil then
     fSockets.ClosePendingRead; // purge fRead.fPending[]
   {$endif USE_WINIOCP}
@@ -2866,9 +2870,8 @@ destructor TAsyncConnections.Destroy;
 begin
   Shutdown;
   inherited Destroy;
-  {$ifdef USE_WINIOCP}
-  FreeAndNil(fIocpAccept);
-  {$endif USE_WINIOCP}
+  // fIocpAccept was already drained and freed during Shutdown,
+  // before the forwarded-event owner fSockets.fIocpRecvSend.
   if (acoNoConnectionTrack in fOptions) or
      (fConnectionCount = 0) then
     exit;
@@ -3791,9 +3794,9 @@ begin
       end;
       touchandgo.ShutdownAndClose(false);  // release the AW thread
     end;
-    fServer.Close; // shutdown the socket to unlock Accept() in Execute
+    fServer.Close;    // shutdown the socket to unlock Accept() in Execute
   end;
-  inherited Shutdown;
+  inherited Shutdown; // eventually release all associated threads and sockets
 end;
 {$endif USE_WINIOCP}
 
@@ -3929,9 +3932,16 @@ begin
             // retrieve the completed accept
             if fIocpAccept.GetNextAccept(sub, client, sin) then
               res := nrOk;
-            // always re-arm AcceptEx after consuming its completion
+            // do not re-arm if shutdown started after GetNext() returned
             if not Terminated then
             begin
+              if fIocpAccept.Terminated then
+              begin
+                if client <> nil then
+                  client.Close;
+                break; // outer finally releases sub via FinishNext()
+              end;
+              // always re-arm AcceptEx after consuming its completion
               s := nil; // allocate in PrepareNext()
               {$ifdef IOCP_ACCEPT_PREALLOCATE_SOCKETS}
               if socketsalloc <= high(sockets) then
@@ -3943,8 +3953,17 @@ begin
               try
                 if not fIocpAccept.PrepareNext(
                          'next', sub, wieAccept, nil, 0, s) then
-                  raise EWinIocp.Create(
-                    'TAsyncServer.Execute: rearming AcceptEx failed');
+                  if Terminated or
+                     fIocpAccept.Terminated then
+                  begin
+                    // a rejected re-arm during shutdown is not an I/O error
+                    if client <> nil then
+                      client.Close;
+                    break; // outer finally releases sub via FinishNext()
+                  end
+                  else
+                    raise EWinIocp.Create(
+                      'TAsyncServer.Execute: rearming AcceptEx failed');
               except
                 // cannot continue accepting: release any client socket
                 if client <> nil then
