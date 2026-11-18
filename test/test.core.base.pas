@@ -7845,6 +7845,37 @@ procedure TTestCoreBase.Utf8Slow(Context: TObject);
     CheckEqual(s, exp);
   end;
 
+  procedure CheckUtf8Hex(const Hex: RawUtf8; ValidUtf8, HasZero: boolean);
+  var
+    s: RawByteString;
+    expectedText, expectedBuffer: boolean;
+  begin
+    s := HexToBin(Hex);
+    CheckEqual(length(s), length(Hex) shr 1);
+    // Pascal and NotVoid always reject #0
+    expectedText := ValidUtf8 and not HasZero;
+    // IsValidUtf8Buffer uses AVX2 when available,
+    // which deliberately accepts #0
+    expectedBuffer := ValidUtf8 and
+      (HasValidUtf8Avx2 or not HasZero);
+    CheckUtf8(IsValidUtf8Pas(pointer(s), length(s)) = expectedText,
+      'IsValidUtf8Pas(%)', [Hex]);
+    CheckUtf8(IsValidUtf8Small(s) = expectedText,
+      'IsValidUtf8Small(%)', [Hex]);
+    CheckUtf8(IsValidUtf8NotVoid(s) = expectedText,
+      'IsValidUtf8NotVoid(%)', [Hex]);
+    CheckUtf8(IsValidUtf8NotVoid(pointer(s), length(s)) = expectedText,
+      'IsValidUtf8NotVoid(ptr,%)', [Hex]);
+    CheckUtf8(IsValidUtf8Buffer(pointer(s), length(s)) = expectedBuffer,
+      'IsValidUtf8Buffer(%)', [Hex]);
+    CheckUtf8(IsValidUtf8(s) = expectedBuffer,
+      'IsValidUtf8(%)', [Hex]);
+    // IsValidUtf8Ptr uses StrLen(), so exclude embedded #0
+    if (s <> '') and not HasZero then
+      CheckUtf8(IsValidUtf8Ptr(pointer(s)) = ValidUtf8,
+        'IsValidUtf8Ptr(%)', [Hex]);
+  end;
+
 var
   i, j, k, len, len120, lenup100, CP, L, lcid: integer;
   bak, bakj: AnsiChar;
@@ -9262,6 +9293,55 @@ begin
   Check(GotoNextLine(P) = nil);
   P := 'to'#3#0'po';
   Check(GotoNextLine(P) = nil);
+  // validate UTF-8 validation
+  CheckUtf8Hex('', {ValidUtf8=}true, {HasZero=}false);
+  CheckUtf8Hex('61', true, false);
+  CheckUtf8Hex('61626364', true, false);
+  CheckUtf8Hex('C280', true, false);
+  CheckUtf8Hex('DFBF', true, false);
+  CheckUtf8Hex('E0A080', true, false);
+  CheckUtf8Hex('ED9FBF', true, false);
+  CheckUtf8Hex('EE8080', true, false);
+  CheckUtf8Hex('EFBFBF', true, false);
+  CheckUtf8Hex('F0908080', true, false);
+  CheckUtf8Hex('F48FBFBF', true, false);
+  // Truncated sequences
+  CheckUtf8Hex('C3', false, false);
+  CheckUtf8Hex('E2', false, false);
+  CheckUtf8Hex('E282', false, false);
+  CheckUtf8Hex('F0', false, false);
+  CheckUtf8Hex('F09F', false, false);
+  CheckUtf8Hex('F09F98', false, false);
+  CheckUtf8Hex('6162C3', false, false);
+  CheckUtf8Hex('616263E282', false, false);
+  CheckUtf8Hex('61626364F09F98', false, false);
+  // Invalid continuation bytes
+  CheckUtf8Hex('80', false, false);
+  CheckUtf8Hex('BF', false, false);
+  CheckUtf8Hex('C341', false, false);
+  CheckUtf8Hex('E28241', false, false);
+  CheckUtf8Hex('F09F9841', false, false);
+  // Overlong sequences
+  CheckUtf8Hex('C080', false, false);
+  CheckUtf8Hex('C180', false, false);
+  CheckUtf8Hex('E08080', false, false);
+  CheckUtf8Hex('F0808080', false, false);
+  // UTF-16 surrogates
+  CheckUtf8Hex('EDA080', false, false);
+  CheckUtf8Hex('EDBFBF', false, false);
+  // Above U+10FFFF and invalid leading bytes
+  CheckUtf8Hex('F4908080', false, false);
+  CheckUtf8Hex('F5808080', false, false);
+  CheckUtf8Hex('F8', false, false);
+  CheckUtf8Hex('FE', false, false);
+  CheckUtf8Hex('FF', false, false);
+  // #0: valid UTF-8 but forbidden in NotVoid/Pascal
+  CheckUtf8Hex('00', true, true);
+  CheckUtf8Hex('616200', true, true);
+  CheckUtf8Hex('610062', true, true);
+  // Invalid UTF-8 even though it contains #0
+  CheckUtf8Hex('C300', false, true);
+  CheckUtf8Hex('6162C300', false, true);
 end;
 
 procedure TTestCoreBase.Charsets;
