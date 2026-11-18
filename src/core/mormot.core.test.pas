@@ -1561,7 +1561,7 @@ var
   log: IUnknown;
 begin
   result := true;
-  if Executable.Command.Option('multithread')
+  if Executable.Command.Option('multithrea&d')
      {$ifdef OSWINDOWS} and not (wsFavorFewThreads in WindowsSpecs) {$endif} then
     fMultiThread := SystemInfo.dwNumberOfProcessors > 2; // enabled with 3 cores
   if Executable.Command.Option('&methods') then
@@ -1868,7 +1868,7 @@ begin
     'list all class name(s) as expected by --test');
   Executable.Command.Option('&methods',
     'list all method name(s) of #class as specified to --test');
-  Executable.Command.Option('multithread',
+  Executable.Command.Option('multithrea&d',
     'parallelize tests execution on multi-core CPU');
   if Executable.Command.Option('&verbose',
        'run logs in verbose mode: enabled only with --test') and
