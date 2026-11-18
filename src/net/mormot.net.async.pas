@@ -2871,7 +2871,7 @@ begin
   Shutdown;
   inherited Destroy;
   // fIocpAccept was already drained and freed during Shutdown,
-  // before the forwarded-event owner fSockets.fIocpRecvSend.
+  // before the forwarded-event owner fSockets.fIocpRecvSend
   if (acoNoConnectionTrack in fOptions) or
      (fConnectionCount = 0) then
     exit;
@@ -3743,9 +3743,10 @@ begin
   if fFlag2 <> 0 then
     exit; // use this counter to avoid duplicated calls
   inc(fFlag2);
-  inherited Shutdown;
+  Terminate; // prevent rearming AcceptEx
   if fServer <> nil then
     fServer.Close; // shutdown the socket to unlock Accept() in Execute
+  inherited Shutdown; // eventually release all associated threads and sockets
 end;
 {$else}
 procedure TAsyncServer.Shutdown;
@@ -3974,8 +3975,8 @@ begin
                 raise;
               end;
             end;
-            // Prepare the accepted client only if initialization succeeded.
-            // TLS connections remain blocking until TLS setup is finished.
+            // prepare the accepted client only if initialization succeeded
+            // (TLS connections remain blocking until TLS setup is finished)
             if (res = nrOk) and
                not (acoEnableTls in fOptions) then
             begin
@@ -4387,7 +4388,7 @@ var
         [aMethod, aUrl.Server, aUrl.Address, ToText(result)^], self);
     finally
       {$ifdef USE_WINIOCP}
-      // ConnectEx was prepared on the accept queue, not the recv/send queue.
+      // ConnectEx was prepared on the accept queue, not the recv/send queue
       if c.fIocpSub <> nil then
       begin
         fOwner.fIocpAccept.Unsubscribe(c.fIocpSub);

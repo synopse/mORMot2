@@ -1315,7 +1315,7 @@ type
   // - flags used e.g. by TWebServerLocal, or mORMot 2 Boilerplate project
   TWebServerBehavior = (
 
-    /// Allow cross-origin requests.
+    /// Allow cross-origin requests
     // - see https://enable-cors.org https://www.w3.org/TR/cors
     // https://developer.mozilla.org/en-US/docs/Web/HTTP/Access_control_CORS
     // - Warning: Do not use this without understanding the consequences.
