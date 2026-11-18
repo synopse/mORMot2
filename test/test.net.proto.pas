@@ -1104,7 +1104,7 @@ begin
             test.Check(false);
             exit;
           end;
-          stream.Sock.SetLinger(0); // otherwise shutdown takes 40ms with epoll
+          stream.Sock.SetLinger(-1); // otherwise shutdown takes 40ms with epoll
           test.Check(get.SockConnected);
           test.Check(post.SockConnected);
         end;
@@ -1344,9 +1344,9 @@ begin
         if not Check(client.SockReceivePending(1000) = cspDataAvailable,
             'broadcast received') then
           break;
-        // Leave the WebSocket frame unread and force an RST. The next
+        // Leave the WebSocket frame unread and force a RST. The next
         // WebSocketBroadcast() should survive an eventual failed Write().
-        client.Sock.SetLinger(0);
+        client.Sock.SetLinger(0); // 0 = abortive close (TCP RST)
       finally
         client.Free;
       end;
@@ -8621,6 +8621,8 @@ var
   len, stdinrecs, appstatus, protstatus: integer;
   pad: array[byte] of byte;
   endreq: array[0..15] of byte;
+  log: TSynLog;
+  ilog: ISynLog;
 
   function Param(const name: RawUtf8): RawUtf8;
   var
@@ -8664,12 +8666,16 @@ begin
   srv := Sender as TCrtSocket;
   slow := nil;
   try
+    log := TSynLogTestLog.EnterLocal(ilog, self, 'DoFastCgiApp');
     repeat
+      log.Log(sllTrace, 'before AcceptIncoming', self);
       cli := srv.AcceptIncoming(nil, {async=}false);
       if cli = nil then
         break; // the listening socket has been closed
+      cli.Sock.SetLinger(-1); // disable blocking SO_LINGER especially on Windows
       resp.Init;
       try
+        log.Log(sllTrace, 'AcceptIncoming=%', [cli], self);
         try
           // read the whole request
           params := '';
@@ -8755,6 +8761,7 @@ begin
           endreq[11] := appstatus;
           endreq[12] := protstatus;
           resp.Add(@endreq, SizeOf(endreq));
+          log.Log(sllTrace, 'SendLow=%', [resp.Size], self);
           cli.SndLow(resp.Buffer, resp.Size);
         except
           // e.g. on connection closed by the client: accept the next one
@@ -8762,6 +8769,7 @@ begin
       finally
         resp.Store.Done;
         cli.Free;
+        log.Log(sllTrace, 'after cli.Free', self);
       end;
     until false;
   finally
@@ -8849,18 +8857,18 @@ begin
     'responder role with no flag');
   // decode a response sent byte by byte, with padding and an unknown record
   buf.Size := 0;
-  buf.Add(#1#6#0#1#0#5#3#0'hello'#0#0#0);                   // stdout + padding
-  buf.Add(#1#11#0#1#0#2#0#0'??');                           // unknown type
-  buf.Add(#1#7#0#1#0#3#0#0'err');                           // stderr
-  buf.Add(#1#6#0#1#0#0#0#0);                                // end of stdout
-  buf.Add(#1#3#0#1#0#8#0#0#1#2#3#4#0#0#0#0);                // end request
-  buf.Add('trailing');                                      // never consumed
+  buf.AddHex('010600010005030068656C6C6F000000'); // stdout 'hello' + padding
+  buf.AddHex('010B0001000200003F3F');             // unknowntype '??'
+  buf.AddHex('0107000100030000657272');           // stderr 'err'
+  buf.AddHex('0106000100000000');                 // endofstdout
+  buf.AddHex('01030001000800000102030400000000'); // endrequest
+  buf.AddShort('trailing');                       // never consumed
   resp.Init;
   s := '';
   n := 0;
   for i := 0 to buf.Size - 1 do
   begin
-    Append(s, @PAnsiChar(buf.Buffer)[i], 1);
+    Append(s, PAnsiChar(buf.Buffer) + i, 1);
     status := resp.Parse(pointer(s), length(s));
     if not CheckFailed(status >= 0, 'parse') then
     begin
@@ -8932,6 +8940,7 @@ begin
     proxy := THttpProxyServer.Create(settings);
     proxy.Start;
     clt := THttpClientSocket.Open('127.0.0.1', '8881');
+    clt.OnLog := TSynLogTestLog.DoLog;
     // the CGI variables, with the script located before the PATH_INFO
     Expect('GET', '/app/echo.php/extra/info?x=1&y=2', HTTP_SUCCESS,
       'X-Test: hello'#13#10'Proxy: evil'#13#10'Bad_Name: v'#13#10'x-test-2:two');

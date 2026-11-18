@@ -8501,6 +8501,8 @@ begin
     exit;
   if fSock.Accept(client, addr, Async) <> nrOK then
     exit;
+  if Assigned(OnLog) then
+    OnLog(sllTrace, 'AcceptIncoming %', [client], self);
   if ResultClass = nil then
     ResultClass := TCrtSocket;
   result := ResultClass.Create(0);
