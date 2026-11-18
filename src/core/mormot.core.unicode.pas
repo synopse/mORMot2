@@ -3566,7 +3566,7 @@ var
 label
   done;
 begin
-  inc(PtrUInt(len), PtrUInt(source) - 4);
+  inc(PtrUInt(len), PtrUInt(source) - 4); // prepare fast by-four loop
   if source = nil then
     goto done;
   utf8 := @UTF8_TABLE.Lookup;
@@ -3595,18 +3595,36 @@ begin
     if c = UTF8_ASCII then
       continue // last 1..3 chars
     else if c > UTF8_MAX then // RFC 3629 requirements as IsValidUtf8Avx2()
-      if c = UTF8_ZERO then
-        break // end of input - may be unexpected if not at source[len]
-      else
-      begin
-        source := nil; // force result = false if does not follows RFC 3629
-        break;
-      end;
+    begin // UTF8_ZERO or does not follows RFC 3629
+      source := nil; // force result = false
+      break;
+    end;
+    if source + c > PUtf8Char(len) + 4 then
+    begin
+      source := nil;
+      break; // truncated UTF-8 sequence
+    end;
+    case byte(source[-1]) of // match RFC 3629 restrictions enforced by AVX2
+      $c0, $c1, $f5 .. $f7:
+        goto done;
+      $e0:
+        if byte(source^) < $a0 then
+          goto done;
+      $ed:
+        if byte(source^) >= $a0 then
+          goto done;
+      $f0:
+        if byte(source^) < $90 then
+          goto done;
+      $f4:
+        if byte(source^) >= $90 then
+          goto done;
+    end;
     repeat
       if byte(source^) and $c0 <> $80 then
         goto done; // stop at invalid input content
-      inc(source); // length check is done below - may read after source[len]
-      dec(c);
+      inc(source);
+      dec(c); // c = 1..3
     until c = 0;
   until false;
 done:
