@@ -7520,9 +7520,10 @@ var
   last: integer;
 begin // caller ensured self <> nil and secs <> 0 and timeout <> 0
   last := fLastAccessTickSec;
-  result := (last < 0) or       // -1 = deprecated by ClearConnectionPool
-            ((last <> 0) and    //  0 = new connection
-             (secs - last >= fProperties.fConnectionTimeOutSecs)); // too idle
+  result := (last < 0) or           // -1 = deprecated by ClearConnectionPool
+            ((last <> 0) and        //  0 = new connection
+             (secs - last >= fProperties.fConnectionTimeOutSecs) and // idle
+             not GetInTransaction); // virtual method
 end;
 
 function TSqlDBConnection.GetInTransaction: boolean;
