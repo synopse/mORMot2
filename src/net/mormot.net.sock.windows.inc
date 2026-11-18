@@ -1589,6 +1589,8 @@ type
     tag: TPollSocketTag;
     socket: TSocket;
     recvclosing: boolean;
+    closed: boolean;  // closesocket() already done in Unsubscribe()
+    pending: integer; // overlapped operations not yet returned by GetNext()
   end;
 
 
@@ -1830,6 +1832,7 @@ begin
   end;
   oe^.buf.pBuffer := buf;
   oe^.buf.cLength := buflen;
+  LockedInc32(@o^.pending); // before the call - may complete at once
   case event of
     wieRecv:
       // from mormot.net.async: overlapped read with buflen=0 to avoid WSAENOBUFS
@@ -1883,8 +1886,12 @@ begin
     end;
   if result then
     LockedInc32(@fPosted)
-  else if wioLockEvent in fOptions then // release lock on failure
-    oe^.prepared.UnLock;
+  else
+  begin
+    LockedDec32(@o^.pending); // no completion will come
+    if wioLockEvent in fOptions then // release lock on failure
+      oe^.prepared.UnLock;
+  end;
   if fatal <> nil then // logic error: need to fix the code -> raise EWinIocp
     raise EWinIocp.CreateFmt('TWinIocp.PrepareNext(%s) %s: %s on %x',
       [IOCP_EVENT[event], ctxt, fatal, integer(o^.socket)]);
@@ -1996,23 +2003,29 @@ begin
         else
           sll := sllError; // this TOverlappedEvent should be locked/prepared
       end;
+      // a 'next' wieRecv may still be pending when Unsubscribe()
+      // posts its 'unsub' wieRecv - both complete, possibly on two threads at once
+      if (InterlockedDecrement(one^.pending) > 0) and
+         one^.recvclosing then
+      begin
+        if Assigned(fOnLog) then
+          fOnLog(sllTrace, 'GetNext=%% unsub pending=%',
+            [IOCP_EVENT[event], sock, one^.pending], self);
+        continue; // closesocket() + Free() on the very last completion only
+      end;
       if one^.recvclosing then
       begin
         // delayed wioUnsubscribeShutdownSocket clean closing
         // - documented pattern: shutdown(SD_SEND) + WSARecv()=0 + closesocket
         res := nrOk;
-        if event = wieRecv then
+        if not one^.closed and
+           (closesocket(one^.socket) <> NOERROR) then
         begin
-          if closesocket(one^.socket) <> NOERROR then
-          begin
-            sll := sllError;
-            res := NetLastError;
-          end;
-          if not fOne.Free(one) then // eventually release this slot
-            sll := sllWarning;
-        end
-        else
-          sll := sllWarning; // continue: closesocket() on very last wieRecv
+          sll := sllError;
+          res := NetLastError;
+        end;
+        if not fOne.Free(one) then // eventually release this slot
+          sll := sllWarning;
         if Assigned(fOnLog) then
           fOnLog(sll, 'GetNext=%% unsub closesocket=%',
             [IOCP_EVENT[event], sock, _NR[res]], self);
@@ -2136,15 +2149,27 @@ begin
     // - user code may call send() directly without wieSend IOCP (e.g.
     // mormot.net.async) so we need more than a flag
     // - follow documented pattern: shutdown(SD_SEND) + recv()=0 + closesocket
+    // - hold a reference so that a pending 'next' wieRecv
+    // completing meanwhile won't close and free the slot under our feet
+    LockedInc32(@o^.pending);
     shutdown(o^.socket, SHUT_WR); // = SD_SEND
     o^.recvclosing := true; // flag for GetNext() to call closesocket()
     if PrepareNext('unsub', pointer(o), wieRecv) then
-    begin
       // started async WSARecv() until the function completes with success
-      result := true;
+      result := true
+    else
+    begin
+      // if failed, graceful disconnect is not possible (already closed)
+      closesocket(o^.socket); // aborts any pending overlapped operation
+      o^.closed := true;
+    end;
+    if InterlockedDecrement(o^.pending) > 0 then
+    begin
+      result := true; // GetNext() will Free() on the very last completion
       exit;
-    end
-    else // if failed, graceful disconnect is not possible (already closed)
+    end;
+    // all completions were already processed by GetNext(): close it here
+    if not o^.closed then
       closesocket(o^.socket);
   end;
   result := fOne.Free(o); // one^.sequence will avoid ABA problem in GetNext()

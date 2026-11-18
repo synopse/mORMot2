@@ -118,6 +118,9 @@ type
     // for AsyncShutdown
     shutdownsrv: THttpAsyncServer;
     shutdownslow, shutdownrequests: integer;
+    // for WinIocpUnsubscribe
+    iocpclosed: integer;
+    iocpstop: boolean;
     // for _TTunnelLocal
     tunnelappsec: RawUtf8;
     tunneloptions: TTunnelOptions;
@@ -207,6 +210,13 @@ type
     /// validate that TCrtSocket.Close won't touch a handle closed by Abort
     procedure CrtSocketAbort;
     procedure CrtSocketAbortRecv(Sender: TObject);
+    {$ifdef OSWINDOWS}
+    /// validate that TWinIocp won't call closesocket() twice on Unsubscribe
+    procedure WinIocpUnsubscribe;
+    procedure WinIocpWorker(Sender: TObject);
+    procedure WinIocpLog(Level: TSynLogLevel; const Format: RawUtf8;
+      const Args: array of const; Instance: TObject = nil);
+    {$endif OSWINDOWS}
   published
     {$ifdef USEWININET}
     {$ifdef USEHTTPSYS}
@@ -6419,6 +6429,9 @@ begin
     ms.Free;
   end;
   CrtSocketAbort;
+  {$ifdef OSWINDOWS}
+  WinIocpUnsubscribe;
+  {$endif OSWINDOWS}
 end;
 
 procedure TNetworkProtocols.CrtSocketAbortRecv(Sender: TObject);
@@ -6523,6 +6536,107 @@ begin
     srv.Free;
   end;
 end;
+
+{$ifdef OSWINDOWS}
+
+procedure TNetworkProtocols.WinIocpLog(Level: TSynLogLevel;
+  const Format: RawUtf8; const Args: array of const; Instance: TObject);
+begin
+  if PosEx('unsub closesocket=', Format) > 0 then
+    LockedInc32(@iocpclosed); // one per actual closesocket() in GetNext()
+end;
+
+procedure TNetworkProtocols.WinIocpWorker(Sender: TObject);
+var
+  ev: TWinIocpEvent;
+  bytes: cardinal;
+begin
+  while not iocpstop do
+    TWinIocp(Sender).GetNext(50, ev, bytes);
+end;
+
+procedure TNetworkProtocols.WinIocpUnsubscribe;
+const
+  LOOPS = 1000;
+  WORKERS = 4;
+var
+  srv: TCrtSocket;
+  iocp: TWinIocp;
+  th: array[0 .. WORKERS - 1] of TLoggedWorkThread;
+  kept: array of TNetSocket;
+  cli, acc, next: TNetSocket;
+  sub: PWinIocpSubscription;
+  addr: TNetAddr;
+  i, n, alive: PtrInt;
+begin
+  srv := TCrtSocket.Bind('127.0.0.1:0'); // ephemeral port
+  try
+    iocpclosed := 0;
+    iocpstop := false;
+    FillCharFast(th, SizeOf(th), 0);
+    iocp := TWinIocp.Create(WORKERS, [wioUnsubscribeShutdownSocket]);
+    try
+      iocp.OnLog := WinIocpLog;
+      for i := 0 to high(th) do
+        th[i] := TLoggedWorkThread.Create(TSynLog, 'iocp', iocp,
+          WinIocpWorker, {suspended=}false, {ManualWaitForAndFree=}true);
+      SetLength(kept, LOOPS);
+      n := 0;
+      for i := 0 to LOOPS - 1 do
+      begin
+        if (NewSocket(cLocalHost, srv.Port, nlTcp, {bind=}false,
+              1000, 1000, 1000, 0, cli) <> nrOk) or
+           (srv.Sock.Accept(acc, addr, {async=}false) <> nrOk) then
+          break;
+        // as mormot.net.async: a 'next' wieRecv is pending after ProcessRead,
+        // then the server closes the connection and Unsubscribe() posts its
+        // own 'unsub' wieRecv on the very same subscription
+        sub := iocp.Subscribe(acc, 1);
+        iocp.PrepareNext('next', sub, wieRecv);
+        iocp.Unsubscribe(sub);
+        cli.Close; // both wieRecv complete, maybe on two threads at once
+        // a new connection may reuse the handle: it should never be closed
+        if (NewSocket(cLocalHost, srv.Port, nlTcp, {bind=}false,
+              1000, 1000, 1000, 0, next) <> nrOk) or
+           (srv.Sock.Accept(kept[n], addr, {async=}false) <> nrOk) then
+          break;
+        inc(n);
+        next.Close;
+      end;
+      CheckEqual(n, LOOPS, 'connections');
+      i := 0;
+      while (iocpclosed < n) and
+            (i < 500) do
+      begin
+        SleepHiRes(10); // wait for all closesocket() in GetNext()
+        inc(i);
+      end;
+      SleepHiRes(100); // a second closesocket() would happen now
+      alive := 0;
+      for i := 0 to n - 1 do
+        if kept[i].GetName(addr) = nrOk then
+        begin
+          inc(alive);
+          kept[i].Close;
+        end;
+      CheckEqual(iocpclosed, n, 'one closesocket per connection');
+      CheckEqual(alive, n, 'no other connection closed');
+    finally
+      iocpstop := true;
+      for i := 0 to high(th) do
+        if th[i] <> nil then
+        begin
+          th[i].WaitFor;
+          th[i].Free;
+        end;
+      iocp.Free;
+    end;
+  finally
+    srv.Free;
+  end;
+end;
+
+{$endif OSWINDOWS}
 
 var
   // how many TCountedStringStream have been released, to validate that
