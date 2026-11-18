@@ -306,6 +306,9 @@ type
       const caller: ShortString); // set connection:=nil and close+GC
     function RawWrite(connection: TPollAsyncConnection;
       var data: PByte; var datalen: integer): boolean;
+    function WriteCore(connection: TPollAsyncConnection;
+      data: pointer; datalen: integer; timeout: integer;
+      closeOnFailure: boolean): boolean;
     function DoAfterWrite(const caller: ShortString;
       connection: TPollAsyncConnection): TPollAsyncSocketOnReadWrite;
     procedure ProcessWaitingWrite; // pending soWaitWrite
@@ -483,6 +486,9 @@ type
     function OnError(connection: TPollAsyncConnection;
       events: TPollSocketEvents): boolean; override;
     procedure OnClosed(connection: TPollAsyncConnection); override;
+    // caller (OnRead/AsyncResponse) owns closing on failure
+    function WriteNoClose(connection: TPollAsyncConnection;
+      data: pointer; datalen: integer; timeout: integer): boolean;
   public
     /// add some data to the asynchronous output buffer of a given connection
     // - this overriden method will also log the write operation if needed
@@ -1693,6 +1699,13 @@ end;
 
 function TPollAsyncSockets.Write(connection: TPollAsyncConnection;
   data: pointer; datalen: integer; timeout: integer): boolean;
+begin
+  result := WriteCore(connection, data, datalen, timeout, {closeOnFailure=}true);
+end;
+
+function TPollAsyncSockets.WriteCore(connection: TPollAsyncConnection;
+  data: pointer; datalen: integer; timeout: integer;
+  closeOnFailure: boolean): boolean;
 var // warning: datalen parameter should be defined as integer, not PtrInt
   P: PByte;
   previous: integer;
@@ -1742,10 +1755,11 @@ begin
     end;
   finally
     //DoLog('Write: finally fProcessingWrite=%', [fProcessingWrite]);
-    if result then
+    if result or
+       not closeOnFailure then
       connection.UnLock({writer=}true)
     else
-      // sending or subscription error -> abort
+      // ordinary Write() still closes, nested HTTP response writes do not
       CloseConnection(connection, 'Write() failure');
     LockedDec32(@fProcessingWrite);
   end
@@ -1965,7 +1979,7 @@ begin
           if res <> nrOk then
             if (res = nrClosed) and
                (added <> 0) then
-              break // first process what was received before the peer closed
+              break // first return received bytes before closing the peer
             else
             begin
               // socket closed gracefully or unrecoverable error -> abort
@@ -2309,6 +2323,15 @@ begin
      not (acoNoLogWrite in fOwner.Options) then
    fOwner.fLogClass.Add.LogEscape(sllTrace, 'Write', [], data, datalen, connection);
   result := inherited Write(connection, data, datalen, timeout);
+end;
+
+function TAsyncConnectionsSockets.WriteNoClose(connection: TPollAsyncConnection;
+  data: pointer; datalen: integer; timeout: integer): boolean;
+begin
+  if (acoVerboseLog in fOwner.Options) and
+     not (acoNoLogWrite in fOwner.Options) then
+    fOwner.fLogClass.Add.LogEscape(sllTrace, 'Write', [], data, datalen, connection);
+  result := WriteCore(connection, data, datalen, timeout, false);
 end;
 
 function TAsyncConnectionsSockets.GetTotal: integer;
@@ -4990,9 +5013,9 @@ begin
       exit;
     end;
     if (len <> 0) and // OS buffer was full (paranoid): finish in ProcessWrite
-       not fServer.fAsync.fSockets.Write(self, p, len, {timeout=}1000) then
+       not fServer.fAsync.fSockets.WriteNoClose(self, p, len, {timeout=}1000) then
     begin
-      result := soClose; // the connection was already closed on write error
+      result := soClose; // let outer OnRead() close the connection
       exit;
     end;
   end;
@@ -5097,7 +5120,11 @@ begin
       fOwner.DoLog(sllWarning, 'DoRequest: pipelining with % streaming',
         [fHttp.CommandUri], self);
       if FlushPipelinedWrite = soContinue then // back to regular process
-        fServer.fAsync.fSockets.Write(self, output.Buffer, output.Len, 1000)
+      begin
+        if not fServer.fAsync.fSockets.WriteNoClose(
+            self, output.Buffer, output.Len, 1000) then
+          result := soClose;
+      end
       else
         result := soClose;
     end
@@ -5118,7 +5145,9 @@ begin
       else if sent <> 0 then // OS buffer was not big enough (paranoid)
       begin
         output.Remove(output.Len - sent);
-        fServer.fAsync.fSockets.Write(self, output.Buffer, output.Len, 1000);
+        if not fServer.fAsync.fSockets.WriteNoClose(
+            self, output.Buffer, output.Len, 1000) then
+          result := soClose;
       end
       else
         result := AfterWrite; // be ready for the next request
@@ -5126,7 +5155,9 @@ begin
     else
       // let TPollAsyncSockets.ProcessWrite/subscribe process hrsSendBody
       // in the background, then call AfterWrite once finished
-      fServer.fAsync.fSockets.Write(self, output.Buffer, output.Len, {timeout=}1000);
+      if not fServer.fAsync.fSockets.WriteNoClose(
+          self, output.Buffer, output.Len, {timeout=}1000) then
+        result := soClose;
       // see THttpServer.Process() for the blocking equivalency of this async code
 end;
 

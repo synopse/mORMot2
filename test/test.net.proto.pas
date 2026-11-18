@@ -9110,7 +9110,7 @@ begin
     CheckEqual(length(clt.Content), length(fcgibig), 'big length');
     CheckEqual(crc32cHash(clt.Content), crc32cHash(fcgibig), 'big');
     // a response which fills exactly the 32KB reading buffer of the proxy
-    // just before the application closes the connection
+    // just before the application closes the connection - see #804
     for i := 1 to 3 do
     begin
       Expect('GET', '/app/eof.php?32768', HTTP_SUCCESS);
