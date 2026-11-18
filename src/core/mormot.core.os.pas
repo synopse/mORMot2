@@ -2587,6 +2587,7 @@ type
 function IsExtendedPathName(const Name: TFileName): boolean;
 
 var
+  kernelHandle, ntHandle: THandle;
   // Slim Reader/Writer (SRW) API exclusive mode - fallback to TLightLock on XP
   InitializeSRWLock,
   AcquireSRWLockExclusive,

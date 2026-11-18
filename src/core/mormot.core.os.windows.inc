@@ -3624,20 +3624,19 @@ function ReadSystemMemory(address, size: PtrUInt): RawByteString;
 var
   memfile: UNICODE_STRING;
   att: OBJECT_ATTRIBUTES;
-  mem, nt: THandle;
+  mem: THandle;
   add: TLargeInteger;
   virt: pointer;
 begin
   if NtDllChecked = lsUnTested then
   begin // late-binding until really needed to circumvent antivirus heuristic
     NtDllChecked := lsNotAvailable;
-    nt := GetModuleHandle(ntdll);
-    if nt > 0 then
+    if ntHandle > 0 then
     begin
-      RtlInitUnicodeString := LibraryResolve(nt, 'RtlInitUnicodeString');
-      NtOpenSection        := LibraryResolve(nt, 'NtOpenSection');
-      NtMapViewOfSection   := LibraryResolve(nt, 'NtMapViewOfSection');
-      NtUnmapViewOfSection := LibraryResolve(nt, 'NtUnmapViewOfSection');
+      RtlInitUnicodeString := LibraryResolve(ntHandle, 'RtlInitUnicodeString');
+      NtOpenSection        := LibraryResolve(ntHandle, 'NtOpenSection');
+      NtMapViewOfSection   := LibraryResolve(ntHandle, 'NtMapViewOfSection');
+      NtUnmapViewOfSection := LibraryResolve(ntHandle, 'NtUnmapViewOfSection');
       if Assigned(RtlInitUnicodeString) and
          Assigned(NtOpenSection) and
          Assigned(NtMapViewOfSection) and
@@ -3706,7 +3705,7 @@ var
   get: function(sig, id: DWord; buf: pointer; siz: DWord): PtrUInt; stdcall;
 begin
   // first try to use Vista+ API which supports EFI (even on aarch64-win64!)
-  get := LibraryResolve(GetModuleHandle(kernel32), 'GetSystemFirmwareTable');
+  get := LibraryResolve(kernelHandle, 'GetSystemFirmwareTable');
   if Assigned(get) then
   begin
     siz := get(_RSMB_, 0, nil, 0); // first call to retrieve the full size
@@ -5641,6 +5640,7 @@ begin
   {$endif ASMX86}
   // 2. late-binding of newest Windows APIs
   h := GetModuleHandle(kernel32);
+  kernelHandle := h;
   GetSystemTimePreciseAsFileTime :=
     LibraryResolve(h, 'GetSystemTimePreciseAsFileTime'); // Win8+
   if not Assigned(GetSystemTimePreciseAsFileTime) then
@@ -5811,6 +5811,7 @@ begin
   h := GetModuleHandle(ntdll); // late binding over unstable / altered API
   if h > 0 then
   begin
+    ntHandle := h;
     wine_get_version := LibraryResolve(h, 'wine_get_version');
     if Assigned(wine_get_version) then
     begin

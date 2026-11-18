@@ -8144,8 +8144,8 @@ var
   ok: BOOL;
   err: integer;
 begin
-  SetDynamicTimeZoneInformation := LibraryResolve(
-    GetModuleHandle(kernel32), 'SetDynamicTimeZoneInformation');
+  SetDynamicTimeZoneInformation :=
+    LibraryResolve(kernelHandle, 'SetDynamicTimeZoneInformation');
   privileges.Init(wttProcess);
   try
     privileges.Enable(wspTimeZone); // ensure has SE_TIME_ZONE_NAME
@@ -8591,6 +8591,7 @@ var
   NtQueryInformationProcess: function(ProcessHandle: THandle;
     ProcessInformationClass: PROCESSINFOCLASS; ProcessInformation: pointer;
     ProcessInformationLength: ULONG; ReturnLength: PULONG): integer; stdcall;
+  // late-binding is safer for anti-virus heuristics
   ReadProcessMemory: function (hProcess: THandle; lpBaseAddress, lpBuffer: pointer;
     nSize: PtrUInt; var lpNumberOfBytesRead: PtrUInt): BOOL; stdcall;
   NtQueryInformationProcessChecked: boolean;
@@ -8602,16 +8603,14 @@ var
   pbi: MS_PROCESS_BASIC_INFORMATION;
   peb: MS_PEB;
   peb_upp: MS_RTL_USER_PROCESS_PARAMETERS;
-  prochandle, nt: THandle;
+  prochandle: THandle;
 begin
   if not NtQueryInformationProcessChecked then
   begin
     NtQueryInformationProcessChecked := true;
-    nt := GetModuleHandle(ntdll);
-    if nt > 0 then
-      NtQueryInformationProcess := LibraryResolve(nt, 'NtQueryInformationProcess');
-    ReadProcessMemory := // late-binding is safer for anti-virus heuristics
-      LibraryResolve(GetModuleHandle(kernel32), 'ReadProcessMemory');
+    if ntHandle > 0 then
+      NtQueryInformationProcess := LibraryResolve(ntHandle, 'NtQueryInformationProcess');
+    ReadProcessMemory := LibraryResolve(kernelHandle, 'ReadProcessMemory');
   end;
   result := false;
   Finalize(aInfo);
