@@ -1715,6 +1715,7 @@ begin
         stmt.BindBlob(1, BlobData); // fast explicit BindBlob() call
       stmt.Bind(2, aID);
       stmt.ExecutePrepared;
+      stmt.ReleaseRows;
       if Owner <> nil then
       begin
         fStoredClassRecordProps.FieldBitsFromBlobField(BlobField, modfields);
