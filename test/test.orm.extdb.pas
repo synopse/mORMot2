@@ -1288,6 +1288,7 @@ begin
   SynDBLog.Family.Level := level + [sllError]; // force the logging branch
   props := TSqlDBSQLite3ConnectionPropertiesNoStatement.Create(
     SQLITE_MEMORY_DATABASE_NAME, '', '', '');
+  TSynLog.Family.ExceptionIgnoreCurrentThread := true;
   try
     conn := props.NewConnection;
     try
@@ -1302,12 +1303,31 @@ begin
           raised := E.ClassType;
       end;
       Check(raised = ESynLogSilent, 'original exception re-raised');
+      // Regression test for issue #802:
+      // enabling reconnection must not change the exception class
+      // when the error is unrelated to the connection.
+      props.ReconnectAfterConnectionError := true;
+      raised := nil;
+      try
+        conn.NewStatementPrepared('select 1', true, true);
+      except
+        on E: Exception do
+          raised := E.ClassType;
+      end;
+      Check(raised = ESynLogSilent,
+        'original exception class with reconnection');
+      Check(conn.LastErrorException = ESynLogSilent,
+        'LastErrorException with reconnection');
+      Check(PosEx('NewStatement failed',
+        conn.LastErrorMessage) > 0,
+        'LastErrorMessage with reconnection');
     finally
       conn.Free;
     end;
   finally
     props.Free;
     SynDBLog.Family.Level := level;
+    TSynLog.Family.ExceptionIgnoreCurrentThread := false;
   end;
 end;
 

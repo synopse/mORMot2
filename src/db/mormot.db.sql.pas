@@ -7748,7 +7748,7 @@ begin
             (fErrorException <> nil) then
       // propagate error not related to connection (e.g. SQL syntax error)
       if fErrorException.InheritsFrom(ESynException) then
-        ECoreDBException.RaiseU(fErrorMessage)
+        ESynExceptionClass(fErrorException).RaiseU(fErrorMessage) // keep class
       else
         raise fErrorException.Create(Utf8ToString(fErrorMessage));
   end
