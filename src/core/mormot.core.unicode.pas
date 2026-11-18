@@ -3594,15 +3594,11 @@ begin
     inc(source);
     if c = UTF8_ASCII then
       continue // last 1..3 chars
-    else if c > UTF8_MAX then // RFC 3629 requirements as IsValidUtf8Avx2()
-    begin // UTF8_ZERO or does not follows RFC 3629
+    else if (c > UTF8_MAX) or // over RFC 3629 / Unicode range
+            (source + c > PUtf8Char(len) + 4) then
+    begin // UTF8_ZERO or does not follows RFC 3629 or truncated
       source := nil; // force result = false
       break;
-    end;
-    if source + c > PUtf8Char(len) + 4 then
-    begin
-      source := nil;
-      break; // truncated UTF-8 sequence
     end;
     case byte(source[-1]) of // match RFC 3629 restrictions enforced by AVX2
       $c0, $c1, $f5 .. $f7:
