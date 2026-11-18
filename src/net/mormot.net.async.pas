@@ -2044,8 +2044,9 @@ begin
   connection := TPollAsyncConnection(ResToTag(notif));
   if (self = nil) or
      fTerminated or
-     (ResToEvents(notif) <> [pseWrite]) or
-     connection.IsClosed then
+     connection.IsClosed or
+     ((ResToEvents(notif) <> [pseWrite]) and // e.g. pseError or pseClosed
+      not (ifWriteWait in connection.fInternalFlags)) then // failed connect()
     exit;
   // we are now sure that the socket is writable and safe
   //DoLog('ProcessWrite: fProcessingWrite=%', [fProcessingWrite]);
@@ -2065,7 +2066,18 @@ begin
       repeat
         buflen := connection.fWr.Len;
         if buflen = 0 then
-          exit;
+          if ifWriteWait in connection.fInternalFlags then
+          begin
+            // connect() of an outbound connection did complete: let its
+            // AfterWrite() send the request, e.g. THttpAsyncClientConnection
+            res := DoAfterWrite('ProcessWrite', connection);
+            if (res <> soContinue) or
+               (connection.fWr.Len = 0) then
+              break;
+            continue; // send what AfterWrite() did append to fWr
+          end
+          else
+            exit;
         buf := connection.fWr.Buffer;
         if sent > 0 then // e.g. after IOCP wieSend
         begin
@@ -4477,8 +4489,8 @@ begin
       c.fSecureHost := aUrl.Server; // no port involved in SNI
     end;
     // start async events subscription and connection
+    include(c.fInternalFlags, ifWriteWait); // until AfterWrite is connected
     {$ifdef USE_WINIOCP}
-    include(c.fInternalFlags, ifWriteWait);
     if c.fIocpSub = nil then
       c.fIocpSub := fOwner.fIocpAccept.Subscribe(c.fSocket, tag);
     if fOwner.fIocpAccept.PrepareNext('client', c.fIocpSub, wieConnect) then

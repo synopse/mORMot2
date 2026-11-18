@@ -105,6 +105,9 @@ type
     // for HttpFastCgi
     fcgibig: RawByteString;
     fcgirequests: integer;
+    // for HttpAsyncClient
+    asyncstates: TOnHttpClientStates;
+    asyncstatus: integer;
     // for OutStream
     outdata: RawByteString;
     outkept: TRawByteStringStream; // supplied with aOwned=false
@@ -194,6 +197,10 @@ type
     procedure DoHttpLongLine(Sender: TObject);
     /// validate that THttpAsyncServer streams a big body by ReadMaxBytes blocks
     procedure DoHttpReadMaxBytes(Sender: TObject);
+    procedure DoHttpAsyncClient(Sender: TObject);
+    function DoHttpAsyncClientOrigin(Ctxt: THttpServerRequestAbstract): cardinal;
+    function DoHttpAsyncClientState(Sender: TObject; State: TOnHttpClientState;
+      Connection: THttpAsyncClientConnection): TPollAsyncSocketOnReadWrite;
     function DoReadMaxBytesRequest(Ctxt: THttpServerRequestAbstract): cardinal;
     function DoReadMaxBytesDownload(const aUrl, aMethod, aInHeaders,
       aInContentType, aRemoteIP: RawUtf8; aContentLength: Int64): TStream;
@@ -663,6 +670,7 @@ begin
   Run(DoHttpLongLine, self, 'HttpLongLine', true, false);
   Run(DoHttpReadMaxBytes, self, 'HttpReadMaxBytes', true, false);
   {$ifdef OSPOSIX}
+  Run(DoHttpAsyncClient, self, 'HttpAsyncClient', true, false); // not on IOCP yet
   Run(DoUnixDomainSocket, self, 'UnixDomainSocket', true, false);
   {$else}
   Run(WinIocpUnsubscribe, self, 'iocp', true, false);
@@ -7757,6 +7765,75 @@ begin
     Ctxt.OutContent := 'no stream';
   Ctxt.OutContentType := TEXT_CONTENT_TYPE;
   result := HTTP_SUCCESS;
+end;
+
+function TNetworkProtocols.DoHttpAsyncClientOrigin(
+  Ctxt: THttpServerRequestAbstract): cardinal;
+begin
+  Ctxt.OutContent := 'async client';
+  Ctxt.OutContentType := TEXT_CONTENT_TYPE;
+  result := HTTP_SUCCESS;
+end;
+
+function TNetworkProtocols.DoHttpAsyncClientState(Sender: TObject;
+  State: TOnHttpClientState; Connection: THttpAsyncClientConnection): TPollAsyncSocketOnReadWrite;
+begin
+  // called from the threads of the THttpAsyncServer
+  if State in [hcsFinished, hcsFailed] then
+    asyncstatus := Connection.ResponseStatus;
+  include(asyncstates, State); // last, since the test thread waits for it
+  result := soContinue;
+end;
+
+procedure TNetworkProtocols.DoHttpAsyncClient(Sender: TObject);
+var
+  origin: THttpServer;
+  async: THttpAsyncServer;
+  uri: TUri;
+  i: integer;
+  endtix: Int64;
+begin
+  // THttpAsyncServer.Clients.StartRequest() to a THttpServer on the same host
+  origin := THttpServer.Create('8876', nil, nil, 'origin', 2);
+  async := THttpAsyncServer.Create('8877', nil, nil, 'async', 2);
+  try
+    origin.OnRequest := DoHttpAsyncClientOrigin;
+    origin.WaitStarted;
+    async.WaitStarted;
+    for i := 1 to 3 do
+    begin
+      asyncstates := [];
+      asyncstatus := 0;
+      CheckUtf8(uri.From('http://127.0.0.1:8876/x'), 'uri');
+      Check(async.Clients.StartRequest(self, uri, 'GET', '', '', nil,
+        DoHttpAsyncClientState) = nrOk, 'start');
+      endtix := GetTickCount64 + 5000;
+      while ([hcsFinished, hcsFailed] * asyncstates = []) and
+            (GetTickCount64 < endtix) do
+        SleepHiRes(1);
+      Check(hcsBeforeSendHeaders in asyncstates, 'request sent');
+      Check(hcsHeadersReceived in asyncstates, 'headers received');
+      Check(hcsFinished in asyncstates, 'finished');
+      Check(not (hcsFailed in asyncstates), 'not failed');
+      CheckEqual(asyncstatus, HTTP_SUCCESS, 'status');
+    end;
+    // nobody listens on this port: the request should be notified as failed
+    asyncstates := [];
+    CheckUtf8(uri.From('http://127.0.0.1:8875/x'), 'uri');
+    if async.Clients.StartRequest(self, uri, 'GET', '', '', nil,
+         DoHttpAsyncClientState) = nrOk then
+    begin
+      endtix := GetTickCount64 + 5000;
+      while ([hcsFinished, hcsFailed] * asyncstates = []) and
+            (GetTickCount64 < endtix) do
+        SleepHiRes(1);
+      Check(hcsFailed in asyncstates, 'refused is failed');
+      Check(not (hcsFinished in asyncstates), 'refused is not finished');
+    end;
+  finally
+    async.Free;
+    origin.Free;
+  end;
 end;
 
 procedure TNetworkProtocols.DoHttpReadMaxBytes(Sender: TObject);
