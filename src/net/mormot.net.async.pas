@@ -1963,11 +1963,15 @@ begin
           if res = nrRetry then
             break; // may block, try later
           if res <> nrOk then
-          begin
-            // socket closed gracefully or unrecoverable error -> abort
-            CloseConnection(connection, _NR[res]);
-            exit;
-          end;
+            if (res = nrClosed) and
+               (added <> 0) then
+              break // first process what was received before the peer closed
+            else
+            begin
+              // socket closed gracefully or unrecoverable error -> abort
+              CloseConnection(connection, _NR[res]);
+              exit;
+            end;
           if (recved < 1024) and
              (connection.fRd.Len = 0) then
             connection.fRd.Reserve(1024); // minimal reusable fRd.Buffer
@@ -1990,6 +1994,10 @@ begin
         end
         else
           result := false; // retry later
+        if (res = nrClosed) and
+           (connection <> nil) then
+          // the peer closed the socket once its data was processed above
+          CloseConnection(connection, _NR[res]);
         // ensure this connection will be tracked for next recv()
         if connection <> nil then // CloseConnection() set connection := nil
         begin
