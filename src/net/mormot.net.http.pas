@@ -571,6 +571,7 @@ type
     function ContentFromStream(aStream: TStream; aStart, aLength: Int64;
       aOptions: THttpOutStreamOptions): integer;
     /// uncompress Content according to CompressContentEncoding header
+    // - may raise an exception on decompression error - e.g. ESizeOverflow
     procedure UncompressData;
     /// check RangeOffset/RangeLength against ContentLength
     // - and update ResponseFlags and ContentLength properties
@@ -4452,7 +4453,7 @@ begin
   end;
   // optionaly uncompress content
   if Http.ContentEncoding <> nil then // DestStream=nil was ensured above
-    Http.UncompressData;
+    Http.UncompressData;              // may raise an exception
   if Assigned(OnLog) then
     OnLog(sllTrace, 'GetBody len=%', [Http.ContentLength], self);
 end;

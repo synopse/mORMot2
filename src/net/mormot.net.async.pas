@@ -4713,16 +4713,12 @@ begin
             [HTTP_STATE[fHttp.State], HTTP_STATE[previous]], self);
           case fHttp.State of
             hrsErrorPayloadTooLarge:
-              begin
-                fServer.IncStat(grOversizedPayload); // e.g. over ContentMaxSize
-                DoReject(HTTP_PAYLOADTOOLARGE);
-              end;
-            hrsErrorContentStreamWrite:
-              DoReject(HTTP_INSUFFICIENTSTORAGE); // e.g. ENOSPC on spool file
+              result := DoReject(HTTP_PAYLOADTOOLARGE);
+            hrsErrorContentStreamWrite: // e.g. ENOSPC on spool file
+              result := DoReject(HTTP_INSUFFICIENTSTORAGE);
           else
-            DoReject(HTTP_BADREQUEST);
+            result := DoReject(HTTP_BADREQUEST);
           end;
-          result := soClose;
         end;
       end;
       if pWrite in fPipelineState then
@@ -4755,16 +4751,14 @@ begin
       begin
         // 408 HTTP error after Server.HeaderRetrieveAbortDelay ms
         fOwner.DoLog(sllWarning, 'OnRead: Header TimeOut', [], self);
-        DoReject(HTTP_TIMEOUT);
         fServer.IncStat(grTimeout);
-        result := soClose;
+        result := DoReject(HTTP_TIMEOUT);
       end
       else if fHttp.Head.Len > fServer.HeadersMaximumSize then
       begin
         // 413 HTTP error when headers > Server.HeadersMaximumSize
         fOwner.DoLog(sllWarning, 'OnRead: Head.Len=%', [fHttp.Head.Len], self);
-        DoReject(HTTP_PAYLOADTOOLARGE);
-        result := soClose;
+        result := DoReject(HTTP_PAYLOADTOOLARGE);
       end;
     {fOwner.DoLog(sllCustom2, 'OnRead % result=%', [HTTP_STATE[fHttp.State], ord(result)], self);}
     // finalize the memory buffers
@@ -4872,19 +4866,13 @@ begin
   result := HTTP_SUCCESS;
   if (fServer.MaximumAllowedContentLength > 0) and
      (fHttp.ContentLength > fServer.MaximumAllowedContentLength) then
-  begin
     // 413 HTTP error if requested payload is too big (default is 0 = no limit)
-    result := HTTP_PAYLOADTOOLARGE;
-    fServer.IncStat(grOversizedPayload);
-  end
+    result := HTTP_PAYLOADTOOLARGE
   else if (hsoRejectBotUserAgent in fServer.Options) and
           (fHttp.UserAgent <> '') and
           IsHttpUserAgentBot(fHttp.UserAgent) then
-  begin
     // implement early hsoRejectBotUserAgent detection as 418 I'm a teapot
-    result := HTTP_TEAPOT;
-    fServer.IncStat(grRejected);
-  end
+    result := HTTP_TEAPOT
   else if Assigned(fServer.OnBeforeBody) then
     // custom validation (e.g. missing/invalid URL or BearerToken)
     result := fServer.OnBeforeBody(
@@ -4905,6 +4893,8 @@ begin
   end
   else
   begin
+    if status = HTTP_PAYLOADTOOLARGE then
+      fServer.IncStat(grOversizedPayload); // e.g. over ContentMaxSize
     if fServer.ComputeRejectBody(
          fHttp.Content, fConnectionID, status, ExtraHeader) then
       result := soContinue; // for grWwwAuthenticate
@@ -5031,6 +5021,8 @@ begin
 end;
 
 function THttpAsyncServerConnection.DoRequest: TPollAsyncSocketOnReadWrite;
+var
+  op: PHttpServerConnectionOpaque;
 begin
   // check the status
   if nfHeadersParsed in fHttp.HeaderFlags then
@@ -5050,22 +5042,33 @@ begin
     fHttp.ContentInputDone;
   // optionaly uncompress content
   if fHttp.ContentEncoding <> nil then
-    fHttp.UncompressData;
+    try
+      fHttp.UncompressData;
+    except
+      on E: Exception do // decompression error
+      begin
+        if PClass(E)^ = ESizeOverflow then
+          result := DoReject(HTTP_PAYLOADTOOLARGE)
+        else
+          result := DoReject(HTTP_BADREQUEST);
+        exit;
+      end;
+    end;
   // prepare the HTTP/REST process reusing the THttpServerRequest instance
   if Assigned(fServer.OnAfterResponse) then
     QueryPerformanceMicroSeconds(fAfterResponseStart);
-  result := soClose;
+  op := GetConnectionOpaque;
   if fRequest = nil then
     // created once, if not rejected by OnBeforeBody
     fRequest := fServer.fRequestClass.Create(fServer,
-      fConnectionID, fReadThread, fHandle, fRequestFlags, GetConnectionOpaque)
+      fConnectionID, fReadThread, fHandle, fRequestFlags, op)
   else
-    fRequest.Recycle(
-      fConnectionID, fReadThread, fHandle, fRequestFlags, GetConnectionOpaque);
+    fRequest.Recycle(fConnectionID, fReadThread, fHandle, fRequestFlags, op);
   include(fInternalFlags, ifProcessing);
   LockedInc32(@fServer.fCurrentProcess);
   fRequest.Prepare(fHttp, fRemoteIP, fServer.fAuthorize);
   // let the associated THttpAsyncServer execute the request
+  result := soClose;
   if fServer.DoRequest(fRequest) then
   begin
     result := soContinue;

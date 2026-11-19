@@ -935,7 +935,8 @@ type
     procedure TaskProcess(aCaller: TSynThreadPoolWorkThread); virtual;
     function TaskProcessBody(aCaller: TSynThreadPoolWorkThread;
       aHeaderResult: THttpServerSocketGetRequestResult): boolean;
-    procedure DownloadBody; {$ifdef HASINLINE} inline; {$endif}
+    procedure DownloadBody;
+      {$ifdef HASINLINE} inline; {$endif}
     procedure GetBodyInMemory;
     procedure GetBodyStream;
     // implement fServer.OnBodyDownload in GetRequest - false if rejected as 415
@@ -3327,13 +3328,13 @@ begin
     result := true; // success
   except
     on E: Exception do
-    begin
-      // intercept and return Internal Server Error 500 on any fatal exception
-      Ctxt.RespStatus := HTTP_SERVERERROR;
-      Ctxt.SetErrorMessage('%: %', [E, E.Message]);
-      IncStat(grException);
-      // will keep soClose as result to shutdown the connection
-    end;
+      begin
+        // intercept and return Internal Server Error 500 on any fatal exception
+        Ctxt.RespStatus := HTTP_SERVERERROR;
+        Ctxt.SetErrorMessage('%: %', [E, E.Message]);
+        IncStat(grException);
+        // will keep soClose as result to shutdown the connection
+      end;
   end;
 end;
 
