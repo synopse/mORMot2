@@ -1062,13 +1062,23 @@ type
     fAsyncServer: THttpAsyncServer;
     procedure IdleEverySecond; override;
     procedure SetExecuteState(State: THttpServerExecuteState); override;
-    procedure WakeupServerMainThread;
   public
     /// run the HTTP server, listening on a supplied IP port
     constructor Create(const aPort: RawUtf8; const OnStart, OnStop: TOnNotifyThread;
       aConnectionClass: TAsyncConnectionClass; const ProcessName: RawUtf8;
       aLog: TSynLogClass; aOptions: TAsyncConnectionsOptions;
       aThreadPoolCount: integer); override;
+    /// let an outbound connection be processed by the threads of this server
+    // - aConnection is a new instance of a client class, e.g. for FastCGI
+    // - aSocket should be connected, and in non-blocking mode
+    // - aRequest is sent, then OnRead will receive the response
+    // - returns false on error: aSocket is released, and aConnection is freed
+    // or closed with its OnClose method
+    function StartClient(aConnection: TAsyncConnection; aSocket: TNetSocket;
+      aRequest: pointer; aRequestLen: PtrInt): boolean;
+    /// release the THttpAsyncServer main thread, e.g. for pending writes
+    // - as called by TAsyncConnection.OnAfterWriteSubscribe overriden methods
+    procedure WakeupServerMainThread;
   published
     /// used for hsoBan40xIP has been defined or via Banned.BlackList
     // - indicates e.g. how many accept() have been rejected from their IP
@@ -2704,9 +2714,11 @@ begin
   ObjArrayAdd(fGC1.Items, aConnection, fGC1.Safe, @fGC1.Count); // to 1st gen
 end;
 
-function OneGC(var gen, dst: TPollAsyncConnections; lastms, delayms: cardinal): PtrInt;
+function OneGC(var gen, dst: TPollAsyncConnections; lastms, delayms: cardinal;
+  recycled: TClass = nil; tofree: PPollAsyncConnections = nil): PtrInt;
 var
   c: PAsyncConnection;
+  p: PPollAsyncConnections;
   ms, n: cardinal;
   d: PtrInt;
 begin
@@ -2714,7 +2726,6 @@ begin
   n := gen.Count;
   if n = 0 then
     exit;
-  d := dst.Count;
   if delayms < 50 then
     delayms := 50; // bare minimum for GC#1
   c := pointer(gen.Items);
@@ -2729,10 +2740,15 @@ begin
     if lastms - ms >= delayms then
     begin
       // move to next generation list after timeout
-      if d = length(dst.Items) then
-        SetLength(dst.Items, NextGrow(d));
-      dst.Items[d] := c^;
-      inc(d);
+      p := @dst;
+      if (tofree <> nil) and
+         (PClass(c^)^ <> recycled) then
+        p := tofree; // never recycled by ConnectionCreate(): no need to keep it
+      d := p^.Count;
+      if d = length(p^.Items) then
+        SetLength(p^.Items, NextGrow(d));
+      p^.Items[d] := c^;
+      p^.Count := d + 1;
     end
     else
     begin
@@ -2743,7 +2759,6 @@ begin
     dec(n);
   until n = 0;
   gen.Count := result; // don't resize gen.Items[] to avoid realloc
-  dst.Count := d;
 end;
 
 procedure TAsyncConnections.DoGC;
@@ -2756,6 +2771,8 @@ begin
   tix1 := fLastOperationMS shr 5; // ProcessIdleTix() to call every 32 ms
   tix2 := tix1 shr 5;             // check GC#2 only every second
   lastms := fLastOperationMS;     // to force 32-bit unsigned value
+  tofree.Count := 0;
+  n2 := -1; // GC#2 not checked
   // retrieve the connection instances to be released
   if fGC2.Safe.TryLock then
   try
@@ -2765,36 +2782,41 @@ begin
         // if we reached here, both GC#1 and GC#2 have been acquired
         try
           // keep just-closed-connections in GC#1 list for 100 ms by default
-          n1 := OneGC(fGC1, fGC2, lastms, fKeepConnectionInstanceMS);
+          // - other classes (e.g. from THttpAsyncConnections.StartClient)
+          // are never recycled by ConnectionCreate(): release them now
+          n1 := OneGC(fGC1, fGC2, lastms, fKeepConnectionInstanceMS,
+            fConnectionClass, @tofree);
         finally
           fGC1.Safe.UnLock;
         end
       else
         exit; // won't block and retry if another thread is accessing GC#1
     fGCTix1 := tix1;
-    if (fGCTix2 = tix2) or
-       (fGC2.Count = 0) then
-      exit;
-    fGCTix2 := tix2;
-    // keep instances 10 seconds in GC#2 until no pending accept() needs them
-    tofree.Count := 0;
-    SetLength(tofree.Items, NextGrow(fGC2.Count shr 1));
-    n2 := OneGC(fGC2, tofree, lastms, 10000);
+    if (fGCTix2 <> tix2) and
+       (fGC2.Count <> 0) then
+    begin
+      fGCTix2 := tix2;
+      // keep instances 10 seconds in GC#2 until no pending accept() needs them
+      n2 := OneGC(fGC2, tofree, lastms, 10000);
+    end;
   finally
     fGC2.Safe.UnLock;
   end
   else
     exit; // won't block if another thread is accessing GC#2
   // notify the result of GC#1 and GC#2 collection
-  h := n1 xor (n2 shl 16); // compute the current state of both GC
-  if (h = fGCLast) and
-     (tofree.Count = 0) then
-    exit; // nothing new to report
-  fGCLast := h;
-  if Assigned(fLogClass) then
-    fLogClass.Add.Log(sllTrace, 'DoGC #1=% #2=% free=% client=%',
-      [n1, n2, tofree.Count, fSockets.Count], self);
-//writeln('DoGC n1=', n1, ' n2=',n2, ' tofree=',tofree.Count);
+  if n2 >= 0 then
+  begin
+    h := n1 xor (n2 shl 16); // compute the current state of both GC
+    if (h <> fGCLast) or
+       (tofree.Count <> 0) then
+    begin
+      fGCLast := h;
+      if Assigned(fLogClass) then
+        fLogClass.Add.Log(sllTrace, 'DoGC #1=% #2=% free=% client=%',
+          [n1, n2, tofree.Count, fSockets.Count], self);
+    end;
+  end;
   // actually release the deprecated connection instances
   if tofree.Count <> 0 then
     FreeGC(tofree);
@@ -2994,7 +3016,7 @@ begin
       dec(pool^.Count);
       aConnection := TAsyncConnection(pool^.Items[pool^.Count]);
     end;
-    pool^.Safe.UnLock;
+    pool^.Safe.UnLock; // GC#2 only contains fConnectionClass - see DoGC
   end;
   if aConnection = nil then
     // need to allocate and initialize a new instance
@@ -5213,6 +5235,22 @@ procedure THttpAsyncConnections.WakeupServerMainThread;
 begin // e.g. from TWebSocketAsyncConnections.NotifyOutgoing with SendDelay = 0
   if fAsyncServer <> nil then
     fAsyncServer.fExecuteEvent.SetEvent;
+end;
+
+function THttpAsyncConnections.StartClient(aConnection: TAsyncConnection;
+  aSocket: TNetSocket; aRequest: pointer; aRequestLen: PtrInt): boolean;
+begin
+  result := false;
+  if not ConnectionNew(aSocket, aConnection) then // with ConnectionAdd()
+  begin
+    aSocket.ShutdownAndClose({rdwr=}false);
+    aConnection.Free; // was not registered
+    exit;
+  end;
+  if fSockets.SubscribeConnection('client', aConnection, pseRead) then
+    result := fSockets.Write(aConnection, aRequest, aRequestLen); // closes on error
+  if not result then
+    ConnectionAbortAndNil(aConnection); // calls OnClose, unless already closed
 end;
 
 procedure THttpAsyncConnections.IdleEverySecond;
