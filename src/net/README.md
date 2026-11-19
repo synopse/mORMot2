@@ -85,6 +85,7 @@ Used e.g. by `mormot.net.relay`, `mormot.net.proxy` and `mormot.net.rtsphttp` to
 
 HTTP Server With Proxy and Cache
 - FastCGI Asynchronous Client Connections
+- High Level Web Server Definitions
 - `THttpProxyServer` HTTP Server With Proxy and Cache
 
 Serves local folders, remote URIs with memory and disk cache, FastCGI applications (e.g. php-fpm), or custom events, over a `THttpAsyncServer`.
