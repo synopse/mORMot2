@@ -8208,6 +8208,9 @@ function TCrtSocket.SockReceivePending(TimeOutMS: integer;
   loerr: PNetErrorInt): TCrtSocketPending;
 var
   events: TNetEvents;
+  {$ifdef OSWINDOWS}
+  peek: byte;
+  {$endif OSWINDOWS}
 begin
   if loerr <> nil then
     loerr^ := 0;
@@ -8229,7 +8232,7 @@ begin
   else if neRead in events then
     {$ifdef OSWINDOWS}
     // inlined fSock.Available seems safer on Windows
-    case mormot.net.sock.recv(TSocket(fSock), @events, 1, MSG_PEEK) of
+    case mormot.net.sock.recv(TSocket(fSock), @peek, 1, MSG_PEEK) of
       0:
         result := cspSocketClosed;  // WSACONNRESET with recv() returning 0
       1:
