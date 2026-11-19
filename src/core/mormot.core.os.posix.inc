@@ -3247,9 +3247,12 @@ begin
   {$endif CPUINTEL}
   PCardinal(@info)^ := SMB_FLAGS; // mark as retrieved from cache
   info.Data := StringFromFile(SMB_CACHE); // cache is better than PosixInject
-  if (info.Data <> '') and
-     (CompressSynLZ(info.Data, {compress=}false) = '') then
-    info.Data := ''; // tampered file
+  if info.Data <> '' then
+    try
+     CompressSynLZ(info.Data, {compress=}false);
+    except
+      info.Data := ''; // tampered file
+    end;
   if info.Data = '' then
     if Assigned(PosixInject.GetSmbiosData) then
     begin
