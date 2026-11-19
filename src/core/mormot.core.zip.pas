@@ -147,8 +147,8 @@ type
     // - on success, return true and fill complen/uncomplen32/crc32c properties
     function Init(gz: PAnsiChar; gzLen: PtrInt; noHCRCcheck: boolean = false): boolean;
     /// uncompress the .gz content into a memory buffer
-    // - warning: won't work as expected if uncomplen32 was truncated to 2^32
-    function ToMem: RawByteString;
+    // - warning: output could be truncated to uncomplen32 32-bit overflow
+    function ToMem(E: ExceptionClass = nil): RawByteString;
     /// uncompress the .gz content into a memory buffer
     // - warning: dest should be at least uncomplen32 in size (works only if
     // was not truncated to 2^32)
@@ -1007,7 +1007,8 @@ procedure ZipAppendFiles(const MainFile, NewFile: TFileName;
 // - use internally a level compression of 1, i.e. fastest available (content of
 // 4803 bytes is compressed into 700, and request is 440 us instead of 220 us)
 // - can use faster libdeflate instead of plain zlib if available
-function CompressGZip(var Data: RawByteString; Compress: boolean): RawUtf8;
+function CompressGZip(var Data: RawByteString; Compress: boolean;
+  MaxSize: PtrUInt = 0): RawUtf8;
 
 /// (un)compress a data content using the Deflate algorithm (i.e. "raw deflate")
 // - as expected by THttpClientSocket/THttpServerGeneric.RegisterCompress
@@ -1015,7 +1016,8 @@ function CompressGZip(var Data: RawByteString; Compress: boolean): RawUtf8;
 // - HTTP 'Content-Encoding: deflate' is pretty inconsistent in practice on client
 // side, so use CompressGZip() instead - https://stackoverflow.com/a/5186177
 // - can use faster libdeflate instead of plain zlib if available
-function CompressDeflate(var Data: RawByteString; Compress: boolean): RawUtf8;
+function CompressDeflate(var Data: RawByteString; Compress: boolean;
+  MaxSize: PtrUInt = 0): RawUtf8;
 
 /// (un)compress a data content using the zlib algorithm
 // - as expected by THttpClientSocket/THttpServerGeneric.RegisterCompress
@@ -1023,7 +1025,8 @@ function CompressDeflate(var Data: RawByteString; Compress: boolean): RawUtf8;
 // - HTTP 'Content-Encoding: zlib' is pretty inconsistent in practice on client
 // side, so use CompressGZip() instead - https://stackoverflow.com/a/5186177
 // - can use faster libdeflate instead of plain zlib if available
-function CompressZLib(var Data: RawByteString; Compress: boolean): RawUtf8;
+function CompressZLib(var Data: RawByteString; Compress: boolean;
+  MaxSize: PtrUInt = 0): RawUtf8;
 
 {$ifndef PUREMORMOT2}
 // backward compatibility functions
@@ -1384,13 +1387,17 @@ begin
   result := true;
 end;
 
-function TGZRead.ToMem: RawByteString;
+function TGZRead.ToMem(E: ExceptionClass): RawByteString;
 begin
   if (comp = nil) or
      ((uncomplen32 = 0) and
       (crc32 = 0)) or
      not ToBuffer(FastSetString(RawUtf8(result{%H-}), uncomplen32)) then
-    FastAssignNew(result); // invalid CRC or truncated uncomplen32
+    // invalid CRC or truncated uncomplen32
+    if E = nil then
+      FastAssignNew(result)
+    else
+      raise E.Create('TGZRead.ToMem failure');
 end;
 
 function TGZRead.ToBuffer(dest: PAnsiChar; maxDest: PtrInt;
@@ -4290,16 +4297,24 @@ end;
 const
   HTTP_LEVEL = Z_BEST_SPEED; // 1 is enough and way faster
 
-function CompressGZip(var Data: RawByteString; Compress: boolean): RawUtf8;
+function CompressGZip(var Data: RawByteString; Compress: boolean; MaxSize: PtrUInt): RawUtf8;
+var
+  r: TGZRead;
 begin
   if Compress then
     Data := GZWrite(pointer(Data), length(Data), HTTP_LEVEL)
+  else if r.Init(pointer(Data), length(Data)) then
+    if (MaxSize = 0) or
+       (r.uncomplen32 <= MaxSize) then
+      Data := r.ToMem(EZLib) // may use libdeflate
+    else
+      raise ESizeOverflow.Create('CompressGZip')
   else
-    Data := GZRead(pointer(Data), length(Data));
+    raise EZLib.Create('CompressGZip: wrong format');
   result := 'gzip';
 end;
 
-procedure CompressRaw(var Data: RawByteString; Compress, ZLib: boolean);
+procedure CompressRaw(var Data: RawByteString; Compress, ZLib: boolean; MaxSize: PtrUInt);
 var
   src: RawByteString;
   max, L: integer;
@@ -4309,26 +4324,26 @@ begin
   if Compress then
   begin
     max := zlibCompressMax(L);
-    L := CompressMem(pointer(src),
-      FastNewRawByteString(Data, max), L, max, HTTP_LEVEL, ZLib);
+    L := CompressMem(pointer(src), FastNewRawByteString(Data, max),
+           L, max, HTTP_LEVEL, ZLib);
     if L <= 0 then
-      Data := ''
+      FastAssignNew(Data)
     else
       FakeLength(Data, L);
   end
   else
-    Data := UnCompressZipString(pointer(src), L, nil, ZLib, 0);
+    Data := UnCompressZipString(pointer(src), L, nil, ZLib, {tempsize=}0, MaxSize);
 end;
 
-function CompressDeflate(var Data: RawByteString; Compress: boolean): RawUtf8;
+function CompressDeflate(var Data: RawByteString; Compress: boolean; MaxSize: PtrUInt): RawUtf8;
 begin
-  CompressRaw(Data, Compress, {zlib=}false);
+  CompressRaw(Data, Compress, {zlib=}false, MaxSize);
   result := 'deflate';
 end;
 
-function CompressZLib(var Data: RawByteString; Compress: boolean): RawUtf8;
+function CompressZLib(var Data: RawByteString; Compress: boolean; MaxSize: PtrUInt): RawUtf8;
 begin
-  CompressRaw(Data, Compress, {zlib=}true);
+  CompressRaw(Data, Compress, {zlib=}true, MaxSize);
   result := 'zlib';
 end;
 
