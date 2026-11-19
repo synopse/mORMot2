@@ -3104,10 +3104,9 @@ function THttpProxyServer.OnFastCgi(Ctxt: THttpServerRequest;
   const Uri: TUriMatchName): cardinal;
 var
   one: THttpProxyUrl;
-  len: integer;
   start: Int64;
   p: PUtf8Char;
-  plen: PtrInt;
+  len, plen: PtrInt;
   path, params, request: TSynTempAdder; // no heap allocation for most requests
 begin
   QueryPerformanceMicroSeconds(start);

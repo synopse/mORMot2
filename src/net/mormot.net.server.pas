@@ -1120,7 +1120,7 @@ type
     procedure SetRegisterCompressGzStatic(Value: boolean);
     function ComputeWwwAuthenticate(Opaque: Int64): RawUtf8;
     function ComputeRejectBody(var Body: RawByteString; Opaque: Int64;
-      Status: integer; const ExtraHeader: RawUtf8 = ''): boolean;
+      Status: integer; const ExtraHeader: RawUtf8 = ''; E: Exception = nil): boolean;
       virtual; // return true for grWwwAuthenticate - ExtraHeader needs #13#10
     function Authorization(var Http: THttpRequestContext;
       Opaque: Int64): TAuthServerResult;
@@ -3701,16 +3701,21 @@ end;
 
 function THttpServerSocketGeneric.ComputeRejectBody(
   var Body: RawByteString; Opaque: Int64; Status: integer;
-  const ExtraHeader: RawUtf8): boolean;
+  const ExtraHeader: RawUtf8; E: Exception): boolean;
 var
   reason: PRawUtf8;
-  auth, html: RawUtf8;
+  exc, auth, html: RawUtf8;
 begin
+  if E <> nil then
+    if PClass(E)^ = ESizeOverflow then
+      status := HTTP_PAYLOADTOOLARGE
+    else
+      Make([' Internal error was an ', E, '.'], exc);
   reason := StatusCodeToText(status); // customizable method
   FormatUtf8('<!DOCTYPE html><html><head><title>%</title></head>' +
              '<body style="font-family:verdana"><h1>%</h1>' +
-             '<p>Server rejected this request as % %.</body></html>',
-    [reason^, reason^, status, reason^], html);
+             '<p>Server rejected this request as % %.%</p></body></html>',
+    [reason^, reason^, status, reason^, exc], html);
   result := (status = HTTP_UNAUTHORIZED) and
             (fAuthorize <> hraNone);
   if result then // don't close the connection but set grWwwAuthenticate
