@@ -554,6 +554,8 @@ type
   end;
   /// internal exception type to identify e.g. HTTP payload overflows
   ESizeOverflow = class(ExceptionWithProps);
+  /// internal exception type raised by CompressSynLZ() wrapper function
+  ESynLZ = class(ExceptionWithProps);
 
   /// a parent TObject class with a virtual constructor and RTTI generated
   // for its published properties
@@ -12625,10 +12627,10 @@ begin
          (((PWord(d)^ and $8000) <> 0) and
           (slen < 4)) or
          (Hash32(pointer(d), slen) <> PCardinal(s + 4)^) then
-        raise EReadError.Create('CompressSynLZ: invalid input');
+        raise ESynLZ.Create('CompressSynLZ: invalid input');
       dlen := SynLZdecompressdestlen(d);
       if dlen <= 0 then
-        raise EReadError.Create('CompressSynLZ: void input');
+        raise ESynLZ.Create('CompressSynLZ: void input');
       if (MaxSize <> 0) and
          (PtrUInt(dlen) > MaxSize) then
         raise ESizeOverflow.Create('CompressSynLZ');
@@ -12637,7 +12639,7 @@ begin
          (Hash32(pointer(d), dlen) <> PCardinal(s)^) then
       begin
         FreeMem(d - _STRRECSIZE); // no memory leak
-        raise EReadError.Create('CompressSynLZ: invalid output');
+        raise ESynLZ.Create('CompressSynLZ: invalid output');
       end;
     end;
     FastAssignNew(Data, d);

@@ -1127,8 +1127,8 @@ type
     fRemoteUri: TUri;
     fFastCgi: TFastCgiAsyncConnections; // for hpsFastCgi
     fFastCgiRoot, fFastCgiPrefix: RawUtf8;
-    fFastCgiExt: RawUtf8;        // e.g. '.php' from Settings.FastCgiIndex
-    fFastCgiFolder: TFileName;   // fFastCgiRoot as local folder for FastCgiIndex
+    fFastCgiExt: RawUtf8;       // e.g. '.php' from Settings.FastCgiIndex
+    fFastCgiFolder: TFileName;  // fFastCgiRoot as local folder for FastCgiIndex
     fHeadCache: TSynDictionary; // THash160 / THeadCache
     fMemCache: TSynDictionary;  // THash160 / Content:RawByteString
     fHashCache: TSynDictionary; // name:RawUtf8 / hash[fAlgos]:TRawUtf8DynArray
