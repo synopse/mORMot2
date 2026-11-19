@@ -1877,10 +1877,10 @@ begin
     for i := 1 to 4 do
       Request(i);
     endtix := GetTickCount64 + 5000;
-    while (srv.Async.Accepted < 5) and
+    while (srv.Async.Sockets.PollRead.Pending < 4) and
           (GetTickCount64 < endtix) do
       SleepHiRes(1);
-    CheckEqual(srv.Async.Accepted, 5, 'queued');
+    CheckEqual(srv.Async.Sockets.PollRead.Pending, 4, 'queued');
     acceptreleased := 1;
     WaitFor(acceptblocked, 2);
     CheckEqual(acceptblocked, 2, 'second blocked');

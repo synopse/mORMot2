@@ -6756,7 +6756,7 @@ begin
       if (m = pmTemplate) and
          ((v^ = '#') or
           (cardinal(PWord(v)^) = SLASH_16)) and
-         ((v = beg) or (v[-1] <= ' ')) then
+         (v[-1] <= ' ') then
         break
       else
         inc(v);
@@ -6953,12 +6953,13 @@ begin
   quoted := P^ in ['"', ''''];
   if quoted then
     inc(P); // allow quoted "<filename>"
-  while not (P^ in [#0, '"', '''', '#', #13, #10]) do
+  while not (P^ in [#0, '"', '''', #13, #10]) do
   begin
     if (not quoted) and
-       (P^ = '/') and
-       (P[1] = '/') and
-       (P[-1] <= ' ') then
+       ((P^ = '#') or
+        ((P^ = '/') and
+         (P[1] = '/') and
+         (P[-1] <= ' '))) then
       break;
     if P^ = '$' then
     begin

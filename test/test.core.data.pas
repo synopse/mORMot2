@@ -1502,6 +1502,34 @@ procedure TTestCoreProcess.TestJopProcess;
     finally
       DeleteFile(fn);
     end;
+    // Quoted include filenames containing #
+    fn := WorkDir + 'jop#config.txt';
+    Check(FileFromString('included'#10, fn));
+    try
+      CheckEqual(TextPreprocess(
+        '$$'#10 +
+        'include "jop#config.txt"'#10 +
+        '$$'#10 +
+        'done', [], WorkDir),
+        'included'#10'done');
+    finally
+      DeleteFile(fn);
+    end;
+    // Comment markers immediately after macro expansion
+    TestJop(
+      '$$'#10 +
+      'name = hello'#10 +
+      'obj = {text:"$(name)#tag"}'#10 +
+      '$$'#10 +
+      '{data:{$(obj)}}',
+      '{data:{text:"hello#tag"}}');
+    TestJop(
+      '$$'#10 +
+      'name = hello'#10 +
+      'obj = {text:"$(name)//tag"}'#10 +
+      '$$'#10 +
+      '{data:{$(obj)}}',
+      '{data:{text:"hello//tag"}}');
     // URL should not be truncated at //
     TestJop(
       '$$'#10 +
