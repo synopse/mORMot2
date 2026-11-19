@@ -2922,7 +2922,7 @@ begin
     GetProperty(hObject, PropertyName, @result, SizeOf(result), len, 0));
   if len <> SizeOf(result) then
     ENCrypt.RaiseFmt(self,
-      'GetCardinal: unexpected property size %', [len]);
+      'GetCardinal: unexpected property size %d', [len]);
 end;
 
 function TNCrypt.GetBuffer(hObject: NCRYPT_HANDLE;
@@ -2946,7 +2946,7 @@ begin
     GetProperty(hObject, PropertyName, pointer(result), len, outlen, 0));
   if outlen > len then
     ENCrypt.RaiseFmt(self,
-      'GetBuffer: unexpected property size % > %', [outlen, len]);
+      'GetBuffer: unexpected property size %d > %d', [outlen, len]);
   if outlen <> len then
     FakeLength(result, outlen);
 end;
@@ -3020,7 +3020,7 @@ begin
     SignHash(hKey, padding, Hash, HashLen, pointer(result), len, outlen, flags));
   if outlen > len then
     ENCrypt.RaiseFmt(self,
-      'KeySign: unexpected signature size % > %', [outlen, len]);
+      'KeySign: unexpected signature size %d > %d', [outlen, len]);
   if outlen <> len then
     FakeLength(result, outlen);
 end;
