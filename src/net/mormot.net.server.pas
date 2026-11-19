@@ -4506,10 +4506,11 @@ begin
     else
       result := grHeaderReceived;
   except
-    on EHttpSocketOverflow do
-      result := grOversizedPayload; // e.g. chunked body over ContentMaxSize
     on E: Exception do
-      result := grException;
+      if PClass(E)^ = ESizeOverflow then
+        result := grOversizedPayload
+      else
+        result := grException;
   end;
 end;
 
@@ -4557,12 +4558,12 @@ begin
   try
     GetBody; // default in-memory download into Http.Content
   except
-    on EHttpSocketOverflow do
+    on E: ESizeOverflow do
     begin
-      // e.g. a chunked body over ContentMaxSize: report 413 before closing,
-      // as GetBodyStream does
-      fServer.ComputeRejectBody(Http.Content, 0, HTTP_PAYLOADTOOLARGE);
-      SockSendFlush(Http.Content);
+        // e.g. a chunked body over ContentMaxSize: report 413 before closing,
+        // as GetBodyStream does
+        fServer.ComputeRejectBody(Http.Content, 0, HTTP_PAYLOADTOOLARGE);
+        SockSendFlush(Http.Content);
       raise; // the caller will close the connection
     end;
   end;
@@ -4577,26 +4578,22 @@ begin
     // as InContentStream - and is released by ProcessDone afterwards
     Http.ContentInputDone;
   except
-    on EHttpSocketOverflow do
+    on E: Exception do
     begin
-      // e.g. a chunked body over ContentMaxSize: report 413 before closing
       Http.ProcessDone; // release the stream + delete any partial spool file
-      fServer.ComputeRejectBody(Http.Content, 0, HTTP_PAYLOADTOOLARGE);
-      SockSendFlush(Http.Content);
+      if PClass(E)^ = ESizeOverflow then
+      begin
+        // e.g. a chunked body over ContentMaxSize: report 413 before closing
+        fServer.ComputeRejectBody(Http.Content, 0, HTTP_PAYLOADTOOLARGE);
+        SockSendFlush(Http.Content);
+      end
+      else if E.InheritsFrom(EStreamError) then
+      begin
+        // e.g. ENOSPC when spooling the body: report it before closing
+        fServer.ComputeRejectBody(Http.Content, 0, HTTP_INSUFFICIENTSTORAGE);
+        SockSendFlush(Http.Content);
+      end;
       raise; // the caller will close the connection
-    end;
-    on EStreamError do
-    begin
-      // e.g. ENOSPC when spooling the body: report it before closing
-      Http.ProcessDone; // release the stream + delete any partial spool file
-      fServer.ComputeRejectBody(Http.Content, 0, HTTP_INSUFFICIENTSTORAGE);
-      SockSendFlush(Http.Content);
-      raise; // the caller will close the connection
-    end;
-    on Exception do
-    begin
-      Http.ProcessDone; // release the stream + delete any partial spool file
-      raise;
     end;
   end;
 end;

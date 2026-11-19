@@ -669,10 +669,6 @@ type
   /// exception class raised during HTTP process
   EHttpSocket = class(ESynException);
 
-  /// exception raised when an incoming request body overflows a size limit
-  // - so that the server could return 413 "Payload Too Large" before closing
-  EHttpSocketOverflow = class(EHttpSocket);
-
   /// parent of THttpClientSocket and THttpServerSocket classes
   // - contain properties for implementing HTTP/1.1 using the Socket API
   // - handle chunking of body content
@@ -4384,10 +4380,10 @@ begin
         break;      // reached the end of input stream
       end;
       if len > MaxHttpChunkSize then // allow up to 256 MB chunk
-        EHttpSocketOverflow.RaiseUtf8('%.GetBody: chunk size=% overflow', [self, len]);
+        ESizeOverflow.RaiseFmt(self, 'GetBody: chunk len=%d', [len]);
       if (Http.ContentMaxSize > 0) and
          (Http.ContentLength + len > Http.ContentMaxSize) then
-        EHttpSocketOverflow.RaiseUtf8('%.GetBody: chunked size overflow', [self]);
+        ESizeOverflow.RaiseFmt(self, 'GetBody: chunked', []);
       if DestStream <> nil then
       begin
         if length({%H-}chunk) < len then
@@ -4399,7 +4395,7 @@ begin
       begin
         bytes := Http.ContentLength + len;
         if bytes > MaxHttpInMemSize then // 1GB in memory max
-          EHttpSocket.RaiseUtf8('%.GetBody: chunked Content mem overflow', [self]);
+          ESizeOverflow.RaiseFmt(self, 'GetBody: chunked mem=%d', [bytes]);
         SetLength(Http.Content, bytes); // space for this chunk
         SockInRead(@PByteArray(Http.Content)[Http.ContentLength], len); // append
       end;

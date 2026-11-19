@@ -8163,7 +8163,7 @@ var
   mpssize: Int64;
 begin
   TSynLog.Family.ExceptionIgnore.AddSeveral([
-    EWriteError, EHttpSocketOverflow, ENetSock]);
+    EWriteError, ESizeOverflow, ENetSock]);
   try
     body8mb := RandomWinAnsi(8 shl 20); // 8MB of data, way above any socket buf
     CheckEqual(length(body8mb), 8 shl 20);
@@ -8586,7 +8586,7 @@ begin
     end;
   finally
     TSynLog.Family.ExceptionIgnore.RemoveSeveral([
-      EWriteError, EHttpSocketOverflow, ENetSock]);
+      EWriteError, ESizeOverflow, ENetSock]);
   end;
 end;
 
