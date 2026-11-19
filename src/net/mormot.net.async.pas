@@ -1903,7 +1903,8 @@ begin
   LockedInc32(@fProcessingRead);
   try
     pse := ResToEvents(notif);
-    if pseClosed in pse then
+    if (pseClosed in pse) and
+       not (pseRead in pse) then
     begin
       // - properly triggered from EPOLLRDHUP on Linux in ET mode
       // - on Windows, select() doesn't return any "close" flag
