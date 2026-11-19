@@ -9612,14 +9612,14 @@ begin
     // front controller at the root: the application has its own favicon.ico
     settings2 := THttpProxyServerSettings.Create;
     try
-      settings2.Server.Port := '8890';
+      settings2.Server.Port := '8879'; // not used by any other test
       settings2.Server.ThreadCount := 2;
       settings2.AddFastCgi(frontsrc, '').FastCgiIndex := 'index.php';
       proxy2 := THttpProxyServer.Create(settings2);
       try
         proxy2.Start;
         FreeAndNil(clt);
-        clt := THttpClientSocket.Open('127.0.0.1', '8890');
+        clt := THttpClientSocket.Open('127.0.0.1', '8879');
         n := fcgirequests;
         Expect('GET', '/favicon.ico', HTTP_SUCCESS);
         CheckEqual(clt.Content, 'icon', 'application favicon');
