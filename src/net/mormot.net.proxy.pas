@@ -1147,6 +1147,12 @@ type
     function ReturnFile(ctxt: THttpServerRequestAbstract; const hash: THash160;
       const filename: TFileName; const uri: TUriMatchName; var size: Int64;
       lastmod: TUnixMSTime; var loginfo: PUtf8Char; canbecached: boolean = true): cardinal;
+    /// return a file of the local folder of this Source, from its relative name
+    // - name is decoded, safe and ending with #0: its SHA-256 is the cache key
+    function ReturnLocalFile(ctxt: THttpServerRequestAbstract;
+      const uri: TUriMatchName; name: PUtf8Char; namelen: PtrInt;
+      var filename: TFileName; var hash: THash256Rec; var size: Int64;
+      var loginfo: PUtf8Char): cardinal;
     /// compute the (probably cached) hash of a given URI resource
     function ReturnHash(ctxt: THttpServerRequestAbstract;
       const name: RawUtf8; var fn: TFileName): integer;
@@ -1190,7 +1196,7 @@ type
     function OnGetHeadRemoteUri(Ctxt: THttpServerRequest; var Uri: TUriMatchName): cardinal;
     function OnFastCgi(Ctxt: THttpServerRequest; const Uri: TUriMatchName): cardinal;
     function OnFastCgiIndex(Ctxt: THttpServerRequest; const Uri: TUriMatchName;
-      One: THttpProxyUrl; var Path: RawUtf8): cardinal;
+      One: THttpProxyUrl; var Path: TSynTempAdder): cardinal;
     procedure OnBackgroundDeleteDeprecated(Sender: TObject);
   public
     /// initialize this forward proxy instance
@@ -2345,6 +2351,21 @@ begin
       FromCache;
 end;
 
+function THttpProxyUrl.ReturnLocalFile(ctxt: THttpServerRequestAbstract;
+  const uri: TUriMatchName; name: PUtf8Char; namelen: PtrInt;
+  var filename: TFileName; var hash: THash256Rec; var size: Int64;
+  var loginfo: PUtf8Char): cardinal;
+var
+  sha: TSha256;
+begin
+  if fSource = hpsFastCgi then // front controller static files
+    MakePath([fFastCgiFolder, name], filename)
+  else
+    MakePath([fSettings.fLocalFolder, name], filename);
+  sha.Full(name, namelen, hash.b);
+  result := ReturnFile(ctxt, hash.sha1, filename, uri, size, {lastmod=}0, loginfo);
+end;
+
 
 { THttpProxyServerMainSettings }
 
@@ -2547,11 +2568,12 @@ begin
     fav := 'default';
     // a front controller at the root has its own /favicon.ico file
     for i := 0 to high(fSettings.Url) do
-      if (not fSettings.Url[i].Disabled) and
-         (fSettings.Url[i].FastCgiIndex <> '') and
-         ((fSettings.Url[i].Url = '') or
-          (fSettings.Url[i].Url = '/')) then
-        fav := '';
+      with fSettings.Url[i] do
+        if (not Disabled) and
+           (FastCgiIndex <> '') and
+           ((Url = '') or
+            (Url = '/')) then
+          fav := '';
   end;
   if fav <> '' then
     fServer.SetFavIcon(fav); // do once
@@ -2857,7 +2879,6 @@ var
   opt: THttpProxyUrlOptions;
   loginfo: PUtf8Char;
   dig: THash256Rec; // 160-bit truncated SHA-256 hash of resource name
-  sha: TSha256;
 begin
   // supplied URI should be a safe resource reference
   result := HTTP_FORBIDDEN; // 403
@@ -2872,10 +2893,9 @@ begin
   if hpoNoSubFolder in opt then
     if PosExChar(PathDelim, name) <> 0 then
       exit;
-  MakePath([one.Settings.fLocalFolder, name], fn);
-  sha.Full(pointer(name), length(name), dig.b);
   // stream the content from local file
-  result := one.ReturnFile(Ctxt, dig.sha1, fn, Uri, siz, {lastmod=}0, loginfo);
+  result := one.ReturnLocalFile(Ctxt, Uri, pointer(name), length(name),
+    fn, dig, siz, loginfo);
   // additional response types
   case result of
     HTTP_NOTFOUND:
@@ -3012,70 +3032,71 @@ begin
 end;
 
 function THttpProxyServer.OnFastCgiIndex(Ctxt: THttpServerRequest;
-  const Uri: TUriMatchName; One: THttpProxyUrl; var Path: RawUtf8): cardinal;
+  const Uri: TUriMatchName; One: THttpProxyUrl; var Path: TSynTempAdder): cardinal;
 var
-  tmp: TSynTempBuffer; // no heap allocation for a path up to 4KB
   name: PUtf8Char;
   namelen, scriptlen: PtrInt;
-  fname: RawUtf8;
-  fn: TFileName;
+  fn: TFileName; // as needed by the file system API
   siz: Int64;
   ts: TUnixMSTime;
-  dig: THash256Rec; // 160-bit truncated SHA-256 hash of resource name
-  sha: TSha256;
+  dig: THash256Rec;
   loginfo: PUtf8Char;
 begin
-  // returns 0 to send Path (or Uri.Path if Path = '') to the application
+  // returns 0 to send Path (or Uri.Path if Path.Size = 0) to the application
   result := 0;
   if Uri.Path.Len = 0 then
   begin
-    Path := One.Settings.FastCgiIndex; // the root index script
+    Path.Add(One.Settings.FastCgiIndex); // the root index script
     exit;
   end;
-  tmp.Init(Uri.Path.Text, Uri.Path.Len);
-  name := tmp.buf;
-  namelen := DoUrlDecode(tmp.buf, tmp.buf, '+') - name;
+  // URI-decode the path within Path itself, ending with #0 as expected
+  Path.Add(Uri.Path.Text, Uri.Path.Len);
+  Path.AddDirect(#0);
+  name := Path.Buffer;
+  namelen := DoUrlDecode(pointer(name), pointer(name), '+') - name;
   name[namelen] := #0;
   scriptlen := FastCgiScriptLen(name, namelen, One.fFastCgiExt);
   if scriptlen = 0 then // not a script path
     if name[namelen - 1] = '/' then
     begin
       // a folder: is sent to its own index script, if any
-      FastSetString(fname, name, namelen);
-      Append(fname, One.Settings.FastCgiIndex);
-      NormalizeFileNameU(fname);
-      if FileExists(One.fFastCgiFolder + Utf8ToString(fname)) then
-      begin
-        FastSetString(Path, Uri.Path.Text, Uri.Path.Len); // still URI-encoded
-        Append(Path, One.Settings.FastCgiIndex);
-      end
-      else
-        Path := One.Settings.FastCgiIndex; // the root index script
+      Path.Size := namelen;
+      Path.Add(One.Settings.FastCgiIndex);
+      Path.AddDirect(#0);
+      MakePath([One.fFastCgiFolder, PUtf8Char(Path.Buffer)], fn); // may realloc
+      Path.Size := 0;
+      if FileExists(fn) then
+        Path.Add(Uri.Path.Text, Uri.Path.Len); // still URI-encoded
+      Path.Add(One.Settings.FastCgiIndex); // or the root index script
     end
     else
     begin
       // an existing file is returned as from a local folder
-      FastSetString(fname, name, namelen);
-      NormalizeFileNameU(fname);
-      fn := One.fFastCgiFolder + Utf8ToString(fname);
       if IsGet(Ctxt.Method) or
          IsHead(Ctxt.Method) then
       begin
-        sha.Full(pointer(fname), length(fname), dig.b); // as OnGetHeadLocalFolder
-        result := One.ReturnFile(Ctxt, dig.sha1, fn, Uri, siz, 0, loginfo);
-        // 200 or 304, or 404 if no such file
-        if result = HTTP_NOTFOUND then
+        result := One.ReturnLocalFile(Ctxt, Uri, name, namelen,
+          fn, dig, siz, loginfo);
+        if result = HTTP_NOTFOUND then // 200 or 304, or 404 if no such file
           result := 0;
       end
-      else if FileInfoByName(fn, siz, ts) and
-              (siz >= 0) then
-        result := HTTP_NOTALLOWED; // not a folder: static file only for GET
+      else
+      begin
+        MakePath([One.fFastCgiFolder, name], fn);
+        if FileInfoByName(fn, siz, ts) and
+           (siz >= 0) then
+          result := HTTP_NOTALLOWED; // not a folder: static file only for GET
+      end;
       if result = 0 then
-        Path := One.Settings.FastCgiIndex; // the root index script
+      begin
+        Path.Size := 0;
+        Path.Add(One.Settings.FastCgiIndex); // the root index script
+      end;
     end
   else if scriptlen < 0 then
-    result := HTTP_NOTFOUND; // unsafe path
-  tmp.Done;
+    result := HTTP_NOTFOUND // unsafe path
+  else
+    Path.Size := 0; // a script: Uri.Path is sent as it is
 end;
 
 function THttpProxyServer.OnFastCgi(Ctxt: THttpServerRequest;
@@ -3084,10 +3105,9 @@ var
   one: THttpProxyUrl;
   len: integer;
   start: Int64;
-  path: RawUtf8;
   p: PUtf8Char;
   plen: PtrInt;
-  params, request: TSynTempAdder; // no heap allocation for most GET requests
+  path, params, request: TSynTempAdder; // no heap allocation for most requests
 begin
   QueryPerformanceMicroSeconds(start);
   len := 0;
@@ -3096,13 +3116,14 @@ begin
   plen := Uri.Path.Len;
   // optional front controller: static files and index scripts
   result := 0;
+  path.Init;
   if one.fFastCgiFolder <> '' then
   begin
     result := OnFastCgiIndex(Ctxt, Uri, one, path);
-    if path <> '' then
+    if path.Size <> 0 then
     begin
-      p := pointer(path);
-      plen := length(path);
+      p := path.Buffer;
+      plen := path.Size;
     end;
   end;
   if result = 0 then
@@ -3126,6 +3147,7 @@ begin
     end;
     params.Store.Done;
   end;
+  path.Store.Done;
   if fHasLog in fFlags then
     fLog.Add.Log(sllDebug, 'OnFastCgi: % % status=% len=% in %',
       [Ctxt.Method, Ctxt.Url, result, len, MicroSecFrom(start)], self);
