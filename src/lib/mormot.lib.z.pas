@@ -179,7 +179,7 @@ type
     /// finalize the Inflate Uncompression
     function UncompressEnd: integer;
     /// low-level flush of the compressed data pending in the internal buffer
-    procedure DoFlush(Code: integer);
+    procedure DoFlush(Code: integer; MaxSize: PtrUInt = 0);
     /// low-level check of the code returned by the ZLib library
     // - raise EZLib Exception on error
     function Check(const Code: integer; const ValidCodes: array of integer;
@@ -893,17 +893,20 @@ begin
   end;
 end;
 
-procedure TZLib.DoFlush(Code: integer);
+procedure TZLib.DoFlush(Code: integer; MaxSize: PtrUInt);
 var
   n: integer;
 begin
   n := FlushSize - integer(Stream.avail_out);
   if n <> 0 then
   begin
+    inc(Written, n);
+    if (MaxSize <> 0) and
+       (Written > Int64(MaxSize)) then
+      raise ESizeOverflow.Create('ZLib UncompressStream');
     if FlushCheckCRC <> nil then
       FlushCheckCRC^ := crc32(FlushCheckCRC^, FlushBuffer, n);
     FlushStream.WriteBuffer(FlushBuffer^, n);
-    inc(Written, n);
   end
   else if Code = Z_BUF_ERROR then
     Check(Code, [], 'DoFlush with no output'); // may occur on corrupted input 
@@ -1155,12 +1158,9 @@ begin
       repeat
         code := z.Check(z.Uncompress(Z_FINISH),
           [Z_OK, Z_STREAM_END, Z_BUF_ERROR], 'UncompressStream');
-        if (MaxSize <> 0) and
-           (z.Stream.total_out + z.Stream.avail_out > MaxSize) then
-          raise ESizeOverflow.Create('ZLib UncompressStream');
-        z.DoFlush(code);
+        z.DoFlush(code, MaxSize);
       until code = Z_STREAM_END;
-      z.DoFlush(code);
+      z.DoFlush(code, MaxSize);
     finally
       z.UncompressEnd;
     end;
