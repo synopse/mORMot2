@@ -1575,7 +1575,7 @@ begin
     begin
       ctx.Reset;
       ctx.ResetPeer := true;
-      ctx.DelayMS := 80;
+      ctx.DelayMS := 5;
       raw := TCrtSocket.Open('127.0.0.1', srv.SockPort, nlTcp, 5000);
       try
         raw.SockSend(['GET /reset HTTP/1.1'#13#10,
@@ -1595,7 +1595,9 @@ begin
       end;
       if not JoinWorker('#750') then
         break;
-      SleepHiRes(120); // allow the 100ms first GC generation to expire
+      // let the 100ms GC grace period elapse once, not per reset
+      if i = RESET_ROUNDS div 2 then
+        SleepHiRes(120);
       if not ReadOk('/alive', 'alive') then
         break;
       inc(tested);
