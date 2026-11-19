@@ -9127,13 +9127,14 @@ procedure TNetworkProtocols.DoHttpFastCgi(Sender: TObject);
 var
   app, raw: TCrtSocket;
   th: TLoggedWorkThread;
-  settings: THttpProxyServerSettings;
+  settings, settings2: THttpProxyServerSettings;
   url: THttpProxyUrlSettings;
-  proxy: THttpProxyServer;
+  proxy, proxy2: THttpProxyServer;
   clt: THttpClientSocket;
   buf, par: TSynTempAdder;
   resp: TFastCgiResponse;
-  s, ctype, headers: RawUtf8;
+  front: TFileName;
+  s, ctype, headers, frontroot, frontsrc: RawUtf8;
   body, bin: RawByteString;
   status, i, n: integer;
   start: Int64;
@@ -9283,6 +9284,23 @@ begin
     // WSGI uses the same FastCGI backend, with virtual SCRIPT_NAME/PATH_INFO.
     url := settings.AddFastCgi('fcgi://127.0.0.1:8880', 'api');
     url.SetOptions([hpoFastCgiWsgi]);
+    // front controller: a real folder, with static files and index scripts
+    front := EnsureDirectoryExists(TempDir + 'fcgifront');
+    frontroot := StringReplaceChars(
+      StringToUtf8(ExcludeTrailingPathDelimiter(front)), '\', '/');
+    if frontroot[1] = '/' then
+      frontsrc := 'fcgi://127.0.0.1:8880' + frontroot
+    else
+      frontsrc := 'fcgi://127.0.0.1:8880/' + frontroot; // e.g. 'c:/...'
+    Check(FileFromString('robots', front + 'robots.txt'), 'robots');
+    Check(FileFromString('icon', front + 'favicon.ico'), 'favicon');
+    Check(FileFromString('<?php', front + 'index.php'), 'index');
+    Check(FileFromString('js',
+      EnsureDirectoryExists(front + 'assets') + 'app.js'), 'js');
+    Check(FileFromString('<?php',
+      EnsureDirectoryExists(front + 'blog') + 'index.php'), 'blog index');
+    EnsureDirectoryExists(front + 'sub'); // a folder with no index script
+    settings.AddFastCgi(frontsrc, 'front').FastCgiIndex := 'index.php';
     proxy := THttpProxyServer.Create(settings);
     proxy.Start;
     clt := THttpClientSocket.Open('127.0.0.1', '8881');
@@ -9429,6 +9447,82 @@ begin
     CheckEqual(fcgirequests, n, 'wsgi NUL must not reach the application');
     Expect('GET', '/app/echo.php', HTTP_SUCCESS);
     CheckEqual(Field(1), '/var/www/echo.php', 'php script mapping unchanged');
+    // front controller: existing files are returned with no application call
+    n := fcgirequests;
+    Expect('GET', '/front/robots.txt', HTTP_SUCCESS);
+    CheckEqual(clt.Content, 'robots', 'static file');
+    Expect('HEAD', '/front/robots.txt', HTTP_SUCCESS);
+    CheckEqual(clt.Content, '', 'static head');
+    Expect('GET', '/front/assets/app.js', HTTP_SUCCESS);
+    CheckEqual(clt.Content, 'js', 'static file in a sub folder');
+    Expect('POST', '/front/robots.txt', HTTP_NOTALLOWED, '', 'body');
+    Expect('GET', '/front/%2e%2e/fcgifront/robots.txt', HTTP_NOTFOUND);
+    Expect('GET', '/front/a%2F..%2F..%2Findex.php', HTTP_NOTFOUND);
+    Expect('GET', '/front/index.php%00.txt', HTTP_NOTFOUND);
+    CheckEqual(fcgirequests, n, 'static or unsafe: application not called');
+    // front controller: a script path is sent as usual, never as a file
+    Expect('GET', '/front/index.php', HTTP_SUCCESS);
+    CheckEqual(Field(0), 'GET', 'script is not returned as a file');
+    CheckEqual(Field(19), '/front/index.php', 'front index script');
+    Expect('GET', '/front/info.php/extra', HTTP_SUCCESS);
+    CheckEqual(Field(19), '/front/info.php', 'front script');
+    CheckEqual(Field(2), '/extra', 'front script path info');
+    Expect('GET', '/front/lib.v2/x.php', HTTP_SUCCESS);
+    CheckEqual(Field(19), '/front/lib.v2/x.php', 'script in a dotted folder');
+    Expect('GET', '/front/INDEX.PHP', HTTP_SUCCESS);
+    CheckEqual(Field(19), '/front/INDEX.PHP', 'case insensitive extension');
+    // front controller: any other path is sent to the index script
+    Expect('GET', '/front/page?x=1', HTTP_SUCCESS);
+    CheckEqual(Field(19), '/front/index.php', 'front script name');
+    CheckEqual(Field(1), frontroot + '/index.php', 'front script filename');
+    CheckEqual(Field(2), '<none>', 'front no path info');
+    CheckEqual(Field(3), 'x=1', 'front query string');
+    CheckEqual(Field(13), '/front/page?x=1', 'front request uri');
+    Expect('GET', '/front/user/john.doe', HTTP_SUCCESS);
+    CheckEqual(Field(19), '/front/index.php', 'dot in a route');
+    Expect('POST', '/front/form', HTTP_SUCCESS, '', 'posted');
+    CheckEqual(Field(0), 'POST', 'front post');
+    CheckEqual(Field(19), '/front/index.php', 'front post script');
+    Expect('GET', '/front/blog/', HTTP_SUCCESS);
+    CheckEqual(Field(19), '/front/blog/index.php', 'folder index script');
+    Expect('GET', '/front/sub/', HTTP_SUCCESS);
+    CheckEqual(Field(19), '/front/index.php', 'folder with no index script');
+    Expect('GET', '/front/sub', HTTP_SUCCESS);
+    CheckEqual(Field(19), '/front/index.php', 'folder name as a route');
+    Expect('GET', '/front/', HTTP_SUCCESS);
+    CheckEqual(Field(19), '/front/index.php', 'front root');
+    Expect('GET', '/front', HTTP_SUCCESS);
+    CheckEqual(Field(19), '/front/index.php', 'front root with no slash');
+    // front controller at the root: the application has its own favicon.ico
+    settings2 := THttpProxyServerSettings.Create;
+    try
+      settings2.Server.Port := '8890';
+      settings2.Server.ThreadCount := 2;
+      settings2.AddFastCgi(frontsrc, '').FastCgiIndex := 'index.php';
+      proxy2 := THttpProxyServer.Create(settings2);
+      try
+        proxy2.Start;
+        FreeAndNil(clt);
+        clt := THttpClientSocket.Open('127.0.0.1', '8890');
+        n := fcgirequests;
+        Expect('GET', '/favicon.ico', HTTP_SUCCESS);
+        CheckEqual(clt.Content, 'icon', 'application favicon');
+        Expect('GET', '/robots.txt', HTTP_SUCCESS);
+        CheckEqual(clt.Content, 'robots', 'static file at the root');
+        CheckEqual(fcgirequests, n, 'root static files');
+        Expect('GET', '/', HTTP_SUCCESS);
+        CheckEqual(Field(19), '/index.php', 'root index script');
+        Expect('GET', '/page?id=3', HTTP_SUCCESS);
+        CheckEqual(Field(19), '/index.php', 'root front controller');
+        CheckEqual(Field(13), '/page?id=3', 'root request uri');
+        FreeAndNil(clt);
+      finally
+        proxy2.Free;
+      end;
+    finally
+      settings2.Free;
+    end;
+    clt := THttpClientSocket.Open('127.0.0.1', '8881');
     if not fOwner.MultiThread then
     begin
       // an application which never answers (not validated in --multithread path)

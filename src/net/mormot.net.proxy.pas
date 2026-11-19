@@ -133,9 +133,10 @@ procedure FastCgiAppendRequest(var Dest: TSynTempAdder;
 
 /// append the CGI/1.1 variables of a HTTP request to a FastCGI frtParams content
 // - Path/PathLen is the URI path below the UriPrefix route, with no ?query
-// - the script is located as the Path up to its first segment with a dot,
-// then set as SCRIPT_NAME below UriPrefix and as SCRIPT_FILENAME below Root:
-// any following segment is the PATH_INFO
+// - the script is located as the Path up to its first segment with a dot -
+// or ending with ScriptExt, e.g. '.php', if supplied - then set as
+// SCRIPT_NAME below UriPrefix and as SCRIPT_FILENAME below Root: any
+// following segment is the PATH_INFO
 // - returns false if Path has no script, or is unsafe, i.e. is absolute or
 // contains a '..' segment, a ':' or a '\'
 // - with Wsgi=true, SCRIPT_NAME is UriPrefix and PATH_INFO is the
@@ -144,7 +145,8 @@ procedure FastCgiAppendRequest(var Dest: TSynTempAdder;
 // with an underscore in its name is ignored
 function FastCgiAppendParams(var Dest: TSynTempAdder;
   Ctxt: THttpServerRequestAbstract; const Root, UriPrefix, ServerPort: RawUtf8;
-  Path: PUtf8Char; PathLen: PtrInt; Wsgi: boolean = false): boolean;
+  Path: PUtf8Char; PathLen: PtrInt; Wsgi: boolean = false;
+  const ScriptExt: RawUtf8 = ''): boolean;
 
 /// parse the CGI headers of a FastCGI frtStdOut content
 // - header lines could end with LF or CRLF
@@ -842,6 +844,7 @@ type
     fCacheControlMaxAgeSec: integer;
     fHttpKeepAlive, fHttpHeadCacheSec, fHttpDirectGetKB, fHttpLimitPerSecond: integer;
     fFastCgiTimeoutSec: integer;
+    fFastCgiIndex: RawUtf8;
     fMemCache: THttpProxyMem; // owned as TSynAutoCreateFields
     fDiskCache: THttpProxyDisk;
     fRejectCsv: RawUtf8;
@@ -901,6 +904,20 @@ type
     // - default is 60 seconds
     property FastCgiTimeoutSec: integer
       read fFastCgiTimeoutSec write fFastCgiTimeoutSec;
+    /// enable front controller support for a fcgi:// Source, e.g. 'index.php'
+    // - as nginx "try_files $uri $uri/ /index.php?$query_string" does: a path
+    // up to its first segment with the FastCgiIndex extension (e.g. '.php') is
+    // a script, sent to the application as usual; any other existing file is
+    // returned as from a local folder (GET and HEAD only); a folder path
+    // ending with '/' is sent to its FastCgiIndex script, if any; and any
+    // other path is sent to the root FastCgiIndex script, with no PATH_INFO
+    // and REQUEST_URI unchanged
+    // - the Source folder should be accessible from this server with the same
+    // path, as for nginx
+    // - if this Source is published at the root, the built-in /favicon.ico is
+    // disabled, unless THttpProxyServerMainSettings.FaviconFile is set
+    property FastCgiIndex: RawUtf8
+      read fFastCgiIndex write fFastCgiIndex;
     /// how many seconds HEAD requests could be cached in memory
     // - 0 would disable head caching
     // - default is 60, i.e. cache HEAD response for 1 minute
@@ -1110,6 +1127,8 @@ type
     fRemoteUri: TUri;
     fFastCgi: TFastCgiAsyncConnections; // for hpsFastCgi
     fFastCgiRoot, fFastCgiPrefix: RawUtf8;
+    fFastCgiExt: RawUtf8;        // e.g. '.php' from Settings.FastCgiIndex
+    fFastCgiFolder: TFileName;   // fFastCgiRoot as local folder for FastCgiIndex
     fHeadCache: TSynDictionary; // THash160 / THeadCache
     fMemCache: TSynDictionary;  // THash160 / Content:RawByteString
     fHashCache: TSynDictionary; // name:RawUtf8 / hash[fAlgos]:TRawUtf8DynArray
@@ -1170,6 +1189,8 @@ type
     function OnGetHeadLocalFolder(Ctxt: THttpServerRequest; const Uri: TUriMatchName): cardinal;
     function OnGetHeadRemoteUri(Ctxt: THttpServerRequest; var Uri: TUriMatchName): cardinal;
     function OnFastCgi(Ctxt: THttpServerRequest; const Uri: TUriMatchName): cardinal;
+    function OnFastCgiIndex(Ctxt: THttpServerRequest; const Uri: TUriMatchName;
+      One: THttpProxyUrl; var Path: RawUtf8): cardinal;
     procedure OnBackgroundDeleteDeprecated(Sender: TObject);
   public
     /// initialize this forward proxy instance
@@ -1351,16 +1372,18 @@ begin // caller ensured P <> nil
   until false;
 end;
 
-function FastCgiScriptLen(P: PUtf8Char; Len: PtrInt): PtrInt;
+function FastCgiScriptLen(P: PUtf8Char; Len: PtrInt; const Ext: RawUtf8): PtrInt;
 var
   s, e: PUtf8Char;
-  script: PtrInt;
+  script, extlen: PtrInt;
   dot: boolean;
 begin
-  // the script is the path up to its first segment with a dot
-  result := 0; // if there is no script, or if the path is unsafe
+  // the script is the path up to its first segment with a dot, or ending with
+  // Ext if supplied: returns 0 if there is no script, -1 if the path is unsafe
+  result := -1;
   if P^ = '/' then
     exit; // should be below the root folder
+  extlen := length(Ext);
   script := 0;
   dot := false;
   s := P; // start of the current segment
@@ -1379,7 +1402,10 @@ begin
              (PWord(s)^ = ord('.') + ord('.') shl 8) then
             exit; // no parent folder
           if dot and
-             (script = 0) then
+             (script = 0) and
+             ((extlen = 0) or
+              ((e - s > extlen) and
+               IdemPropNameU(Ext, e - extlen, extlen))) then
             script := e - P; // but continue to validate the PATH_INFO
           if e^ = #0 then
             break;
@@ -1394,7 +1420,7 @@ end;
 
 function FastCgiAppendParams(var Dest: TSynTempAdder;
   Ctxt: THttpServerRequestAbstract; const Root, UriPrefix, ServerPort: RawUtf8;
-  Path: PUtf8Char; PathLen: PtrInt; Wsgi: boolean): boolean;
+  Path: PUtf8Char; PathLen: PtrInt; Wsgi: boolean; const ScriptExt: RawUtf8): boolean;
 var
   name, p: PUtf8Char;
   namelen, scriptlen, i: PtrInt;
@@ -1425,10 +1451,10 @@ begin
       end;
     end
     else
-      scriptlen := FastCgiScriptLen(name, namelen);
+      scriptlen := FastCgiScriptLen(name, namelen, ScriptExt);
   end;
   if Wsgi or
-     (scriptlen <> 0) then
+     (scriptlen > 0) then
   begin
     // the standard CGI/1.1 variables
     FastCgiAppendParam(Dest, 'GATEWAY_INTERFACE', 'CGI/1.1');
@@ -2479,6 +2505,7 @@ var
   hso: THttpServerOptions;
   tls: TNetTlsContext;
   fav: RawByteString;
+  i: PtrInt;
 begin
   fLog.EnterLocal(log, 'Start %', [fSettings], self);
   if Assigned(log) then
@@ -2516,8 +2543,18 @@ begin
     fServer.Logger.Settings := fSettings.Server.Log;   // override default
   fav := StringFromFile(fSettings.Server.FaviconFile);
   if fav = '' then
+  begin
     fav := 'default';
-  fServer.SetFavIcon(fav); // do once
+    // a front controller at the root has its own /favicon.ico file
+    for i := 0 to high(fSettings.Url) do
+      if (not fSettings.Url[i].Disabled) and
+         (fSettings.Url[i].FastCgiIndex <> '') and
+         ((fSettings.Url[i].Url = '') or
+          (fSettings.Url[i].Url = '/')) then
+        fav := '';
+  end;
+  if fav <> '' then
+    fServer.SetFavIcon(fav); // do once
   fServer.IdleEverySecond; // initial setup of background processing
   fServer.OnIdle := OnIdle;
   if not (psoDisableGzip in fSettings.Server.Options) then
@@ -2622,6 +2659,15 @@ begin
               SetLength(one.fFastCgiRoot, length(one.fFastCgiRoot) - 1);
             one.fFastCgi := TFastCgiAsyncConnections.Create(fServer,
               one.fRemoteUri, s.FastCgiTimeoutSec, fLog);
+            if (s.FastCgiIndex <> '') and
+               not (hpoFastCgiWsgi in s.Options) then
+            begin
+              // front controller: the root is also a local folder
+              one.fFastCgiExt := ExtractExtU(s.FastCgiIndex); // e.g. '.php'
+              Utf8ToFileName(one.fFastCgiRoot, one.fFastCgiFolder);
+              one.fFastCgiFolder := IncludeTrailingPathDelimiter(
+                NormalizeFileName(one.fFastCgiFolder));
+            end;
           end;
         end
         else if IsHttp(s.Source) then
@@ -2650,7 +2696,8 @@ begin
       fUrlOptions := fUrlOptions + s.fOptions;
       // normalize cache settings
       nfo := '';
-      if not (hps in [hpsEvent, hpsFastCgi]) then
+      if not (hps in [hpsEvent, hpsFastCgi]) or
+         (one.fFastCgiFolder <> '') then // front controller static files
       begin
         if not (psoDisableMemCache in fSettings.Server.Options) then
         begin
@@ -2964,35 +3011,121 @@ begin
      req.localsize, req.loginfo, MicroSecFrom(start)], instance);
 end;
 
+function THttpProxyServer.OnFastCgiIndex(Ctxt: THttpServerRequest;
+  const Uri: TUriMatchName; One: THttpProxyUrl; var Path: RawUtf8): cardinal;
+var
+  tmp: TSynTempBuffer; // no heap allocation for a path up to 4KB
+  name: PUtf8Char;
+  namelen, scriptlen: PtrInt;
+  fname: RawUtf8;
+  fn: TFileName;
+  siz: Int64;
+  ts: TUnixMSTime;
+  dig: THash256Rec; // 160-bit truncated SHA-256 hash of resource name
+  sha: TSha256;
+  loginfo: PUtf8Char;
+begin
+  // returns 0 to send Path (or Uri.Path if Path = '') to the application
+  result := 0;
+  if Uri.Path.Len = 0 then
+  begin
+    Path := One.Settings.FastCgiIndex; // the root index script
+    exit;
+  end;
+  tmp.Init(Uri.Path.Text, Uri.Path.Len);
+  name := tmp.buf;
+  namelen := DoUrlDecode(tmp.buf, tmp.buf, '+') - name;
+  name[namelen] := #0;
+  scriptlen := FastCgiScriptLen(name, namelen, One.fFastCgiExt);
+  if scriptlen = 0 then // not a script path
+    if name[namelen - 1] = '/' then
+    begin
+      // a folder: is sent to its own index script, if any
+      FastSetString(fname, name, namelen);
+      Append(fname, One.Settings.FastCgiIndex);
+      NormalizeFileNameU(fname);
+      if FileExists(One.fFastCgiFolder + Utf8ToString(fname)) then
+      begin
+        FastSetString(Path, Uri.Path.Text, Uri.Path.Len); // still URI-encoded
+        Append(Path, One.Settings.FastCgiIndex);
+      end
+      else
+        Path := One.Settings.FastCgiIndex; // the root index script
+    end
+    else
+    begin
+      // an existing file is returned as from a local folder
+      FastSetString(fname, name, namelen);
+      NormalizeFileNameU(fname);
+      fn := One.fFastCgiFolder + Utf8ToString(fname);
+      if IsGet(Ctxt.Method) or
+         IsHead(Ctxt.Method) then
+      begin
+        sha.Full(pointer(fname), length(fname), dig.b); // as OnGetHeadLocalFolder
+        result := One.ReturnFile(Ctxt, dig.sha1, fn, Uri, siz, 0, loginfo);
+        // 200 or 304, or 404 if no such file
+        if result = HTTP_NOTFOUND then
+          result := 0;
+      end
+      else if FileInfoByName(fn, siz, ts) and
+              (siz >= 0) then
+        result := HTTP_NOTALLOWED; // not a folder: static file only for GET
+      if result = 0 then
+        Path := One.Settings.FastCgiIndex; // the root index script
+    end
+  else if scriptlen < 0 then
+    result := HTTP_NOTFOUND; // unsafe path
+  tmp.Done;
+end;
+
 function THttpProxyServer.OnFastCgi(Ctxt: THttpServerRequest;
   const Uri: TUriMatchName): cardinal;
 var
   one: THttpProxyUrl;
   len: integer;
   start: Int64;
+  path: RawUtf8;
+  p: PUtf8Char;
+  plen: PtrInt;
   params, request: TSynTempAdder; // no heap allocation for most GET requests
 begin
   QueryPerformanceMicroSeconds(start);
-  // compute the CGI variables from this request
-  result := HTTP_NOTFOUND; // unsafe path or no script
   len := 0;
   one := Ctxt.RouteOpaque;
-  params.Init;
-  if FastCgiAppendParams(params, Ctxt, one.fFastCgiRoot,
-       one.fFastCgiPrefix, fServer.SockPort, Uri.Path.Text, Uri.Path.Len,
-       hpoFastCgiWsgi in one.Settings.Options) then
+  p := Uri.Path.Text;
+  plen := Uri.Path.Len;
+  // optional front controller: static files and index scripts
+  result := 0;
+  if one.fFastCgiFolder <> '' then
   begin
-    // send to the application: its response will come via fServer.AsyncResponse
-    request.Init;
-    FastCgiAppendRequest(request, params.Buffer, params.Size, Ctxt.InContent);
-    len := request.Size;
-    if one.fFastCgi.Send(Ctxt.AsyncHandle, request.Buffer, len) then
-      result := HTTP_ASYNCRESPONSE
-    else
-      result := HTTP_BADGATEWAY; // the application could not be reached
-    request.Store.Done;
+    result := OnFastCgiIndex(Ctxt, Uri, one, path);
+    if path <> '' then
+    begin
+      p := pointer(path);
+      plen := length(path);
+    end;
   end;
-  params.Store.Done;
+  if result = 0 then
+  begin
+    // compute the CGI variables from this request
+    result := HTTP_NOTFOUND; // unsafe path or no script
+    params.Init;
+    if FastCgiAppendParams(params, Ctxt, one.fFastCgiRoot, one.fFastCgiPrefix,
+         fServer.SockPort, p, plen, hpoFastCgiWsgi in one.Settings.Options,
+         one.fFastCgiExt) then
+    begin
+      // send to the application: its response will come via fServer.AsyncResponse
+      request.Init;
+      FastCgiAppendRequest(request, params.Buffer, params.Size, Ctxt.InContent);
+      len := request.Size;
+      if one.fFastCgi.Send(Ctxt.AsyncHandle, request.Buffer, len) then
+        result := HTTP_ASYNCRESPONSE
+      else
+        result := HTTP_BADGATEWAY; // the application could not be reached
+      request.Store.Done;
+    end;
+    params.Store.Done;
+  end;
   if fHasLog in fFlags then
     fLog.Add.Log(sllDebug, 'OnFastCgi: % % status=% len=% in %',
       [Ctxt.Method, Ctxt.Url, result, len, MicroSecFrom(start)], self);
