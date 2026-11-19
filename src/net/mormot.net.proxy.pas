@@ -386,7 +386,8 @@ type
     /// how many TFastCgiAsyncConnections are used in turn for a fcgi:// Source
     // - each has its own thread to read and parse the responses, so that
     // several responses are processed in parallel, e.g. big ones
-    // - default 0 will use as many as CPU cores, up to 8
+    // - default 0 will use half the CPU cores, between 1 and 8: more clients
+    // help with big responses, but use more CPU per request for smaller ones
     property FastCgiClients: integer
       read fFastCgiClients write fFastCgiClients;
     /// how many seconds HEAD requests could be cached in memory
@@ -2083,8 +2084,10 @@ begin
             n := s.FastCgiClients;
             if n <= 0 then
             begin
-              n := SystemInfo.dwNumberOfProcessors;
-              if n > 8 then
+              n := SystemInfo.dwNumberOfProcessors shr 1; // see FastCgiClients
+              if n = 0 then
+                n := 1
+              else if n > 8 then
                 n := 8;
             end;
             SetLength(one.fFastCgi, n);
