@@ -1038,8 +1038,8 @@ type
     // handle ifProcessing flag
     procedure OnClose; override;
     // quickly reject incorrect requests (payload/timeout/OnBeforeBody)
-    function DoReject(status: integer;
-      const ExtraHeader: RawUtf8 = ''): TPollAsyncSocketOnReadWrite;
+    function DoReject(status: integer; const ExtraHeader: RawUtf8 = '';
+      E: Exception = nil): TPollAsyncSocketOnReadWrite;
     // implement fServer.OnBodyDownload event - may reject as 415
     function DoBodyDownload: TPollAsyncSocketOnReadWrite; virtual;
     function DecodeHeaders: integer; virtual; // e.g. hfConnectionUpgrade override
@@ -4881,7 +4881,7 @@ begin
 end;
 
 function THttpAsyncServerConnection.DoReject(status: integer;
-  const ExtraHeader: RawUtf8): TPollAsyncSocketOnReadWrite;
+  const ExtraHeader: RawUtf8; E: Exception): TPollAsyncSocketOnReadWrite;
 var
   len: integer; // should not be PtrInt
 begin
@@ -4893,10 +4893,8 @@ begin
   end
   else
   begin
-    if status = HTTP_PAYLOADTOOLARGE then
-      fServer.IncStat(grOversizedPayload); // e.g. over ContentMaxSize
     if fServer.ComputeRejectBody(
-         fHttp.Content, fConnectionID, status, ExtraHeader) then
+         fHttp.Content, fConnectionID, status, ExtraHeader, E) then
       result := soContinue; // for grWwwAuthenticate
     len := length(fHttp.Content);
     Send(pointer(fHttp.Content), len); // no polling nor ProcessWrite
@@ -5047,10 +5045,7 @@ begin
     except
       on E: Exception do // decompression error
       begin
-        if PClass(E)^ = ESizeOverflow then
-          result := DoReject(HTTP_PAYLOADTOOLARGE)
-        else
-          result := DoReject(HTTP_BADREQUEST);
+        result := DoReject(HTTP_BADREQUEST, '', E);
         exit;
       end;
     end;
