@@ -987,8 +987,8 @@ type
     property Options: THttpProxyServerOptions
       read fOptions write fOptions;
     /// the number of threads of the HTTP/HTTPS content delivery
-    // - default value is 4 sub-threads which is enough to scale well if no
-    // content is to be generated
+    // - default value is the number of CPU cores + 1, which is enough to scale
+    // well if no content is to be generated
     property ThreadCount: integer
       read fThreadCount write fThreadCount;
     /// custom log settings for the psoEnableLogging option
@@ -1711,6 +1711,7 @@ end;
 
 procedure TFastCgiAsyncConnection.OnClose;
 begin
+  inherited OnClose; // set fClosed flag
   HttpResponse(HTTP_BADGATEWAY); // closed with no frtEndRequest
   fRd.Clear; // one request per connection: don't keep this buffer in the GC
   fResponse.Init;
