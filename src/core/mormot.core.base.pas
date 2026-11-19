@@ -552,6 +552,8 @@ type
     class procedure RaiseFmt(caller: TObject; const Fmt: string;
       const Args: array of const);
   end;
+  /// internal exception type to identify e.g. HTTP payload overflows
+  ESizeOverflow = class(ExceptionWithProps);
 
   /// a parent TObject class with a virtual constructor and RTTI generated
   // for its published properties
@@ -4254,9 +4256,10 @@ function SynLZdecompress1(src: PAnsiChar; size: integer; dst: PAnsiChar): intege
 /// compress a data content using the SynLZ algorithm
 // - as expected by THttpClientSocket/THttpServerGeneric.RegisterCompress
 // - will return 'synlz' as ACCEPT-ENCODING: header parameter
-// - will store a hash of both compressed and uncompressed stream: if the
-// data is corrupted during transmission, will instantly return ''
-function CompressSynLZ(var Data: RawByteString; Compress: boolean): RawUtf8;
+// - will store a Hash32() of both compressed and uncompressed stream: if the
+// data is corrupted during transmission, will raise an exception
+function CompressSynLZ(var Data: RawByteString; Compress: boolean;
+  MaxSize: PtrUInt = 0): RawUtf8;
 
 /// compress a data content for trusted in-process with no hash
 function SynLZComp(const Source: RawByteString): RawByteString;
@@ -12594,39 +12597,51 @@ begin
       FastNewRawByteString(result, SynLZdecompressdestlen(s)));
 end;
 
-function CompressSynLZ(var Data: RawByteString; Compress: boolean): RawUtf8;
+function CompressSynLZ(var Data: RawByteString; Compress: boolean;
+  MaxSize: PtrUInt): RawUtf8;
 var
-  datalen, len: integer;
-  p: PAnsiChar;
-  tmp: TSynTempBuffer;
+  slen, dlen: integer;
+  s, d: PAnsiChar;
 begin
-  datalen := length(Data);
-  if datalen <> 0 then // '' is compressed and uncompressed to ''
+  s := pointer(Data);
+  if s <> nil then // '' is compressed and uncompressed to ''
+  begin
+    slen := PStrLen(s - _STRLEN)^;
     if Compress then
     begin
-      len := SynLZcompressdestlen(datalen) + 8;
-      p := tmp.Init(len);
-      PCardinal(p)^ := Hash32(pointer(Data), datalen);
-      len := SynLZcompress1(pointer(Data), datalen, p + 8);
-      PCardinal(p + 4)^ := Hash32(pointer(p + 8), len);
-      FastSetRawByteString(Data, p, len + 8);
-      {%H-}tmp.Done;
+      d := FastNewString(SynLZcompressdestlen(slen) + 8); // pre-allocate max
+      PCardinal(d)^ := Hash32(pointer(s), slen);
+      dlen := SynLZcompress1(s, slen, d + 8);
+      PCardinal(d + 4)^ := Hash32(pointer(d + 8), dlen);
+      inc(dlen, 8);
+      PStrLen(d - _STRLEN)^ := dlen; // in-place truncate to eventual length
+      PCardinal(d + dlen)^ := 0;
     end
     else
     begin
-      FastAssignNew(result);
-      p := pointer(Data);
-      if (datalen <= 8) or
-         (Hash32(pointer(p + 8), datalen - 8) <> PCardinal(p + 4)^) then
-        exit;
-      len := SynLZdecompressdestlen(p + 8);
-      tmp.Init(len);
-      if (len = 0) or
-         ((SynLZDecompress1(p + 8, datalen - 8, tmp.buf) = len) and
-          (Hash32(tmp.buf, len) = PCardinal(p)^)) then
-        FastSetRawByteString(Data, tmp.buf, len);
-      {%H-}tmp.Done;
+      d := s + 8;
+      dec(slen, 8);
+      if (slen < 2) or
+         (((PWord(d)^ and $8000) <> 0) and
+          (slen < 4)) or
+         (Hash32(pointer(d), slen) <> PCardinal(s + 4)^) then
+        raise EReadError.Create('CompressSynLZ: invalid input');
+      dlen := SynLZdecompressdestlen(d);
+      if dlen <= 0 then
+        raise EReadError.Create('CompressSynLZ: void input');
+      if (MaxSize <> 0) and
+         (PtrUInt(dlen) > MaxSize) then
+        raise ESizeOverflow.Create('CompressSynLZ');
+      d := FastNewString(dlen);
+      if (SynLZdecompress1partial(s + 8, slen, d, dlen) <> dlen) or // safe
+         (Hash32(pointer(d), dlen) <> PCardinal(s)^) then
+      begin
+        FreeMem(d - _STRRECSIZE); // no memory leak
+        raise EReadError.Create('CompressSynLZ: invalid output');
+      end;
     end;
+    FastAssignNew(Data, d);
+  end;
   result := 'synlz';
 end;
 
