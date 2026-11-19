@@ -229,7 +229,7 @@ type
     procedure CrtSocketAbortRecv(Sender: TObject);
     {$ifdef OSWINDOWS}
     /// validate that TWinIocp won't call closesocket() twice on Unsubscribe
-    procedure WinIocpUnsubscribe(Sender: TObject);
+    procedure DoWinIocpUnsubscribe(Sender: TObject);
     procedure WinIocpWorker(Sender: TObject);
     procedure WinIocpLog(Level: TSynLogLevel; const Format: RawUtf8;
       const Args: array of const; Instance: TObject = nil);
@@ -676,9 +676,6 @@ begin
   Run(DoTFTPServer, self, 'TFTPServer', true, false);
   Run(DoTWebSocketAsyncServer, self, 'WSBroadcast', true, false);
   Run(DoHttpAsyncShutdown, self, 'HttpAsyncShutdown', true, false);
-  {$ifndef USE_WINIOCP} // IOCP has no pending queue at accept()
-  Run(DoHttpAcceptPending, self, 'HttpAcceptPending', true, false);
-  {$endif USE_WINIOCP}
   Run(DoHttpAsyncResponses, self, 'HttpAsyncResponses', true, false);
   Run(DoHttpKeepAliveOptions, self, 'HttpKeepAliveOptions', true, false);
   Run(DoHttpLongLine, self, 'HttpLongLine', true, false);
@@ -686,8 +683,9 @@ begin
   {$ifdef OSPOSIX}
   Run(DoHttpAsyncClient, self, 'HttpAsyncClient', true, false); // not on IOCP yet
   Run(DoUnixDomainSocket, self, 'UnixDomainSocket', true, false);
+  Run(DoHttpAcceptPending, self, 'HttpAcceptPending', true, false);
   {$else}
-  Run(WinIocpUnsubscribe, self, 'iocp', true, false);
+  Run(DoWinIocpUnsubscribe, self, 'WinIocpUnsubscribe', true, false);
   {$endif OSPOSIX}
 end;
 
@@ -6933,7 +6931,7 @@ begin
   end;
 end;
 
-procedure TNetworkProtocols.WinIocpUnsubscribe(Sender: TObject);
+procedure TNetworkProtocols.DoWinIocpUnsubscribe(Sender: TObject);
 const
   LOOPS = 1000;
   WORKERS = 4;

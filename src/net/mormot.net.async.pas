@@ -4085,7 +4085,7 @@ begin
           else if (fSockets.fRead.Count > fMaxConnections) or
                   (fSockets.fRead.Pending > fMaxPending) then
              // map THttpAsyncServer.HttpQueueLength property value
-             // - Pending, not PendingCount which includes consumed events
+             // (compare Pending, not PendingCount which includes consumed events)
           {$endif USE_WINIOCP}
           begin
             client.ShutdownAndClose({rdwr=}false); // e.g. for load balancing
