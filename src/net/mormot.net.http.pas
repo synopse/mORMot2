@@ -77,12 +77,15 @@ type
   // your own (like 'synlz')
   // - the data is compressed (if Compress=TRUE) or uncompressed (if
   // Compress=FALSE) in the Data variable (i.e. it is modified in-place)
+  // - raise exception on decompression error e.g. ESizeOverflow over MaxSize<>0
   // - as used e.g. by THttpClientSocket/THttpServerGeneric.RegisterCompress
-  THttpSocketCompress = function(var Data: RawByteString; Compress: boolean): RawUtf8;
+  THttpSocketCompress = function(var Data: RawByteString; Compress: boolean;
+    MaxSize: PtrUInt = 0): RawUtf8;
 
   /// used to identify one known compression algorithm
   THttpSocketCompressRec = record
     /// the compression name, as in ACCEPT-ENCODING: header (gzip,deflate,synlz)
+    // - computed from Func(dummy='', true) result
     Name: RawUtf8;
     /// the function handling compression and decompression
     Func: THttpSocketCompress;
@@ -3017,10 +3020,8 @@ begin
   if result <> nil then
     try
       result^.Func(Data, {compress=}false);
-      if Data = '' then
-        result := nil; // error during decompression
     except
-      result := nil;   // catch any exception here
+      result := nil;   // any exception means decompression error
     end;
 end;
 
@@ -3622,12 +3623,20 @@ begin // caller ensured P <> nil
 end;
 
 procedure THttpRequestContext.UncompressData;
+var
+  max: PtrUInt;
 begin // caller checked that ContentEncoding <> nil
-  if ContentEncoding^.Func(Content, false) = '' then
-    // invalid content
-    EHttpSocket.RaiseUtf8('% UncompressData failed', [ContentEncoding^.Name]);
+  if (ContentMaxSize <= 0) or // THttpServerGeneric.MaximumAllowedContentLength
+     (ContentMaxSize > MaxHttpInMemSize) then
+    max := MaxHttpInMemSize  // 1GB by default and typically smaller
+  else
+    max := ContentMaxSize;
+  ContentEncoding^.Func(Content, {compress=}false, max); // may raise exception
   ContentLength := length(Content); // uncompressed Content-Length
-  ContentEncoding := nil; // field will be used for output encoding now
+  if (max <> 0) and
+     (ContentLength > Int64(max)) then // should have been done in Func()
+    ESizeOverflow.RaiseFmt(nil, 'UncompressData %', [ContentEncoding^.Name]);
+  ContentEncoding := nil;    // field will be used for output encoding now
 end;
 
 procedure THttpRequestContext.SetRawUtf8(var res: RawUtf8;

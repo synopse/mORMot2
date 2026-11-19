@@ -1585,7 +1585,8 @@ procedure CompressShaAesSetKey(const Key: RawByteString;
 // CompressShaAesClass variable to the expected TAes* class name
 // - will store a hash of both cyphered and clear stream: if the
 // data is corrupted during transmission, will instantly return ''
-function CompressShaAes(var Data: RawByteString; Compress: boolean): RawUtf8;
+function CompressShaAes(var Data: RawByteString; Compress: boolean;
+  MaxSize: PtrUInt = 0): RawUtf8;
 
 {$endif PUREMORMOT2}
 
@@ -7259,11 +7260,11 @@ begin
     Sha256Weak(Key, CompressShaAesKey);
 end;
 
-function CompressShaAes(var Data: RawByteString; Compress: boolean): RawUtf8;
+function CompressShaAes(var Data: RawByteString; Compress: boolean;
+  MaxSize: PtrUInt): RawUtf8;
 begin
   if (Data <> '') and
      (CompressShaAesClass <> nil) then
-  try
     with CompressShaAesClass.Create(CompressShaAesKey, 256) do
     try
       if Compress then
@@ -7274,23 +7275,11 @@ begin
       else
       begin
         Data := DecryptPkcs7(Data, {ivatbeg=}true, {raiseexc=}true);
-        if CompressSynLZ(Data, false) = '' then
-        begin
-          FastAssignNew(result);
-          exit; // invalid content
-        end;
+        CompressSynLZ(Data, false, MaxSize); // raise exception on invalid input
       end;
     finally
       Free;
     end;
-  except
-    on Exception do
-    begin
-      // e.g. ESynCrypto in DecryptPkcs7(Data)
-      FastAssignNew(result);
-      exit; // invalid content
-    end;
-  end;
   result := 'synshaaes'; // mark success
 end;
 
