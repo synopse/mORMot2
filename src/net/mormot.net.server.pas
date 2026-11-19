@@ -936,9 +936,6 @@ type
     function TaskProcessBody(aCaller: TSynThreadPoolWorkThread;
       aHeaderResult: THttpServerSocketGetRequestResult): boolean;
     procedure DownloadBody;
-      {$ifdef HASINLINE} inline; {$endif}
-    procedure GetBodyInMemory;
-    procedure GetBodyStream;
     // implement fServer.OnBodyDownload in GetRequest - false if rejected as 415
     function DoOnBodyDownload: boolean; virtual;
   public
@@ -4173,14 +4170,6 @@ begin
              fServer.Terminated);   // abort e.g. any background SockRecvLn()
 end;
 
-procedure THttpServerSocket.DownloadBody; // properly inlined
-begin
-  if Http.ContentStream = nil then
-    GetBodyInMemory // default in-memory download into Http.Content
-  else
-    GetBodyStream;  // use Http.ContentStream from OnBodyDownload event
-end;
-
 procedure THttpServerSocket.TaskProcess(aCaller: TSynThreadPoolWorkThread);
 var
   freeme: boolean;
@@ -4554,46 +4543,32 @@ begin // called from GetRequest() to process OnBodyDownload event
   end;
 end;
 
-procedure THttpServerSocket.GetBodyInMemory;
+procedure THttpServerSocket.DownloadBody;
+var
+  err: integer;
 begin
   try
-    GetBody; // default in-memory download into Http.Content
-  except
-    on E: ESizeOverflow do
-    begin
-        // e.g. a chunked body over ContentMaxSize: report 413 before closing,
-        // as GetBodyStream does
-        fServer.ComputeRejectBody(Http.Content, 0, HTTP_PAYLOADTOOLARGE);
-        SockSendFlush(Http.Content);
-      raise; // the caller will close the connection
-    end;
-  end;
-end;
-
-procedure THttpServerSocket.GetBodyStream;
-begin
-  // download into the stream supplied by the OnBodyDownload event
-  try
+    // retrieve the HTTP body (after uncompression if necessary)
     GetBody(Http.ContentStream);
-    // the stream (and any spool file) remains during the request processing,
-    // as InContentStream - and is released by ProcessDone afterwards
-    Http.ContentInputDone;
+    if Http.ContentStream <> nil then
+      // the stream (and any spool file) remains during the request processing,
+      // as InContentStream - and is released by ProcessDone afterwards
+      Http.ContentInputDone;
   except
     on E: Exception do
     begin
-      Http.ProcessDone; // release the stream + delete any partial spool file
-      if PClass(E)^ = ESizeOverflow then
-      begin
-        // e.g. a chunked body over ContentMaxSize: report 413 before closing
-        fServer.ComputeRejectBody(Http.Content, 0, HTTP_PAYLOADTOOLARGE);
-        SockSendFlush(Http.Content);
-      end
-      else if E.InheritsFrom(EStreamError) then
-      begin
+      // guess the appropriate HTTP status code to return
+      if (Http.ContentStream <> nil) and
+         E.InheritsFrom(EWriteError) then
         // e.g. ENOSPC when spooling the body: report it before closing
-        fServer.ComputeRejectBody(Http.Content, 0, HTTP_INSUFFICIENTSTORAGE);
-        SockSendFlush(Http.Content);
-      end;
+        err := HTTP_INSUFFICIENTSTORAGE
+      else
+        err := HTTP_BADREQUEST;
+      // on fatal error, release the stream + delete any partial spool file
+      Http.ProcessDone;
+      // send back some human-readbale HTML error message
+      fServer.ComputeRejectBody(Http.Content, 0, err, '', E);
+      SockSendFlush(Http.Content);
       raise; // the caller will close the connection
     end;
   end;
