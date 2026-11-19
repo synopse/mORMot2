@@ -4228,8 +4228,7 @@ function SynLZcompress1pas(src: PAnsiChar; size: integer; dst: PAnsiChar): integ
 function SynLZdecompress1pas(src: PAnsiChar; size: integer; dst: PAnsiChar): integer;
 
 /// SynLZ decompression algorithm with memory boundaries check
-// - this function is slower, but will allow to uncompress only the start
-// of the content (e.g. to read some metadata header)
+// - only 10% slower but allow partial decompression with no buffer overflow
 // - it will also check for dst buffer overflow and detect invalid input
 // - so will be more secure than other functions, which expect the content to be
 // from a trusted source and verified ahead of time e.g. via a CRC/GMAC
@@ -4258,6 +4257,12 @@ function SynLZdecompress1(src: PAnsiChar; size: integer; dst: PAnsiChar): intege
 // - will store a hash of both compressed and uncompressed stream: if the
 // data is corrupted during transmission, will instantly return ''
 function CompressSynLZ(var Data: RawByteString; Compress: boolean): RawUtf8;
+
+/// compress a data content for trusted in-process with no hash
+function SynLZComp(const Source: RawByteString): RawByteString;
+
+/// compress a data content from trusted in-process with no hash nor checks
+function SynLZDecomp(const Source: RawByteString): RawByteString;
 
 /// return the Hash32() 32-bit CRC of CompressSynLZ() uncompressed data
 // - will first check the CRC of the supplied compressed Data
@@ -12559,6 +12564,34 @@ begin
   ctx.dstend := dst + maxDst;
   ctx.offset := @offset;
   result := SynLZdecompress1partialsub(ctx); // returns bytes written in dst[]
+end;
+
+function SynLZComp(const Source: RawByteString): RawByteString;
+var
+  s: PAnsiChar;
+  l: PtrInt;
+  tmp: TSynTempBuffer; // won't over-allocate
+begin
+  FastAssignNew(result);
+  s := pointer(Source);
+  if s = nil then
+    exit;
+  l := PStrLen(s - _STRLEN)^;
+  tmp.Init(SynLZcompressdestlen(l));
+  FastSetRawByteString(result, tmp.buf, SynLZcompress1(s, l, tmp.buf));
+  tmp.Done;
+end;
+
+function SynLZDecomp(const Source: RawByteString): RawByteString;
+var
+  s: PAnsiChar;
+begin
+  s := pointer(Source);
+  if s = nil then
+    FastAssignNew(result)
+  else
+    SynLZdecompress1(s, PStrLen(s - _STRLEN)^,
+      FastNewRawByteString(result, SynLZdecompressdestlen(s)));
 end;
 
 function CompressSynLZ(var Data: RawByteString; Compress: boolean): RawUtf8;

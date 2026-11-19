@@ -11858,18 +11858,18 @@ begin
     Check(n >= 0, 'ZStreamNext');
     Append(s, pointer(tmp), n);
   until n = 0;
-  check(gzr.ZStreamDone, 'ZStreamDone');
+  Check(gzr.ZStreamDone, 'ZStreamDone');
   Check(gzr.uncomplen32 = Cardinal(length(s)));
-  check(s = Data);
+  CheckEqual(s, Data);
   s := Data;
-  Check(CompressGZip(s, {compress=}true) = 'gzip');
+  CheckEqual(CompressGZip(s, {compress=}true), 'gzip');
   //FileFromString(s, 'test.plain.gz');
-  Check(CompressGZip(s, {compress=}false) = 'gzip');
+  CheckEqual(CompressGZip(s, {compress=}false), 'gzip');
   //FileFromString(s, 'test.plain');
-  Check(s = Data, 'compressGZip');
+  CheckEqual(s, Data, 'compressGZip');
   s := Data;
-  Check(CompressDeflate(s, true) = 'deflate');
-  Check(CompressDeflate(s, false) = 'deflate');
+  CheckEqual(CompressDeflate(s, true), 'deflate');
+  CheckEqual(CompressDeflate(s, false), 'deflate');
   Check(s = Data, 'CompressDeflate');
   Run(ZipFormat, self, '.zip', true, true);
   Run(ZipEncryption, pointer(0), 'zipcrypt0', true, true);
@@ -13174,16 +13174,20 @@ end;
 
 procedure TTestCoreCompression.DoSynLZ;
 
-  procedure TestOne(const v: RawByteString);
+  procedure TestOne(const a: array of RawByteString);
   var
-    s, t: RawByteString;
+    v, s, t: RawUtf8;
   begin
+    Join(a, v);
     s := AlgoSynLZ.Compress(v);
     t := AlgoSynLZ.Decompress(s);
-    Check(t = v);
+    CheckEqual(t, v, 'AlgoSynLZ');
     s := AlgoRleLZ.Compress(v);
     t := AlgoRleLZ.Decompress(s);
-    Check(t = v);
+    CheckEqual(t, v, 'AlgoRleLZ');
+    s := SynLZComp(v);
+    t := SynLZDecomp(s);
+    CheckEqual(t, v, 'SynLZComp/Decomp');
   end;
 
   procedure TestPartial(const hexa, suffix, expected: RawByteString;
@@ -13223,24 +13227,22 @@ var
   {$endif ASMINTEL}
 begin
   for i := 0 to 200 do
-    TestOne(RawUtf8OfChar(AnsiChar(i), i));
-  TestOne('hello' + by1(32, 10000) +
-          'hello' + by1(32, 1000) + 'world');
-  TestOne('hello' + by1($33, 10000) +
-          'hello' + by1($33, 1000) + 'world');
+    TestOne([RawUtf8OfChar(AnsiChar(i), i)]);
+  TestOne(['hello', by1(32, 10000), 'hello', by1(32, 1000), 'world']);
+  TestOne(['hello', by1($33, 10000), 'hello', by1($33, 1000), 'world']);
   for i := 1 to 150 do
-    TestOne('hello' + by1(i, Random32(200)) +
-            'hello' + by1(i + 100, Random32(200)) + 'world');
-  TestOne('hello' + by4($3031333, 10000) +
-          'hello' + by4($3031333, 1000) + 'world');
+    TestOne(['hello', by1(i, Random32(200)),
+             'hello', by1(i, 100 + Random32(200)), 'world']);
+  TestOne(['hello', by4($3031333, 10000),
+           'hello', by4($3031333, 1000), 'world']);
   for i := 0 to 1000 do
   begin
     s := RawUtf8OfChar(' ', 20);
     t := RandomTextParagraph(i, '.', s);
     FastSetRawByteString(s, pointer(t), length(t)); // =UniqueString
-    Check(CompressSynLZ(s, true) = 'synlz');
-    Check(CompressSynLZ(s, false) = 'synlz');
-    CheckEqual(s, t);
+    CheckEqual(CompressSynLZ(s, true), 'synlz');
+    CheckEqual(CompressSynLZ(s, false), 'synlz');
+    CheckEqual(s, t, 'CompressSynLZ');
     Check(AlgoSynLZ.Decompress(AlgoSynLZ.Compress(s)) = t);
     SetLength(comp2, AlgoSynLZ.Compressdestlen(length(s)));
     complen2 := SynLZCompress1pas(Pointer(s), length(s), pointer(comp2));
@@ -13261,6 +13263,7 @@ begin
     CheckEqual(SynLZDecompress1(Pointer(comp2), complen2, pointer(dec2)), length(s));
     Check(CompareMem(pointer(dec1), pointer(s), length(s)));
     {$endif ASMINTEL}
+    CheckEqual(SynLZDecomp(SynLZComp(s)), s, 'SynLZDecomp');
   end;
   SetLength(dec1, length(t));
   for j := 0 to length(t) - 1 do
