@@ -122,6 +122,8 @@ type
     // for AsyncShutdown
     shutdownsrv: THttpAsyncServer;
     shutdownslow, shutdownrequests: integer;
+    // for AcceptPending (not on IOCP)
+    acceptblocked, acceptreleased: integer;
     // for WinIocpUnsubscribe
     iocpclosed: integer;
     iocpstop: boolean;
@@ -191,6 +193,11 @@ type
     procedure DoTWebSocketAsyncServer(Sender: TObject);
     /// validate that THttpAsyncServer shutdown does close all its connections
     procedure DoHttpAsyncShutdown(Sender: TObject);
+    {$ifndef USE_WINIOCP} // IOCP has no pending queue at accept()
+    /// validate that accept() only counts the events still pending
+    procedure DoHttpAcceptPending(Sender: TObject);
+    function DoAcceptPendingRequest(Ctxt: THttpServerRequestAbstract): cardinal;
+    {$endif USE_WINIOCP}
     /// regressions #743 and #750: early async replies and failed sends
     procedure DoHttpAsyncResponses(Sender: TObject);
     /// validate that hsoHeadersUnfiltered applies to kept-alive requests
@@ -669,6 +676,9 @@ begin
   Run(DoTFTPServer, self, 'TFTPServer', true, false);
   Run(DoTWebSocketAsyncServer, self, 'WSBroadcast', true, false);
   Run(DoHttpAsyncShutdown, self, 'HttpAsyncShutdown', true, false);
+  {$ifndef USE_WINIOCP} // IOCP has no pending queue at accept()
+  Run(DoHttpAcceptPending, self, 'HttpAcceptPending', true, false);
+  {$endif USE_WINIOCP}
   Run(DoHttpAsyncResponses, self, 'HttpAsyncResponses', true, false);
   Run(DoHttpKeepAliveOptions, self, 'HttpKeepAliveOptions', true, false);
   Run(DoHttpLongLine, self, 'HttpLongLine', true, false);
@@ -1802,6 +1812,114 @@ begin
       end;
     end;
 end;
+
+{$ifndef USE_WINIOCP}
+
+function TNetworkProtocols.DoAcceptPendingRequest(
+  Ctxt: THttpServerRequestAbstract): cardinal;
+var
+  n: integer;
+  endtix: Int64;
+begin
+  if Ctxt.Url = '/block' then
+  begin
+    // keep the only request worker busy until the test releases this request
+    n := InterlockedIncrement(acceptblocked);
+    endtix := GetTickCount64 + 10000;
+    while (acceptreleased < n) and
+          (GetTickCount64 < endtix) do
+      SleepHiRes(1);
+  end;
+  Ctxt.OutContent := 'ok';
+  Ctxt.OutContentType := TEXT_CONTENT_TYPE;
+  result := HTTP_SUCCESS;
+end;
+
+procedure TNetworkProtocols.DoHttpAcceptPending(Sender: TObject);
+const
+  URI: array[0..5] of RawUtf8 = (
+    '/block', '/block', '/one', '/two', '/three', '/new');
+var
+  srv: THttpAsyncServer;
+  client: array[0 .. high(URI)] of TCrtSocket;
+  i: PtrInt;
+  endtix: Int64;
+  line: RawUtf8;
+
+  procedure Request(n: PtrInt);
+  begin
+    client[n] := TCrtSocket.Open('127.0.0.1', srv.SockPort, nlTcp, 5000);
+    client[n].SockSend(['GET ', URI[n], ' HTTP/1.1'#13#10'Host: localhost'#13#10]);
+    client[n].SockSendFlush;
+  end;
+
+  procedure WaitFor(var value: integer; expected: integer);
+  begin
+    endtix := GetTickCount64 + 5000;
+    while (value < expected) and
+          (GetTickCount64 < endtix) do
+      SleepHiRes(1);
+  end;
+
+begin
+  acceptblocked := 0;
+  acceptreleased := 0;
+  FillCharFast(client, SizeOf(client), 0);
+  // one polling thread and one request worker, with no keep alive
+  srv := THttpAsyncServer.Create('8874', nil, nil, 'acceptpending', 2, 0);
+  try
+    srv.OnRequest := DoAcceptPendingRequest;
+    srv.HttpQueueLength := 3; // up to 3 accepted connections waiting for a read
+    srv.WaitStarted(10);
+    // the worker takes the first request, then is blocked
+    Request(0);
+    WaitFor(acceptblocked, 1);
+    CheckEqual(acceptblocked, 1, 'first blocked');
+    // four more connections are queued, then the worker takes one of them
+    for i := 1 to 4 do
+      Request(i);
+    endtix := GetTickCount64 + 5000;
+    while (srv.Async.Accepted < 5) and
+          (GetTickCount64 < endtix) do
+      SleepHiRes(1);
+    CheckEqual(srv.Async.Accepted, 5, 'queued');
+    acceptreleased := 1;
+    WaitFor(acceptblocked, 2);
+    CheckEqual(acceptblocked, 2, 'second blocked');
+    // the queue array has 4 events, but only 3 are still pending
+    CheckEqual(srv.Async.Sockets.PollRead.PendingCount, 4, 'count');
+    CheckEqual(srv.Async.Sockets.PollRead.PendingIndex, 1, 'index');
+    CheckEqual(srv.Async.Sockets.PollRead.Pending, 3, 'pending');
+    // so a new connection is not above HttpQueueLength, and should be accepted
+    Request(5);
+    endtix := GetTickCount64 + 2000;
+    while (srv.Async.Accepted < 6) and
+          (GetTickCount64 < endtix) do
+      SleepHiRes(1);
+    CheckEqual(srv.Async.Accepted, 6, 'accepted with 3 pending');
+    // all requests, including the new one, are eventually answered
+    acceptreleased := 2;
+    for i := 0 to high(client) do
+    begin
+      line := '';
+      try
+        client[i].CreateSockIn;
+        client[i].SockRecvLn(line);
+      except
+        line := ''; // closed by the server
+      end;
+      CheckUtf8(IdemPChar(pointer(line), 'HTTP/1.1 200'), '% answered: %',
+        [URI[i], line]);
+    end;
+  finally
+    acceptreleased := 2;
+    srv.Free;
+    for i := 0 to high(client) do
+      client[i].Free;
+  end;
+end;
+
+{$endif USE_WINIOCP}
 
 function TNetworkProtocols.DoRequest_(Ctxt: THttpServerRequestAbstract): cardinal;
 begin
