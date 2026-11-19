@@ -1960,8 +1960,7 @@ begin
   stream := TRawByteStringStream.Create;
   try
     MetaFile.SaveToStream(stream);
-    fPages[PageIndex].MetaFileCompressed := stream.DataString;
-    CompressSynLZ(fPages[PageIndex].MetaFileCompressed, true);
+    fPages[PageIndex].MetaFileCompressed := SynLZComp(stream.DataString);
   finally
     stream.Free;
   end;
@@ -1969,7 +1968,6 @@ end;
 
 function TGdiPages.GetMetaFileForPage(PageIndex: integer): TMetaFile;
 var
-  tmp: RawByteString;
   stream: TStream;
 begin
   if fMetaFileForPage = nil then
@@ -1979,9 +1977,8 @@ begin
   result := fMetaFileForPage;
   if cardinal(PageIndex) >= cardinal(length(fPages)) then
     exit;
-  tmp := fPages[PageIndex].MetaFileCompressed;
-  CompressSynLZ(tmp, false);
-  stream := TRawByteStringStream.Create(tmp);
+  stream := TRawByteStringStream.Create(
+              SynLZDecomp(fPages[PageIndex].MetaFileCompressed));
   try
     fMetaFileForPage.LoadFromStream(stream);
   finally
