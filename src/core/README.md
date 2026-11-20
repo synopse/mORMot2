@@ -183,6 +183,7 @@ Binary, JSON, XML and Text Advanced Formatting Functions
 - HTML Text Conversions
 - XML Processing with Escape/Unescape and `TXmlParser`
 - YAML 1.2 core-schema to JSON or `TDocVariant` Support
+- Relational Markdown and CSV Tables from JSON or `TDocVariant`
 - Markup (e.g. Markdown or Emoji) process
 - INI Files In-memory Access
 - `TSynJsonFileSettings` Parent Class

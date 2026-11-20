@@ -10,6 +10,7 @@ unit mormot.core.fmt;
     - HTML Text Conversions
     - XML Processing with Escape/Unescape and TXmlParser
     - YAML 1.2 core-schema to JSON or TDocVariant Support
+    - Relational Markdown and CSV Tables from JSON or TDocVariant
     - Markup (e.g. Markdown or Emoji) Process
     - INI Files In-memory Access
     - TSynJsonFileSettings parent class
@@ -682,6 +683,168 @@ procedure WriteYamlString(W: TJsonWriter; P: PUtf8Char; L: PtrInt);
 
 /// emit some variant as YAML string, with JSON-escaped double-quotes if needed
 procedure WriteYamlVariant(W: TJsonWriter; const V: variant);
+
+
+{ ************* Relational Markdown and CSV Tables from JSON or TDocVariant }
+
+type
+  /// tune JSON/Variant conversion into relational tables
+  // - by default, collect all fields in first appearance order, write missing
+  // values as empty cells, and report non-uniform fields as remarks
+  // - tboFirstRowFields ignores fields not present in the first object at each
+  // path; tboStrictFields takes precedence and rejects missing or new fields
+  // - tboStrictTypes rejects different non-null scalar types; all numeric
+  // variants share one type, and null does not constrain a field type
+  // - tboMixedAsJson writes mixed object/scalar arrays and arrays of arrays as
+  // one 'value' column, serializing container items as compact JSON; scalar
+  // items retain their usual text; tboStrictTypes takes precedence
+  // - tboNullAsText writes explicit scalar null as 'null'; missing fields
+  // always remain empty, including fields below a null object
+  // - tboKeepArrayIndex adds a zero-based '__index' data column for array rows;
+  // the index restarts for each parent array, unlike the per-table row ID
+  TTableOption = (
+    tboFirstRowFields,
+    tboStrictFields,
+    tboStrictTypes,
+    tboMixedAsJson,
+    tboNullAsText,
+    tboKeepArrayIndex);
+  TTableOptions = set of TTableOption;
+
+  /// overall result of a relational table conversion
+  // - the first two values indicate complete output; Info is empty on plain
+  // success, otherwise contains bounded LF-separated remarks or an error
+  // - normal data errors do not raise an exception; memory allocation errors
+  // are not intercepted
+  TTableResult = (
+    tbrSuccess,
+    tbrSuccessWithRemarks,
+    tbrInvalidJson,
+    tbrInvalidData,
+    tbrTooDeep,
+    tbrOutputError);
+
+  /// schema shared by every row of one table
+  // - Name is RootName followed by dotted property paths for child arrays
+  // - Path is the source path, starting with '$', with '[]' for array items
+  // - ParentName is empty at the root, otherwise the exact parent table Name
+  // - Columns contains data fields only, without '__rowid' or '__parentid'
+  // - names are case-sensitive; literal dots, brackets and backslashes are
+  // backslash-escaped, control characters use \u00XX, and reserved field names
+  // '__rowid', '__parentid' and '__index' receive a leading backslash
+  TTableInfo = record
+    Name: RawUtf8;
+    Path: RawUtf8;
+    ParentName: RawUtf8;
+    Columns: TRawUtf8DynArray;
+  end;
+
+  /// one row passed to a relational table writer
+  // - ID starts at 1 and increases within its table; ParentID identifies the
+  // owning row in Table.ParentName, or is 0 for the root table
+  // - Values is aligned with Table.Columns and contains unescaped UTF-8 text
+  // - the callback must copy any data it wants to retain after returning
+  TTableRow = record
+    ID: TID;
+    ParentID: TID;
+    Values: TRawUtf8DynArray;
+  end;
+  PTableRow = ^TTableRow;
+
+  /// events sent once per table, in parent-before-child depth-first order
+  TTableWriteEvent = (
+    tweBegin,
+    tweRow,
+    tweEnd);
+
+  /// callback receiving a complete schema, its rows, then its end event
+  // - Row is nil for tweBegin/tweEnd, and is only valid during tweRow
+  // - called after schema discovery; scalar conversion occurs during output
+  // - must not modify Doc or its referenced data; an exception stops further
+  // events and returns tbrOutputError, but earlier callback effects remain
+  TOnTableWrite = procedure(Event: TTableWriteEvent;
+    const Table: TTableInfo; Row: PTableRow) of object;
+
+const
+  /// union of fields, with native scalar conversion and no type checking
+  TABLE_DEFAULT = [];
+  /// require the same fields and compatible scalar types in every row
+  TABLE_STRICT = [tboStrictFields, tboStrictTypes];
+  /// maximum exported object/table nesting, including the root container
+  TableMaxDepth = 32;
+
+  /// TDocVariant options to be used by TableLoadJson() wrapper
+  JSON_TABLE: TDocVariantOptions = JSON_FAST_FLOAT + [dvoNameCaseSensitive,
+    dvoJsonParseDoNotGuessCount, dvoJsonParseDoNotTryCustomVariants];
+
+/// normalize a TDocVariant or scalar into relational tables
+// - apply its reconstructed data schema to a TOnTableWrite callback in a SAX way
+// - an object becomes one row, an array becomes consecutive rows, and a scalar
+// becomes one row with a 'value' column; an empty array has headers but no rows
+// - nested objects flatten into dotted columns, and each array becomes a
+// child table linked by '__parentid', without any Cartesian product
+// - sibling arrays and repeated arrays under different parents share schemas
+// at the same path, with independent per-table row ID sequences
+// - field order follows first appearance at each object level; empty nested
+// objects have no leaf columns; null containers produce no child rows
+// - object/array/scalar changes at one field path are rejected; the mixed
+// array option only applies to array items, not to conflicting field shapes
+// - scalar values use VariantToUtf8, with textual booleans and optional null
+// text; dates, native variant arrays and custom variants follow core conversion
+// - caller-supplied variants are trusted, with no scalar-content or UTF-8
+// validation; scalar types are compared only when tboStrictTypes is specified
+// - duplicate object names follow native lookup and keep the first occurrence
+// - skipped fields are not traversed; JSON fallback uses the native serializer
+// without another validation pass; TableMaxDepth bounds exported table nesting
+// - retains source row references, so Doc and its aliases must remain unchanged;
+// conversion errors during output return tbrOutputError
+function VariantToTables(const Doc: variant; const OnWrite: TOnTableWrite;
+  out Info: RawUtf8; Options: TTableOptions = TABLE_DEFAULT;
+  const RootName: RawUtf8 = 'root'): TTableResult;
+
+/// decode JSON then normalize its value into relational tables
+// - accepts an optional UTF-8 BOM, but no comments or extended JSON syntax
+// - uses IsValidJson and VariantLoadJson, with case-sensitive names and
+// JSON_FAST_FLOAT numeric precision/formatting; this is not an RFC
+// validator, and string escapes follow the regular mORMot decoding rules
+// - as with TDocVariant, empty JSON property names are ignored and \u0000 is
+// decoded as '?'; raw embedded NUL and invalid UTF-8 input are rejected
+// - checks UTF-8 once at the JSON boundary, then trusts the decoded variants
+// - input is never modified; invalid JSON produces a nonempty Info diagnostic
+function JsonToTables(const Json: RawUtf8; const OnWrite: TOnTableWrite;
+  out Info: RawUtf8; Options: TTableOptions = TABLE_DEFAULT;
+  const RootName: RawUtf8 = 'root'): TTableResult;
+
+/// convert a document into LLM-friendly Markdown, with several '## table' CSV
+// - this format is very convenient to feed a LLM with some CSV instead of JSON
+// - emits UTF-8 with LF endings, escaped cell content and a final blank line
+// - '__rowid' is always first, followed by '__parentid' for child tables
+// - Md is cleared on failure, including a failure after partial generation
+function VariantToMd(const Doc: variant; out Md, Info: RawUtf8;
+  Options: TTableOptions = TABLE_DEFAULT;
+  const RootName: RawUtf8 = 'root'): TTableResult;
+
+/// decode JSON as JsonToTables then convert its value into relational Markdown
+function JsonToMd(const Json: RawUtf8; out Md, Info: RawUtf8;
+  Options: TTableOptions = TABLE_DEFAULT;
+  const RootName: RawUtf8 = 'root'): TTableResult;
+
+/// convert a document into one CSV text per relational table
+// - this format is very convenient to feed a LLM with some CSV instead of JSON
+// - emits UTF-8 without BOM, comma separators and LF record endings
+// - fields containing comma, quote, CR or LF are quoted, doubling inner quotes
+// - field contents, including embedded CR/LF, are preserved without trimming
+// - '__rowid' is always first, followed by '__parentid' for child tables
+// - Csv is nil on failure; this function does not create any physical file
+function VariantToCsv(const Doc: variant; out Csv: TTextPairs;
+  out Info: RawUtf8; Options: TTableOptions = TABLE_DEFAULT;
+  const RootName: RawUtf8 = 'root'): TTableResult;
+
+/// decode JSON as JsonToTables then convert its value into relational CSV texts
+function JsonToCsv(const Json: RawUtf8; out Csv: TTextPairs;
+  out Info: RawUtf8; Options: TTableOptions = TABLE_DEFAULT;
+  const RootName: RawUtf8 = 'root'): TTableResult;
+
 
 
 { ************* Markup (e.g. Markdown or Emoji) process }
@@ -4714,6 +4877,944 @@ begin
     W.AddNoJsonEscape(tmp.Text, tmp.Len);
   TempUtf8Done(tmp);
 end;
+
+
+{ ************* Relational Markdown and CSV Tables from JSON or TDocVariant }
+
+type
+  TTableRowKind = (
+    trkScalar,
+    trkObject,
+    trkJson);
+
+  TTableSchema = class;
+  TTableData = class;
+
+  TTableField = record
+    ColumnName: RawUtf8;
+    Kind: TDocVariantKind;
+    ValueType: TVarType;
+    Column: integer;
+    Seen: integer;
+    Objects: TTableSchema;
+    Child: TTableData;
+  end;
+  PTableField = ^TTableField;
+
+  // scalar field metadata shares arrays; only nested objects need a schema
+  TTableSchema = class
+  public
+    Names: TRawUtf8DynArray;
+    Fields: array of TTableField;
+    Count: integer;
+    Samples: integer;
+    destructor Destroy; override;
+    function Find(const Name: RawUtf8): PTableField;
+    function Add(const Name, Prefix: RawUtf8): PTableField;
+  end;
+
+  TTableSourceRow = record
+    Value: PVarData; // borrowed until VariantToTables returns
+    ParentID: TID;
+    ArrayIndex: integer;
+  end;
+
+  TTableData = class
+  public
+    Info: TTableInfo;
+    Next: TTableData; // non-owning, parent-before-child emission order
+    Field: TTableField;
+    Rows: array of TTableSourceRow;
+    Count: integer;
+    ColumnCount: integer;
+    Depth: integer;
+    Kind: TTableRowKind;
+    ArrayRows: boolean;
+    constructor Create(aParent: TTableData; const Name: RawUtf8;
+      aDepth: integer; aArrayRows: boolean);
+    destructor Destroy; override;
+    procedure AddRow(Value: PVarData; ParentID: TID; ArrayIndex: integer);
+    procedure AddArray(Value: PDocVariantData; ParentID: TID);
+  end;
+
+  TTableExport = class
+  protected
+    fRoot: TTableData;
+    fLast: TTableData;
+    fOptions: TTableOptions;
+    fResult: TTableResult;
+    fInfo: RawUtf8;
+    fRemarks: integer;
+    fOnWrite: TOnTableWrite;
+    fJson: TJsonWriter;
+    fHasJson: boolean;
+    fTable: TTableData;
+    function Message(const Text, Field: RawUtf8): RawUtf8;
+    function Fail(Code: TTableResult; const Text: RawUtf8;
+      const Field: RawUtf8 = ''): boolean;
+    procedure Remark(const Text: RawUtf8; const Field: RawUtf8 = '');
+    function MergeField(var Field: TTableField; Value: PVarData;
+      Kind: TDocVariantKind = dvUndefined): boolean;
+    function DiscoverObject(Table: TTableData; var Field: TTableField;
+      Value: PDocVariantData; ID: TID; Depth: integer): boolean;
+    procedure Columns(Table: TTableData; var Field: TTableField);
+    function DiscoverChildren(var Field: TTableField): boolean;
+    function Discover(Table: TTableData): boolean;
+    procedure FillRow(var Field: TTableField; Value: PVarData;
+      var Values: TRawUtf8DynArray);
+    procedure WriteTable(Table: TTableData);
+  public
+    destructor Destroy; override;
+    function Run(const Doc: variant; const OnWrite: TOnTableWrite;
+      Options: TTableOptions; const RootName: RawUtf8;
+      out Info: RawUtf8): TTableResult;
+  end;
+
+const
+  TABLE_MAX_REMARKS = 16;
+
+function TableEscapeName(const Name: RawUtf8): RawUtf8;
+var
+  tmp: TSynTempAdder;
+  p, first, last: PUtf8Char;
+begin
+  tmp.Init;
+  try
+    p := pointer(Name);
+    last := p + length(Name);
+    while p < last do
+    begin
+      first := p;
+      while (p < last) and
+            not (p^ in [#0..#31, #127, '.', '\', '[', ']']) do
+        inc(p);
+      tmp.Add(first, p - first);
+      if p = last then
+        break;
+      if p^ in [#0..#31, #127] then
+      begin
+        tmp.AddShort('\u00');
+        tmp.AddByteHex(ord(p^));
+      end
+      else
+      begin
+        tmp.Add('\');
+        tmp.Add(p^);
+      end;
+      inc(p);
+    end;
+    FastSetString(result, tmp.Buffer, tmp.Size);
+  finally
+    tmp.Store.Done;
+  end;
+end;
+
+function TableName(const Prefix, Name: RawUtf8): RawUtf8;
+begin
+  result := Name;
+  if PosExChar(#0, Name) <> 0 then
+    result := TableEscapeName(Name)
+  else if NeedsEscape(pointer(Name), [#1..#31, #127, '.', '\', '[', ']']) then
+    if NeedsEscape(pointer(Name), [#1..#31, #127]) then
+      result := TableEscapeName(Name) // printable control characters
+    else
+      result := EscapeChar(Name, ['.', '\', '[', ']']);
+  if (Name = '__rowid') or
+     (Name = '__parentid') or
+     (Name = '__index') then
+    result := '\' + result;
+  if Prefix <> '' then
+    result := Prefix + '.' + result;
+end;
+
+function TableScalarType(ValueType: TVarType): TVarType;
+begin
+  result := ValueType;
+  // used only for the explicit tboStrictTypes option
+  case ValueType of
+    varSmallInt..varCurrency, varShortInt..varOleUInt:
+      result := varDouble;
+    varDate, varOleStr, varString
+    {$ifdef HASVARUSTRING}, varUString {$endif}:
+      result := varString;
+  end;
+end;
+
+procedure TableText(Value: PVarData; Options: TTableOptions;
+  var Text: RawUtf8);
+var
+  tmp: TVarData;
+begin
+  if Value^.VType and varByRef <> 0 then
+    Value := pointer(SetVarDataUnRef(Value^.VType, Value, tmp));
+  if Value^.VType <= varNull then
+    if tboNullAsText in Options then
+      Text := NULL_STR_VAR
+    else
+      Text := ''
+  else if Value^.VType = varBoolean then
+    Text := BOOL_UTF8[ord(Value^.VBoolean) <> 0]
+  else
+    VariantToUtf8(PVariant(Value)^, Text);
+end;
+
+
+{ TTableSchema }
+
+destructor TTableSchema.Destroy;
+var
+  i: PtrInt;
+begin
+  for i := 0 to Count - 1 do
+  begin
+    Fields[i].Objects.Free;
+    Fields[i].Child.Free;
+  end;
+  inherited Destroy;
+end;
+
+function TTableSchema.Find(const Name: RawUtf8): PTableField;
+var
+  i: PtrInt;
+begin
+  i := FindRawUtf8(pointer(Names), Name, Count, {casesensitive=}true);
+  if i < 0 then
+    result := nil
+  else
+    result := @Fields[i];
+end;
+
+function TTableSchema.Add(const Name, Prefix: RawUtf8): PTableField;
+var
+  i: PtrInt;
+begin
+  if Count = length(Fields) then
+    SetLength(Fields, NextGrow(Count));
+  i := AddRawUtf8(Names, Count, Name);
+  result := @Fields[i];
+  result^.Column := -1;
+  result^.ColumnName := TableName(Prefix, Name);
+end;
+
+
+{ TTableData }
+
+constructor TTableData.Create(aParent: TTableData; const Name: RawUtf8;
+  aDepth: integer; aArrayRows: boolean);
+begin
+  inherited Create;
+  Depth := aDepth;
+  ArrayRows := aArrayRows;
+  Field.Column := -1;
+  if aParent = nil then
+  begin
+    Info.Name := Name;
+    Info.Path := '$';
+  end
+  else
+  begin
+    Info.Name := aParent.Info.Name + '.' + Name;
+    Info.Path := aParent.Info.Path;
+    if aParent.ArrayRows then
+      Append(Info.Path, '[]');
+    Append(Info.Path, '.', Name);
+    Info.ParentName := aParent.Info.Name;
+  end;
+end;
+
+destructor TTableData.Destroy;
+begin
+  Field.Objects.Free;
+  inherited Destroy;
+end;
+
+procedure TTableData.AddRow(Value: PVarData; ParentID: TID;
+  ArrayIndex: integer);
+begin
+  if Count = length(Rows) then
+    SetLength(Rows, NextGrow(Count));
+  Rows[Count].Value := VarDataFromVariant(PVariant(Value)^);
+  Rows[Count].ParentID := ParentID;
+  Rows[Count].ArrayIndex := ArrayIndex;
+  inc(Count);
+end;
+
+procedure TTableData.AddArray(Value: PDocVariantData; ParentID: TID);
+var
+  i: integer;
+begin
+  for i := 0 to Value^.Count - 1 do
+    AddRow(pointer(@Value^.Values[i]), ParentID, i);
+end;
+
+
+{ TTableExport }
+
+destructor TTableExport.Destroy;
+begin
+  fRoot.Free;
+  inherited Destroy;
+end;
+
+function TTableExport.Message(const Text, Field: RawUtf8): RawUtf8;
+var
+  path, msg: RawUtf8;
+begin
+  if fTable = nil then
+    path := '$'
+  else
+    path := fTable.Info.Path;
+  if Field <> '' then
+    Append(path, '.', Field);
+  msg := Text;
+  if Utf8TruncateToLength(path, 256) then
+    Append(path, '...');
+  if Utf8TruncateToLength(msg, 256) then
+    Append(msg, '...');
+  result := FormatUtf8('%: %', [path, msg]);
+end;
+
+function TTableExport.Fail(Code: TTableResult; const Text, Field: RawUtf8): boolean;
+begin
+  fResult := Code;
+  fInfo := Message(Text, Field);
+  result := false;
+end;
+
+procedure TTableExport.Remark(const Text, Field: RawUtf8);
+begin
+  fResult := tbrSuccessWithRemarks;
+  inc(fRemarks);
+  if fRemarks > TABLE_MAX_REMARKS then
+    exit;
+  if fInfo <> '' then
+    Append(fInfo, #10);
+  Append(fInfo, Message(Text, Field));
+end;
+
+function TTableExport.MergeField(var Field: TTableField;
+  Value: PVarData; Kind: TDocVariantKind): boolean;
+var
+  vt: TVarType;
+begin
+  result := true;
+  vt := Value^.VType and not varByRef;
+  if vt <= varNull then
+    exit;
+  if Field.ValueType = varEmpty then
+  begin
+    Field.ValueType := vt;
+    Field.Kind := kind;
+  end
+  else if Field.Kind <> kind then
+    result := Fail(tbrInvalidData, 'conflicting scalar/object/array shapes',
+      Field.ColumnName)
+  else if (kind = dvUndefined) and
+          (tboStrictTypes in fOptions) and
+          (TableScalarType(Field.ValueType) <> TableScalarType(vt)) then
+    result := Fail(tbrInvalidData, 'conflicting non-null scalar types',
+      Field.ColumnName);
+end;
+
+function TTableExport.DiscoverObject(Table: TTableData;
+  var Field: TTableField; Value: PDocVariantData; ID: TID;
+  Depth: integer): boolean;
+var
+  i: integer;
+  schema: TTableSchema;
+  item: PTableField;
+  valueitem: PVarData;
+  kind: TDocVariantKind;
+begin
+  result := false;
+  if Depth >= TableMaxDepth then
+  begin
+    Fail(tbrTooDeep, 'maximum table nesting exceeded', Field.ColumnName);
+    exit;
+  end;
+  inc(Depth);
+  if Field.Objects = nil then
+    Field.Objects := TTableSchema.Create;
+  schema := Field.Objects;
+  inc(schema.Samples);
+  for i := 0 to Value^.Count - 1 do
+  begin
+    item := schema.Find(Value^.Names[i]);
+    if item = nil then
+    begin
+      if schema.Samples > 1 then
+      begin
+        if tboStrictFields in fOptions then
+        begin
+          Fail(tbrInvalidData, 'new field after the first row',
+            TableName(Field.ColumnName, Value^.Names[i]));
+          exit;
+        end;
+        if tboFirstRowFields in fOptions then
+        begin
+          Remark('new field ignored by tboFirstRowFields', Field.ColumnName);
+          continue;
+        end;
+      end;
+      item := schema.Add(Value^.Names[i], Field.ColumnName);
+      if schema.Samples > 1 then
+        Remark('new field; earlier rows have empty cells', item^.ColumnName);
+    end;
+    if item^.Seen = schema.Samples then
+      continue; // native name lookup uses the first occurrence
+    item^.Seen := schema.Samples;
+    valueitem := VarDataFromVariant(Value^.Values[i]);
+    kind := _Safe(PVariant(valueitem)^)^.Kind;
+    if not MergeField(item^, valueitem, kind) then
+      exit;
+    case kind of
+      dvObject:
+        if not DiscoverObject(Table, item^, pointer(valueitem), ID, Depth) then
+          exit;
+      dvArray:
+        begin
+          if Depth >= TableMaxDepth then
+          begin
+            Fail(tbrTooDeep, 'maximum table nesting exceeded', item^.ColumnName);
+            exit;
+          end;
+          if item^.Child = nil then
+            item^.Child := TTableData.Create(Table, item^.ColumnName,
+              Depth + 1, {arrayrows=}true);
+          item^.Child.AddArray(pointer(valueitem), ID);
+        end;
+    end;
+  end;
+  for i := 0 to schema.Count - 1 do
+    if schema.Fields[i].Seen <> schema.Samples then
+    begin
+      if tboStrictFields in fOptions then
+      begin
+        Fail(tbrInvalidData, 'missing field', schema.Fields[i].ColumnName);
+        exit;
+      end;
+      Remark('missing field; emitted empty cells', schema.Fields[i].ColumnName);
+    end;
+  result := true;
+end;
+
+procedure TTableExport.Columns(Table: TTableData; var Field: TTableField);
+var
+  i: PtrInt;
+begin
+  case Field.Kind of
+    dvObject:
+      for i := 0 to Field.Objects.Count - 1 do
+        Columns(Table, Field.Objects.Fields[i]);
+    dvArray:
+      exit;
+  else
+    Field.Column := AddRawUtf8(Table.Info.Columns, Table.ColumnCount,
+      Field.ColumnName);
+  end;
+end;
+
+function TTableExport.DiscoverChildren(var Field: TTableField): boolean;
+var
+  i: PtrInt;
+begin
+  result := false;
+  if Field.Child <> nil then
+    if not Discover(Field.Child) then
+      exit;
+  if Field.Objects <> nil then
+    for i := 0 to Field.Objects.Count - 1 do
+      if not DiscoverChildren(Field.Objects.Fields[i]) then
+        exit;
+  result := true;
+end;
+
+function TTableExport.Discover(Table: TTableData): boolean;
+var
+  i: integer;
+  rowkind: TTableRowKind;
+begin
+  result := false;
+  fTable := Table;
+  // select the row layout before expanding any child arrays
+  for i := 0 to Table.Count - 1 do
+  begin
+    case _Safe(PVariant(Table.Rows[i].Value)^)^.Kind of
+      dvObject:
+        rowkind := trkObject;
+      dvArray:
+        rowkind := trkJson;
+    else
+      rowkind := trkScalar;
+    end;
+    if i = 0 then
+      Table.Kind := rowkind
+    else if rowkind <> Table.Kind then
+      Table.Kind := trkJson;
+  end;
+  if Table.Kind = trkJson then
+  begin
+    if not (tboMixedAsJson in fOptions) or
+       (tboStrictTypes in fOptions) then
+    begin
+      Fail(tbrInvalidData,
+        'mixed array items require tboMixedAsJson without tboStrictTypes');
+      exit;
+    end;
+    Remark('mixed array container items emitted as JSON');
+    fHasJson := true;
+  end;
+  if Table.Kind = trkObject then
+  begin
+    Table.Field.Kind := dvObject;
+    for i := 0 to Table.Count - 1 do
+      if not DiscoverObject(Table, Table.Field, pointer(Table.Rows[i].Value),
+        TID(i) + 1, Table.Depth) then
+        exit;
+  end
+  else
+  begin
+    Table.Field.ColumnName := 'value';
+    if (Table.Kind = trkScalar) and
+       (tboStrictTypes in fOptions) then
+      for i := 0 to Table.Count - 1 do
+        if not MergeField(Table.Field, Table.Rows[i].Value) then
+          exit;
+  end;
+  if Table.ArrayRows and
+     (tboKeepArrayIndex in fOptions) then
+    AddRawUtf8(Table.Info.Columns, Table.ColumnCount, '__index');
+  Columns(Table, Table.Field);
+  SetLength(Table.Info.Columns, Table.ColumnCount);
+  if fLast <> nil then
+    fLast.Next := Table;
+  fLast := Table;
+  result := DiscoverChildren(Table.Field);
+end;
+
+procedure TTableExport.FillRow(var Field: TTableField; Value: PVarData;
+  var Values: TRawUtf8DynArray);
+var
+  doc: PDocVariantData;
+  i, j: integer;
+begin
+  Value := VarDataFromVariant(PVariant(Value)^);
+  if Field.Column >= 0 then
+    TableText(Value, fOptions, Values[Field.Column])
+  else if (Field.Kind = dvObject) and
+          (_Safe(PVariant(Value)^)^.Kind = dvObject) then
+  begin
+    doc := pointer(Value);
+    for i := 0 to Field.Objects.Count - 1 do
+    begin
+      // explicitly case-sensitive, whatever the caller's document options
+      j := doc^.GetValueIndex(pointer(Field.Objects.Names[i]),
+        length(Field.Objects.Names[i]), {casesensitive=}true);
+      if j >= 0 then
+        FillRow(Field.Objects.Fields[i], pointer(@doc^.Values[j]), Values);
+    end;
+  end;
+end;
+
+procedure TTableExport.WriteTable(Table: TTableData);
+var
+  i: integer;
+  row: TTableRow;
+  value: PVarData;
+begin
+  fOnWrite(tweBegin, Table.Info, nil);
+  if Table.Count <> 0 then
+    SetLength(row.Values, length(Table.Info.Columns));
+  for i := 0 to Table.Count - 1 do
+  begin
+    row.ID := TID(i) + 1;
+    row.ParentID := Table.Rows[i].ParentID;
+    // reuse storage unless a callback retained a managed copy of the row
+    EnsureUnique(row.Values);
+    if row.Values <> nil then
+      StringClearSeveral(pointer(row.Values), length(row.Values));
+    if Table.ArrayRows and
+       (tboKeepArrayIndex in fOptions) then
+      row.Values[0] := UInt32ToUtf8(Table.Rows[i].ArrayIndex);
+    value := Table.Rows[i].Value;
+    if (Table.Kind = trkJson) and
+       (_Safe(PVariant(value)^)^.Kind <> dvUndefined) then
+    begin
+      fJson.CancelAll;
+      fJson.AddVariant(PVariant(value)^);
+      fJson.SetText(row.Values[Table.Field.Column]);
+    end
+    else
+      FillRow(Table.Field, value, row.Values);
+    fOnWrite(tweRow, Table.Info, @row);
+  end;
+  fOnWrite(tweEnd, Table.Info, nil);
+end;
+
+function TTableExport.Run(const Doc: variant; const OnWrite: TOnTableWrite;
+  Options: TTableOptions; const RootName: RawUtf8;
+  out Info: RawUtf8): TTableResult;
+var
+  table: TTableData;
+  value: PVarData;
+  arrayroot: boolean;
+  tmp: TTextWriterStackBuffer;
+begin
+  fOptions := Options;
+  fOnWrite := OnWrite;
+  if not Assigned(OnWrite) then
+    Fail(tbrOutputError, 'no table writer callback')
+  else if RootName = '' then
+    Fail(tbrInvalidData, 'empty root name')
+  else
+  try
+    value := VarDataFromVariant(Doc);
+    arrayroot := _Safe(PVariant(value)^)^.Kind = dvArray;
+    fRoot := TTableData.Create(nil, TableName('', RootName),
+      ord(arrayroot), arrayroot);
+    if arrayroot then
+      fRoot.AddArray(pointer(value), 0)
+    else
+      fRoot.AddRow(value, 0, -1);
+    if Discover(fRoot) then
+    begin
+      fTable := nil;
+      try
+        if fHasJson then
+        begin
+          fJson := TJsonWriter.CreateOwnedStream(tmp);
+          fJson.CustomOptions := [twoForceJsonStandard];
+        end;
+        try
+          table := fRoot;
+          repeat
+            WriteTable(table);
+            table := table.Next;
+          until table = nil;
+        finally
+          FreeAndNil(fJson);
+        end;
+      except
+        on E: Exception do
+          Fail(tbrOutputError, StringToUtf8(E.Message));
+      end;
+    end;
+  except
+    on E: Exception do
+      Fail(tbrInvalidData, StringToUtf8(E.Message));
+  end;
+  if (fResult = tbrSuccessWithRemarks) and
+     (fRemarks > TABLE_MAX_REMARKS) then
+    Append(fInfo, [#10, fRemarks - TABLE_MAX_REMARKS,
+      ' additional remarks omitted']);
+  Info := fInfo;
+  result := fResult;
+end;
+
+
+function TableLoadJson(const Json: RawUtf8; out Doc: variant;
+  out Info: RawUtf8): TTableResult;
+var
+  source: RawUtf8;
+  p: pointer;
+  len: PtrInt;
+begin
+  VarClear(Doc);
+  result := tbrInvalidJson;
+  Info := 'Invalid JSON';
+  if not IsValidUtf8NotVoid(Json) then
+    exit;
+  source := Json;
+  p := pointer(source);
+  len := length(source);
+  if BomFile(p, len) <> bomNone then
+    FastSetString(source, p, len);
+  // VariantLoadJson owns the temporary decoding buffer and accepts scalar roots
+  if not IsValidJson(source, {strict=}true) or
+     not VariantLoadJson(Doc, source, @JSON_TABLE, {double=}true) then
+    exit;
+  result := tbrSuccess;
+  Info := '';
+end;
+
+type
+  TTableTextFormat = (
+    ttfCsv,
+    ttfMarkdown);
+
+  TTableTextWriter = class(TTextWriter)
+  protected
+    fFormat: TTableTextFormat;
+    fCsv: TTextPairs;
+    fCount: integer;
+    procedure AddText(const Text: RawUtf8); virtual;
+    procedure AddCell(const Text: RawUtf8);
+    procedure AddID(ID: TID);
+    procedure EndRow;
+  public
+    constructor Create(Format: TTableTextFormat;
+      var Temp: TTextWriterStackBuffer);
+    procedure WriteTable(Event: TTableWriteEvent;
+      const Table: TTableInfo; Row: PTableRow); virtual;
+  end;
+
+constructor TTableTextWriter.Create(Format: TTableTextFormat;
+  var Temp: TTextWriterStackBuffer);
+begin
+  inherited CreateOwnedStream(Temp);
+  fFormat := Format;
+end;
+
+procedure TTableTextWriter.AddText(const Text: RawUtf8);
+var
+  p, beg, last: PUtf8Char;
+begin
+  if Text = '' then
+    exit;
+  case fFormat of
+    ttfCsv:
+      begin
+        if (PosExChar(',', Text) <> 0) or
+           (PosExChar('"', Text) <> 0) or
+           (PosExChar(#13, Text) <> 0) or
+           (PosExChar(#10, Text) <> 0) then
+          AddQuotedStr(pointer(Text), length(Text), '"')
+        else
+          AddString(Text);
+      end;
+    ttfMarkdown:
+      begin
+        p := pointer(Text);
+        last := p + length(Text);
+        repeat
+          beg := p;
+          while (p < last) and
+                not (p^ in [#0 .. #31, #127, '!' .. '/', ':' .. '@',
+                            '[' .. '`', '{' .. '~']) do
+            inc(p);
+          AddNoJsonEscape(beg, p - beg);
+          if p = last then
+            break;
+          case p^ of
+            #13, #10:
+              begin
+                if (p^ = #13) and
+                   (p[1] = #10) then
+                  inc(p);
+                AddShorter('<br>');
+              end;
+            #0 .. #9, #11, #12, #14 .. #31, #127:
+              begin
+                Add('&', '#');
+                Add(PtrInt(ord(p^)));
+                Add(';');
+              end;
+            '&', '<', '>', '"':
+              AddShorter(HTML_ESCAPED[HTML_ESC[hfAnyWhere][p^]]);
+          else
+            Add('\', p^);
+          end;
+          inc(p);
+        until p = last;
+      end;
+  end;
+end;
+
+const
+  TABLE_SEPARATOR: array[TTableTextFormat] of TShort3 = (',', ' | ');
+
+procedure TTableTextWriter.AddCell(const Text: RawUtf8);
+begin
+  AddShorter(TABLE_SEPARATOR[fFormat]);
+  AddText(Text);
+end;
+
+procedure TTableTextWriter.AddID(ID: TID);
+begin
+  AddShorter(TABLE_SEPARATOR[fFormat]);
+  Add(Int64(ID));
+end;
+
+procedure TTableTextWriter.EndRow;
+begin
+  if fFormat = ttfMarkdown then
+    Add(' ', '|');
+  Add(#10);
+end;
+
+procedure TTableTextWriter.WriteTable(Event: TTableWriteEvent;
+  const Table: TTableInfo; Row: PTableRow);
+var
+  i, n: PtrInt;
+begin
+  case Event of
+    tweBegin:
+      begin
+        case fFormat of
+          ttfCsv:
+            begin
+              CancelAll;
+              if fCount = length(fCsv) then
+                SetLength(fCsv, NextGrow(fCount));
+              fCsv[fCount].Name := Table.Name;
+              inc(fCount);
+            end;
+          ttfMarkdown:
+            begin
+              AddShorter('## ');
+              AddText(Table.Name);
+              AddShorter(#10#10'| ');
+            end;
+        end;
+        // synthetic column names are known plain text
+        AddString('__rowid');
+        if Table.ParentName <> '' then
+        begin
+          AddShorter(TABLE_SEPARATOR[fFormat]);
+          AddString('__parentid');
+        end;
+        for i := 0 to high(Table.Columns) do
+          if (fFormat = ttfMarkdown) and
+             (Table.Columns[i] = '__index') then
+            AddString(' | __index')
+          else
+            AddCell(Table.Columns[i]);
+        EndRow;
+        if fFormat = ttfMarkdown then
+        begin
+          n := length(Table.Columns) + ord(Table.ParentName <> '');
+          AddShorter('| ---');
+          for i := 1 to n do
+            AddShorter(' | ---');
+          EndRow;
+        end;
+      end;
+    tweRow:
+      begin
+        if fFormat = ttfMarkdown then
+          Add('|', ' ');
+        Add(Int64(Row^.ID));
+        if Table.ParentName <> '' then
+          AddID(Row^.ParentID);
+        for i := 0 to high(Row^.Values) do
+          AddCell(Row^.Values[i]);
+        EndRow;
+      end;
+    tweEnd:
+      case fFormat of
+        ttfCsv:
+          SetText(fCsv[fCount - 1].Value);
+        ttfMarkdown:
+          Add(#10);
+      end;
+  end;
+end;
+
+
+function VariantToTables(const Doc: variant; const OnWrite: TOnTableWrite;
+  out Info: RawUtf8; Options: TTableOptions;
+  const RootName: RawUtf8): TTableResult;
+var
+  tables: TTableExport;
+begin
+  Info := '';
+  tables := TTableExport.Create;
+  try
+    result := tables.Run(Doc, OnWrite, Options, RootName, Info);
+  finally
+    tables.Free;
+  end;
+end;
+
+function JsonToTables(const Json: RawUtf8; const OnWrite: TOnTableWrite;
+  out Info: RawUtf8; Options: TTableOptions;
+  const RootName: RawUtf8): TTableResult;
+var
+  doc: variant;
+begin
+  result := TableLoadJson(Json, doc, Info);
+  if result = tbrSuccess then
+    result := VariantToTables(doc, OnWrite, Info, Options, RootName);
+end;
+
+function TableToText(const Doc: variant; Format: TTableTextFormat;
+  out Md: RawUtf8; out Csv: TTextPairs; out Info: RawUtf8;
+  Options: TTableOptions; const RootName: RawUtf8): TTableResult;
+var
+  writer: TTableTextWriter;
+  temp: TTextWriterStackBuffer;
+begin
+  Md := '';
+  Csv := nil;
+  writer := TTableTextWriter.Create(Format, temp);
+  try
+    result := VariantToTables(Doc, writer.WriteTable, Info, Options, RootName);
+    if result in [tbrSuccess, tbrSuccessWithRemarks] then
+      try
+        // publish completed output only after every table was written
+        case Format of
+          ttfCsv:
+            begin
+              SetLength(writer.fCsv, writer.fCount);
+              Csv := writer.fCsv;
+            end;
+          ttfMarkdown:
+            writer.SetText(Md);
+        end;
+      except
+        on E: Exception do
+        begin
+          result := tbrOutputError;
+          Info := FormatUtf8('$: %', [E.Message]);
+          Md := '';
+          Csv := nil;
+        end;
+      end;
+  finally
+    writer.Free;
+  end;
+end;
+
+function VariantToMd(const Doc: variant; out Md, Info: RawUtf8;
+  Options: TTableOptions; const RootName: RawUtf8): TTableResult;
+var
+  csv: TTextPairs;
+begin
+  result := TableToText(Doc, ttfMarkdown, Md, csv, Info, Options, RootName);
+end;
+
+function JsonToMd(const Json: RawUtf8; out Md, Info: RawUtf8;
+  Options: TTableOptions; const RootName: RawUtf8): TTableResult;
+var
+  doc: variant;
+begin
+  Md := '';
+  result := TableLoadJson(Json, doc, Info);
+  if result = tbrSuccess then
+    result := VariantToMd(doc, Md, Info, Options, RootName);
+end;
+
+function VariantToCsv(const Doc: variant; out Csv: TTextPairs;
+  out Info: RawUtf8; Options: TTableOptions;
+  const RootName: RawUtf8): TTableResult;
+var
+  md: RawUtf8;
+begin
+  result := TableToText(Doc, ttfCsv, md, Csv, Info, Options, RootName);
+end;
+
+function JsonToCsv(const Json: RawUtf8; out Csv: TTextPairs;
+  out Info: RawUtf8; Options: TTableOptions;
+  const RootName: RawUtf8): TTableResult;
+var
+  doc: variant;
+begin
+  Csv := nil;
+  result := TableLoadJson(Json, doc, Info);
+  if result = tbrSuccess then
+    result := VariantToCsv(doc, Csv, Info, Options, RootName);
+end;
+
 
 
 { ************* Markup (e.g. Markdown or Emoji) process }

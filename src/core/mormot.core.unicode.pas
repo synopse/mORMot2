@@ -2554,6 +2554,20 @@ type
   /// a dynamic array of UTF-8 text-buffer name/value pairs
   TTextBufferPairDynArray = array of TTextBufferPair;
 
+  /// store a name/value pair as UTF-8 strings
+  // - not used directly in this unit, but e.g. in VariantToCsv() and other
+  // places where TSynNameValue from mormot.core.search is overkill
+  TTextPair = record
+    /// a name identifier
+    Name: RawUtf8;
+    /// the associated UTF-8 value
+    Value: RawUtf8;
+  end;
+  /// a pointer to name/value pair as UTF-8 strings
+  PTextPair = ^TTextPair;
+  /// a dynamic array of name/value pairs as UTF-8 strings
+  TTextPairs = array of TTextPair;
+
   /// all parsed filled from ParseTextExpression()
   TTextExpression = record
     /// start of the name identifier - not #0 ended, but of NameLen length
