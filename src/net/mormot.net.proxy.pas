@@ -165,43 +165,60 @@ type
 
   /// one asynchronous connection to a FastCGI responder application
   // - handles a single request, then is closed by the application
+  // - is owned and processed by the threads of the HTTP server itself
   TFastCgiAsyncConnection = class(TAsyncConnection)
   protected
+    fClient: TFastCgiAsyncConnections;
     fHttpHandle: PtrUInt; // = TConnectionAsyncHandle = 0 once answered
+    fStartThread: TThreadID; // <> 0 while TFastCgiAsyncConnections.Send() runs
+    fLastRead: cardinal; // 32-bit GetTickCount64 of the last application data
     fResponse: TFastCgiResponse;
-    procedure AfterCreate; override;
+    function OnFirstRead(aOwner: TPollAsyncSockets): boolean; override;
     function OnRead: TPollAsyncSocketOnReadWrite; override;
+    procedure OnAfterWriteSubscribe; override;
     procedure OnClose; override;
-    function OnLastOperationIdle(nowsec: TAsyncConnectionSec): boolean; override;
     procedure HttpResponse(Status: integer);
   end;
 
-  /// asynchronous connections to a FastCGI responder application, e.g. php-fpm
-  // - each HTTP request has its own connection, and is answered via the
-  // AsyncResponse() method of the associated HTTP server
-  TFastCgiAsyncConnections = class(TAsyncClient)
+  /// the requests to a FastCGI responder application, e.g. php-fpm
+  // - each HTTP request has its own connection, which shares the threads and
+  // the I/O events of the THttpAsyncServer, and is answered via its
+  // AsyncResponse() method
+  TFastCgiAsyncConnections = class(TSynPersistent)
   protected
-    fHttpServer: THttpServerGeneric;
+    fHttpServer: THttpAsyncServer;
+    fLog: TSynLogClass;
+    fAddr: TNetAddr;
+    fAddrRes: TNetResult;
     fLayer: TNetLayer;
+    fTerminated: boolean;
     fTimeoutSec: integer;
+    fServer, fPort: RawUtf8;
+    fSafe: TLightLock; // protect fPending[]
+    fPendingCount: integer;
+    fPending: TConnectionAsyncHandleDynArray; // to check for timeouts
+    procedure DoLog(Level: TSynLogLevel; Fmt: PUtf8Char;
+      const Args: array of const; Instance: TObject);
   public
-    /// initialize the connections to a FastCGI application
+    /// initialize the access to a FastCGI application
     // - aUri is e.g. 'fcgi://127.0.0.1:9000' or 'fcgi://unix:/run/php-fpm.sock:'
     // - aTimeoutSec is how long an application may take with no data sent back
-    constructor Create(aHttpServer: THttpServerGeneric; const aUri: TUri;
+    constructor Create(aHttpServer: THttpAsyncServer; const aUri: TUri;
       aTimeoutSec: integer; aLog: TSynLogClass); reintroduce;
     /// connect to the application, then asynchronously send a request
     // - the response will be sent back to aHttpHandle via AsyncResponse()
-    // - returns false if the application could not be reached: the caller
+    // - returns false if the connection could not be started: the caller
     // should then answer to the HTTP client by itself
     function Send(aHttpHandle: TConnectionAsyncHandle;
       aRequest: pointer; aRequestLen: PtrInt): boolean;
-    /// how many seconds an application may take with no data sent back
-    function GetLastOperationIdleSeconds: cardinal; override;
     /// should be called every second, e.g. from the HTTP server idle process
-    // - on Windows IOCP, a TAsyncClient has no idle process of its own, which
-    // is needed to detect any timeout and to release the closed connections
+    // - answer 504 for the applications which sent no data in time
     procedure Idle(NowTix: Int64);
+    /// no response will be sent any more to the HTTP server
+    procedure Shutdown;
+    /// true after Shutdown
+    property Terminated: boolean
+      read fTerminated;
   end;
 
 
@@ -1683,29 +1700,27 @@ end;
 
 { TFastCgiAsyncConnection }
 
-procedure TFastCgiAsyncConnection.AfterCreate;
+function TFastCgiAsyncConnection.OnFirstRead(aOwner: TPollAsyncSockets): boolean;
 begin
-  fHttpHandle := 0;
-  fResponse.Init;
+  result := true; // no TLS handshake, as for the incoming HTTPS connections
 end;
 
 procedure TFastCgiAsyncConnection.HttpResponse(Status: integer);
 var
   h: PtrUInt;
   o: TFastCgiAsyncConnections;
-  server: THttpServerGeneric;
+  server: THttpAsyncServer;
   ctype, headers: RawUtf8;
 begin
-  o := pointer(fOwner);
+  o := fClient;
   // the HTTP client should be answered only once, but this method is called
   // from several threads: by OnRead from the threads polling the sockets, by
-  // OnLastOperationIdle from the idle thread, and by OnClose from any thread
-  // closing this connection - Send may also reset fHttpHandle from a HTTP
-  // thread: so a compare-and-swap is needed to let a single caller continue
+  // Idle from the idle thread, and by OnClose from any thread closing this
+  // connection: so a compare-and-swap is needed to let a single caller continue
   h := fHttpHandle;
   if (h = 0) or
      not LockedExc(fHttpHandle, 0, h) or
-     o.Terminated then // HTTP server may be gone
+     o.fTerminated then // HTTP server may be gone
     exit;
   server := o.fHttpServer;
   if fResponse.Error <> '' then
@@ -1731,6 +1746,7 @@ var
   n: PtrInt;
 begin
   result := soClose;
+  fLastRead := cardinal(GetTickCount64); // see TFastCgiAsyncConnections.Idle
   n := fResponse.Parse(fRd.Buffer, fRd.Len);
   if n < 0 then
     exit; // protocol error: OnClose will answer 502
@@ -1741,86 +1757,148 @@ begin
     result := soContinue;
 end;
 
+procedure TFastCgiAsyncConnection.OnAfterWriteSubscribe;
+begin
+  // e.g. a big request body: let THttpAsyncServer.DoExecute send it
+  THttpAsyncConnections(fOwner).WakeupServerMainThread;
+end;
+
 procedure TFastCgiAsyncConnection.OnClose;
 begin
   inherited OnClose; // set fClosed flag
-  HttpResponse(HTTP_BADGATEWAY); // closed with no frtEndRequest
+  // within Send(), its thread answers by itself if the connection failed
+  if fStartThread <> GetCurrentThreadId then
+    HttpResponse(HTTP_BADGATEWAY); // closed with no frtEndRequest
   fRd.Clear; // one request per connection: don't keep this buffer in the GC
   fResponse.Init;
-end;
-
-function TFastCgiAsyncConnection.OnLastOperationIdle(
-  nowsec: TAsyncConnectionSec): boolean;
-begin
-  result := fHttpHandle <> 0;
-  if not result then
-    exit;
-  HttpResponse(HTTP_GATEWAYTIMEOUT); // no data from the application
-  fOwner.Sockets.Stop(self, 'fastcgi timeout');
 end;
 
 
 { TFastCgiAsyncConnections }
 
-constructor TFastCgiAsyncConnections.Create(aHttpServer: THttpServerGeneric;
+constructor TFastCgiAsyncConnections.Create(aHttpServer: THttpAsyncServer;
   const aUri: TUri; aTimeoutSec: integer; aLog: TSynLogClass);
 begin
+  inherited Create;
   fHttpServer := aHttpServer;
+  fLog := aLog;
   fLayer := aUri.Layer;
   fTimeoutSec := aTimeoutSec;
-  inherited Create(aUri.Server, aUri.Port, {clients=}0, nil, nil,
-    TFastCgiAsyncConnection, 'fastcgi', aLog, ASYNC_OPTION_PROD, {threads=}1);
-  fSockets.ReadMaxBytes := 128 shl 10; // parse 64KB records as they come
+  fServer := aUri.Server;
+  fPort := aUri.Port;
+  fAddrRes := fAddr.SetFrom(fServer, fPort, fLayer);
+  {$ifndef USE_WINIOCP}
+  // each request adds a FastCGI read event to the threads of the HTTP server,
+  // which is no fast process: wake up another thread after fewer events, since
+  // with the default (ThreadPoolCount/CpuCount)*8, e.g. 32 for 16 threads on
+  // 4 cores, responses were up to 20% slower
+  with aHttpServer.Async do
+    if ThreadPollingWakeupLoad > 4 then
+      ThreadPollingWakeupLoad := 4; // the minimum of TAsyncConnections.Create
+  {$endif USE_WINIOCP}
 end;
 
-function TFastCgiAsyncConnections.GetLastOperationIdleSeconds: cardinal;
+procedure TFastCgiAsyncConnections.DoLog(Level: TSynLogLevel; Fmt: PUtf8Char;
+  const Args: array of const; Instance: TObject);
 begin
-  result := fTimeoutSec;
+  if fLog <> nil then
+    fLog.Add.Log(Level, Fmt, Args, Instance);
+end;
+
+procedure TFastCgiAsyncConnections.Shutdown;
+begin
+  fTerminated := true;
 end;
 
 procedure TFastCgiAsyncConnections.Idle(NowTix: Int64);
+var
+  i, n, e: PtrInt;
+  h: TConnectionAsyncHandle;
+  c: TFastCgiAsyncConnection;
+  async: THttpAsyncConnections;
+  expired: array[0..63] of TConnectionAsyncHandle; // no heap allocation
 begin
-  {$ifdef USE_WINIOCP}
-  {$ifndef NO_ASYNC_WINIOCP}
-  ProcessIdleTix(self, NowTix); // on POSIX, is called from TAsyncClient.DoExecute
-  {$endif NO_ASYNC_WINIOCP}
-  {$endif USE_WINIOCP}
+  if (fPendingCount = 0) or
+     fTerminated then
+    exit;
+  async := fHttpServer.Async;
+  e := 0;
+  // within the lock: purge the closed connections, and extract the expired
+  fSafe.Lock;
+  try
+    n := 0;
+    for i := 0 to fPendingCount - 1 do
+    begin
+      h := fPending[i];
+      c := pointer(async.ConnectionFind(h)); // all fPending[] are FastCGI
+      if c = nil then
+        continue; // this connection has been closed
+      if (e <= high(expired)) and // any other at the next second
+         (cardinal(NowTix) - c.fLastRead >= cardinal(fTimeoutSec) * 1000) then
+      begin
+        expired[e] := h;
+        inc(e);
+        continue;
+      end;
+      fPending[n] := h;
+      inc(n);
+    end;
+    fPendingCount := n;
+  finally
+    fSafe.UnLock;
+  end;
+  // outside of the lock: answer and close the connections with no data
+  for i := 0 to e - 1 do
+  begin
+    c := pointer(async.ConnectionFind(expired[i]));
+    if c = nil then
+      continue;
+    c.HttpResponse(HTTP_GATEWAYTIMEOUT); // no data from the application
+    async.ConnectionRemove(expired[i]);
+  end;
 end;
 
 function TFastCgiAsyncConnections.Send(aHttpHandle: TConnectionAsyncHandle;
   aRequest: pointer; aRequestLen: PtrInt): boolean;
 var
   sock: TNetSocket;
-  addr: TNetAddr;
-  c: TAsyncConnection;
-  f: TFastCgiAsyncConnection absolute c;
+  c: TFastCgiAsyncConnection;
 begin
   result := false;
-  if Terminated then
+  if fTerminated or
+     (fAddrRes <> nrOk) then
     exit;
-  // connect as blocking connection, since the application is likely to be local,
-  // but with all timeout=0 to speed up the process especially on Windows
-  with fThreadClients do
-    if NewSocket(Address, Port, fLayer, {dobind=}false, {timeout=}0, 0, 0,
-         {retry=}0, sock, @addr) <> nrOk then
-      exit;
-  if (sock.MakeAsync <> nrOk) or
-     not ConnectionCreate(sock, addr, c) then
+  // blocking connect() with no timeout, since the application is likely local:
+  // a non-blocking connect() would wait for the single THttpAsyncServer writing
+  // thread to send the request, which is slower for small responses - and IOCP
+  // has no ConnectEx() support yet anyway
+  if NewSocket(fServer, fPort, fLayer, {dobind=}false, {timeout=}0, 0, 0,
+       {retry=}0, sock) <> nrOk then
+    exit;
+  if sock.MakeAsync <> nrOk then
   begin
     sock.ShutdownAndClose({rdwr=}false);
     exit;
   end;
-  // set the handle before any read: the response may come very quickly
-  f.fHttpHandle := aHttpHandle;
-  if not fSockets.Start(c) then
-  begin
-    f.fHttpHandle := 0; // the caller will answer
-    ConnectionAbortAndNil(c);
-    exit;
+  c := TFastCgiAsyncConnection.Create(fHttpServer.Async, fAddr);
+  c.fClient := self;
+  c.fLastRead := cardinal(GetTickCount64);
+  // the response may come before StartClient() returns: set the handle first,
+  // but OnClose() from this thread within StartClient() won't answer
+  c.fHttpHandle := aHttpHandle;
+  c.fStartThread := GetCurrentThreadId;
+  if not fHttpServer.Async.StartClient(c, sock, aRequest, aRequestLen) then
+    exit; // c may have been freed: the caller answers
+  c.fStartThread := 0; // from now on, OnClose() from any thread answers
+  result := true;
+  if fTimeoutSec <= 0 then
+    exit; // no timeout
+  fSafe.Lock;
+  try
+    AddInteger(TIntegerDynArray(fPending), fPendingCount, c.Handle);
+  finally
+    fSafe.UnLock;
   end;
-  // true if sent, or if OnClose did already answer to the HTTP client
-  result := Write(c, aRequest, aRequestLen) or
-            not LockedExc(f.fHttpHandle, 0, aHttpHandle);
 end;
 
 

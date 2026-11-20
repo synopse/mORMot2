@@ -9503,6 +9503,32 @@ begin
     Expect('GET', '/app/proto.php', HTTP_BADGATEWAY);
     Expect('GET', '/app/nohead.php', HTTP_BADGATEWAY);
     Expect('GET', '/app/close.php', HTTP_BADGATEWAY);
+    // new incoming connections, once the closed FastCGI connections reached
+    // the second generation of their GC: should be answered as usual
+    for i := 1 to 3 do
+      Expect('GET', '/app/echo.php', HTTP_SUCCESS);
+    // the server main thread may idle up to 500ms, then its GC keeps the closed
+    // instances 100ms in the first generation
+    SleepHiRes(1000);
+    for i := 1 to 5 do
+    begin
+      raw := TCrtSocket.Open('127.0.0.1', '8881', nlTcp, 5000);
+      try
+        raw.SockSend('GET /app/echo.php HTTP/1.0');
+        raw.SockSendCRLF;
+        raw.SockSendFlush;
+        s := '';
+        try
+          raw.CreateSockIn;
+          raw.SockRecvLn(s);
+        except
+          s := ''; // closed with no response
+        end;
+        CheckUtf8(PosEx(' 200 ', s) > 0, 'new connection %: %', [i, s]);
+      finally
+        raw.Free;
+      end;
+    end;
     // no script or unsafe path: the application is not even called
     n := fcgirequests;
     Expect('GET', '/app/noscript', HTTP_NOTFOUND);
@@ -9612,14 +9638,14 @@ begin
     // front controller at the root: the application has its own favicon.ico
     settings2 := THttpProxyServerSettings.Create;
     try
-      settings2.Server.Port := '8890';
+      settings2.Server.Port := '8879'; // not used by any other test
       settings2.Server.ThreadCount := 2;
       settings2.AddFastCgi(frontsrc, '').FastCgiIndex := 'index.php';
       proxy2 := THttpProxyServer.Create(settings2);
       try
         proxy2.Start;
         FreeAndNil(clt);
-        clt := THttpClientSocket.Open('127.0.0.1', '8890');
+        clt := THttpClientSocket.Open('127.0.0.1', '8879');
         n := fcgirequests;
         Expect('GET', '/favicon.ico', HTTP_SUCCESS);
         CheckEqual(clt.Content, 'icon', 'application favicon');
