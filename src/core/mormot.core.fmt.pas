@@ -4918,6 +4918,7 @@ type
     ParentID: TID;
     ArrayIndex: integer;
   end;
+  PTableSourceRow = ^TTableSourceRow;
 
   TTableData = class
   public
@@ -4943,15 +4944,16 @@ type
     fLast: TTableData;
     fOptions: TTableOptions;
     fResult: TTableResult;
-    fInfo: RawUtf8;
+    fHasJson: boolean;
     fRemarks: integer;
+    fInfo: RawUtf8;
     fOnWrite: TOnTableWrite;
     fJson: TJsonWriter;
-    fHasJson: boolean;
     fTable: TTableData;
     function Message(const Text, Field: RawUtf8): RawUtf8;
     function Fail(Code: TTableResult; const Text: RawUtf8;
       const Field: RawUtf8 = ''): boolean;
+    procedure FailTable(Code: TTableResult; const Text, TablePrefix, TableName: RawUtf8);
     procedure Remark(const Text: RawUtf8; const Field: RawUtf8 = '');
     function MergeField(var Field: TTableField; Value: PVarData;
       Kind: TDocVariantKind = dvUndefined): boolean;
@@ -4997,10 +4999,7 @@ begin
         tmp.AddByteHex(ord(p^));
       end
       else
-      begin
-        tmp.Add('\');
-        tmp.Add(p^);
-      end;
+        tmp.AddDirect('\', p^);
       inc(p);
     end;
     FastSetString(result, tmp.Buffer, tmp.Size);
@@ -5009,7 +5008,7 @@ begin
   end;
 end;
 
-function TableName(const Prefix, Name: RawUtf8): RawUtf8;
+procedure TableNameVar(const Prefix, Name: RawUtf8; var result: RawUtf8);
 begin
   result := Name;
   if PosExChar(#0, Name) <> 0 then
@@ -5022,21 +5021,31 @@ begin
   if (Name = '__rowid') or
      (Name = '__parentid') or
      (Name = '__index') then
-    result := '\' + result;
+    result := Join(['\', result]);
   if Prefix <> '' then
-    result := Prefix + '.' + result;
+    result := Join([Prefix, '.', result]);
 end;
 
-function TableScalarType(ValueType: TVarType): TVarType;
+function TableName(const Prefix, Name: RawUtf8): RawUtf8;
+  {$ifdef HASINLINE} inline; {$endif}
 begin
-  result := ValueType;
+  TableNameVar(Prefix, Name, result);
+end;
+
+function TableScalarType(ValueType: PtrUInt): PtrUInt;
+begin
   // used only for the explicit tboStrictTypes option
   case ValueType of
-    varSmallInt..varCurrency, varShortInt..varOleUInt:
+    varSmallInt .. varCurrency,
+    varShortInt .. varOleUInt:
       result := varDouble;
-    varDate, varOleStr, varString
-    {$ifdef HASVARUSTRING}, varUString {$endif}:
+    varDate,
+    varOleStr,
+    {$ifdef HASVARUSTRING} varUString, {$endif}
+    varString:
       result := varString;
+  else
+    result := ValueType;
   end;
 end;
 
@@ -5051,7 +5060,7 @@ begin
     if tboNullAsText in Options then
       Text := NULL_STR_VAR
     else
-      Text := ''
+      FastAssignNew(Text)
   else if Value^.VType = varBoolean then
     Text := BOOL_UTF8[ord(Value^.VBoolean) <> 0]
   else
@@ -5063,12 +5072,15 @@ end;
 
 destructor TTableSchema.Destroy;
 var
-  i: PtrInt;
+  i: integer;
+  f: PTableField;
 begin
-  for i := 0 to Count - 1 do
+  f := pointer(Fields);
+  for i := 1 to Count do
   begin
-    Fields[i].Objects.Free;
-    Fields[i].Child.Free;
+    f^.Objects.Free;
+    f^.Child.Free;
+    inc(f);
   end;
   inherited Destroy;
 end;
@@ -5093,7 +5105,7 @@ begin
   i := AddRawUtf8(Names, Count, Name);
   result := @Fields[i];
   result^.Column := -1;
-  result^.ColumnName := TableName(Prefix, Name);
+  TableNameVar(Prefix, Name, result^.ColumnName);
 end;
 
 
@@ -5113,7 +5125,7 @@ begin
   end
   else
   begin
-    Info.Name := aParent.Info.Name + '.' + Name;
+    Join([aParent.Info.Name, '.', Name], Info.Name);
     Info.Path := aParent.Info.Path;
     if aParent.ArrayRows then
       Append(Info.Path, '[]');
@@ -5130,19 +5142,25 @@ end;
 
 procedure TTableData.AddRow(Value: PVarData; ParentID: TID;
   ArrayIndex: integer);
+var
+  r: PTableSourceRow;
 begin
   if Count = length(Rows) then
     SetLength(Rows, NextGrow(Count));
-  Rows[Count].Value := VarDataFromVariant(PVariant(Value)^);
-  Rows[Count].ParentID := ParentID;
-  Rows[Count].ArrayIndex := ArrayIndex;
+  r := @Rows[Count];
+  r^.Value := VarDataFromVariant(PVariant(Value)^);
+  r^.ParentID := ParentID;
+  r^.ArrayIndex := ArrayIndex;
   inc(Count);
 end;
 
 procedure TTableData.AddArray(Value: PDocVariantData; ParentID: TID);
 var
-  i: integer;
+  i: PtrInt;
 begin
+  i := Count + Value^.Count;
+  if i > length(Rows) then
+    SetLength(Rows, i); // pre-allocate
   for i := 0 to Value^.Count - 1 do
     AddRow(pointer(@Value^.Values[i]), ParentID, i);
 end;
@@ -5171,7 +5189,7 @@ begin
     Append(path, '...');
   if Utf8TruncateToLength(msg, 256) then
     Append(msg, '...');
-  result := FormatUtf8('%: %', [path, msg]);
+  Join([path, ': ', msg], result);
 end;
 
 function TTableExport.Fail(Code: TTableResult; const Text, Field: RawUtf8): boolean;
@@ -5179,6 +5197,16 @@ begin
   fResult := Code;
   fInfo := Message(Text, Field);
   result := false;
+end;
+
+procedure TTableExport.FailTable(Code: TTableResult;
+  const Text, TablePrefix, TableName: RawUtf8);
+var
+  field: RawUtf8;
+begin
+  fResult := Code;
+  TableNameVar(TablePrefix, TableName, field);
+  fInfo := Message(Text, field);
 end;
 
 procedure TTableExport.Remark(const Text, Field: RawUtf8);
@@ -5220,7 +5248,7 @@ function TTableExport.DiscoverObject(Table: TTableData;
   var Field: TTableField; Value: PDocVariantData; ID: TID;
   Depth: integer): boolean;
 var
-  i: integer;
+  i: PtrInt;
   schema: TTableSchema;
   item: PTableField;
   valueitem: PVarData;
@@ -5246,8 +5274,8 @@ begin
       begin
         if tboStrictFields in fOptions then
         begin
-          Fail(tbrInvalidData, 'new field after the first row',
-            TableName(Field.ColumnName, Value^.Names[i]));
+          FailTable(tbrInvalidData, 'new field after the first row',
+            Field.ColumnName, Value^.Names[i]);
           exit;
         end;
         if tboFirstRowFields in fOptions then
@@ -5310,7 +5338,7 @@ begin
       exit;
   else
     Field.Column := AddRawUtf8(Table.Info.Columns, Table.ColumnCount,
-      Field.ColumnName);
+                      Field.ColumnName);
   end;
 end;
 
@@ -5331,7 +5359,7 @@ end;
 
 function TTableExport.Discover(Table: TTableData): boolean;
 var
-  i: integer;
+  i: PtrInt;
   rowkind: TTableRowKind;
 begin
   result := false;
@@ -5396,7 +5424,7 @@ procedure TTableExport.FillRow(var Field: TTableField; Value: PVarData;
   var Values: TRawUtf8DynArray);
 var
   doc: PDocVariantData;
-  i, j: integer;
+  i, j: PtrInt;
 begin
   Value := VarDataFromVariant(PVariant(Value)^);
   if Field.Column >= 0 then
@@ -5418,7 +5446,7 @@ end;
 
 procedure TTableExport.WriteTable(Table: TTableData);
 var
-  i: integer;
+  i: PtrInt;
   row: TTableRow;
   value: PVarData;
 begin
@@ -5427,7 +5455,7 @@ begin
     SetLength(row.Values, length(Table.Info.Columns));
   for i := 0 to Table.Count - 1 do
   begin
-    row.ID := TID(i) + 1;
+    row.ID := succ(i);
     row.ParentID := Table.Rows[i].ParentID;
     // reuse storage unless a callback retained a managed copy of the row
     EnsureUnique(row.Values);
@@ -5435,7 +5463,7 @@ begin
       StringClearSeveral(pointer(row.Values), length(row.Values));
     if Table.ArrayRows and
        (tboKeepArrayIndex in fOptions) then
-      row.Values[0] := UInt32ToUtf8(Table.Rows[i].ArrayIndex);
+      UInt32ToUtf8(Table.Rows[i].ArrayIndex, row.Values[0]);
     value := Table.Rows[i].Value;
     if (Table.Kind = trkJson) and
        (_Safe(PVariant(value)^)^.Kind <> dvUndefined) then
@@ -5738,37 +5766,24 @@ begin
 end;
 
 function TableToText(const Doc: variant; Format: TTableTextFormat;
-  out Md: RawUtf8; out Csv: TTextPairs; out Info: RawUtf8;
+  var Md: RawUtf8; var Csv: TTextPairs; var Info: RawUtf8;
   Options: TTableOptions; const RootName: RawUtf8): TTableResult;
 var
   writer: TTableTextWriter;
   temp: TTextWriterStackBuffer;
 begin
-  Md := '';
+  FastAssignNew(Md);
   Csv := nil;
   writer := TTableTextWriter.Create(Format, temp);
   try
     result := VariantToTables(Doc, writer.WriteTable, Info, Options, RootName);
     if result in [tbrSuccess, tbrSuccessWithRemarks] then
-      try
-        // publish completed output only after every table was written
-        case Format of
-          ttfCsv:
-            begin
-              SetLength(writer.fCsv, writer.fCount);
-              Csv := writer.fCsv;
-            end;
-          ttfMarkdown:
-            writer.SetText(Md);
-        end;
-      except
-        on E: Exception do
-        begin
-          result := tbrOutputError;
-          Info := FormatUtf8('$: %', [E.Message]);
-          Md := '';
-          Csv := nil;
-        end;
+      // publish completed output only after every table was written
+      case Format of
+        ttfCsv:
+          Csv := copy(writer.fCsv, 0, writer.fCount);
+        ttfMarkdown:
+          writer.SetText(Md);
       end;
   finally
     writer.Free;
