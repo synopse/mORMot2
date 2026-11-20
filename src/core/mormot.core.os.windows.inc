@@ -1231,8 +1231,8 @@ begin
 end;
 
 const // not defined on oldest FPC
-  MOVEFILE_REPLACE_EXISTING       = $00000001;
-  MOVEFILE_WRITE_THROUGH          = $00000008;
+  MOVEFILE_REPLACE_EXISTING = $00000001;
+  MOVEFILE_WRITE_THROUGH    = $00000008;
 
 function ReplaceFile(const aOld, aNew: TFileName): boolean;
 var

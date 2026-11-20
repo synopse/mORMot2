@@ -109,12 +109,14 @@ type
   /// a TStream descendant for uncompressing data into a stream using Zip/Deflate
   // - supports forward only Write() decompression
   TSynZipDecompressor = class(TSynZipStream)
+  protected
+    fMaxSize: QWord;
   public
     /// create a decompression stream, writing the uncompressed data into
     // the specified stream (e.g. a file stream)
     // - only supported formats are szcfRaw and szcfZip (not szcfGZ)
     constructor Create(outStream: TStream;
-      Format: TSynZipCompressorFormat = szcfRaw);
+      Format: TSynZipCompressorFormat = szcfRaw; MaxSize: QWord = 0);
     /// release memory
     destructor Destroy; override;
     /// decompress some data and update the global CRC
@@ -203,6 +205,15 @@ function GZFile(const orig, destgz: TFileName;
 // use during (huge) file compression
 function GZFile(buf: pointer; len: PtrInt; const destgz: TFileName;
   CompressionLevel: integer = Z_USUAL_COMPRESSION): boolean; overload;
+
+{$ifdef LIBDEFLATESTATIC}
+var
+  // libdeflate + AVX is much faster than zlib, but its API expects only buffers
+  // - files or buffers up to 64MB (on 32-bit OS) or 128MB (on 64-bit OS) will
+  // call libdeflate and a temporary memory buffer
+  // - at startup, on a PC with more than 4/8GB of RAM, allow up to 256/512MB
+  LIBDEFLATE_MAXSIZE: Int64 = {$ifdef CPU32} 64 {$else} 128 {$endif} shl 20;
+{$endif LIBDEFLATESTATIC}
 
 
 { ************  .ZIP Archive File Support }
@@ -1106,15 +1117,6 @@ const
   GZHEAD: array[0..2] of cardinal = (
     GZ_MAGIC, 0, 0);
 
-{$ifdef LIBDEFLATESTATIC}
-var
-  // libdeflate + AVX is much faster than zlib, but its API expects only buffers
-  // - files or buffers up to 64MB (on 32-bit OS) or 128MB (on 64-bit OS) will
-  // call libdeflate and a temporary memory buffer
-  // - at startup, on a PC with more than 4/8GB of RAM, allow up to 256/512MB
-  LIBDEFLATE_MAXSIZE: Int64 = {$ifdef CPU32} 64 {$else} 128 {$endif} shl 20;
-{$endif LIBDEFLATESTATIC}
-
 
 { TSynZipStream }
 
@@ -1250,12 +1252,13 @@ end;
 { TSynZipDecompressor }
 
 constructor TSynZipDecompressor.Create(outStream: TStream;
-  Format: TSynZipCompressorFormat);
+  Format: TSynZipCompressorFormat; MaxSize: QWord);
 begin
   if fFormat = szcfGZ then
     RaiseStreamError(self, 'Create: unsupported szcfGZ');
   fDestStream := outStream;
   fFormat := Format;
+  fMaxSize := MaxSize;;
   Z.Init(nil, 0, outStream, @fCrc, nil, 0, 256 shl 10); // use 256KB buffers
   fInitialized := Z.UncompressInit(fFormat = szcfZip);
 end;
@@ -1292,7 +1295,7 @@ begin
     result := Z.Check(Z.Uncompress(Z_NO_FLUSH), [Z_OK, Z_STREAM_END],
       'TSynZipDecompressor.Write');
     if Z.Stream.avail_out = 0 then
-      Z.DoFlush(Z_OK);
+      Z.DoFlush(Z_OK, fMaxSize);
     if result = Z_STREAM_END then
       break;
   end;
@@ -1309,8 +1312,8 @@ begin
   while (Z.Check(Z.Uncompress(Z_FINISH),
           [Z_OK, Z_STREAM_END], 'TSynZipDecompressor.Flush') <> Z_STREAM_END) and
         (Z.Stream.avail_out = 0) do
-    Z.DoFlush(Z_OK);
-  Z.DoFlush(Z_STREAM_END);
+    Z.DoFlush(Z_OK, fMaxSize);
+  Z.DoFlush(Z_STREAM_END, fMaxSize);
   fSizeOut := Z.Written;
 end;
 
@@ -3421,15 +3424,17 @@ function TZipRead.RetrieveFileInfo(Index: integer;
   out Info: TFileInfoFull): boolean;
 var
   e: PZipReadEntry;
+  remaining: QWord;
   local: TLocalFileHeader;
 
-  procedure SearchFromDataDescriptor; // seldom called sub-function
+  function SearchFromDataDescriptor: boolean; // seldom called sub-function
   var
     desc: ^TDataDescriptor;
     descmin, tmpLen: PtrUInt;
     posi: Int64;
     tmp: array[0..63] of TDataDescriptor; // enough to search a few iterations
   begin
+    result := true;
     descmin := 0;
     if e^.local <> nil then
       descmin := PtrUInt(e^.local^.Data);
@@ -3489,7 +3494,6 @@ begin
      (cardinal(Index) >= cardinal(Count)) then
     exit;
   // try to get information from central directory
-  result := true;
   e := @Entry[Index];
   Info.f32 := e^.dir^.fileInfo;
   FillCharFast(Info.f64, SizeOf(Info.f64), 0);
@@ -3503,7 +3507,19 @@ begin
     Info.f64 := e^.fileinfo
   else
     // MacOS: search manually the "data descriptor" from the binary local data
-    SearchFromDataDescriptor;
+    if SearchFromDataDescriptor then
+      e := @Entry[Index] // SearchFromDataDescriptor may have changed e
+    else
+      exit;
+  // validate the metadata sizes against the actual file layout
+  if (fCentralDirectoryOffset < 0) or
+     (Info.localsize < SizeOf(TLocalFileHeader)) or
+     (Info.f64.zfullSize > QWord(High(Int64))) or
+     (e^.fileinfo.offset > QWord(fCentralDirectoryOffset)) then
+    exit;
+  remaining := QWord(fCentralDirectoryOffset) - e^.fileinfo.offset;
+  if QWord(Info.localsize) <= remaining then
+    result := Info.f64.zzipSize <= remaining - QWord(Info.localsize);
 end;
 
 function TZipRead.CryptPrepare(e: PZipReadEntry; const info: TFileInfoFull;
@@ -3743,7 +3759,9 @@ begin
     {$ifdef LIBDEFLATESTATIC}
     // up to 64MB/128MB will call libdeflate using a temporary memory buffer
     if (method = Z_DEFLATED) and
-       (len < LIBDEFLATE_MAXSIZE) then
+       (len < LIBDEFLATE_MAXSIZE) and
+       (ziplen <= len + (1 shl 20)) and
+       (ziplen <= High(PtrInt) - len) then
     begin
       pointer(tmp) := FastNewString(ziplen + len); // alloc zip+unziped
       if not StreamReadAll(fSource, pointer(tmp), ziplen) then
@@ -3762,7 +3780,8 @@ begin
     begin
       deflate := nil;
       if method = Z_DEFLATED then
-        deflate := TSynZipDecompressor.Create(aDest, szcfRaw);
+        deflate := TSynZipDecompressor.Create(aDest, szcfRaw,
+          {maxsize=}aInfo.f64.zfullSize);
       try
         len := ziplen;
         tmpLen := 1 shl 20; // use a 1MB temporary buffer
@@ -3846,7 +3865,8 @@ begin
         else
         // big files will use the slower but unlimited zlib streaming abilities
         {$endif LIBDEFLATESTATIC}
-        if UnCompressStream(data, ziplen, aDest, @crc) <> len then
+        if UnCompressStream(data, ziplen, aDest, @crc, {zlib=}false,
+             {tempbuf=}0, {maxsize=}aInfo.f64.zfullSize) <> len then
           exit;
     end;
   end;
