@@ -558,6 +558,8 @@ type
     procedure SetHttpQueueLength(aValue: cardinal); virtual; abstract;
     function GetConnectionsActive: cardinal; virtual; abstract;
     procedure DoIdle(tix64: Int64; sec32: cardinal); virtual;
+    // called by THttpServerRequest.AsyncHandle, e.g. to prepare AsyncResponse()
+    procedure DoAsyncHandle(Ctxt: THttpServerRequest); virtual;
     function DoBeforeRequest(Ctxt: THttpServerRequest): cardinal;
       {$ifdef HASINLINE}inline;{$endif}
     function DoAfterRequest(Ctxt: THttpServerRequest): cardinal;
@@ -2485,6 +2487,7 @@ begin
   result := fConnectionAsyncHandle;
   if result = 0 then
     EHttpServer.RaiseUtf8('% has no async response support', [fServer]);
+  fServer.DoAsyncHandle(self);
 end;
 
 procedure THttpServerRequest.ToDocVariant(out Dest: TDocVariantData);
@@ -2799,6 +2802,10 @@ procedure THttpServerGeneric.SetOnAfterResponse(
   const aEvent: TOnHttpServerAfterResponse);
 begin
   fOnAfterResponse := aEvent;
+end;
+
+procedure THttpServerGeneric.DoAsyncHandle(Ctxt: THttpServerRequest);
+begin // nothing to do by default
 end;
 
 function THttpServerGeneric.DoBeforeRequest(Ctxt: THttpServerRequest): cardinal;
