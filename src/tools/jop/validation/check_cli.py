@@ -1,5 +1,6 @@
 from pathlib import Path
 import subprocess, json, sys
+import xml.etree.ElementTree as ET
 base=Path(__file__).resolve().parent
 exe=Path(sys.argv[1]) if len(sys.argv)>1 else base/'bin/jop'
 work=base/'cases'
@@ -15,7 +16,8 @@ def dep(o):
     if isinstance(o,dict): return 1+max([dep(v) for v in o.values()] or [0])
     if isinstance(o,list): return 1+max([dep(v) for v in o] or [0])
     return 0
-assert 'Exit codes' in run(['--help'])
+help_text=run(['--help'])
+assert 'Exit codes' in help_text and 'xml' in help_text
 run([])
 assert '0 scalar' in run(['generate','--help'])
 for depth in (0,1,3,64):
@@ -57,8 +59,52 @@ run(['convert','table.json','alias.md','--to','md-csv'])
 assert (work/'alias.md').read_bytes()==(work/'table.md').read_bytes()
 run(['convert','table.json','table.csv'])
 assert 'count' in (work/'table.csv').read_text()
+# XML uses the native @attribute/#text mapping and retains all input scalars as strings.
+catalog={'catalog': {'book': [
+    {'title': 'A & B', '@id': '007'},
+    {'title': 'Second', '@id': '008'}], '@version': '1'}}
+(work/'catalog.json').write_text(json.dumps(catalog))
+run(['convert','catalog.json','catalog.XML'])
+xml=(work/'catalog.XML').read_bytes()
+assert xml.startswith(b'<?xml version="1.0" encoding="UTF-8"?>\r\n')
+root=ET.fromstring(xml)
+assert root.tag=='catalog' and root.attrib=={'version': '1'}
+assert [(b.attrib['id'],b.findtext('title')) for b in root.findall('book')]==[
+    ('007','A & B'),('008','Second')]
+run(['convert','catalog.XML','catalog-restored.json','--compact'])
+assert json.loads((work/'catalog-restored.json').read_text())==catalog
+run(['convert','catalog.XML','catalog.yaml'])
+run(['convert','catalog.yaml','catalog-yaml.xml'])
+assert ET.tostring(ET.parse(work/'catalog-yaml.xml').getroot())==ET.tostring(root)
+run(['convert','catalog.json','xml-output.data','--to','xml'])
+run(['convert','xml-output.data','xml-restored.data','--from','xml','--to','json','--compact'])
+assert json.loads((work/'xml-restored.data').read_text())==catalog
+(work/'xml-template.xml').write_text('<root>$(answer)</root>')
+run(['convert','xml-template.xml','xml-literal.json','--define','answer=42','--compact'])
+assert json.loads((work/'xml-literal.json').read_text())=={'root':'$(answer)'}
+run(['convert','xml-template.xml','xml-expanded.json','--preprocess-input','--define','answer=42','--compact'])
+assert json.loads((work/'xml-expanded.json').read_text())=={'root':'42'}
+run(['convert','xml-template.xml','xml-noexpand.json','--preprocess-input','--no-expand','--define','answer=42','--compact'])
+assert json.loads((work/'xml-noexpand.json').read_text())=={'root':'$(answer)'}
+(work/'xml-broken.xml').write_text('<root><item></root>')
+assert 'Invalid XML' in run(['convert','xml-broken.xml','keep.json'],2)
+assert (work/'keep.json').read_text()=='unchanged'
+(work/'xml-unknown-entity.xml').write_text('<root>&unknown;</root>')
+run(['convert','xml-unknown-entity.xml','keep.json'],2)
+assert (work/'keep.json').read_text()=='unchanged'
+(work/'xml-batch-in'/'nested').mkdir(parents=True,exist_ok=True)
+(work/'xml-batch-in'/'a.xml').write_text('<root>007</root>')
+(work/'xml-batch-in'/'nested'/'b.xml').write_text('<root>true</root>')
+(work/'xml-batch-in'/'ignored.bin').write_text('not a document')
+run(['batch','xml-batch-in','xml-batch-json','--recursive','--compact'])
+assert json.loads((work/'xml-batch-json'/'a.json').read_text())=={'root':'007'}
+assert json.loads((work/'xml-batch-json'/'nested'/'b.json').read_text())=={'root':'true'}
+assert not (work/'xml-batch-json'/'ignored.json').exists()
+run(['batch','xml-batch-json','xml-batch-out','--to','xml','--recursive'])
+assert ET.parse(work/'xml-batch-out'/'a.xml').getroot().text=='007'
+assert ET.parse(work/'xml-batch-out'/'nested'/'b.xml').getroot().text=='true'
 run(['generate','buffered.json','--items',2000,'--depth',6,'--seed',1234])
 assert len(json.loads((work/'buffered.json').read_text()))==2000
 run(['compare','buffered.json','buffered.json'])
 (base/'cli-results.json').write_text(json.dumps(checks,indent=2)+'\n')
-print(f'{len(checks)} command checks passed; valid deterministic JSON at depths 0/1/3/64, stream buffer rollover, native Markdown formats and error destination preservation')
+print(f'{len(checks)} command checks passed; valid deterministic JSON at depths 0/1/3/64, stream buffer rollover, native XML/Markdown formats, XML batch/preprocessing and error destination preservation')

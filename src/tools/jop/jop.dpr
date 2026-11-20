@@ -1,7 +1,7 @@
 program jop;
 
 {
-  JSON and Text Processing Command Line Tool
+  JSON, XML and Text Processing Command Line Tool
 
   This file is a part of the Open Source Synopse mORMot framework 2,
   licensed under a MPL/GPL/LGPL three license - see LICENSE.md
@@ -39,15 +39,16 @@ const
     'convert', 'batch', 'generate', 'compare');
 
   DESCRIPTION: RawUtf8 =
-    'JOP - JSON and text processing with mORMot 2'#13#10 +
+    'JOP - JSON, XML and text processing with mORMot 2'#13#10 +
     '  jop convert source destination [options]'#13#10 +
     '  jop source destination [options]'#13#10 +
     '  jop batch "input/*.json" output-folder [options]'#13#10 +
     '  jop generate output.json [--depth 3 --items 10 --seed 42]'#13#10 +
     '  jop compare left.json right.json5'#13#10 +
     'Use <command> --help for its parameters. Put filenames before switches.'#13#10 +
-    'Formats: json, jsonc, json5, hjson, morml, yaml, csv, text.'#13#10 +
+    'Formats: json, jsonc, json5, hjson, morml, yaml, csv, xml, text.'#13#10 +
     'Output also accepts md/md-csv (fenced CSV) and md-pipe (pipe tables).'#13#10 +
+    'XML uses native @attribute/#text mapping; supply one valid root element.'#13#10 +
     'Compare uses native compact JSON text, without validation or expansion;'#13#10 +
     'comments/formatting are ignored, object property order is significant.'#13#10 +
     'Exit codes: 0 success/equal, 1 different, 2 usage or processing error.';
@@ -69,8 +70,8 @@ const
     'explicitly validate UTF-8; input is otherwise opaque 8-bit text',
     'bypass preprocessing, including defines and includes',
     'omit JSON comments',
-    'disable external namespaces',
-    'preprocess YAML/CSV source text before parsing',
+    'disable external preprocessor namespaces',
+    'preprocess YAML/CSV/XML source text before parsing',
     'add preprocessing diagnostics to comment-capable output',
     'allow absolute paths in include/insert directives',
     'ignore missing includes',

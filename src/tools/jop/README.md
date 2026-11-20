@@ -18,6 +18,8 @@ This `README.md` file documents the `jop` tool in its initial state of 20 Novemb
 
 ```sh
 jop convert input.json output.yaml
+jop convert catalog.json catalog.xml
+jop convert catalog.xml catalog.json --compact
 jop convert input.json output.json --compact --no-expand
 jop convert input.json tables.md --to md
 jop convert input.json tables-pipe.md --to md-pipe
@@ -111,6 +113,8 @@ BOM-only or unreadable content returns `jeRead`. `Equal` is false on I/O failure
 
 ## Calling the unit
 
+Add `mormot.jop` from `src/tools/jop` to the application uses clause.
+
 Processing functions return `TJopError`; `jeSuccess` means that output is
 complete. A required `out Error: RawUtf8` and Boolean result are no longer part
 of the API. `JOP_ERROR[error]` is the static `RawUtf8` description.
@@ -132,7 +136,7 @@ end;
 ```
 
 The optional final `Info: PRawUtf8` parameter receives contextual information,
-such as a YAML parser location, an include failure, a file operation exception,
+such as a YAML/XML parser location, an include failure, a file operation exception,
 or native table remarks. It is cleared on entry. A routine enum error does not
 need an allocated description. Remarks accompany `jeSuccess`; they do not turn
 completed output into a failure.
@@ -195,7 +199,7 @@ class is required.
 
 `TJsonWriter` inherits from `TTextWriter`. Using that concrete capability in the
 writer signature removes the old runtime class check and temporary adapter for
-plain `TTextWriter` instances. It can still receive text, CSV and Markdown bytes.
+plain `TTextWriter` instances. It can still receive text, XML, CSV and Markdown bytes.
 
 ## Formats and encoding
 
@@ -207,6 +211,7 @@ plain `TTextWriter` instances. It can still receive text, CSV and Markdown bytes
 | `jfHjson` | Also permits an implicit root object | Hjson layout |
 | `jfMorml` | Also permits an implicit root object | mORMl layout |
 | `jfYaml` | Native YAML 1.2 core-schema subset | Native YAML serializer |
+| `jfXml` | Native XML-to-variant mapping, string values | Native variant-to-XML mapping with UTF-8 declaration |
 | `jfCsv` | Headered CSV, all cells retained as strings | Native relational CSV, one table for a single destination |
 | `jfText` | Text preprocessor | Text |
 | `jfMd` | Unsupported | Markdown sections with fenced CSV (`ttfMarkdownCsv`) |
@@ -215,7 +220,8 @@ plain `TTextWriter` instances. It can still receive text, CSV and Markdown bytes
 `jfAuto` uses filename extensions for file calls. For in-memory calls it chooses
 JSON input; automatic output is text for text input and JSON otherwise.
 Aliases include `yml`, `txt`, `jop`, `markdown`, `md-csv`, `markdown-pipe` and `md-pipe`.
-`.ini`, `.cnf` and `.jop` are treated as text. `.md` and `.markdown` select
+`.ini`, `.cnf` and `.jop` are treated as text. `.xml` selects `jfXml`.
+`.md` and `.markdown` select
 **`jfMd`**; choose `jfMdPipe` or `--to md-pipe` explicitly for pipe tables. Both
 Markdown modes use `.md` as their output extension and are output only.
 
@@ -247,7 +253,7 @@ The old private JSON grammar/state machine, generic escaped-NUL scanner and
 generic-writer adapter have been removed. Native syntax failures still report
 an error, and the shared formatter checks that containers were closed.
 
-For YAML and table export, ordinary JSON is decoded directly in the supplied
+For XML, YAML and table export, ordinary JSON is decoded directly in the supplied
 buffer through `TDocVariantData(doc).InitJsonInPlace()` on a local
 `doc: variant`. Scalar roots retain native `JsonToAnyVariant` support.
 Native quoted-string skipping keeps URLs, apostrophes and literal dollar signs
@@ -280,7 +286,7 @@ case. `jofNoNamespaces` disables external namespace fallback while retaining
 local definitions. `jofNoComments` removes comments while keeping the selected
 JSON output layout.
 
-YAML and CSV source text is expanded only when `jofPreprocessInput` is enabled.
+YAML, CSV and XML source text is expanded only when `jofPreprocessInput` is enabled.
 Converted data is never expanded a second time. `jofDebugComments` requires
 preprocessing and a compatible JSONC, JSON5, Hjson or text output; incompatible
 flag combinations return `jeInvalidOptions`.
@@ -296,6 +302,88 @@ Root/path rules, nesting limits, callbacks, content NUL handling and optional
 UTF-8 checks remain. `jofAbsolutePaths` enables absolute include names. Include
 and insert remain distinct: insert does not expand its content. Include byte
 counters measure successfully loaded decoded bytes, including repeated loads.
+
+## XML conversion
+
+XML uses the existing `mormot.core.fmt` code and `TDocVariant` storage.
+`XmlToVariant()` builds the tree once; XML, YAML, CSV and Markdown output
+reuse that tree directly. JSON output serializes the tree once before its
+selected layout is applied. XML output appends `XMLUTF8_HEADER` and calls
+`AddVariantToXml()` on the destination writer with `JXO_ENABLED`, avoiding
+an intermediate XML string. `--compact` only changes JSON output.
+
+The native mapping is:
+
+| Document value | XML representation |
+| --- | --- |
+| Object property | Element with that name |
+| Array-valued property | Repeated elements with that name |
+| Scalar `@name` property | Attribute of the enclosing element |
+| Scalar `#text` property | Text content of the enclosing element |
+
+Attributes may appear after child properties in JSON; the variant writer
+emits them in the start tag. XML input retains values as strings, including
+`007`, `true` and `null`. Names are case-sensitive. Namespace prefixes and
+`xmlns` attributes are retained, without namespace URI resolution;
+`--no-namespaces` only controls preprocessor namespaces.
+
+For example, save this as `catalog.json`:
+
+```json
+{
+  "catalog": {
+    "@version": "1",
+    "book": [
+      { "@id": "007", "title": "A & B" },
+      { "@id": "008", "title": "Second" }
+    ]
+  }
+}
+```
+
+```sh
+jop convert catalog.json catalog.xml
+jop convert catalog.xml catalog.yaml
+jop convert catalog.xml restored.json --compact
+jop batch "input/*.xml" output --to json --recursive
+```
+
+The first command emits the XML declaration followed by:
+
+```xml
+<catalog version="1"><book id="007"><title>A &amp; B</title></book><book id="008"><title>Second</title></book></catalog>
+```
+
+The same conversion is available from the reusable unit:
+
+```pascal
+source := RawUtf8FromFile('catalog.json');
+output := JopProcess(source, jfJson, jfXml);
+```
+
+**Supply an object with one root element and XML-valid names when a complete
+XML document is required.** The native exporter also supports fragments:
+multiple root properties produce sibling elements. It does not invent a root
+wrapper, validate names or encode arbitrary JSON keys into XML names. A bare
+scalar emits no element; a root array uses numeric element names, which are
+not valid XML names. Put an array under a named property inside a root object,
+as in the example. Empty arrays emit no elements; null and empty string values
+both produce empty elements. Attribute values must be scalar: structured
+`@name` values are omitted by the native writer. Keep `#text` scalar as well.
+
+This is a data conversion, not an XML document editor. CDATA is stored as text;
+comments and processing instructions are discarded. Mixed text is gathered
+into `#text`, and repeated siblings are grouped by name, so their original
+interleaving is not preserved. Native escaping and character handling apply.
+The input parser decodes predefined entities and numeric references without
+DTD processing or schema validation. It is not a full XML conformance
+validator. Parser failures return `jeInvalidXml`, with the native line/context
+diagnostic in `Info`.
+
+XML preprocessing is opt-in through `--preprocess-input`, as for YAML and CSV.
+Expansion runs on the source text before XML parsing, so replacement values
+must already be suitable XML text or markup. `--no-expand` takes precedence.
+Parsed strings are never expanded a second time.
 
 ## CSV and Markdown exporters
 
@@ -381,7 +469,8 @@ read failure. `JopProcessFile` reports `jeRead` for that result and leaves an
 existing destination intact. A missing source is reported as `jeNoSource`.
 Empty in-memory text is still supported; empty includes are now errors.
 
-Existing output survives conversion failures, including `jeMultipleTables`.
+Existing output survives conversion failures, including `jeMultipleTables`
+and `jeInvalidXml`.
 Source/destination comparison uses normalized lexical paths. The core helper
 owns platform-specific replacement semantics; supported platforms still
 require their own build verification.

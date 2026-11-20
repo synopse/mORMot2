@@ -45,6 +45,8 @@ type
     procedure Text;
     /// YAML conversion and explicit source preprocessing
     procedure Yaml;
+    /// XML nodes, native output conventions, preprocessing and conversion errors
+    procedure Xml;
     /// CSV input and native relational CSV output
     procedure Csv;
     /// all native tables, shared options, remarks, Markdown and escaping
@@ -237,6 +239,11 @@ begin
     Check(JopFormatFromName(JOP_FORMAT_NAMES[f], resolved));
     Check(resolved = f);
   end;
+  Check(JopFormatFromName('XmL', resolved));
+  Check(resolved = jfXml);
+  Check(JopFormatFromFileName('nested/document.XML', resolved));
+  Check(resolved = jfXml);
+  CheckEqual(JOP_FORMAT_EXTENSIONS[jfXml], '.xml');
   Check(JopFormatFromName('JsOn5', resolved));
   Check(resolved = jfJson5);
   Check(JopFormatFromName('yml', resolved));
@@ -507,6 +514,98 @@ begin
   ok := (TestJopProcess(output, o, restored, nil, @error) = jeSuccess);
   CheckUtf8(ok, error);
   CheckEqual(restored, '{"x":"\\u0000"}');
+end;
+
+procedure TTestCoreJop.Xml;
+const
+  SOURCE = '{"catalog":{"book":[{"title":"A & B","@id":"001"},' +
+    '{"@id":"002","#text":"<raw>"}],"@version":"1"}}';
+  XMLDOC = '<catalog version="1"><book id="001"><title>A &amp; B</title></book>' +
+    '<book id="002">&lt;raw&gt;</book></catalog>';
+  JSONDOC = '{"catalog":{"@version":"1","book":[' +
+    '{"@id":"001","title":"A & B"},{"@id":"002","#text":"<raw>"}]}}';
+  NAMES = '<s:Root xmlns:s="urn:test" ID="1" id="2">' +
+    '<s:Name>A</s:Name><s:name>B</s:name></s:Root>';
+var
+  o: TJopOptions;
+  stats: TJopStatistics;
+  output, expected, info, yamlText: RawUtf8;
+  doc: variant;
+  tables, native: TTextPairs;
+  f: TJopFormat;
+  fmt: TTableTextFormat;
+  i: PtrInt;
+begin
+  // Attributes may follow child nodes in JSON; the native writer gathers them.
+  Expect(SOURCE, XMLUTF8_HEADER + XMLDOC, JopOptions(jfJson, jfXml));
+  o := JopOptions(jfXml, jfJson, [jofCompact]);
+  Expect(XMLUTF8_HEADER + XMLDOC, JSONDOC, o);
+  Expect('<root><id>001</id><big>184467440737095516160</big>' +
+    '<flag>true</flag><empty/></root>',
+    '{"root":{"id":"001","big":"184467440737095516160",' +
+    '"flag":"true","empty":""}}', o);
+  Expect('<r q="&quot;">&#65;&#x42;<![CDATA[<raw>&]]></r>',
+    '{"r":{"@q":"\"","#text":"AB<raw>&"}}', o);
+  Expect(NAMES, '{"s:Root":{"@xmlns:s":"urn:test","@ID":"1",' +
+    '"@id":"2","s:Name":"A","s:name":"B"}}', o);
+  Expect(NAMES, XMLUTF8_HEADER + NAMES, JopOptions(jfXml, jfXml));
+  // Converted text is data, including macro syntax. Expansion is opt-in.
+  SetLength(o.Defines, 1);
+  o.Defines[0] := 'name=Alice';
+  Expect('<r>$(name)</r>', '{"r":"$(name)"}', o);
+  include(o.Flags, jofPreprocessInput);
+  Expect('<r>$(name)</r>', '{"r":"Alice"}', o);
+  include(o.Flags, jofNoExpand);
+  Expect('<r>$(name)</r>', '{"r":"$(name)"}', o);
+  o := JopOptions(jfXml, jfJsonC, [jofDebugComments]);
+  Reject(XMLDOC, o, jeInvalidOptions);
+  // Core parser errors clear public results and are counted as failed input.
+  o := JopOptions(jfXml, jfJson, [jofCompact]);
+  FillCharFast(stats, SizeOf(stats), 0);
+  output := 'old output';
+  Check(TestJopProcess('<r><x></r>', o, output, @stats, @info) = jeInvalidXml);
+  CheckEqual(output, '');
+  Check(Pos('line 1', info) > 0, 'native XML error context');
+  CheckEqual(stats.FilesFailed, 1);
+  CheckEqual(stats.FilesSucceeded, 0);
+  CheckEqual(stats.InputBytes, length('<r><x></r>'));
+  CheckEqual(stats.OutputBytes, 0);
+  Reject('<r>&unknown;</r>', o, jeInvalidXml);
+  Reject('<r>unfinished', JopOptions(jfXml, jfXml), jeInvalidXml);
+  Reject('<r>'#0'</r>', o, jeEmbeddedNul);
+  include(o.Flags, jofValidateUtf8);
+  Reject('<r>' + TestJopBytes('e9') + '</r>', o, jeInvalidUtf8);
+  // All native output paths consume the XML document with its case-sensitive
+  // names and string values; no conversion through JSON is required here.
+  XmlToVariant(XMLDOC, doc);
+  yamlText := TestJopProcess(XMLDOC, jfXml, jfYaml);
+  CheckEqual(yamlText, VariantToYaml(doc));
+  expected := VariantToXml(doc);
+  Expect(yamlText, expected, JopOptions(jfYaml, jfXml));
+  Expect(XMLDOC, expected, JopOptions(jfXml, jfXml));
+  o := JopOptions(jfXml, jfCsv);
+  o.TableRoot := 'catalog-data';
+  Check(VariantToCsv(doc, native, info, o.TableOptions, o.TableRoot) in
+    [tbrSuccess, tbrSuccessWithRemarks]);
+  Check(TestJopProcessToCsv(XMLDOC, o, tables) = jeSuccess);
+  if Check(length(tables) = length(native), 'all XML relational tables') then
+    for i := 0 to high(tables) do
+    begin
+      CheckEqual(tables[i].Name, native[i].Name);
+      CheckEqual(tables[i].Value, native[i].Value);
+    end;
+  for f := jfMd to jfMdPipe do
+  begin
+    o.OutputFormat := f;
+    fmt := ttfMarkdownCsv;
+    if f = jfMdPipe then
+      fmt := ttfMarkdownPipe;
+    Check(VariantToMd(doc, expected, info, o.TableOptions, o.TableRoot, fmt) in
+      [tbrSuccess, tbrSuccessWithRemarks]);
+    Expect(XMLDOC, expected, o);
+  end;
+  o := JopOptions(jfXml, jfCsv);
+  Expect('<r><name>Alice</name></r>', '__rowid,r.name'#10'1,Alice'#10, o);
 end;
 
 procedure TTestCoreJop.Csv;
@@ -929,6 +1028,14 @@ begin
     w.SetText(output);
     CheckEqual(output, 'before:{"n":1}:after');
     CheckEqual(s.OutputBytes, length('{"n":1}'));
+    w.CancelAll;
+    w.AddShort('before:');
+    Check(TestJopProcessToWriter('{"r":{"@id":"1","#text":"&"}}', w,
+      JopOptions(jfJson, jfXml)) = jeSuccess);
+    w.AddShort(':after');
+    w.SetText(output);
+    CheckEqual(output, 'before:' + XMLUTF8_HEADER +
+      '<r id="1">&amp;</r>:after');
     // Native formatting must restore caller state on success and failure.
     w.CancelAll;
     w.CustomOptions := [twoForceJsonStandard];
@@ -961,6 +1068,11 @@ begin
     Check(s.ElapsedMicroSeconds >= 0);
     Check(TestJopProcessToStream('{}', nil, o) = jeInvalidOptions);
     Check(TestJopProcessToWriter('{}', nil, o) = jeInvalidOptions);
+    stream.Clear;
+    Check(TestJopProcessToStream('<r><x>001</x></r>', stream,
+      JopOptions(jfXml, jfXml)) = jeSuccess);
+    FastSetString(output, stream.Memory, stream.Size);
+    CheckEqual(output, XMLUTF8_HEADER + '<r><x>001</x></r>');
     // overwrite at the requested position without truncating an existing tail
     stream.Clear;
     output := 'abcdefxxxxxxxxxxxTAIL';
@@ -1075,6 +1187,20 @@ begin
   Check(JopProcessFile(source, dest, o) = jeMultipleTables);
   CheckEqual(RawUtf8FromFile(dest), '__rowid,name'#10'1,Alice'#10);
   Check(JopProcessFile('', dest, o) = jeInvalidPath);
+  // XML input/output inference uses the same protected file replacement path.
+  source := FileName('document.XML');
+  dest := FileName('document.json');
+  expected := '<r id="001"><name>A &amp; B</name></r>';
+  Check(FileFromString(expected, source));
+  o := JopOptions(jfAuto, jfAuto, [jofCompact]);
+  Check(JopProcessFile(source, dest, o) = jeSuccess);
+  CheckEqual(RawUtf8FromFile(dest), '{"r":{"@id":"001","name":"A & B"}}');
+  planned := FileName('document-copy.xml');
+  Check(JopProcessFile(dest, planned, o) = jeSuccess);
+  CheckEqual(RawUtf8FromFile(planned), XMLUTF8_HEADER + expected);
+  Check(FileFromString('<r><name></r>', source));
+  Check(JopProcessFile(source, dest, o) = jeInvalidXml);
+  CheckEqual(RawUtf8FromFile(dest), '{"r":{"@id":"001","name":"A & B"}}');
   // File decoding follows RawUtf8FromFile: BOMless bytes are unchanged,
   // UTF-8 BOM is stripped, and UTF-16 BOMs select native UTF-8 conversion.
   expected := '{"text":"' + TestJopBytes('c3a9') + '"}';
@@ -1188,8 +1314,19 @@ begin
   CheckEqual(s.InputBytes, 0);
   Check(JopProcessFiles(input + '*.absent', output, o, files) = jeNoFiles);
   CheckEqual(length(files), 0);
+  // Batch destination names use the XML extension; XML sources are inferred.
+  input := Folder('xml-input');
+  output := Folder('xml-output');
+  WriteFile('xml-input' + PathDelim + 'a.json', '{"r":{"n":1}}');
+  expected := FileName('xml-output' + PathDelim + 'a.xml');
+  o := JopOptions(jfAuto, jfXml);
+  Check(JopProcessFiles(input + '*.json', output, o, files) = jeSuccess);
+  CheckEqual(length(files), 1);
+  CheckEqual(RawUtf8FromFile(expected), XMLUTF8_HEADER + '<r><n>1</n></r>');
+  o := JopOptions(jfAuto, jfJson, [jofCompact]);
+  Check(JopProcessFiles(output + '*.xml', input, o, files) = jeSuccess);
+  CheckEqual(RawUtf8FromFile(input + 'a.json'), '{"r":{"n":"1"}}');
 end;
-
 
 procedure TTestCoreJop.Generate;
 var
