@@ -1834,6 +1834,13 @@ begin
             (PosixRename(aOld, aNew) >= 0);
 end;
 
+function ReplaceFile(const aOld, aNew: TFileName): boolean;
+begin
+  result := (aOld <> '') and
+            (aNew <> '') and
+            (PosixRename(aOld, aNew) >= 0);
+end;
+
 function RemoveDir(const aDirName: TFileName): boolean;
 begin
   result := (aDirName <> '') and

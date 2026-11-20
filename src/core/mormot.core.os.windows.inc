@@ -1230,6 +1230,16 @@ begin
             MoveFileW(W32(aOld, o), W32(aNew, n));
 end;
 
+function ReplaceFile(const aOld, aNew: TFileName): boolean;
+var
+  o, n: TW32Temp;
+begin
+  result := (aOld <> '') and
+            (aNew <> '') and
+            MoveFileExW(W32(aOld, o), W32(aNew, n),
+              MOVEFILE_REPLACE_EXISTING or MOVEFILE_WRITE_THROUGH);
+end;
+
 function RemoveDir(const aDirName: TFileName): boolean;
 var
   tmp: TW32Temp;
