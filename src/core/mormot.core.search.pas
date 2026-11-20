@@ -3104,7 +3104,9 @@ begin
   end;
   if r <> n then
     DynArrayFakeLength(result, r);
-  if not (ffoSortByDate in Options) then
+  if not (ffoSortByDate in Options) and
+     not ((ffoSortByName in Options) and
+          (ffoIncludeFolder in Options)) then
     exit;
   da.Init(TypeInfo(TFindFilesDynArray), result);
   FindFilesSort(da, Options);
@@ -3124,7 +3126,12 @@ begin
 end;
 {$else}
 begin
-  FileNamesU(Directory, Mask, Options, IgnoreFileName, result);
+  if (ffoSortByName in Options) and
+     (ffoIncludeFolder in Options) then
+    result := FindFilesDynArrayToFileNames(
+      FindFiles(Directory, Mask, IgnoreFileName, Options))
+  else
+   FileNamesU(Directory, Mask, Options, IgnoreFileName, result);
 end;
 {$endif UNICODE}
 
