@@ -675,6 +675,9 @@ var
 // - return false on signed 64-bit overflow so caller falls back to string
 function TryYamlInt(p: PUtf8Char; out V: Int64): boolean;
 
+/// YAML 1.2 core-schema decimal/hexa/octal number detection
+function IsYamlNumber(P: PUtf8Char): boolean;
+
 /// strip an unquoted trailing "# ..." YAML comment from a scalar fragment
 // - accounts for single/double quoted spans where # is literal
 procedure YamlStripLineComment(var S: RawUtf8);
@@ -3457,6 +3460,44 @@ begin
              (p[4] = #0));
 end;
 
+function IsYamlNumber(P: PUtf8Char): boolean;
+var
+  tab: PAnsiCharToByte;
+begin
+  result := false;
+  if P = nil then
+    exit;
+  if P^ in ['+', '-'] then
+    inc(P);
+  if P^ = '0' then
+    if P[1] in ['x', 'X', 'o'] then // octal/hexadecimal format
+    begin
+      if P[1] = 'o' then
+      begin
+        inc(P, 2);
+        if not (P^ in ['0' .. '7']) then
+          exit;
+        repeat
+          inc(P);
+        until not (P^ in ['0' .. '7']);
+      end
+      else
+      begin
+        inc(P, 2);
+        tab := @ConvertHexToBin;
+        if tab^[P^] = 255 then
+          exit;
+        repeat
+          inc(P);
+        until tab^[P^] = 255;
+      end;
+      result := P^ = #0;
+      exit;
+    end;
+  if P^ in ['0' .. '9'] then
+    result := GotoEndRawNumber(P)^ = #0; //
+end;
+
 function TryYamlInt(p: PUtf8Char; out V: Int64): boolean;
 var
   neg: boolean;
@@ -4970,7 +5011,7 @@ begin
       // to preserve string type on round-trip
       IsYamlNull(P) or
       IsBooleanJson(P) or
-      IsNumberJson(P) or
+      IsYamlNumber(P) or
       // quick scan for chars that require escape
       YamlSpecialChars(P) then
     // emit as JSON-escaped double-quoted string - valid YAML 1.2 §5.7
