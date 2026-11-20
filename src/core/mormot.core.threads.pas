@@ -844,7 +844,9 @@ type
   // TSynBackgroundThreadMethod and provide a much more convenient callback
   TSynBackgroundThreadMethodAbstract = class(TSynBackgroundThreadAbstract)
   protected
-    fPendingProcessLock: TLightLock; // atomic access to fPendingProcessFlag
+    fPendingProcessLock: TLightLock; // protects request state and caller lifetime
+    fRunAndWaitCount: integer; // registered callers, including queued calls
+    fStopping: boolean; // reject new requests without changing the active state
     fCallerThreadID: TThreadID;
     fCallerEvent: TSynEvent;
     fParam: pointer;
@@ -872,7 +874,10 @@ type
     constructor Create(const aOnIdle: TOnIdleSynBackgroundThread;
       const aThreadName: RawUtf8; const OnBeforeExecute: TOnNotifyThread = nil;
       const OnAfterExecute: TOnNotifyThread = nil); reintroduce;
-    /// finalize and wait for the thread ending
+    /// stop accepting requests and wait for registered callers and the thread
+    // - an acquired request completes; callers waiting to acquire return false
+    // - the owner must prevent new calls before destruction starts
+    // - must not be called from the worker or a RunAndWait callback
     destructor Destroy; override;
     /// launch Process abstract method asynchronously in the background thread
     // - wait until process is finished, calling OnIdle() callback in
@@ -882,6 +887,7 @@ type
     // - returns false if self is not set, or if called from the same thread
     // as it is currently processing (to avoid race condition from OnIdle()
     // callback)
+    // - also returns false if the request is rejected during destruction
     // - returns true when the background process is finished
     // - OpaqueParam will be used to specify a thread-safe content for the
     // background process
@@ -3252,12 +3258,28 @@ begin
 end;
 
 destructor TSynBackgroundThreadMethodAbstract.Destroy;
+var
+  idle: boolean;
 begin
-  SetPendingProcess(flagDestroying);
-  fProcessEvent.SetEvent;   // notify terminated
-  fCallerEvent.WaitForEver; // wait for actual termination
+  fPendingProcessLock.Lock;
+  fStopping := true;
+  fPendingProcessLock.UnLock;
+  repeat
+    fPendingProcessLock.Lock;
+    idle := (fRunAndWaitCount = 0) and
+            (fPendingProcessFlag = flagIdle); // also used by TSynParallelProcess
+    if idle then
+      fPendingProcessFlag := flagDestroying;
+    fPendingProcessLock.UnLock;
+    if idle then
+      break;
+    if GetCurrentThreadId = MainThreadID then
+      CheckSynchronize(0);
+    SleepHiRes(1);
+  until false;
+  Terminate; // wake the worker only after the accepted request has completed
+  inherited Destroy; // join before releasing the caller event
   FreeAndNilSafe(fCallerEvent);
-  inherited Destroy;        // calling WaitForNotExecuting() if needed
 end;
 
 function TSynBackgroundThreadMethodAbstract.GetPendingProcess:
@@ -3321,11 +3343,11 @@ end;
 function TSynBackgroundThreadMethodAbstract.
   AcquireThread: TSynBackgroundThreadProcessStep;
 begin
-  result := fPendingProcessFlag;
-  if result <> flagIdle then
-    exit; // no need to lock if obviously busy or finished
   fPendingProcessLock.Lock;
-  result := fPendingProcessFlag;
+  if fStopping then
+    result := flagDestroying
+  else
+    result := fPendingProcessFlag;
   if result = flagIdle then
   begin
     // we just acquired the thread! congrats!
@@ -3404,35 +3426,50 @@ var
   ThreadID: TThreadID;
 begin
   result := false;
-  ThreadID := GetCurrentThreadId;
-  if (self = nil) or
-     (ThreadID = fCallerThreadID) then
-    // avoid endless loop when waiting in same thread (e.g. UI + OnIdle)
+  if self = nil then
     exit;
-  // 1. wait for any previous request to be finished (should not happen often)
-  if Assigned(fOnIdle) then
-    fOnIdle(self, 0); // notify started
-  ms := 0;
-  start := 0;
-  while true do
-    case AcquireThread of
-      flagDestroying:
-        exit;
-      flagIdle:
-        break; // we acquired the background thread
-    else
-      begin
-        SleepHiRes(ms);
-        ms := ms xor 1; // 0,1,0,1,0,1... SleepDelay() does not scale here
-        if ms = 0 then
-          OnIdleProcessNotify(start);
+  fPendingProcessLock.Lock;
+  if fStopping then
+  begin
+    fPendingProcessLock.UnLock;
+    exit;
+  end;
+  inc(fRunAndWaitCount);
+  fPendingProcessLock.UnLock;
+  try
+    ThreadID := GetCurrentThreadId;
+    if ThreadID = fCallerThreadID then
+      // avoid endless loop when waiting in same thread (e.g. UI + OnIdle)
+      exit;
+    // 1. wait for any previous request to be finished (should not happen often)
+    if Assigned(fOnIdle) then
+      fOnIdle(self, 0); // notify started
+    ms := 0;
+    start := 0;
+    while true do
+      case AcquireThread of
+        flagDestroying:
+          exit;
+        flagIdle:
+          break; // we acquired the background thread
+      else
+        begin
+          SleepHiRes(ms);
+          ms := ms xor 1; // 0,1,0,1,0,1... SleepDelay() does not scale here
+          if ms = 0 then
+            OnIdleProcessNotify(start);
+        end;
       end;
-    end;
-  // 2. process execution in the background thread
-  fParam := OpaqueParam;
-  fProcessEvent.SetEvent; // notify background thread for next pending process
-  WaitForFinished(start, nil); // wait for flagFinished, then set flagIdle
-  result := true;
+    // 2. process execution in the background thread
+    fParam := OpaqueParam;
+    fProcessEvent.SetEvent; // notify background thread for next pending process
+    WaitForFinished(start, nil); // wait for flagFinished, then set flagIdle
+    result := true;
+  finally
+    fPendingProcessLock.Lock;
+    dec(fRunAndWaitCount);
+    fPendingProcessLock.UnLock; // last access to self, including OnIdle callbacks
+  end;
 end;
 
 function TSynBackgroundThreadMethodAbstract.GetOnIdleBackgroundThreadActive: boolean;
