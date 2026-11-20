@@ -1452,6 +1452,12 @@ type
     // - on success, returns true and fill tag with the associated opaque value
     // - similar to epoll's EPOLL_CTL_DEL control interface
     function Unsubscribe(socket: TNetSocket): boolean; virtual; abstract;
+    /// change the events tracked for one TSocket, keeping its subscription
+    // - the socket should have been monitored by a previous call to Subscribe()
+    // with the very same tag - events may be [] to pause its notifications
+    // - similar to epoll's EPOLL_CTL_MOD control interface
+    function Modify(socket: TNetSocket; events: TPollSocketEvents;
+      tag: TPollSocketTag): boolean; virtual; abstract;
     /// waits for status modifications of all tracked TSocket
     // - will wait up to timeoutMS milliseconds, 0 meaning immediate return
     // and -1 for infinite blocking
@@ -1485,6 +1491,7 @@ type
     socket: TNetSocket;
     tag: TPollSocketTag;
     events: TPollSocketEvents;
+    modify: boolean; // from TPollSockets.Modify, not Subscribe
   end;
   PPollSocketsSubscribe = ^TPollSocketsSubscribe;
   TPollSocketsSubscribeDynArray = array of TPollSocketsSubscribe;
@@ -1523,6 +1530,8 @@ type
     function GetSubscribeCount: integer;
     function GetUnsubscribeCount: integer;
     function MergePendingEvents(const new: TPollSocketResults): integer;
+    procedure AddSubscription(socket: TNetSocket; events: TPollSocketEvents;
+      tag: TPollSocketTag; modify: boolean);
     function MergeSubscribeEvents: boolean;
     // virtual methods below could be overridden for O(1) pending state check
     function EnsurePending(tag: TPollSocketTag): boolean; virtual;
@@ -1554,6 +1563,15 @@ type
     // - this method is thread-safe, and the actual fPoll[].UnSubscribe
     // will take place during the next PollForPendingEvents() call
     procedure Unsubscribe(socket: TNetSocket; tag: TPollSocketTag); virtual;
+    /// change the events tracked for one TSocket, keeping its subscription
+    // - e.g. Modify(socket, [], tag) to pause its notifications without
+    // closing it, then Modify(socket, [pseRead], tag) to resume
+    // - this method is thread-safe, and the actual fPoll[].Modify will take
+    // place during the next PollForPendingEvents() call, after (and in the same
+    // order than) any previous Subscribe() or Modify() call
+    // - on epoll, is executed immediately and returns false on error
+    function Modify(socket: TNetSocket; events: TPollSocketEvents;
+      tag: TPollSocketTag): boolean;
     /// retrieve the next pending notification, or let the poll wait for new
     // - if GetOnePending returns no pending notification, will try
     // PollForPendingEvents and wait up to timeoutMS milliseconds for events
@@ -5248,13 +5266,32 @@ begin
   inherited Destroy;
 end;
 
-function TPollSockets.Subscribe(socket: TNetSocket; events: TPollSocketEvents;
-  tag: TPollSocketTag): boolean;
-{$ifndef POLLSOCKETEPOLL}
+procedure TPollSockets.AddSubscription(socket: TNetSocket;
+  events: TPollSocketEvents; tag: TPollSocketTag; modify: boolean);
 var
   n: PtrInt;
   one: PPollSocketsSubscribe;
-{$endif POLLSOCKETEPOLL}
+begin
+  // fPoll[0].Subscribe() is not allowed when WaitForModified() is running
+  // -> trick is to asynch append the information to fSubscription.Subscribe[]
+  fSubscriptionSafe.Lock;
+  try
+    n := fSubscription.SubscribeCount;
+    if n = length(fSubscription.Subscribe) then
+      SetLength(fSubscription.Subscribe, n + 64);
+    one := @fSubscription.Subscribe[n];
+    one^.socket := socket;
+    one^.tag := tag;
+    one^.events := events;
+    one^.modify := modify;
+    fSubscription.SubscribeCount := n + 1;
+  finally
+    fSubscriptionSafe.UnLock;
+  end;
+end;
+
+function TPollSockets.Subscribe(socket: TNetSocket; events: TPollSocketEvents;
+  tag: TPollSocketTag): boolean;
 begin
   result := false;
   if (self = nil) or
@@ -5267,21 +5304,22 @@ begin
   if result then
     LockedInc32(@fCount);
   {$else}
-  // fPoll[0].Subscribe() is not allowed when WaitForModified() is running
-  // -> trick is to asynch append the information to fSubscription.Subscribe[]
-  fSubscriptionSafe.Lock;
-  try
-    n := fSubscription.SubscribeCount;
-    if n = length(fSubscription.Subscribe) then
-      SetLength(fSubscription.Subscribe, n + 64);
-    one := @fSubscription.Subscribe[n];
-    one^.socket := socket;
-    one^.tag := tag;
-    one^.events := events;
-    fSubscription.SubscribeCount := n + 1;
-  finally
-    fSubscriptionSafe.UnLock;
-  end;
+  AddSubscription(socket, events, tag, {modify=}false);
+  result := true;
+  {$endif POLLSOCKETEPOLL}
+end;
+
+function TPollSockets.Modify(socket: TNetSocket; events: TPollSocketEvents;
+  tag: TPollSocketTag): boolean;
+begin
+  result := false;
+  if (self = nil) or
+     (socket = nil) then
+    exit;
+  {$ifdef POLLSOCKETEPOLL}
+  result := fPoll[0].Modify(socket, events, tag);
+  {$else}
+  AddSubscription(socket, events, tag, {modify=}true);
   result := true;
   {$endif POLLSOCKETEPOLL}
 end;
@@ -5570,7 +5608,8 @@ begin
       begin
         sock := sub.Unsubscribe[u];
         for s := 0 to sub.SubscribeCount - 1 do
-          if sub.Subscribe[s].socket = sock then
+          if (sub.Subscribe[s].socket = sock) and
+             not sub.Subscribe[s].modify then
           begin
             if Assigned(fOnLog) then
               fOnLog(sllTrace, 'PollForPendingEvents sub+unsub sock=%',
@@ -5605,9 +5644,17 @@ begin
             fOnLog(sllTrace, 'PollForPendingEvents Unsubscribe(%) failed count=%',
               [pointer(sock), fCount], self);
       end;
-      // then subscribe to the new connections
+      // then subscribe to the new connections, or modify existing ones
       for s := 0 to sub.SubscribeCount - 1 do
-        if sub.Subscribe[s].socket <> nil then
+        if sub.Subscribe[s].modify then
+        begin
+          // e.g. from TPollAsyncSockets.SetReadPaused()
+          for p := 0 to length(fPoll) - 1 do
+            with sub.Subscribe[s] do
+              if fPoll[p].Modify(socket, events, tag) then
+                break; // a closed connection won't be found - just ignore
+        end
+        else if sub.Subscribe[s].socket <> nil then
         begin
           poll := nil;
           n := length(fPoll);

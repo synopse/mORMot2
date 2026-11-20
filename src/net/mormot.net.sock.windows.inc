@@ -1373,6 +1373,8 @@ type
     function Subscribe(socket: TNetSocket; events: TPollSocketEvents;
       tag: TPollSocketTag): boolean; override;
     function Unsubscribe(socket: TNetSocket): boolean; override;
+    function Modify(socket: TNetSocket; events: TPollSocketEvents;
+      tag: TPollSocketTag): boolean; override;
     function WaitForModified(var results: TPollSocketResults;
       timeoutMS: integer): boolean; override;
   end;
@@ -1430,6 +1432,28 @@ begin
   end;
 end;
 
+function TPollSocketSelect.Modify(socket: TNetSocket; events: TPollSocketEvents;
+  tag: TPollSocketTag): boolean;
+var
+  i: PtrInt;
+begin
+  result := false;
+  if (self = nil) or
+     (socket = nil) then
+    exit;
+  i := PtrUIntScanIndex(pointer(fTagSocket), fCount, PtrUInt(socket));
+  if (i < 0) or
+     (fTagTag[i] <> tag) then // the socket may have been reused
+    exit;
+  FD_CLR(socket, fRead);
+  FD_CLR(socket, fWrite);
+  if pseRead in events then
+    FD_SET(socket, fRead);
+  if pseWrite in events then
+    FD_SET(socket, fWrite);
+  result := true;
+end;
+
 function TPollSocketSelect.WaitForModified(var results: TPollSocketResults;
   timeoutMS: integer): boolean;
 var
@@ -1464,6 +1488,14 @@ begin
   end
   else
     wrp := nil;
+  if (rdp = nil) and
+     (wrp = nil) then
+  begin
+    // e.g. all sockets paused by Modify(): select() would fail at once
+    if timeoutMS > 0 then
+      SleepHiRes(timeoutMS);
+    exit;
+  end;
   SetTimeVal(timeoutMS, tv);
   if select({ignored=}0, rdp, wrp, nil, @tv) <= 0 then
     exit;

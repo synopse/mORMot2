@@ -116,6 +116,14 @@ type
     // - by default, a single lock is used for all connection access, but
     // ifSeparateWLock may be set to separate Recv() and Send()
     fRWSafe: array[0..1] of TMultiLightLock;
+    /// protect fReadPaused and the read subscription from SetReadPaused()
+    fReadSafe: TLightLock;
+    /// set by TPollAsyncSockets.SetReadPaused()
+    fReadPaused: boolean;
+    {$ifdef USE_WINIOCP}
+    /// no wieRecv was prepared after the last read, since fReadPaused was set
+    fRecvParked: boolean;
+    {$endif USE_WINIOCP}
     /// low-level TLS context
     fSecure: INetTls;
     /// the thread currently set by ProcessRead - maybe nil e.g. on write
@@ -312,6 +320,10 @@ type
     function DoAfterWrite(const caller: ShortString;
       connection: TPollAsyncConnection): TPollAsyncSocketOnReadWrite;
     procedure ProcessWaitingWrite; // pending soWaitWrite
+    {$ifdef USE_WINIOCP}
+    function PrepareNextRecv(const caller: ShortString;
+      connection: TPollAsyncConnection): boolean;
+    {$endif USE_WINIOCP}
   public
     /// initialize the read/write sockets polling
     // - fRead and fWrite TPollSocketsBuffer instances will track pseRead or
@@ -336,6 +348,18 @@ type
     // - this method won't call OnClosed, since it is initiated by the class
     function Stop(connection: TPollAsyncConnection;
       const caller: ShortString): boolean; virtual;
+    /// stop or restart reading from a connection, without closing its socket
+    // - e.g. for backpressure, when the data read from this connection can't
+    // be sent as fast as it is received
+    // - the caller doesn't need to lock the connection, and could call this
+    // method from its OnRead, or from any other thread
+    // - a paused connection does not notify any read event to the poll, and
+    // its incoming data remains in the socket buffers until it is resumed
+    // - resuming does not call OnRead with the data already in fRd: its
+    // processing is up to the caller
+    // - returns false if the connection is closed, or if the poll failed
+    function SetReadPaused(connection: TPollAsyncConnection;
+      paused: boolean): boolean;
     /// add some data to the asynchronous output buffer of a given connection
     // - this method may block if the connection is currently writing from
     // another thread (which is not possible from TPollAsyncSockets.Write),
@@ -1472,6 +1496,12 @@ end;
 
 { TPollAsyncSockets }
 
+{$ifndef USE_WINIOCP}
+const
+  READ_EVENTS: array[boolean] of TPollSocketEvents = (
+    [pseRead], []); // [paused]
+{$endif USE_WINIOCP}
+
 constructor TPollAsyncSockets.Create(aOptions: TPollAsyncSocketsOptions;
   aThreadCount: integer);
 begin
@@ -1576,8 +1606,10 @@ begin
       {$endif USE_WINIOCP}
     if sock <> nil then
     begin
-      // notify ProcessRead/ProcessWrite to abort
+      // notify ProcessRead/ProcessWrite/SetReadPaused to abort
+      connection.fReadSafe.Lock;
       connection.fSocket := nil;
+      connection.fReadSafe.UnLock;
       // clean the TLS state
       if connection.fSecure <> nil then
         try
@@ -1801,7 +1833,7 @@ begin
   if result then
     case sub of
       pseRead:
-        result := fIocpRecvSend.PrepareNext('sub', connection.fIocpSub, wieRecv);
+        result := PrepareNextRecv('sub', connection);
       pseWrite:
         result := fIocpRecvSend.PrepareNext('sub', connection.fIocpSub, wieSend);
     end;
@@ -1810,19 +1842,30 @@ begin
     if fSubRead in connection.fFlags then
       exit
     else
-      result := fRead.Subscribe(connection.fSocket, [pseRead], tag)
+    begin
+      connection.fReadSafe.Lock; // consistent with SetReadPaused()
+      try
+        result := fRead.Subscribe(connection.fSocket, [pseRead], tag);
+        if result then
+        begin
+          if connection.fReadPaused then // paused before its subscription
+            result := fRead.Modify(connection.fSocket, [], tag);
+          include(connection.fFlags, fSubRead);
+        end;
+      finally
+        connection.fReadSafe.UnLock;
+      end;
+    end
   else if fSubWrite in connection.fFlags then
       exit
     else
       result := fWrite.Subscribe(connection.fSocket, [pseWrite], tag);
-  if result then
-     if sub = pseRead then
-       include(connection.fFlags, fSubRead)
-     else
-     begin
-       include(connection.fFlags, fSubWrite);
-       connection.OnAfterWriteSubscribe; // overriden in THttpAsyncConnection
-     end;
+  if result and
+     (sub = pseWrite) then
+  begin
+    include(connection.fFlags, fSubWrite);
+    connection.OnAfterWriteSubscribe; // overriden in THttpAsyncConnection
+  end;
   {$endif USE_WINIOCP}
   if fDebugLog <> nil then
     fDebugLog.Add.Log(sllDebug, 'Subscribe(%,%)=% % handle=%',
@@ -1886,6 +1929,63 @@ begin
     // just ignore any exception here (may leak memory at the cost of stability)
   end;
 end;
+
+function TPollAsyncSockets.SetReadPaused(connection: TPollAsyncConnection;
+  paused: boolean): boolean;
+begin
+  result := false;
+  if (self = nil) or
+     fTerminated or
+     (connection = nil) then
+    exit;
+  connection.fReadSafe.Lock;
+  try
+    if connection.fSocket = nil then
+      exit; // closed by Stop()
+    result := true;
+    if connection.fReadPaused = paused then
+      exit; // nothing to change
+    {$ifdef USE_WINIOCP}
+    if not paused and
+       connection.fRecvParked then
+    begin
+      // no wieRecv is pending: prepare one now
+      result := fIocpRecvSend.PrepareNext('resume', connection.fIocpSub, wieRecv);
+      if result then
+        connection.fRecvParked := false;
+    end;
+    {$else}
+    if fSubRead in connection.fFlags then
+      // no read event any more, but keep the socket subscribed (and open)
+      result := fRead.Modify(connection.fSocket, READ_EVENTS[paused],
+        TPollSocketTag(connection));
+    // if not subscribed yet, SubscribeConnection() will check fReadPaused
+    {$endif USE_WINIOCP}
+    if result then
+      connection.fReadPaused := paused;
+  finally
+    connection.fReadSafe.UnLock;
+  end;
+end;
+
+{$ifdef USE_WINIOCP}
+function TPollAsyncSockets.PrepareNextRecv(const caller: ShortString;
+  connection: TPollAsyncConnection): boolean;
+begin
+  connection.fReadSafe.Lock; // consistent with SetReadPaused()
+  try
+    if connection.fReadPaused then
+    begin
+      connection.fRecvParked := true; // SetReadPaused() will prepare it
+      result := true;
+    end
+    else
+      result := fIocpRecvSend.PrepareNext(caller, connection.fIocpSub, wieRecv);
+  finally
+    connection.fReadSafe.UnLock;
+  end;
+end;
+{$endif USE_WINIOCP}
 
 function TPollAsyncSockets.ProcessRead(Sender: TSynThread;
   const notif: TPollSocketResult): boolean;
@@ -1959,6 +2059,9 @@ begin
         // notified again (level-triggered poll or IOCP re-subscription), as
         // already after any recv() < SizeOf(temp): so a fast client won't
         // make fRd grow without limit before OnRead can consume it
+        // - a paused connection keeps its input in the socket buffer
+        res := nrRetry;
+        if not connection.fReadPaused then
         repeat
           if fTerminated or
              (connection.fSocket = nil) then
@@ -2028,7 +2131,7 @@ begin
         begin
           {$ifdef USE_WINIOCP}
           // IOCP requires per-notification subscription
-          if not fIocpRecvSend.PrepareNext('next', connection.fIocpSub, wieRecv) then
+          if not PrepareNextRecv('next', connection) then
           {$else}
           if not (fSubRead in connection.fFlags) then
             // it is time to subscribe for any future read on this connection
@@ -2050,7 +2153,7 @@ begin
         SleepHiRes(0); // avoid switch threads for nothing
         {$ifdef USE_WINIOCP}
         // IOCP requires per-notification subscription
-        if not fIocpRecvSend.PrepareNext('next', connection.fIocpSub, wieRecv) then
+        if not PrepareNextRecv('next', connection) then
           CloseConnection(connection, 'ProcessRead waitlock iocp');
         {$endif USE_WINIOCP}
         result := false; // retry later
@@ -2288,10 +2391,13 @@ begin
   fWr.Reset;
   fRWSafe[0].Init;
   fRWSafe[1].Init;
+  fReadSafe.Init;
+  fReadPaused := false;
   fSecure := nil;
   fLastOperation := 0;
   {$ifdef USE_WINIOCP}
   fIocpSub := nil;
+  fRecvParked := false;
   {$endif USE_WINIOCP}
   fRemoteIP4 := aRemoteIP.IP4;
   aRemoteIP.IP(fRemoteIP, RemoteIPLocalHostAsVoidInServers);
