@@ -312,7 +312,8 @@ type
     class function Open(const aHost, aPort: RawUtf8; aLog: TSynLogClass = nil;
       aOptions: TSocketsIOClientOptions = SCI_DEFAULT;
       const aRoot: RawUtf8 = ''; const aCustomHeaders: RawUtf8 = '';
-      aTls: boolean = false; aTLSContext: PNetTlsContext = nil): pointer; overload;
+      aTls: boolean = false; aTLSContext: PNetTlsContext = nil;
+      const aOnAfterOpen: TOnSocketsIOClient = nil): pointer; overload;
     /// low-level client WebSockets connection factory for host and port
     // - calls THttpClientWebSockets.WebSocketsConnect for the Socket.IO protocol
     // - with error interception and optional logging, returning nil on error,
@@ -322,8 +323,8 @@ type
     // - never call the Create constructor, but one of the Open() factory methods
     class function Open(const aUri: RawUtf8; aLog: TSynLogClass = nil;
       aOptions: TSocketsIOClientOptions = SCI_DEFAULT;
-      const aCustomHeaders: RawUtf8 = '';
-      aTLSContext: PNetTlsContext = nil): pointer; overload;
+      const aCustomHeaders: RawUtf8 = ''; aTLSContext: PNetTlsContext = nil;
+      const aOnAfterOpen: TOnSocketsIOClient = nil): pointer; overload;
     /// finalize this instance and release its associated Client instance
     destructor Destroy; override;
     /// return the array of connected remote namespaces as text
@@ -888,8 +889,8 @@ end;
 
 class function TSocketsIOClient.Open(const aHost, aPort: RawUtf8;
   aLog: TSynLogClass; aOptions: TSocketsIOClientOptions;
-  const aRoot, aCustomHeaders: RawUtf8;
-  aTls: boolean; aTLSContext: PNetTlsContext): pointer;
+  const aRoot, aCustomHeaders: RawUtf8; aTls: boolean; aTLSContext: PNetTlsContext;
+  const aOnAfterOpen: TOnSocketsIOClient): pointer;
 var
   c: THttpClientWebSockets;
   proto: TWebSocketSocketIOClientProtocol;
@@ -897,6 +898,7 @@ begin
   result := nil;
   proto := TWebSocketSocketIOClientProtocol.Create('Socket.IO', '');
   proto.fClient := Create;
+  proto.fClient.OnAfterOpen := aOnAfterOpen;
   proto.fClient.fDefaultWaitTimeoutSec := 2;
   proto.fClient.fOptions := aOptions;
   proto.fClient.fLog := aLog;
@@ -913,13 +915,13 @@ end;
 
 class function TSocketsIOClient.Open(const aUri: RawUtf8; aLog: TSynLogClass;
   aOptions: TSocketsIOClientOptions; const aCustomHeaders: RawUtf8;
-  aTLSContext: PNetTlsContext): pointer;
+  aTLSContext: PNetTlsContext; const aOnAfterOpen: TOnSocketsIOClient): pointer;
 var
   uri: TUri;
 begin
   if uri.From(aUri) then // detect http[s]:// and ws[s]:// schemes
     result := Open(uri.Server, uri.Port, aLog, aOptions,
-      uri.Address, aCustomHeaders, uri.Https, aTLSContext)
+      uri.Address, aCustomHeaders, uri.Https, aTLSContext, aOnAfterOpen)
   else
     result := nil;
 end;
