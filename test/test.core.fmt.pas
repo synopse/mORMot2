@@ -139,9 +139,9 @@ end;
 procedure TTestCoreJop.Setup;
 begin
   inherited Setup;
-  fFolder := TemporaryFileName(WorkDir, 'jop-tests');
-  Check(CreateDir(fFolder));
-  fFolder := IncludeTrailingPathDelimiter(fFolder);
+  fFolder := EnsureDirectoryExists(TemporaryFileName(WorkDir, 'jop-tests'));
+  Check(fFolder <> '');
+  Check(DirectoryExists(fFolder));
 end;
 
 procedure TTestCoreJop.CleanUp;
@@ -877,7 +877,7 @@ begin
   Reject('$$'#10'include bom-only.txt'#10'$$'#10'done', o, jePreprocess);
   Reject('$$'#10'include ../outside.txt'#10'$$'#10'done', o, jePreprocess);
   fn := fFolder + 'included.txt';
-  source := '$$'#10'include "' + StringToUtf8(fn) + '"'#10'$$'#10;
+  source := Make(['$$'#10'include "', fn, '"'#10'$$'#10]);
   Reject(source, o, jePreprocess);
   include(o.Flags, jofAbsolutePaths);
   Expect(source, 'hello world'#10, o);
@@ -888,10 +888,14 @@ begin
   include(o.Flags, jofValidateUtf8);
   Reject('$$'#10'include bytes.txt'#10'$$'#10, o, jePreprocess);
   Reject('$$'#10'insert bytes.txt'#10'$$'#10, o, jePreprocess);
-  WriteFile('nul.txt', 'before'#0'after');
+  source := 'before0after';
+  CheckUtf8(source[7] = '0', source);
+  source[7] := #0;
+  CheckUtf8(source[7] = #0, source);
+  WriteFile('zero.txt', source); // was 'nul.txt' but Windows silently skip it
   exclude(o.Flags, jofValidateUtf8);
-  Reject('$$'#10'include nul.txt'#10'$$'#10, o, jePreprocess);
-  Reject('$$'#10'insert nul.txt'#10'$$'#10, o, jePreprocess);
+  Reject('$$'#10'include zero.txt'#10'$$'#10, o, jePreprocess);
+  Reject('$$'#10'insert zero.txt'#10'$$'#10, o, jePreprocess);
   WriteFile('fragment.json', 'answer:42');
   WriteFile('broken.json', 'answer:"unterminated');
   WriteFile('trailing.json', '{"ok":1}}');
