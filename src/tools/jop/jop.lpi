@@ -31,7 +31,7 @@
         <IsPartOfProject Value="True"/>
       </Unit>
       <Unit>
-        <Filename Value="jop.main.pas"/>
+        <Filename Value="mormot.tools.jop.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit>
     </Units>
@@ -44,5 +44,10 @@
     <SearchPaths>
       <UnitOutputDirectory Value="lib/$(TargetCPU)-$(TargetOS)"/>
     </SearchPaths>
+    <Linking>
+      <Debugging>
+        <DebugInfoType Value="dsDwarf3"/>
+      </Debugging>
+    </Linking>
   </CompilerOptions>
 </CONFIG>

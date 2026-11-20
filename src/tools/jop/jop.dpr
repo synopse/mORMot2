@@ -259,8 +259,8 @@ begin
           error := jeInvalidOptions;
           info := '--items expects a nonnegative integer';
         end;
-        seed := cardinal(GetTickCount64);
-        if c.Get('seed', value, 'unsigned 32-bit #seed; default current tick count') then
+        seed := Random32;
+        if c.Get('seed', value, 'unsigned 32-bit #seed; default random') then
           if ToInt64(value, number) and
              (number >= 0) and
              (number <= high(cardinal)) then

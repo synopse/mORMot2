@@ -214,7 +214,7 @@ plain `TTextWriter` instances. It can still receive text, CSV and Markdown bytes
 
 `jfAuto` uses filename extensions for file calls. For in-memory calls it chooses
 JSON input; automatic output is text for text input and JSON otherwise.
-Aliases include `yml`, `txt`, `jop`, `markdown`, `md-csv`, and `markdown-pipe`.
+Aliases include `yml`, `txt`, `jop`, `markdown`, `md-csv`, `markdown-pipe` and `md-pipe`.
 `.ini`, `.cnf` and `.jop` are treated as text. `.md` and `.markdown` select
 **`jfMd`**; choose `jfMdPipe` or `--to md-pipe` explicitly for pipe tables. Both
 Markdown modes use `.md` as their output extension and are output only.
