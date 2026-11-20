@@ -10896,6 +10896,7 @@ type
     Active: PtrInt;
     Invalid: boolean;
     RaiseEnabled: boolean;
+    RaiseMemory: boolean;
     RaiseAt: TTableWriteEvent;
     procedure Clear;
     procedure WriteTable(Event: TTableWriteEvent;
@@ -10909,6 +10910,7 @@ begin
   Active := -1;
   Invalid := false;
   RaiseEnabled := false;
+  RaiseMemory := false;
 end;
 
 procedure TTableTestWriter.WriteTable(Event: TTableWriteEvent;
@@ -10918,7 +10920,10 @@ var
 begin
   if RaiseEnabled and
      (Event = RaiseAt) then
-    raise ESynLogSilent.Create('table test output failure');
+    if RaiseMemory then
+      OutOfMemoryError // use the RTL-owned preallocated exception
+    else
+      raise ESynLogSilent.Create('table test output failure');
   case Event of
     tweBegin:
       begin
@@ -11005,7 +11010,8 @@ var
   begin
     md := 'old';
     info := 'old';
-    CheckUtf8(JsonToMd(Json, md, info, Options) = tbrSuccess, Json);
+    CheckUtf8(JsonToMd(Json, md, info, Options, 'root',
+      ttfMarkdownPipe) = tbrSuccess, Json);
     CheckEqual(md, Expected, Json);
     CheckEqual(info, '');
   end;
@@ -11020,17 +11026,21 @@ var
     SetLength(csv, 1);
     csv[0].Name := 'old';
     csv[0].Value := 'old';
+    info := '';
     CheckEqual(ord(JsonToCsv(Json, csv, info, Options)), ord(Expected), Json);
     CheckEqual(length(csv), 0, 'no partial csv on failure');
     Check(info <> '', 'csv error context');
     md := 'old';
+    info := '';
     CheckEqual(ord(JsonToMd(Json, md, info, Options)), ord(Expected), Json);
     CheckEqual(md, '', 'no partial markdown on failure');
     Check(info <> '', 'markdown error context');
     sink.Clear;
+    info := '';
     CheckEqual(ord(JsonToTables(Json, sink.WriteTable, info, Options)),
       ord(Expected), Json);
     CheckEqual(sink.Events, '', 'no callback on schema/input error');
+    Check(info <> '', 'callback error context');
   end;
 
   procedure FailVariant(const Doc: variant;
@@ -11254,7 +11264,8 @@ var
       CheckEqual(sink.Tables[1].Rows[0].ParentID, 1);
     end;
     // child Markdown has the same parent link as CSV
-    Check(JsonToMd('{"items":[1]}', md, info) = tbrSuccess);
+    Check(JsonToMd('{"items":[1]}', md, info, TABLE_DEFAULT, 'root',
+      ttfMarkdownPipe) = tbrSuccess);
     CheckEqual(md, '## root'#10#10 +
       '| __rowid |'#10'| --- |'#10'| 1 |'#10#10 +
       '## root\.items'#10#10 +
@@ -11567,7 +11578,7 @@ var
     event: TTableWriteEvent;
     v: variant;
     none: TOnTableWrite;
-    savedIgnore: boolean;
+    savedIgnore, raised: boolean;
   begin
     none := nil;
     Check(JsonToTables('[]', none, info) = tbrOutputError, 'missing callback');
@@ -11610,6 +11621,30 @@ var
         sink.RaiseEnabled := true;
         Check(JsonToTables('[[1,2],[3]]', sink.WriteTable, info,
           [tboMixedAsJson]) = tbrOutputError, 'release shared JSON writer');
+        sink.Clear;
+        sink.RaiseAt := event;
+        sink.RaiseEnabled := true;
+        sink.RaiseMemory := true;
+        raised := false;
+        try
+          JsonToTables('[1,2]', sink.WriteTable, info);
+        except
+          on EOutOfMemory do
+            raised := true;
+        end;
+        Check(raised, 'JSON callback allocation failure propagates');
+        sink.Clear;
+        sink.RaiseAt := event;
+        sink.RaiseEnabled := true;
+        sink.RaiseMemory := true;
+        raised := false;
+        try
+          VariantToTables(v, sink.WriteTable, info);
+        except
+          on EOutOfMemory do
+            raised := true;
+        end;
+        Check(raised, 'Variant callback allocation failure propagates');
       end;
     finally
       TSynLog.Family.ExceptionIgnoreCurrentThread := savedIgnore;
@@ -11639,13 +11674,22 @@ var
       CheckEqual(csv[1].Value,
         '__rowid,__parentid,value'#10'1,1,tiny'#10);
     end;
-    Check(VariantToMd(doc, md, info) = tbrSuccess);
+    Check(VariantToMd(doc, md, info, TABLE_DEFAULT, 'root',
+      ttfMarkdownPipe) = tbrSuccess);
     CheckEqual(md, '## root'#10#10 +
       '| __rowid | text |'#10'| --- | --- |'#10'| 1 | ' +
       s + '\,&quot;' + s + ' |'#10#10 +
       '## root\.child'#10#10 +
       '| __rowid | __parentid | value |'#10 +
       '| --- | --- | --- |'#10'| 1 | 1 | tiny |'#10#10);
+    // fenced CSV uses a second writer and must reset the first after flushing
+    Check(VariantToMd(doc, md, info) = tbrSuccess);
+    CheckEqual(md,
+      '### root.csv'#10'```csv'#10'__rowid,text'#10'1,"' +
+      s + ',""' + s + '"'#10'```'#10#10 +
+      '### root.child.csv'#10'```csv'#10 +
+      '__rowid,__parentid,value'#10'1,1,tiny'#10'```'#10#10);
+    CheckEqual(info, '');
     // reuse the JSON fallback writer across rows and across child tables
     doc := _ObjFast(['a', _ArrFast([_ObjFast(['x', s]), 2]),
       'b', _ArrFast([_Json('[]'), 3])]);
@@ -11870,6 +11914,176 @@ var
       Check(PosEx(#10'101,'#10, csv[0].Value) <> 0, 'remarks do not stop rows');
   end;
 
+  procedure MarkdownCsv;
+  var
+    md, info: RawUtf8;
+
+    procedure One(const Json, Expected: RawUtf8;
+      Options: TTableOptions = TABLE_DEFAULT);
+    begin
+      md := 'old';
+      info := 'old';
+      CheckUtf8(JsonToMd(Json, md, info, Options) = tbrSuccess, Json);
+      CheckEqual(md, Expected, Json);
+      CheckEqual(info, '', 'default Markdown clears diagnostics');
+      Parity(Json, Options);
+    end;
+
+  begin
+    One('[{"name":"John"},{"name":"Jane"}]',
+      '### root.csv'#10'```csv'#10 +
+      '__rowid,name'#10'1,John'#10'2,Jane'#10'```'#10#10);
+    One('[]', '### root.csv'#10'```csv'#10 +
+      '__rowid,value'#10'```'#10#10);
+    One('{}', '### root.csv'#10'```csv'#10 +
+      '__rowid'#10'1'#10'```'#10#10);
+    One('null', '### root.csv'#10'```csv'#10 +
+      '__rowid,value'#10'1,'#10'```'#10#10);
+    One('null', '### root.csv'#10'```csv'#10 +
+      '__rowid,value'#10'1,null'#10'```'#10#10, [tboNullAsText]);
+    One('{"items":[1],"empty":[]}',
+      '### root.csv'#10'```csv'#10'__rowid'#10'1'#10'```'#10#10 +
+      '### root.items.csv'#10'```csv'#10 +
+      '__rowid,__parentid,value'#10'1,1,1'#10'```'#10#10 +
+      '### root.empty.csv'#10'```csv'#10 +
+      '__rowid,__parentid,value'#10'```'#10#10);
+    One('["a,b\"c","a\nb","a\rb","a\r\nb"]',
+      '### root.csv'#10'```csv'#10'__rowid,value'#10 +
+      '1,"a,b""c"'#10'2,"a'#10'b"'#10'3,"a'#13'b"'#10 +
+      '4,"a'#13#10'b"'#10'```'#10#10);
+    // each table chooses a fence longer than every backtick run in its CSV
+    One('{"a":["\n```\n"],"b":["\n````\n"],"c":["\n`````\n"]}',
+      '### root.csv'#10'```csv'#10'__rowid'#10'1'#10'```'#10#10 +
+      '### root.a.csv'#10'````csv'#10 +
+      '__rowid,__parentid,value'#10'1,1,"'#10'```'#10'"'#10'````'#10#10 +
+      '### root.b.csv'#10'`````csv'#10 +
+      '__rowid,__parentid,value'#10'1,1,"'#10'````'#10'"'#10'`````'#10#10 +
+      '### root.c.csv'#10'``````csv'#10 +
+      '__rowid,__parentid,value'#10'1,1,"'#10'`````'#10'"'#10'``````'#10#10);
+    One('{"```":1}', '### root.csv'#10'````csv'#10 +
+      '__rowid,```'#10'1,1'#10'````'#10#10);
+    One('[1,null]', '### root.csv'#10'```csv'#10 +
+      '__rowid,__index,value'#10'1,0,1'#10'2,1,null'#10'```'#10#10,
+      [tboKeepArrayIndex, tboNullAsText]);
+    // requesting the CSV-only format from a Markdown wrapper is an error
+    md := 'old';
+    info := '';
+    Check(JsonToMd('[1]', md, info, TABLE_DEFAULT, 'root', ttfCsv) =
+      tbrInvalidData);
+    CheckEqual(md, '');
+    Check(info <> '');
+    md := 'old';
+    info := '';
+    Check(VariantToMd(1, md, info, TABLE_DEFAULT, 'root', ttfCsv) =
+      tbrInvalidData);
+    CheckEqual(md, '');
+    Check(info <> '');
+  end;
+
+  procedure JsonBoundaries;
+  var
+    bom: RawUtf8;
+
+    procedure Root(const Json, Expected: RawUtf8;
+      Options: TTableOptions = TABLE_DEFAULT);
+    var
+      source, alias, before, md, info: RawUtf8;
+    begin
+      source := Json;
+      alias := source;
+      FastSetString(before, pointer(source), length(source));
+      OneCsv(source, '__rowid,value'#10'1,' + Expected + #10,
+        tbrSuccess, Options);
+      sink.Clear;
+      info := 'old';
+      Check(JsonToTables(source, sink.WriteTable, info, Options) = tbrSuccess,
+        'scalar root callback');
+      CheckEqual(info, '', 'scalar callback clears diagnostics');
+      CheckEqual(sink.Events, 'B(root)RE');
+      if Check(length(sink.Tables) = 1) then
+      begin
+        if Check(length(sink.Tables[0].Info.Columns) = 1) then
+          CheckEqual(sink.Tables[0].Info.Columns[0], 'value');
+        if Check(length(sink.Tables[0].Rows) = 1) then
+        begin
+          CheckEqual(sink.Tables[0].Rows[0].ID, 1);
+          CheckEqual(sink.Tables[0].Rows[0].ParentID, 0);
+          if Check(length(sink.Tables[0].Rows[0].Values) = 1) then
+            CheckEqual(sink.Tables[0].Rows[0].Values[0], Expected);
+        end;
+      end;
+      md := 'old';
+      info := 'old';
+      Check(JsonToMd(source, md, info, Options) = tbrSuccess,
+        'scalar root Markdown');
+      CheckEqual(md, '### root.csv'#10'```csv'#10 +
+        '__rowid,value'#10'1,' + Expected + #10'```'#10#10);
+      CheckEqual(info, '', 'scalar Markdown clears diagnostics');
+      CheckEqual(source, before, 'JSON source remains unchanged');
+      CheckEqual(alias, before, 'shared JSON source remains unchanged');
+    end;
+
+  begin
+    Root('0', '0');
+    Root('false', 'false');
+    Root('""', '');
+    Root(' '#9'42'#13#10, '42');
+    Root(' true '#10, 'true');
+    Root(' null '#13, '');
+    Root(' null '#13, 'null', [tboNullAsText]);
+    Root(' "hello" '#10, 'hello');
+    Root('-12.5 ', '-12.50');
+    bom := RawBytes([$ef, $bb, $bf]);
+    Root(bom + '42', '42');
+    Root(bom + 'true', 'true');
+    Root(bom + 'null', '');
+    Root(bom + 'null', 'null', [tboNullAsText]);
+    Root(bom + '"hello"', 'hello');
+    OneCsv(bom + ' {"n":1} '#10, '__rowid,n'#10'1,1'#10);
+    // an end delimiter alone cannot prove that the decoder consumed one value
+    FailJson('"hello" garbage');
+    FailJson('"a" "b"');
+    FailJson('{"a":"hello" garbage}');
+    FailJson('42 garbage');
+    FailJson('42,');
+    FailJson('1+2');
+    FailJson('1-2');
+    FailJson('1e1e2');
+    FailJson('null true');
+    FailJson('[1] garbage');
+    FailJson('[1],2');
+    FailJson('{},');
+    FailJson('{} []');
+    FailJson(bom);
+    FailJson(bom + '{} garbage');
+    FailJson(bom + '"' + RawBytes([$c0, $af]) + '"');
+    FailJson('42'#0'garbage');
+  end;
+
+  procedure LookupOrder;
+  begin
+    OneCsv('[{"a":1,"b":2,"c":3},{"a":4,"b":5,"c":6}]',
+      '__rowid,a,b,c'#10'1,1,2,3'#10'2,4,5,6'#10);
+    OneCsv('[{"a":1,"b":2,"c":3},{"c":4,"a":5,"b":6}]',
+      '__rowid,a,b,c'#10'1,1,2,3'#10'2,5,6,4'#10);
+    OneCsv('[{"a":1,"b":2,"c":3},{"c":4,"a":5,"c":99,"b":6}]',
+      '__rowid,a,b,c'#10'1,1,2,3'#10'2,5,6,4'#10);
+    OneCsv('[{"a":1,"b":2,"c":3},{"c":4,"a":5}]',
+      '__rowid,a,b,c'#10'1,1,2,3'#10'2,5,,4'#10,
+      tbrSuccessWithRemarks);
+    // equal counts do not imply equal positions or unique input names
+    OneCsv('[{"a":1,"b":2,"c":3},{"a":4,"a":5,"c":6}]',
+      '__rowid,a,b,c'#10'1,1,2,3'#10'2,4,,6'#10,
+      tbrSuccessWithRemarks);
+    OneCsv('[{"a":1,"b":2},{"b":3,"b":4}]',
+      '__rowid,a,b'#10'1,1,2'#10'2,,3'#10,
+      tbrSuccessWithRemarks);
+    OneCsv('[{"o":{"a":1,"b":2}},{"o":{"b":3,"a":4}}]',
+      '__rowid,o.a,o.b'#10'1,1,2'#10'2,4,3'#10);
+    OneCsv('[{"A":1,"a":2},{"a":3,"A":4}]',
+      '__rowid,A,a'#10'1,1,2'#10'2,4,3'#10);
+  end;
+
 begin
   sink := TTableTestWriter.Create;
   try
@@ -11879,6 +12093,9 @@ begin
     Schemas;
     Escaping;
     JsonDecoding;
+    JsonBoundaries;
+    MarkdownCsv;
+    LookupOrder;
     NativeValues;
     InvalidJson;
     Depth;

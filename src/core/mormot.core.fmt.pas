@@ -765,6 +765,12 @@ type
   TOnTableWrite = procedure(Event: TTableWriteEvent;
     const Table: TTableInfo; Row: PTableRow) of object;
 
+  /// the supported output text formats for our relational table writer
+  TTableTextFormat = (
+    ttfCsv,
+    ttfMarkdownCsv,
+    ttfMarkdownPipe);
+
 const
   /// union of fields, with native scalar conversion and no type checking
   TABLE_DEFAULT = [];
@@ -804,9 +810,10 @@ function VariantToTables(const Doc: variant; const OnWrite: TOnTableWrite;
 
 /// decode JSON then normalize its value into relational tables
 // - accepts an optional UTF-8 BOM, but no comments or extended JSON syntax
-// - uses IsValidJson and VariantLoadJson, with case-sensitive names and
-// JSON_FAST_FLOAT numeric precision/formatting; this is not an RFC
-// validator, and string escapes follow the regular mORMot decoding rules
+// - uses IsValidJson and JsonToAnyVariant, with case-sensitive names and
+// JSON_FAST_FLOAT numeric precision/formatting
+// - syntax and string escapes follow native mORMot rules; this is not a full
+// RFC 8259 validator
 // - as with TDocVariant, empty JSON property names are ignored and \u0000 is
 // decoded as '?'; raw embedded NUL and invalid UTF-8 input are rejected
 // - checks UTF-8 once at the JSON boundary, then trusts the decoded variants
@@ -815,19 +822,21 @@ function JsonToTables(const Json: RawUtf8; const OnWrite: TOnTableWrite;
   out Info: RawUtf8; Options: TTableOptions = TABLE_DEFAULT;
   const RootName: RawUtf8 = 'root'): TTableResult;
 
-/// convert a document into LLM-friendly Markdown, with several '## table' CSV
-// - this format is very convenient to feed a LLM with some CSV instead of JSON
-// - emits UTF-8 with LF endings, escaped cell content and a final blank line
+/// convert a document into relational Markdown
+// - ttfMarkdownCsv (default) emits one '### table.csv' fenced CSV section per table
+// - ttfMarkdownPipe emits regular pipe tables with escaped cell content
+// - emits UTF-8 with LF record endings and a final blank line; fenced CSV
+// preserves the original cell content, including embedded CR/LF
 // - '__rowid' is always first, followed by '__parentid' for child tables
 // - Md is cleared on failure, including a failure after partial generation
 function VariantToMd(const Doc: variant; out Md, Info: RawUtf8;
-  Options: TTableOptions = TABLE_DEFAULT;
-  const RootName: RawUtf8 = 'root'): TTableResult;
+  Options: TTableOptions = TABLE_DEFAULT; const RootName: RawUtf8 = 'root';
+  Format: TTableTextFormat = ttfMarkdownCsv): TTableResult;
 
 /// decode JSON as JsonToTables then convert its value into relational Markdown
 function JsonToMd(const Json: RawUtf8; out Md, Info: RawUtf8;
-  Options: TTableOptions = TABLE_DEFAULT;
-  const RootName: RawUtf8 = 'root'): TTableResult;
+  Options: TTableOptions = TABLE_DEFAULT; const RootName: RawUtf8 = 'root';
+  Format: TTableTextFormat = ttfMarkdownCsv): TTableResult;
 
 /// convert a document into one CSV text per relational table
 // - this format is very convenient to feed a LLM with some CSV instead of JSON
@@ -5156,11 +5165,11 @@ end;
 
 procedure TTableData.AddArray(Value: PDocVariantData; ParentID: TID);
 var
-  i: PtrInt;
+  n, i: PtrInt;
 begin
-  i := Count + Value^.Count;
-  if i > length(Rows) then
-    SetLength(Rows, i); // pre-allocate
+  n := Count + Value^.Count;
+  if n > length(Rows) then
+    SetLength(Rows, NextGrow(n)); // pre-allocate
   for i := 0 to Value^.Count - 1 do
     AddRow(pointer(@Value^.Values[i]), ParentID, i);
 end;
@@ -5267,7 +5276,12 @@ begin
   inc(schema.Samples);
   for i := 0 to Value^.Count - 1 do
   begin
-    item := schema.Find(Value^.Names[i]);
+    // most JSON objects keep the same property order in every row
+    if (i < schema.Count) and
+       (schema.Names[i] = Value^.Names[i]) then
+      item := @schema.Fields[i]
+    else
+      item := schema.Find(Value^.Names[i]);
     if item = nil then
     begin
       if schema.Samples > 1 then
@@ -5425,6 +5439,7 @@ procedure TTableExport.FillRow(var Field: TTableField; Value: PVarData;
 var
   doc: PDocVariantData;
   i, j: PtrInt;
+  ordered: boolean;
 begin
   Value := VarDataFromVariant(PVariant(Value)^);
   if Field.Column >= 0 then
@@ -5433,11 +5448,22 @@ begin
           (_Safe(PVariant(Value)^)^.Kind = dvObject) then
   begin
     doc := pointer(Value);
+    // use direct positions only when the complete name sequence matches
+    ordered := doc^.Count = Field.Objects.Count;
+    if ordered then
+      for i := 0 to Field.Objects.Count - 1 do
+        if doc^.Names[i] <> Field.Objects.Names[i] then
+        begin
+          ordered := false;
+          break;
+        end;
     for i := 0 to Field.Objects.Count - 1 do
     begin
-      // explicitly case-sensitive, whatever the caller's document options
-      j := doc^.GetValueIndex(pointer(Field.Objects.Names[i]),
-        length(Field.Objects.Names[i]), {casesensitive=}true);
+      if ordered then
+        j := i
+      else
+        j := doc^.GetValueIndex(pointer(Field.Objects.Names[i]),
+          length(Field.Objects.Names[i]), {casesensitive=}true);
       if j >= 0 then
         FillRow(Field.Objects.Fields[i], pointer(@doc^.Values[j]), Values);
     end;
@@ -5523,11 +5549,15 @@ begin
           FreeAndNil(fJson);
         end;
       except
+        on E: EOutOfMemory do // paranoid check - expected by tests
+          raise;
         on E: Exception do
           Fail(tbrOutputError, StringToUtf8(E.Message));
       end;
     end;
   except
+    on E: EOutOfMemory do
+      raise;
     on E: Exception do
       Fail(tbrInvalidData, StringToUtf8(E.Message));
   end;
@@ -5540,41 +5570,14 @@ begin
 end;
 
 
-function TableLoadJson(const Json: RawUtf8; out Doc: variant;
-  out Info: RawUtf8): TTableResult;
-var
-  source: RawUtf8;
-  p: pointer;
-  len: PtrInt;
-begin
-  VarClear(Doc);
-  result := tbrInvalidJson;
-  Info := 'Invalid JSON';
-  if not IsValidUtf8NotVoid(Json) then
-    exit;
-  source := Json;
-  p := pointer(source);
-  len := length(source);
-  if BomFile(p, len) <> bomNone then
-    FastSetString(source, p, len);
-  // VariantLoadJson owns the temporary decoding buffer and accepts scalar roots
-  if not IsValidJson(source, {strict=}true) or
-     not VariantLoadJson(Doc, source, @JSON_TABLE, {double=}true) then
-    exit;
-  result := tbrSuccess;
-  Info := '';
-end;
-
 type
-  TTableTextFormat = (
-    ttfCsv,
-    ttfMarkdown);
-
   TTableTextWriter = class(TTextWriter)
   protected
     fFormat: TTableTextFormat;
     fCsv: TTextPairs;
     fCount: integer;
+    fMarkdownTemp: TTextWriterStackBuffer;
+    fMarkdown: TTextWriter;
     procedure AddText(const Text: RawUtf8); virtual;
     procedure AddCell(const Text: RawUtf8);
     procedure AddID(ID: TID);
@@ -5582,15 +5585,41 @@ type
   public
     constructor Create(Format: TTableTextFormat;
       var Temp: TTextWriterStackBuffer);
+    destructor Destroy; override;
     procedure WriteTable(Event: TTableWriteEvent;
       const Table: TTableInfo; Row: PTableRow); virtual;
   end;
+
+function TableFenceLength(const Csv: RawUtf8): integer;
+var
+  i, run: PtrInt;
+begin
+  result := 3;
+  run := 0;
+  for i := 1 to length(Csv) do
+    if Csv[i] = '`' then
+    begin
+      inc(run);
+      if run >= result then
+        result := run + 1;
+    end
+    else
+      run := 0;
+end;
 
 constructor TTableTextWriter.Create(Format: TTableTextFormat;
   var Temp: TTextWriterStackBuffer);
 begin
   inherited CreateOwnedStream(Temp);
   fFormat := Format;
+  if Format = ttfMarkdownCsv then
+    fMarkdown := TTextWriter.CreateOwnedStream(fMarkdownTemp);
+end;
+
+destructor TTableTextWriter.Destroy;
+begin
+  fMarkdown.Free;
+  inherited Destroy;
 end;
 
 procedure TTableTextWriter.AddText(const Text: RawUtf8);
@@ -5600,7 +5629,8 @@ begin
   if Text = '' then
     exit;
   case fFormat of
-    ttfCsv:
+    ttfCsv,
+    ttfMarkdownCsv:
       begin
         if (PosExChar(',', Text) <> 0) or
            (PosExChar('"', Text) <> 0) or
@@ -5610,7 +5640,7 @@ begin
         else
           AddString(Text);
       end;
-    ttfMarkdown:
+    ttfMarkdownPipe:
       begin
         p := pointer(Text);
         last := p + length(Text);
@@ -5649,7 +5679,8 @@ begin
 end;
 
 const
-  TABLE_SEPARATOR: array[TTableTextFormat] of TShort3 = (',', ' | ');
+  TABLE_SEPARATOR: array[TTableTextFormat] of TShort3 =
+    (',', ',', ' | ');
 
 procedure TTableTextWriter.AddCell(const Text: RawUtf8);
 begin
@@ -5665,7 +5696,7 @@ end;
 
 procedure TTableTextWriter.EndRow;
 begin
-  if fFormat = ttfMarkdown then
+  if fFormat = ttfMarkdownPipe then
     Add(' ', '|');
   Add(#10);
 end;
@@ -5674,6 +5705,7 @@ procedure TTableTextWriter.WriteTable(Event: TTableWriteEvent;
   const Table: TTableInfo; Row: PTableRow);
 var
   i, n: PtrInt;
+  csv: RawUtf8;
 begin
   case Event of
     tweBegin:
@@ -5687,28 +5719,29 @@ begin
               fCsv[fCount].Name := Table.Name;
               inc(fCount);
             end;
-          ttfMarkdown:
+          ttfMarkdownCsv:
+            CancelAll; // one CSV table, later appended to fMarkdown
+          ttfMarkdownPipe:
             begin
               AddShorter('## ');
               AddText(Table.Name);
               AddShorter(#10#10'| ');
             end;
         end;
-        // synthetic column names are known plain text
-        AddString('__rowid');
+        AddShorter('__rowid');
         if Table.ParentName <> '' then
         begin
           AddShorter(TABLE_SEPARATOR[fFormat]);
-          AddString('__parentid');
+          AddShort('__parentid');
         end;
         for i := 0 to high(Table.Columns) do
-          if (fFormat = ttfMarkdown) and
+          if (fFormat = ttfMarkdownPipe) and
              (Table.Columns[i] = '__index') then
-            AddString(' | __index')
+            AddShort(' | __index')
           else
             AddCell(Table.Columns[i]);
         EndRow;
-        if fFormat = ttfMarkdown then
+        if fFormat = ttfMarkdownPipe then
         begin
           n := length(Table.Columns) + ord(Table.ParentName <> '');
           AddShorter('| ---');
@@ -5719,7 +5752,7 @@ begin
       end;
     tweRow:
       begin
-        if fFormat = ttfMarkdown then
+        if fFormat = ttfMarkdownPipe then
           Add('|', ' ');
         Add(Int64(Row^.ID));
         if Table.ParentName <> '' then
@@ -5732,7 +5765,23 @@ begin
       case fFormat of
         ttfCsv:
           SetText(fCsv[fCount - 1].Value);
-        ttfMarkdown:
+        ttfMarkdownCsv:
+          begin
+            SetText(csv);
+            fMarkdown.AddShorter('### ');
+            fMarkdown.AddString(Table.Name);
+            fMarkdown.AddShorter('.csv'#10);
+            n := TableFenceLength(csv);
+            fMarkdown.AddChars('`', n);
+            fMarkdown.AddShorter('csv'#10);
+            fMarkdown.AddString(csv);
+            if (csv = '') or
+               (csv[length(csv)] <> #10) then
+              fMarkdown.AddDirect(#10);
+            fMarkdown.AddChars('`', n);
+            fMarkdown.AddDirect(#10, #10);
+          end;
+        ttfMarkdownPipe:
           Add(#10);
       end;
   end;
@@ -5745,12 +5794,48 @@ function VariantToTables(const Doc: variant; const OnWrite: TOnTableWrite;
 var
   tables: TTableExport;
 begin
-  Info := '';
   tables := TTableExport.Create;
   try
     result := tables.Run(Doc, OnWrite, Options, RootName, Info);
   finally
     tables.Free;
+  end;
+end;
+
+function TableLoadJson(const Json: RawUtf8; out Doc: variant;
+  out Info: RawUtf8): TTableResult;
+var
+  p: pointer;
+  len: PtrInt;
+  parser: TGetJsonField;
+  tmp: TSynTempBuffer;
+begin
+  VarClear(Doc);
+  result := tbrInvalidJson;
+  Info := 'JSON should be UTF-8';
+  p := pointer(Json);
+  len := length(Json);
+  if (BomFile(p, len) in [bomUtf16LE, bomUtf16BE]) or
+     not IsValidUtf8NotVoid(p, len) then
+    exit;
+  // JsonToAnyVariant() stops without complaining: check the whole input once
+  Info := 'Invalid JSON';
+  if not IsValidJson(p, len, {strict=}true) then
+    exit;
+  tmp.Init(p, len); // one temporary copy before in-place decoding
+  try
+    parser.Json := tmp.buf;
+    JsonToAnyVariant(Doc, parser, @JSON_TABLE, {double=}true);
+    if (parser.Json = nil) or
+       (parser.EndOfObject <> #0) then
+      VarClear(Doc)
+    else
+    begin
+      result := tbrSuccess;
+      FastAssignNew(Info);
+    end;
+  finally
+    tmp.Done;
   end;
 end;
 
@@ -5778,11 +5863,13 @@ begin
   try
     result := VariantToTables(Doc, writer.WriteTable, Info, Options, RootName);
     if result in [tbrSuccess, tbrSuccessWithRemarks] then
-      // publish completed output only after every table was written
+      // publish output only after every table has been written
       case Format of
         ttfCsv:
           Csv := copy(writer.fCsv, 0, writer.fCount);
-        ttfMarkdown:
+        ttfMarkdownCsv:
+          writer.fMarkdown.SetText(Md);
+        ttfMarkdownPipe:
           writer.SetText(Md);
       end;
   finally
@@ -5791,22 +5878,35 @@ begin
 end;
 
 function VariantToMd(const Doc: variant; out Md, Info: RawUtf8;
-  Options: TTableOptions; const RootName: RawUtf8): TTableResult;
+  Options: TTableOptions; const RootName: RawUtf8;
+  Format: TTableTextFormat): TTableResult;
 var
   csv: TTextPairs;
 begin
-  result := TableToText(Doc, ttfMarkdown, Md, csv, Info, Options, RootName);
+  if Format = ttfCsv then
+  begin
+    Info := 'Use VariantToCsv for CSV output';
+    result := tbrInvalidData;
+    exit;
+  end;
+  result := TableToText(Doc, Format, Md, csv, Info, Options, RootName);
 end;
 
 function JsonToMd(const Json: RawUtf8; out Md, Info: RawUtf8;
-  Options: TTableOptions; const RootName: RawUtf8): TTableResult;
+  Options: TTableOptions; const RootName: RawUtf8;
+  Format: TTableTextFormat): TTableResult;
 var
   doc: variant;
 begin
-  Md := '';
+  if Format = ttfCsv then
+  begin
+    Info := 'Use JsonToCsv for CSV output';
+    result := tbrInvalidData;
+    exit;
+  end;
   result := TableLoadJson(Json, doc, Info);
   if result = tbrSuccess then
-    result := VariantToMd(doc, Md, Info, Options, RootName);
+    result := VariantToMd(doc, Md, Info, Options, RootName, Format);
 end;
 
 function VariantToCsv(const Doc: variant; out Csv: TTextPairs;

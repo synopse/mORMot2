@@ -3312,9 +3312,9 @@ function DeleteFile(const aFileName: TFileName): boolean;
 // and support FileName longer than MAX_PATH
 function RenameFile(const aOld, aNew: TFileName): boolean;
 
-/// same as DeleteFile(aOld) + RenameFile(aOld, aNew)
+/// same as DeleteFile(aNew) + RenameFile(aOld, aNew)
 // - use MoveFileExW() Windows API in an atomic way, but plain RenameFile() on
-// POSIX since libc __rename() always delete and replace the existing file
+// POSIX since libc __rename() already delete and replace any existing file
 function ReplaceFile(const aOld, aNew: TFileName): boolean;
 
 /// redefined here to avoid warning to include "Windows" in uses clause
