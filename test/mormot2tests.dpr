@@ -60,6 +60,7 @@ uses
   mormot.crypt.x509,
   mormot.crypt.openssl,
   mormot.tools.ecc         in '..\src\tools\ecc\mormot.tools.ecc.pas',
+  mormot.tools.jop         in '..\src\tools\jop\mormot.tools.jop.pas',
   test.core.base           in '.\test.core.base.pas',
   test.core.threads        in '.\test.core.threads.pas',
   test.core.data           in '.\test.core.data.pas',
@@ -162,6 +163,7 @@ begin
     TTestCoreBase,
     TTestCoreThreads,
     TTestCoreProcess,
+    TTestCoreJop,
     {$ifdef HASGENERICS} // do-nothing on oldest compilers (e.g. <= Delphi XE7)
     TTestCoreCollections,
     {$endif HASGENERICS}

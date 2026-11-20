@@ -24,7 +24,7 @@ uses
   mormot.core.text,
   mormot.core.json,
   mormot.core.fmt,
-  jop.main in 'jop.main.pas';
+  mormot.tools.jop in 'mormot.tools.jop.pas';
 
 
 type

@@ -8644,7 +8644,19 @@ begin
   end;
   txt := RawUtf8FromFile(fn); // supports BOM and UTF-16 encoding
   if txt = '' then
+  begin
+    IncludeError(fn, 'empty or unreadable include file');
     exit;
+  end;
+  CheckText(pointer(txt), length(txt), 'included file');
+  if Statistics <> nil then
+  begin
+    if Verbatim then
+      inc(Statistics^.InsertFiles)
+    else
+      inc(Statistics^.IncludeFiles);
+    inc(Statistics^.IncludeBytes, length(txt));
+  end;
   inc(IncludeDepth);
   try
     if Verbatim then

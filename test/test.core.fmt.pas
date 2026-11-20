@@ -17,7 +17,7 @@ uses
   mormot.core.json,
   mormot.core.fmt,
   mormot.core.test,
-  jop.main in '..\src\tools\jop\jop.main.pas';
+  mormot.tools.jop;
 
 type
   /// exercise the processing API without invoking a command line executable
@@ -90,7 +90,7 @@ var
   buffer: RawUtf8;
 begin
   FastSetString(buffer, pointer(Source), length(Source));
-  result := jop.main.JopProcess(buffer, Options, Dest, Statistics, Info);
+  result := mormot.tools.jop.JopProcess(buffer, Options, Dest, Statistics, Info);
 end;
 
 function TestJopProcess(const Source: RawUtf8;
@@ -100,7 +100,7 @@ var
   buffer: RawUtf8;
 begin
   FastSetString(buffer, pointer(Source), length(Source));
-  result := jop.main.JopProcess(buffer, InputFormat, OutputFormat, Flags);
+  result := mormot.tools.jop.JopProcess(buffer, InputFormat, OutputFormat, Flags);
 end;
 
 function TestJopProcessToWriter(const Source: RawUtf8; W: TJsonWriter;
@@ -110,7 +110,7 @@ var
   buffer: RawUtf8;
 begin
   FastSetString(buffer, pointer(Source), length(Source));
-  result := jop.main.JopProcessToWriter(buffer, W, Options, Statistics, Info);
+  result := mormot.tools.jop.JopProcessToWriter(buffer, W, Options, Statistics, Info);
 end;
 
 function TestJopProcessToStream(const Source: RawUtf8; Dest: TStream;
@@ -120,7 +120,7 @@ var
   buffer: RawUtf8;
 begin
   FastSetString(buffer, pointer(Source), length(Source));
-  result := jop.main.JopProcessToStream(buffer, Dest, Options, Statistics, Info);
+  result := mormot.tools.jop.JopProcessToStream(buffer, Dest, Options, Statistics, Info);
 end;
 
 function TestJopProcessToCsv(const Source: RawUtf8; const Options: TJopOptions;
@@ -130,7 +130,7 @@ var
   buffer: RawUtf8;
 begin
   FastSetString(buffer, pointer(Source), length(Source));
-  result := jop.main.JopProcessToCsv(buffer, Options, Tables, Statistics, Info);
+  result := mormot.tools.jop.JopProcessToCsv(buffer, Options, Tables, Statistics, Info);
 end;
 
 
@@ -774,7 +774,7 @@ begin
         o := JopOptions(jfJson, f);
         if pass = 1 then
           include(o.Flags, jofNoExpand);
-        Check(jop.main.JopProcess(source, o, output) = jeSuccess);
+        Check(mormot.tools.jop.JopProcess(source, o, output) = jeSuccess);
         Check(pointer(source) = start, 'plain JSON is decoded in its original buffer');
         Check(source <> DOC, 'the caller-owned buffer is consumed by native decoding');
         CheckEqual(output, expected, 'escaped values retain native export behavior');
@@ -783,7 +783,7 @@ begin
   // Exercise the direct all-table API with an array root too.
   FastSetString(source, pointer(ROWS), length(ROWS));
   start := pointer(source);
-  Check(jop.main.JopProcessToCsv(source, JopOptions(jfJson, jfCsv), tables) = jeSuccess);
+  Check(mormot.tools.jop.JopProcessToCsv(source, JopOptions(jfJson, jfCsv), tables) = jeSuccess);
   Check(pointer(source) = start);
   Check(source <> ROWS);
   native := JsonToCsv(ROWS, wanted, info);
@@ -796,7 +796,7 @@ begin
   Expect('$$'#10'value=1'#10'$$'#10'{value:$(value)}', 'value: 1'#10, o);
   // Scalars use the native scalar decoder instead of a document cast.
   FastSetString(source, pointer(SCALAR), length(SCALAR));
-  Check(jop.main.JopProcess(source, JopOptions(jfJson, jfYaml), output) = jeSuccess);
+  Check(mormot.tools.jop.JopProcess(source, JopOptions(jfJson, jfYaml), output) = jeSuccess);
   CheckEqual(output, '42'#10);
 end;
 
