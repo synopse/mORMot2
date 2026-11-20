@@ -10,6 +10,7 @@ unit mormot.core.fmt;
     - HTML Text Conversions
     - XML Processing with Escape/Unescape and TXmlParser
     - YAML 1.2 core-schema to JSON or TDocVariant Support
+    - CSV Input to JSON
     - Relational Markdown and CSV Tables from JSON or TDocVariant
     - Markup (e.g. Markdown or Emoji) Process
     - INI Files In-memory Access
@@ -683,6 +684,51 @@ procedure WriteYamlString(W: TJsonWriter; P: PUtf8Char; L: PtrInt);
 
 /// emit some variant as YAML string, with JSON-escaped double-quotes if needed
 procedure WriteYamlVariant(W: TJsonWriter; const V: variant);
+
+
+{ ************* CSV Input to JSON }
+
+type
+  /// result of parsing a CSV document with a header row
+  TCsvError = (
+    ceNone,
+    ceNoInput,
+    ceInvalidDelimiter,
+    ceInvalidHeader,
+    ceInvalidQuote,
+    ceColumnCount,
+    ceEmbeddedNul);
+
+const
+  /// static descriptions of CSV parsing results
+  CSV_ERROR: array[TCsvError] of RawUtf8 = (
+    '',
+    'CSV requires a header row',
+    'Invalid CSV delimiter',
+    'CSV headers must be nonempty and unique',
+    'Invalid CSV quoting',
+    'CSV row does not match its header width',
+    'Embedded NUL in CSV input');
+
+/// append a CSV document as a compact JSON array of objects
+// - Csv is read-only zero-terminated 8-bit text, with no UTF-8 validation
+// - the first row defines nonempty, case-sensitive unique property names
+// - all cells remain strings, preserving leading zeros, spaces and empty cells
+// - quoted cells support doubled quotes and embedded CR/LF; row endings may
+// be CR, LF or CRLF, and every data row must match the header column count
+// - Separator must be a printable ASCII character or tab, except double quote
+// - W must be a valid writer; it is not flushed or freed by this function
+// - returns ceNone on success; failure may have appended partial JSON to W
+// - pointer input cannot detect embedded NUL: use the RawUtf8 overload to do so
+// - writer and allocation exceptions are propagated to the caller
+function CsvToJson(Csv: PUtf8Char; W: TJsonWriter;
+  Separator: AnsiChar = ','): TCsvError; overload;
+
+/// convert CSV into compact JSON, clearing Json on any parsing error
+// - rejects physical embedded NUL before calling the pointer overload
+// - Csv and Json must be distinct variables; no encoding conversion is done
+function CsvToJson(const Csv: RawUtf8; out Json: RawUtf8;
+  Separator: AnsiChar = ','): TCsvError; overload;
 
 
 { ************* Relational Markdown and CSV Tables from JSON or TDocVariant }
@@ -4885,6 +4931,174 @@ begin
     // direct output of e.g. BSON content as JSON
     W.AddNoJsonEscape(tmp.Text, tmp.Len);
   TempUtf8Done(tmp);
+end;
+
+
+{ ************* CSV Input to JSON }
+
+type
+  TCsvFieldEnd = (
+    cfeColumn,
+    cfeRow,
+    cfeEnd,
+    cfeInvalid);
+
+function CsvReadField(var P: PUtf8Char; Separator: AnsiChar;
+  var Field: TSynTempAdder): TCsvFieldEnd;
+var
+  first: PUtf8Char;
+begin
+  result := cfeInvalid;
+  Field.Size := 0;
+  if P^ = '"' then
+  begin
+    inc(P);
+    repeat
+      first := P;
+      while not (P^ in [#0, '"']) do
+        inc(P);
+      Field.Add(first, P - first);
+      if P^ = #0 then
+        exit;
+      inc(P);
+      if P^ <> '"' then
+        break;
+      Field.Add('"');
+      inc(P);
+    until false;
+    if (P^ <> Separator) and
+       not (P^ in [#0, #10, #13]) then
+      exit;
+  end
+  else
+  begin
+    first := P;
+    while (P^ <> Separator) and
+          not (P^ in [#0, #10, #13]) do
+    begin
+      if P^ = '"' then
+        exit;
+      inc(P);
+    end;
+    Field.Add(first, P - first);
+  end;
+  if P^ = Separator then
+  begin
+    inc(P);
+    result := cfeColumn;
+  end
+  else if P^ = #0 then
+    result := cfeEnd
+  else
+  begin
+    if P^ = #13 then
+    begin
+      inc(P);
+      if P^ = #10 then
+        inc(P);
+    end
+    else
+      inc(P);
+    result := cfeRow;
+  end;
+end;
+
+function CsvToJson(Csv: PUtf8Char; W: TJsonWriter;
+  Separator: AnsiChar): TCsvError;
+var
+  names: TRawUtf8DynArray;
+  field: TSynTempAdder;
+  ending: TCsvFieldEnd;
+  n, i, j: PtrInt;
+  first: boolean;
+begin
+  result := ceInvalidDelimiter;
+  if (Separator <> #9) and
+     ((Separator < ' ') or
+      (Separator >= #127) or
+      (Separator = '"')) then
+    exit;
+  result := ceNoInput;
+  if (Csv = nil) or
+     (Csv^ = #0) then
+    exit;
+  n := 0;
+  names := nil;
+  field.Init;
+  try
+    // Retain the header only; every data cell reuses the temporary buffer.
+    repeat
+      result := ceInvalidQuote;
+      ending := CsvReadField(Csv, Separator, field);
+      if ending = cfeInvalid then
+        exit;
+      result := ceInvalidHeader;
+      if field.Size = 0 then
+        exit;
+      for i := 0 to n - 1 do
+        if (length(names[i]) = field.Size) and
+           CompareMem(pointer(names[i]), field.Buffer, field.Size) then
+          exit;
+      if n = length(names) then
+        SetLength(names, NextGrow(n));
+      FastSetString(names[n], field.Buffer, field.Size);
+      inc(n);
+    until ending <> cfeColumn;
+    W.AddDirect('[');
+    first := true;
+    while Csv^ <> #0 do
+    begin
+      if not first then
+        W.AddDirect(',');
+      first := false;
+      W.AddDirect('{');
+      j := 0;
+      repeat
+        result := ceInvalidQuote;
+        ending := CsvReadField(Csv, Separator, field);
+        if ending = cfeInvalid then
+          exit;
+        result := ceColumnCount;
+        if j >= n then
+          exit;
+        if j <> 0 then
+          W.AddDirect(',');
+        W.AddJsonString(names[j]);
+        W.AddDirect(':', '"');
+        if field.Size <> 0 then
+          W.AddJsonEscape(field.Buffer, field.Size);
+        W.AddDirect('"');
+        inc(j);
+      until ending <> cfeColumn;
+      if j <> n then
+        exit;
+      W.AddDirect('}');
+    end;
+    W.AddDirect(']');
+    result := ceNone;
+  finally
+    field.Store.Done;
+  end;
+end;
+
+function CsvToJson(const Csv: RawUtf8; out Json: RawUtf8;
+  Separator: AnsiChar): TCsvError;
+var
+  W: TJsonWriter;
+  temp: TTextWriterStackBuffer;
+begin
+  Json := '';
+  result := ceEmbeddedNul;
+  if ByteScanIndex(pointer(Csv), length(Csv), 0) >= 0 then
+    exit;
+  W := TJsonWriter.CreateOwnedStream(temp);
+  try
+    result := CsvToJson(pointer(Csv), W, Separator);
+    if result = ceNone then
+      W.SetText(Json);
+  finally
+    W.Free;
+  end;
 end;
 
 
