@@ -1346,12 +1346,73 @@ type
 { ********** JSON and Text Preprocessor }
 
 type
-  /// tune JsonPreprocess() pre-processor features
-  // - jppIncludeAbsolute enables unsafe "include <file>" outside the root folder
-  // - jppDebugComment will emit verbose debugging comments during pre-processing
+  /// tune JsonPreprocess() and TextPreprocess() features
+  // - jppIncludeAbsolute enables "include <file>" outside the root folder
+  // - jppDebugComment emits debugging comments into the generated content
+  // - jppNoNamespaces disables the GlobalInfoFind() fallback for unknown names
+  // - jppStrictInclude raises EPreprocException for rejected or failed includes
+  // - jppAllowMissingInclude skips files not found by FileExists(); empty or
+  // unreadable files, forbidden paths and excessive nesting still fail
+  // - jppValidateUtf8 explicitly checks input, definitions and included content
+  // - jppJsonImplicitObject enables Hjson root objects without braces in the
+  // new JsonPreprocessToWriter() API; other entry points retain their defaults
+  // - jppNoExpand makes the writer APIs bypass definitions/includes/expansion
+  // - jppNoComments strips comments in JsonPreprocessToWriter() output
   TPreprocFlags = set of (
     jppIncludeAbsolute,
-    jppDebugComment);
+    jppDebugComment,
+    jppNoNamespaces,
+    jppStrictInclude,
+    jppAllowMissingInclude,
+    jppValidateUtf8,
+    jppJsonImplicitObject,
+    jppNoExpand,
+    jppNoComments);
+
+  /// failure reported by the configurable pre-processor entry points
+  EPreprocException = class(ESynException);
+
+  /// optional counters accumulated by one or several pre-processor calls
+  // - nonempty reads are counted, including repeated includes
+  // - IncludeBytes counts included/inserted bytes after BOM decoding
+  TPreprocStatistics = record
+    IncludeFiles: Int64;
+    InsertFiles: Int64;
+    IncludeBytes: Int64;
+  end;
+  PPreprocStatistics = ^TPreprocStatistics;
+
+  /// optional settings for JsonPreprocessToWriter/TextPreprocessToWriter
+  // - initialize with Default(TPreprocSettings), or a zeroed local record
+  // - Defines contains literal name=value pairs, evaluated before the source
+  // - names are case-sensitive [A-Za-z_][A-Za-z0-9_.-]* identifiers
+  // - values are not expanded or parsed as DSL; JSON constants/numbers keep
+  // their type, and all other values are registered as plain strings
+  // - repeated definitions use the last value; source definitions may override
+  // - IncludeRoot is shared by all nested includes, as with the older APIs
+  // - includes use RawUtf8FromFile(): BOM decoding, or unchanged 8-bit bytes
+  // - Statistics may be nil, otherwise counters are accumulated, never reset
+  TPreprocSettings = record
+    Flags: TPreprocFlags;
+    IncludeRoot: TFileName;
+    Defines: TRawUtf8DynArray;
+    Statistics: PPreprocStatistics;
+  end;
+
+/// pre-process a zero-terminated JSON buffer directly into a caller-owned writer
+// - leaves P unchanged and does not flush or release W
+// - caller must reject embedded #0 bytes using its known input length
+// - supports scalar roots; use jppJsonImplicitObject for implicit Hjson objects
+// - returns false on parser failure, but does not perform full JSON validation
+// - may raise EPreprocException for bad settings or strict include failures
+// - already written output is not rolled back
+function JsonPreprocessToWriter(P: PUtf8Char; W: TJsonWriter;
+  Format: TTextWriterJsonFormat; const Settings: TPreprocSettings): boolean;
+
+/// pre-process zero-terminated text directly into a caller-owned writer
+// - same settings, ownership and partial-output contract as JsonPreprocessToWriter
+function TextPreprocessToWriter(P: PUtf8Char; W: TTextWriter;
+  const Settings: TPreprocSettings): boolean;
 
 /// pre-process and format JSON with $".." and $(ident) expansion
 function JsonPreprocess(const Json: RawUtf8;
@@ -7796,9 +7857,15 @@ type
     Vars: TBinDictionary;
     IfLevel: TPreprocIfLevel;       // 8-bit
     IncludeDepth: byte;             // 8-bit
-    Options: TPreprocFlags;         // 8-bit
+    Options: TPreprocFlags;         // 16-bit
     IfSkip: set of TPreprocIfLevel; // 32-bit
     IncludeFolder: TFileName;
+    Statistics: PPreprocStatistics;
+    JsonParser: ^TJsonParser; // assigned only by the JSON writer API
+    procedure JsonVerbatim(P: PUtf8Char; Len: PtrInt);
+    procedure ApplySettings(const Settings: TPreprocSettings);
+    procedure CheckText(P: PUtf8Char; Len: PtrInt; const Context: ShortString);
+    procedure IncludeError(const FileName: TFileName; const Reason: ShortString);
     procedure DoSkip(var P: PUtf8Char);
     function DoFind(Key: pointer; KeyLen: PtrInt; var ValueLen: PtrInt): pointer;
     function DoIf(P: PUtf8Char): PUtf8Char;
@@ -7837,10 +7904,79 @@ begin
   Vars.Free;
 end;
 
+procedure TPreproc.CheckText(P: PUtf8Char; Len: PtrInt;
+  const Context: ShortString);
+begin
+  if Len = 0 then
+    exit;
+  if (jppStrictInclude in Options) and
+     (PosChar(P, Len, #0) <> nil) then
+    EPreprocException.RaiseUtf8('% contains a zero byte', [Context]);
+  if (jppValidateUtf8 in Options) and
+     not IsValidUtf8NotVoid(P, Len) then
+    EPreprocException.RaiseUtf8('% is not valid UTF-8', [Context]);
+end;
+
+procedure TPreproc.ApplySettings(const Settings: TPreprocSettings);
+var
+  i, n, k, l: PtrInt;
+  p: PUtf8Char;
+  m: TPreprocMarker;
+  tmp: TSynTempAdder;
+begin
+  Statistics := Settings.Statistics;
+  if (Settings.IncludeRoot <> '') and
+     (IncludeFolder = '') and
+     (jppStrictInclude in Options) then
+    EPreprocException.RaiseUtf8('Include root does not exist: %',
+      [Settings.IncludeRoot]);
+  tmp.Init;
+  try
+    for i := 0 to high(Settings.Defines) do
+    begin
+      p := pointer(Settings.Defines[i]);
+      n := length(Settings.Defines[i]);
+      CheckText(p, n, 'definition');
+      k := PosExChar('=', Settings.Defines[i]);
+      if k <= 1 then
+        EPreprocException.RaiseUtf8('Definition % expects name=value', [i + 1]);
+      dec(k); // name length, excluding '='
+      if not (p^ in ['A'..'Z', 'a'..'z', '_']) then
+        EPreprocException.RaiseUtf8('Invalid name in definition %', [i + 1]);
+      for l := 1 to k - 1 do
+        if not (p[l] in ['A'..'Z', 'a'..'z', '0'..'9', '_', '.', '-']) then
+          EPreprocException.RaiseUtf8('Invalid name in definition %', [i + 1]);
+      l := n - k - 1;
+      if (l <> 0) and
+         IsConstantOrNumberJson(p + k + 1, l) then
+        m := pmConstNum
+      else
+        m := pmPlainString;
+      tmp.Size := 0;
+      tmp.AddDirect(AnsiChar(m));
+      tmp.Add(p + k + 1, l); // literal, no DSL injection or macro expansion
+      Vars.Update(p, tmp.Buffer, k, tmp.Size);
+    end;
+  finally
+    tmp.Store.Done;
+  end;
+end;
+
+procedure TPreproc.IncludeError(const FileName: TFileName;
+  const Reason: ShortString);
+begin
+  if jppStrictInclude in Options then
+    EPreprocException.RaiseUtf8('Include %: %', [FileName, Reason]);
+  if (jppDebugComment in Options) and
+     Assigned(OnAddDebugComment) then
+    OnAddDebugComment(Reason);
+end;
+
 function TPreproc.DoFind(Key: pointer; KeyLen: PtrInt; var ValueLen: PtrInt): pointer;
 begin
   result := Vars.Find(Key, KeyLen, @ValueLen); // from known variables/templates
-  if result = nil then
+  if (result = nil) and
+     not (jppNoNamespaces in Options) then
     result := GlobalInfoFind(Key, KeyLen, ValueLen); // global macros
 end;
 
@@ -7850,6 +7986,8 @@ var
   key: PUtf8Char;
   keylen: PtrInt;
   ending: AnsiChar;
+label
+  trimmarker;
 begin
   result := P;
   inc(result); // called with P^ = '$'
@@ -7875,7 +8013,7 @@ begin
     inc(result);
     if result^ = '$' then // $ident|$default$$ or $(ident|$(def1)|$(def2))}
     begin
-      result := Expand(result, key, keylen, KeepMarker); // cascaded defaults
+      result := Expand(result, key, keylen, {KeepMarker=}true); // cascaded defaults
       if Value = nil then // fallback to the nested $default$
       begin
         Value := key;
@@ -7885,8 +8023,8 @@ begin
             (result^ > ' ') do
         inc(result);
       if result^ = ending then
-        inc(result); // skip trailing $ or }
-      exit;
+        inc(result);   // skip trailing $ or }
+      goto trimmarker; // strip the selected value marker exactly once
     end;
     key := result;
     while (result^ <> ending) and
@@ -7901,6 +8039,7 @@ begin
     end;
   end;
   inc(result); // skip trailing $ } )
+trimmarker:
   if (Value = nil) or
      KeepMarker or
      (TPreprocMarker(Value^) > high(TPreprocMarker)) then
@@ -8301,7 +8440,8 @@ ok: result := GotoNextNotSpace(result);
       'i',
       'I':
         if ((IncludeFolder <> '') or
-            (jppIncludeAbsolute in Options)) and
+            (jppIncludeAbsolute in Options) or
+            (jppStrictInclude in Options)) and
            (result[1] in ['n', 'N']) then
           case IdemPCharSep(result + 2, 'CLUDE |SERT |') of
             0:
@@ -8311,7 +8451,7 @@ ok: result := GotoNextNotSpace(result);
               end;
             1:
               begin
-                DoInclude(GotoNextNotSpace(result + 8), {verbatim=}true);
+                DoInclude(GotoNextNotSpace(result + 7), {verbatim=}true);
                 continue; // this is a reserved keyword, never an identifier
               end;
           end;
@@ -8371,21 +8511,22 @@ end;
 
 procedure TPreproc.DoInclude(P: PUtf8Char; Verbatim: boolean);
 var
-  tmp: ShortString; // to compute the expanded filename
+  tmp: ShortString; // bounded expanded name, never silently truncated
   v: PUtf8Char;
   vlen: PtrInt;     // @vlen = PPtrInt
-  c: AnsiChar;
-  quoted: boolean;
-  txt: RawUtf8;     // UTF-8 file name
+  c, quote: AnsiChar;
+  txt: RawUtf8;     // UTF-8 file name or content
   fn: TFileName;    // RTL file name
 begin
   tmp[0] := #0;
-  quoted := P^ in ['"', ''''];
-  if quoted then
-    inc(P); // allow quoted "<filename>"
+  quote := P^;
+  if quote in ['"', ''''] then
+    inc(P)
+  else
+    quote := #0;
   while not (P^ in [#0, '"', '''', #13, #10]) do
   begin
-    if (not quoted) and
+    if (quote = #0) and
        ((P^ = '#') or
         ((P^ = '/') and
          (P[1] = '/') and
@@ -8394,61 +8535,220 @@ begin
     if P^ = '$' then
     begin
       P := Expand(P, v, vlen, {KeepMarker=}false);
-      if v <> nil then // include "config/general-$mode$.json"
+      if v <> nil then
+      begin
+        if vlen > high(tmp) - ord(tmp[0]) then
+        begin
+          IncludeError('', 'expanded file name exceeds 255 bytes');
+          exit;
+        end;
         AppendShortBuffer(pointer(v), vlen, high(tmp), @tmp);
+      end;
     end
     else
     begin
+      if ord(tmp[0]) = high(tmp) then
+      begin
+        IncludeError('', 'expanded file name exceeds 255 bytes');
+        exit;
+      end;
       c := P^;
       if c = InvertedPathDelim then
-        c := PathDelim; // normalize for direct cross-platform support
+        c := PathDelim;
       AppendShortCharSafe(c, tmp);
       inc(P);
     end;
   end;
-  while (tmp[0] <> #0) and
-        (tmp[ord(tmp[0])] <= ' ') do
-    dec(tmp[0]); // trim right
-  if IncludeDepth >= DSL_INCLUDE_DEPTH then
+  if (quote <> #0) and
+     (P^ <> quote) then
   begin
-    if (jppDebugComment in Options) and
-       Assigned(OnAddDebugComment) then
-      OnAddDebugComment('include too deep: rejected');
+    IncludeError('', 'unterminated quoted file name');
     exit;
   end;
-  fn := MakeString([tmp]);
+  while (tmp[0] <> #0) and
+        (tmp[ord(tmp[0])] <= ' ') do
+    dec(tmp[0]);
+  if tmp[0] = #0 then
+  begin
+    IncludeError('', 'empty file name');
+    exit;
+  end;
+  if IncludeDepth >= DSL_INCLUDE_DEPTH then
+  begin
+    IncludeError('', 'include nesting exceeds 4 levels');
+    exit;
+  end;
+  fn := NormalizeFileName(Utf8DecodeToString(@tmp[1], ord(tmp[0])));
   if IsExpandedPath(fn) then
   begin
     if not (jppIncludeAbsolute in Options) then
+    begin
+      IncludeError(fn, 'absolute paths are disabled');
       exit;
-  end else if (IncludeFolder <> '') and
-              SafeFileName(fn) then
+    end;
+  end
+  else if (IncludeFolder <> '') and
+          SafePathName(fn) then
     fn := IncludeFolder + fn
   else
-    exit;
-  txt := RawUtf8FromFile(fn);
-  if (jppDebugComment in Options) and
-     Assigned(OnAddDebugComment) then
   begin
-    if txt = '' then
-      AppendShort(' not found: skipped', tmp)
-    else
-    begin
-      AppendShort(' included: size=', tmp);
-      AppendShortCardinal(length(txt), tmp);
-    end;
-    OnAddDebugComment(tmp);
+    IncludeError(fn, 'relative path is unsafe or no include root was supplied');
+    exit;
   end;
+  if not FileExists(fn) then
+  begin
+    if not (jppAllowMissingInclude in Options) then
+      IncludeError(fn, 'file not found');
+    exit;
+  end;
+  txt := RawUtf8FromFile(fn); // supports BOM and UTF-16 encoding
   if txt = '' then
     exit;
   inc(IncludeDepth);
-  if Verbatim then
-    OnVerbatim(pointer(txt), length(txt)) // insert <filename>
-  else
-    OnAppend(pointer(txt));               // include <filename>
-  dec(IncludeDepth);
+  try
+    if Verbatim then
+      OnVerbatim(pointer(txt), length(txt))
+    else if not OnAppend(pointer(txt)) then
+      IncludeError(fn, 'included content could not be parsed');
+  finally
+    dec(IncludeDepth);
+  end;
 end;
 
+procedure TPreproc.JsonVerbatim(P: PUtf8Char; Len: PtrInt);
+var
+  tmp: TSynTempBuffer;
+  bak: TPreprocAbstract;
+begin
+  if P[Len] <> #0 then
+  begin
+    tmp.Init(P, Len); // $$$ blocks are not necessarily zero-terminated
+    P := tmp.buf;
+  end
+  else
+    tmp.buf := nil;
+  bak := JsonParser^.FmtPreproc;
+  try
+    JsonParser^.FmtPreproc := nil; // insert is parsed, but never expanded
+    if not JsonParser^.Reformat(P) then
+      IncludeError('', 'inserted or verbatim content could not be parsed');
+  finally
+    JsonParser^.FmtPreproc := bak;
+    tmp.Done;
+  end;
+end;
+
+function PreprocJsonStart(P: PUtf8Char): PUtf8Char;
+begin
+  // Same look-ahead as AddJsonReformat(), before enclosing an implicit object.
+  result := P;
+  repeat
+    result := GotoNextNotSpace(result);
+    if result^ = '#' then
+      result := GotoNextLineSmall(result + 1)
+    else if (result^ = '/') and
+            (result[1] in ['/', '*']) then
+    begin
+      P := GotoEndOfSlashComment(result);
+      if P = result then
+        exit; // preserve an incomplete comment for the parser
+      result := P;
+    end
+    else if cardinal(PWord(result)^) = DOLLAR_16 then
+    begin
+      repeat
+        inc(result);
+        if result^ = #0 then
+          exit;
+      until cardinal(PWord(result)^) = DOLLAR_16;
+      result := GotoNextLineSmall(result + 2);
+    end
+    else
+      break;
+  until result^ = #0;
+end;
+
+function JsonPreprocessToWriter(P: PUtf8Char; W: TJsonWriter;
+  Format: TTextWriterJsonFormat; const Settings: TPreprocSettings): boolean;
+var
+  preproc: TPreproc;
+  parser: TJsonParser;
+  opt: TTextWriterOptions;
+  start, stop: PUtf8Char;
+  level: integer;
+  implicit: boolean;
+begin
+  result := false;
+  if (P = nil) or
+     (W = nil) then
+    exit;
+  P := GotoNextNotSpace(P);
+  if P^ = #0 then
+    exit;
+  preproc := nil;
+  opt := W.CustomOptions;
+  level := W.HumanReadableLevel;
+  try
+    if (jppValidateUtf8 in Settings.Flags) and
+       not IsValidUtf8NotVoid(P, StrLen(P)) then
+      EPreprocException.RaiseU('Input is not valid UTF-8');
+    if not (jppNoExpand in Settings.Flags) then
+    begin
+      preproc := TPreproc.Create(Settings.Flags, Settings.IncludeRoot);
+      preproc.ApplySettings(Settings);
+    end;
+    if Format <> jsonHumanReadable then
+      W.CustomOptions := opt + [twoIndentSpaces];
+    implicit := jppJsonImplicitObject in Settings.Flags;
+    if implicit then
+    begin
+      start := PreprocJsonStart(P);
+      implicit := not (start^ in ['{', '[']);
+      if implicit and
+         (start^ <> #0) then
+      begin
+        parser.Init({strict=}true, nil);
+        stop := parser.GotoEnd(start);
+        if (stop <> nil) and
+           (PreprocJsonStart(stop)^ = #0) then
+          implicit := false; // a scalar may have leading/trailing comments
+      end;
+    end;
+    parser.InitReformat(Format, W, preproc);
+    if jppNoComments in Settings.Flags then
+      exclude(parser.Fmt, jrfComments);
+    if preproc <> nil then
+    begin
+      preproc.JsonParser := @parser;
+      preproc.OnVerbatim := preproc.JsonVerbatim; // propagate insert failures
+    end;
+    if implicit then
+    begin
+      W.AddDirect('{');
+      W.HumanReadableLevel := level + 1;
+      parser.Stack[0] := parser.State;
+      parser.StackCount := 1; // the implicit object remains open until below
+      parser.State := stObjectNameFirst;
+    end;
+    result := parser.Reformat(P) and
+              (parser.StackCount = ord(implicit));
+    if implicit and
+       result then
+    begin
+      if (jrfTrailingComma in parser.Fmt) and
+         not (parser.State in [stObjectNameFirst, stValueFirst]) then
+        W.AddDirect(',');
+      W.HumanReadableLevel := level;
+      if jrfIndent in parser.Fmt then
+        W.AddCRAndIndent;
+      W.AddDirect('}');
+    end;
+  finally
+    W.HumanReadableLevel := level;
+    W.CustomOptions := opt;
+    preproc.Free;
+  end;
+end;
 
 function JsonPreprocess(const Json: RawUtf8; Format: TTextWriterJsonFormat;
   Flags: TPreprocFlags; const IncludeRoot: TFileName): RawUtf8;
@@ -8457,6 +8757,7 @@ var
 begin
   preproc := TPreProc.Create(Flags, IncludeRoot);
   try
+    preproc.CheckText(pointer(Json), length(Json), 'input');
     if not JsonBufferReformat(pointer(Json), result, Format, preproc) then
       FastAssignNew(result);
   finally
@@ -8471,6 +8772,7 @@ var
 begin
   preproc := TPreProc.Create(Flags, IncludeRoot);
   try
+    preproc.CheckText(pointer(Json), length(Json), 'input');
     result := JsonBufferReformatToFile(pointer(Json), Dest, Format, preproc);
   finally
     preproc.Free;
@@ -8484,6 +8786,7 @@ var
 begin
   preproc := TPreProc.Create(Flags, IncludeRoot);
   try
+    preproc.CheckText(pointer(Json), length(Json), 'input');
     result := JsonBufferReformatToStream(pointer(Json), Dest, Format, preproc);
   finally
     preproc.Free;
@@ -8599,6 +8902,39 @@ begin
 end;
 
 
+function TextPreprocessToWriter(P: PUtf8Char; W: TTextWriter;
+  const Settings: TPreprocSettings): boolean;
+var
+  preproc: TPreprocText;
+  len: PtrInt;
+begin
+  result := false;
+  if (P = nil) or
+     (W = nil) then
+    exit;
+  len := 0;
+  if Settings.Flags * [jppNoExpand, jppValidateUtf8] <> [] then
+    len := StrLen(P);
+  if (jppValidateUtf8 in Settings.Flags) and
+     (len <> 0) and
+     not IsValidUtf8NotVoid(P, len) then
+    EPreprocException.RaiseU('Input is not valid UTF-8');
+  if jppNoExpand in Settings.Flags then
+  begin
+    W.AddNoJsonEscape(P, len);
+    result := true;
+    exit;
+  end;
+  preproc := TPreprocText.Create(Settings.Flags, Settings.IncludeRoot);
+  try
+    preproc.ApplySettings(Settings);
+    result := preproc.TextPreprocessToWriter(P, W);
+  finally
+    preproc.Free;
+  end;
+end;
+
+
 function TextPreprocessToStream(const Text: RawUtf8; Dest: TStream;
   Flags: TPreprocFlags; const IncludeRoot: TFileName): boolean;
 var
@@ -8612,6 +8948,7 @@ begin
     exit;
   preproc := TPreprocText.Create(Flags, IncludeRoot);
   try
+    preproc.CheckText(pointer(Text), length(Text), 'input');
     W := TTextWriter.Create(Dest, @temp, SizeOf(temp));
     try
       result := preproc.TextPreprocessToWriter(pointer(Text), W);
