@@ -231,6 +231,8 @@ type
     procedure _XML;
     /// regression tests for the mormot.core.fmt YAML parser
     procedure _YAML;
+    /// regression tests for the mormot.core.fmt relational table exporters
+    procedure _Tables;
     /// regression tests for the mormot.core.i18n unit
     procedure _i18n;
   end;
@@ -10876,6 +10878,1018 @@ begin
     dec(n);
   end;
   CheckEqual(n, 0);
+end;
+
+{ relational table export regression tests }
+
+type
+  // own copies of callback data, whose lifetime is otherwise limited to the call
+  TTableTestData = record
+    Info: TTableInfo;
+    Rows: array of TTableRow;
+  end;
+
+  TTableTestWriter = class
+  public
+    Tables: array of TTableTestData;
+    Events: RawUtf8;
+    Active: PtrInt;
+    Invalid: boolean;
+    RaiseEnabled: boolean;
+    RaiseAt: TTableWriteEvent;
+    procedure Clear;
+    procedure WriteTable(Event: TTableWriteEvent;
+      const Table: TTableInfo; Row: PTableRow);
+  end;
+
+procedure TTableTestWriter.Clear;
+begin
+  Tables := nil;
+  Events := '';
+  Active := -1;
+  Invalid := false;
+  RaiseEnabled := false;
+end;
+
+procedure TTableTestWriter.WriteTable(Event: TTableWriteEvent;
+  const Table: TTableInfo; Row: PTableRow);
+var
+  n: PtrInt;
+begin
+  if RaiseEnabled and
+     (Event = RaiseAt) then
+    raise ESynLogSilent.Create('table test output failure');
+  case Event of
+    tweBegin:
+      begin
+        Invalid := Invalid or (Active <> -1) or (Row <> nil);
+        Active := length(Tables);
+        SetLength(Tables, Active + 1);
+        Tables[Active].Info := Table;
+        Tables[Active].Info.Columns := copy(Table.Columns, 0,
+          length(Table.Columns));
+        Append(Events, ['B(', Table.Name, ')']);
+      end;
+    tweRow:
+      begin
+        if (Active < 0) or
+           (Row = nil) then
+        begin
+          Invalid := true;
+          exit;
+        end;
+        Invalid := Invalid or (Table.Name <> Tables[Active].Info.Name) or
+          (length(Row^.Values) <> length(Table.Columns));
+        n := length(Tables[Active].Rows);
+        SetLength(Tables[Active].Rows, n + 1);
+        // retain the managed array: the exporter must preserve this snapshot
+        Tables[Active].Rows[n] := Row^;
+        Append(Events, 'R');
+      end;
+    tweEnd:
+      begin
+        if Active < 0 then
+          Invalid := true
+        else
+          Invalid := Invalid or (Row <> nil) or
+            (Table.Name <> Tables[Active].Info.Name);
+        Append(Events, 'E');
+        Active := -1;
+      end;
+  end;
+end;
+
+function RawBytes(const Bytes: array of byte): RawUtf8;
+var
+  i: PtrInt;
+  p: PByteArray;
+begin
+  // avoid Delphi re-encoding non-ASCII character literals as UTF-8
+  p := FastSetString(result, length(Bytes));
+  for i := 0 to high(Bytes) do
+    p[i] := Bytes[i];
+end;
+
+procedure TTestCoreProcess._Tables;
+var
+  sink: TTableTestWriter;
+
+  procedure OneCsv(const Json, Expected: RawUtf8;
+    ExpectedResult: TTableResult = tbrSuccess;
+    Options: TTableOptions = TABLE_DEFAULT);
+  var
+    csv: TTextPairs;
+    info: RawUtf8;
+    res: TTableResult;
+  begin
+    SetLength(csv, 1);
+    csv[0].Name := 'old';
+    csv[0].Value := 'old';
+    info := 'old';
+    res := JsonToCsv(Json, csv, info, Options);
+    CheckEqual(ord(res), ord(ExpectedResult), Json);
+    if CheckFailed(length(csv) = 1, 'one csv') then
+      exit;
+    CheckEqual(csv[0].Name, 'root', 'logical name, without .csv');
+    CheckEqual(csv[0].Value, Expected, Json);
+    if ExpectedResult = tbrSuccess then
+      CheckEqual(info, '', 'no stale diagnostics')
+    else
+      Check(info <> '', 'remarks');
+  end;
+
+  procedure OneMd(const Json, Expected: RawUtf8;
+    Options: TTableOptions = TABLE_DEFAULT);
+  var
+    md, info: RawUtf8;
+  begin
+    md := 'old';
+    info := 'old';
+    CheckUtf8(JsonToMd(Json, md, info, Options) = tbrSuccess, Json);
+    CheckEqual(md, Expected, Json);
+    CheckEqual(info, '');
+  end;
+
+  procedure FailJson(const Json: RawUtf8;
+    Expected: TTableResult = tbrInvalidJson;
+    Options: TTableOptions = TABLE_DEFAULT);
+  var
+    csv: TTextPairs;
+    md, info: RawUtf8;
+  begin
+    SetLength(csv, 1);
+    csv[0].Name := 'old';
+    csv[0].Value := 'old';
+    CheckEqual(ord(JsonToCsv(Json, csv, info, Options)), ord(Expected), Json);
+    CheckEqual(length(csv), 0, 'no partial csv on failure');
+    Check(info <> '', 'csv error context');
+    md := 'old';
+    CheckEqual(ord(JsonToMd(Json, md, info, Options)), ord(Expected), Json);
+    CheckEqual(md, '', 'no partial markdown on failure');
+    Check(info <> '', 'markdown error context');
+    sink.Clear;
+    CheckEqual(ord(JsonToTables(Json, sink.WriteTable, info, Options)),
+      ord(Expected), Json);
+    CheckEqual(sink.Events, '', 'no callback on schema/input error');
+  end;
+
+  procedure FailVariant(const Doc: variant;
+    Expected: TTableResult = tbrInvalidData;
+    Options: TTableOptions = TABLE_DEFAULT);
+  var
+    csv: TTextPairs;
+    md, info: RawUtf8;
+  begin
+    SetLength(csv, 1);
+    csv[0].Value := 'old';
+    CheckEqual(ord(VariantToCsv(Doc, csv, info, Options)), ord(Expected));
+    CheckEqual(length(csv), 0, 'no partial variant csv');
+    Check(info <> '', 'variant csv error context');
+    md := 'old';
+    CheckEqual(ord(VariantToMd(Doc, md, info, Options)), ord(Expected));
+    CheckEqual(md, '', 'no partial variant markdown');
+    Check(info <> '', 'variant markdown error context');
+    sink.Clear;
+    CheckEqual(ord(VariantToTables(Doc, sink.WriteTable, info, Options)),
+      ord(Expected));
+    CheckEqual(sink.Events, '', 'no callback on schema error');
+  end;
+
+  procedure Parity(const Json: RawUtf8;
+    Options: TTableOptions = TABLE_DEFAULT);
+  var
+    doc, alias: variant;
+    c1, c2: TTextPairs;
+    m1, m2, i1, i2, before: RawUtf8;
+    r1, r2: TTableResult;
+    i: PtrInt;
+  begin
+    if CheckFailed(VariantLoadJson(doc, Json, @JSON_TABLE, true),
+       'native JSON decoding') then
+      exit;
+    alias := doc;
+    before := VariantSaveJson(doc);
+    r1 := JsonToCsv(Json, c1, i1, Options);
+    r2 := VariantToCsv(doc, c2, i2, Options);
+    CheckEqual(ord(r1), ord(r2), 'json/variant csv result');
+    CheckEqual(i1, i2, 'json/variant csv diagnostics');
+    if Check(length(c1) = length(c2), 'json/variant csv count') then
+      for i := 0 to high(c1) do
+      begin
+        CheckEqual(c1[i].Name, c2[i].Name);
+        CheckEqual(c1[i].Value, c2[i].Value);
+      end;
+    r1 := JsonToMd(Json, m1, i1, Options);
+    r2 := VariantToMd(doc, m2, i2, Options);
+    CheckEqual(ord(r1), ord(r2), 'json/variant markdown result');
+    CheckEqual(m1, m2, 'json/variant markdown');
+    CheckEqual(i1, i2, 'json/variant markdown diagnostics');
+    CheckEqual(VariantSaveJson(doc), before, 'input is read only');
+    CheckEqual(VariantSaveJson(alias), before, 'shared input is read only');
+  end;
+
+  procedure Flat;
+  var
+    doc: variant;
+    dv: TSynVarData absolute doc;
+    csv: TTextPairs;
+    info: RawUtf8;
+  begin
+    OneCsv('[{"name":"John","age":42},{"name":"Jane","age":39}]',
+      '__rowid,name,age'#10'1,John,42'#10'2,Jane,39'#10);
+    OneCsv('{"name":"John","age":42}',
+      '__rowid,name,age'#10'1,John,42'#10);
+    OneCsv('[{"b":2,"a":1},{"a":3,"b":4}]',
+      '__rowid,b,a'#10'1,2,1'#10'2,4,3'#10);
+    OneCsv('[1,2,3]', '__rowid,value'#10'1,1'#10'2,2'#10'3,3'#10);
+    OneCsv('[true,false]', '__rowid,value'#10'1,true'#10'2,false'#10);
+    OneCsv('["a","b"]', '__rowid,value'#10'1,a'#10'2,b'#10);
+    OneCsv('42', '__rowid,value'#10'1,42'#10);
+    OneCsv('true', '__rowid,value'#10'1,true'#10);
+    OneCsv('"hello"', '__rowid,value'#10'1,hello'#10);
+    OneCsv('null', '__rowid,value'#10'1,'#10);
+    OneCsv('null', '__rowid,value'#10'1,null'#10,
+      tbrSuccess, [tboNullAsText]);
+    OneCsv('[]', '__rowid,value'#10);
+    OneCsv('{}', '__rowid'#10'1'#10);
+    OneCsv('[{},{}]', '__rowid'#10'1'#10'2'#10);
+    OneCsv('{"a":{"b":1,"c":{"d":2}},"e":3}',
+      '__rowid,a.b,a.c.d,e'#10'1,1,2,3'#10);
+    OneCsv('[{"n":null},{"n":2}]', '__rowid,n'#10'1,'#10'2,2'#10);
+    OneCsv('[1,null,2]', '__rowid,value'#10'1,1'#10'2,'#10'3,2'#10);
+    OneCsv('[1,null,2]', '__rowid,value'#10'1,1'#10'2,null'#10'3,2'#10,
+      tbrSuccess, [tboNullAsText]);
+    OneCsv('[{"Name":1,"name":2}]', '__rowid,Name,name'#10'1,1,2'#10);
+    // the existing decoder uses Currency, whose writer retains two decimals
+    OneCsv('[1,2.5]', '__rowid,value'#10'1,1'#10'2,2.50'#10);
+    OneCsv('[1,2.5]', '__rowid,value'#10'1,1'#10'2,2.50'#10,
+      tbrSuccess, TABLE_STRICT);
+    OneCsv('[null,1]', '__rowid,__index,value'#10'1,0,'#10'2,1,1'#10,
+      tbrSuccess, [tboKeepArrayIndex]);
+    OneCsv('{"n":1}', '__rowid,n'#10'1,1'#10,
+      tbrSuccess, [tboKeepArrayIndex]);
+    OneMd('[{"name":"John"},{"name":"Jane"}]',
+      '## root'#10#10 +
+      '| __rowid | name |'#10 +
+      '| --- | --- |'#10 +
+      '| 1 | John |'#10 +
+      '| 2 | Jane |'#10#10);
+    OneMd('[]', '## root'#10#10 +
+      '| __rowid | value |'#10'| --- | --- |'#10#10);
+    OneMd('{}', '## root'#10#10 +
+      '| __rowid |'#10'| --- |'#10'| 1 |'#10#10);
+    // scalar Variant entry points do not need a document wrapper
+    doc := 42;
+    Check(VariantToCsv(doc, csv, info) = tbrSuccess);
+    if Check(length(csv) = 1) then
+      CheckEqual(csv[0].Value, '__rowid,value'#10'1,42'#10);
+    doc := Null;
+    Check(VariantToCsv(doc, csv, info, [tboNullAsText]) = tbrSuccess);
+    if Check(length(csv) = 1) then
+      CheckEqual(csv[0].Value, '__rowid,value'#10'1,null'#10);
+    dv.VType := varEmpty;
+    Check(VariantToCsv(doc, csv, info) = tbrSuccess);
+    if Check(length(csv) = 1) then
+      CheckEqual(csv[0].Value, '__rowid,value'#10'1,'#10);
+    Check(VariantToCsv(doc, csv, info, [tboNullAsText]) = tbrSuccess);
+    if Check(length(csv) = 1) then
+      CheckEqual(csv[0].Value, '__rowid,value'#10'1,null'#10);
+    dv.VType := varInt64;
+    dv.VInt64 := high(Int64);
+    Check(VariantToCsv(doc, csv, info) = tbrSuccess);
+    if Check(length(csv) = 1) then
+      CheckEqual(csv[0].Value, '__rowid,value'#10'1,9223372036854775807'#10);
+    dv.VType := varInt64;
+    dv.VInt64 := low(Int64);
+    Check(VariantToCsv(doc, csv, info) = tbrSuccess);
+    if Check(length(csv) = 1) then
+      CheckEqual(csv[0].Value, '__rowid,value'#10'1,-9223372036854775808'#10);
+    dv.VType := varDouble;
+    dv.VDouble := 2.5;
+    Check(VariantToCsv(doc, csv, info) = tbrSuccess);
+    if Check(length(csv) = 1) then
+      CheckEqual(csv[0].Value, '__rowid,value'#10'1,2.5'#10);
+    doc := VarFromDateTime(EncodeDate(2024, 1, 2) + EncodeTime(3, 4, 5, 0));
+    Check(VariantToCsv(doc, csv, info) = tbrSuccess);
+    if Check(length(csv) = 1) then
+      CheckEqual(csv[0].Value, '__rowid,value'#10'1,2024-01-02T03:04:05'#10);
+    Parity('[{"Name":1,"name":2,"child":{"value":3}}]');
+    Parity('[{"a":1},{"a":2,"b":3}]');
+    Parity('[{"a":null},{"a":2}]', [tboNullAsText]);
+  end;
+
+  procedure Relations;
+  const
+    JSON: RawUtf8 =
+      '[{"name":"A","orders":[{"sku":"X","tags":["red","big"]},' +
+      '{"sku":"Y","tags":[]}],"phones":["111","222"]},' +
+      '{"name":"B","orders":[{"sku":"Z","tags":["blue"]}],' +
+      '"phones":["333"]}]';
+  var
+    csv: TTextPairs;
+    info, md: RawUtf8;
+  begin
+    Check(JsonToCsv(JSON, csv, info) = tbrSuccess, 'relations');
+    if CheckFailed(length(csv) = 4, 'four tables') then
+      exit;
+    CheckEqual(csv[0].Name, 'root');
+    CheckEqual(csv[0].Value, '__rowid,name'#10'1,A'#10'2,B'#10);
+    CheckEqual(csv[1].Name, 'root.orders');
+    CheckEqual(csv[1].Value,
+      '__rowid,__parentid,sku'#10'1,1,X'#10'2,1,Y'#10'3,2,Z'#10);
+    CheckEqual(csv[2].Name, 'root.orders.tags');
+    CheckEqual(csv[2].Value,
+      '__rowid,__parentid,value'#10'1,1,red'#10'2,1,big'#10'3,3,blue'#10);
+    CheckEqual(csv[3].Name, 'root.phones');
+    CheckEqual(csv[3].Value,
+      '__rowid,__parentid,value'#10'1,1,111'#10'2,1,222'#10'3,2,333'#10);
+    sink.Clear;
+    Check(JsonToTables(JSON, sink.WriteTable, info) = tbrSuccess);
+    Check(not sink.Invalid, 'callback arguments');
+    CheckEqual(sink.Active, -1);
+    CheckEqual(sink.Events,
+      'B(root)RREB(root.orders)RRREB(root.orders.tags)RRREB(root.phones)RRRE');
+    if CheckFailed(length(sink.Tables) = 4) then
+      exit;
+    CheckEqual(sink.Tables[0].Info.Path, '$');
+    CheckEqual(sink.Tables[0].Info.ParentName, '');
+    CheckEqual(sink.Tables[1].Info.Path, '$[].orders');
+    CheckEqual(sink.Tables[1].Info.ParentName, 'root');
+    CheckEqual(sink.Tables[2].Info.Path, '$[].orders[].tags');
+    CheckEqual(sink.Tables[2].Info.ParentName, 'root.orders');
+    if Check(length(sink.Tables[1].Info.Columns) = 1) then
+      CheckEqual(sink.Tables[1].Info.Columns[0], 'sku');
+    if CheckFailed((length(sink.Tables[2].Rows) = 3) and
+                  (length(sink.Tables[3].Rows) = 3)) then
+      exit;
+    CheckEqual(sink.Tables[2].Rows[2].ID, 3);
+    CheckEqual(sink.Tables[2].Rows[2].ParentID, 3);
+    CheckEqual(sink.Tables[3].Rows[2].ParentID, 2);
+    // indexes are local to each parent array; generated IDs are per table
+    Check(JsonToCsv(JSON, csv, info, [tboKeepArrayIndex]) = tbrSuccess);
+    if CheckFailed(length(csv) = 4) then
+      exit;
+    CheckEqual(csv[0].Value,
+      '__rowid,__index,name'#10'1,0,A'#10'2,1,B'#10);
+    CheckEqual(csv[1].Value,
+      '__rowid,__parentid,__index,sku'#10'1,1,0,X'#10'2,1,1,Y'#10'3,2,0,Z'#10);
+    CheckEqual(csv[2].Value,
+      '__rowid,__parentid,__index,value'#10 +
+      '1,1,0,red'#10'2,1,1,big'#10'3,3,0,blue'#10);
+    // an empty child is represented by a header, without a fictitious row
+    Check(JsonToCsv('{"list":[]}', csv, info) = tbrSuccess);
+    if Check(length(csv) = 2) then
+    begin
+      CheckEqual(csv[0].Value, '__rowid'#10'1'#10);
+      CheckEqual(csv[1].Value, '__rowid,__parentid,value'#10);
+    end;
+    sink.Clear;
+    Check(JsonToTables('{"a":{"list":[1]}}', sink.WriteTable, info) =
+      tbrSuccess);
+    if Check(length(sink.Tables) = 2) then
+    begin
+      CheckEqual(sink.Tables[1].Info.Name, 'root.a.list');
+      CheckEqual(sink.Tables[1].Info.Path, '$.a.list');
+      CheckEqual(sink.Tables[1].Info.ParentName, 'root');
+      CheckEqual(sink.Tables[1].Rows[0].ParentID, 1);
+    end;
+    // child Markdown has the same parent link as CSV
+    Check(JsonToMd('{"items":[1]}', md, info) = tbrSuccess);
+    CheckEqual(md, '## root'#10#10 +
+      '| __rowid |'#10'| --- |'#10'| 1 |'#10#10 +
+      '## root\.items'#10#10 +
+      '| __rowid | __parentid | value |'#10 +
+      '| --- | --- | --- |'#10'| 1 | 1 | 1 |'#10#10);
+    Parity(JSON);
+    Parity(JSON, [tboKeepArrayIndex]);
+  end;
+
+  procedure Schemas;
+  var
+    doc: variant;
+    d: double;
+    c: currency;
+    csv: TTextPairs;
+    info, before: RawUtf8;
+  begin
+    OneCsv('[{"a":1},{"a":2,"b":3}]',
+      '__rowid,a,b'#10'1,1,'#10'2,2,3'#10, tbrSuccessWithRemarks);
+    OneCsv('[{"a":1,"b":2},{"a":3}]',
+      '__rowid,a,b'#10'1,1,2'#10'2,3,'#10, tbrSuccessWithRemarks);
+    OneCsv('[{"a":null},{"b":2}]',
+      '__rowid,a,b'#10'1,null,'#10'2,,2'#10,
+      tbrSuccessWithRemarks, [tboNullAsText]);
+    OneCsv('[{"a":1},{"a":2,"b":3}]',
+      '__rowid,a'#10'1,1'#10'2,2'#10,
+      tbrSuccessWithRemarks, [tboFirstRowFields]);
+    OneCsv('[{"a":1,"b":2},{"a":3}]',
+      '__rowid,a,b'#10'1,1,2'#10'2,3,'#10,
+      tbrSuccessWithRemarks, [tboFirstRowFields]);
+    OneCsv('[{"a":1},{"a":"two"}]',
+      '__rowid,a'#10'1,1'#10'2,two'#10);
+    OneCsv('[1,"two",false]',
+      '__rowid,value'#10'1,1'#10'2,two'#10'3,false'#10);
+    FailJson('[{"a":1},{"a":2,"b":3}]', tbrInvalidData,
+      [tboStrictFields]);
+    FailJson('[{"a":1,"b":2},{"a":3}]', tbrInvalidData,
+      [tboStrictFields]);
+    FailJson('[{"a":1},{"a":2,"b":3}]', tbrInvalidData,
+      [tboFirstRowFields, tboStrictFields]);
+    FailJson('[{"a":1},{"a":"two"}]', tbrInvalidData,
+      [tboStrictTypes]);
+    FailJson('[1,"two"]', tbrInvalidData, [tboStrictTypes]);
+    FailJson('[1,true]', tbrInvalidData, [tboStrictTypes]);
+    d := 2.5;
+    c := 3.25;
+    doc := _ArrFast([1, d, c]);
+    Check(VariantToCsv(doc, csv, info, [tboStrictTypes]) = tbrSuccess,
+      'native numeric Variant kinds are compatible');
+    doc := _ArrFast([VarFromDateTime(EncodeDate(2024, 1, 2)), 'plain text']);
+    Check(VariantToCsv(doc, csv, info, [tboStrictTypes]) = tbrSuccess,
+      'dates and strings use text cells');
+    // nullable fields keep the shape and non-null type of their other rows
+    OneCsv('[{"a":null},{"a":1}]', '__rowid,a'#10'1,'#10'2,1'#10,
+      tbrSuccess, TABLE_STRICT);
+    OneCsv('[{"a":null},{"a":{"b":1}}]',
+      '__rowid,a.b'#10'1,'#10'2,1'#10);
+    OneCsv('[{"a":null},{"a":{"b":1}}]',
+      '__rowid,a.b'#10'1,'#10'2,1'#10,
+      tbrSuccess, [tboNullAsText]);
+    OneCsv('[{"a":null},{"a":{"b":1}}]',
+      '__rowid,a.b'#10'1,'#10'2,1'#10,
+      tbrSuccess, TABLE_STRICT);
+    FailJson('[{"a":1},{"a":{"b":2}}]', tbrInvalidData);
+    FailJson('[{"a":[1]},{"a":2}]', tbrInvalidData);
+    FailJson('[{"a":{"b":1}},{"a":[2]}]', tbrInvalidData);
+    // late child columns are discovered across all parents of that table
+    Check(JsonToCsv('[{"items":[{"a":1}]},' +
+      '{"items":[{"a":2,"b":3}]}]', csv, info) =
+      tbrSuccessWithRemarks);
+    if Check(length(csv) = 2) then
+      CheckEqual(csv[1].Value,
+        '__rowid,__parentid,a,b'#10'1,1,1,'#10'2,2,2,3'#10);
+    Check(info <> '');
+    FailJson('[{"items":[{"a":1}]},' +
+      '{"items":[{"a":2,"b":3}]}]', tbrInvalidData, TABLE_STRICT);
+    FailJson('[{"a":1},2]', tbrInvalidData);
+    FailJson('[null,{"a":1}]', tbrInvalidData);
+    FailJson('[[1],[2]]', tbrInvalidData);
+    OneCsv('[{"a":1},2]',
+      '__rowid,value'#10'1,"{""a"":1}"'#10'2,2'#10,
+      tbrSuccessWithRemarks, [tboMixedAsJson]);
+    OneCsv('[null,{"a":1}]',
+      '__rowid,value'#10'1,'#10'2,"{""a"":1}"'#10,
+      tbrSuccessWithRemarks, [tboMixedAsJson]);
+    OneCsv('[null,{"a":1}]',
+      '__rowid,value'#10'1,null'#10'2,"{""a"":1}"'#10,
+      tbrSuccessWithRemarks, [tboMixedAsJson, tboNullAsText]);
+    OneCsv('[[1,2],[3]]',
+      '__rowid,value'#10'1,"[1,2]"'#10'2,[3]'#10,
+      tbrSuccessWithRemarks, [tboMixedAsJson]);
+    FailJson('[{"a":1},2]', tbrInvalidData,
+      [tboMixedAsJson, tboStrictTypes]);
+    Parity('[{"a":1},2]', [tboMixedAsJson]);
+    Parity('[[1,2],[3]]', [tboMixedAsJson]);
+    Parity('[{"a":1},{"a":2,"b":3}]', [tboFirstRowFields]);
+    // JSON fallback must be standard even if the document requests extended JSON
+    doc := _Json('[{"a":{"b":1}},2]', JSON_FAST_FLOAT +
+      [dvoSerializeAsExtendedJson, dvoNameCaseSensitive]);
+    before := VariantSaveJson(doc);
+    Check(VariantToCsv(doc, csv, info, [tboMixedAsJson]) =
+      tbrSuccessWithRemarks);
+    if Check(length(csv) = 1) then
+      CheckEqual(csv[0].Value,
+        '__rowid,value'#10'1,"{""a"":{""b"":1}}"'#10'2,2'#10);
+    CheckEqual(VariantSaveJson(doc), before, 'keep source JSON options');
+  end;
+
+  procedure Escaping;
+  var
+    csv: TTextPairs;
+    info: RawUtf8;
+  begin
+    OneCsv('["a,b","a\"b","a\nb","a\rb","a\r\nb",""]',
+      '__rowid,value'#10 +
+      '1,"a,b"'#10'2,"a""b"'#10'3,"a'#10'b"'#10 +
+      '4,"a'#13'b"'#10'5,"a'#13#10'b"'#10'6,'#10);
+    OneCsv('{"a,b":1,"a\"b":2}',
+      '__rowid,"a,b","a""b"'#10'1,1,2'#10);
+    OneCsv('["\u00e9","\u4e2d","\ud83d\ude00"]',
+      '__rowid,value'#10'1,' + RawBytes([$c3, $a9]) + #10 +
+      '2,' + RawBytes([$e4, $b8, $ad]) + #10 +
+      '3,' + RawBytes([$f0, $9f, $98, $80]) + #10);
+    OneCsv('{"__rowid":1,"__parentid":2,"__index":3,' +
+      '"a.b":4,"a":{"b":5},"a\\b":6,"c[0]":7}',
+      '__rowid,\__rowid,\__parentid,\__index,a\.b,a.b,a\\b,c\[0\]'#10 +
+      '1,1,2,3,4,5,6,7'#10);
+    OneCsv('{"a/b":1,"a\"b":2}',
+      '__rowid,a/b,"a""b"'#10'1,1,2'#10);
+    OneCsv('{"\u000F":1,"\u001a":2,"\u007F":3,"\\u000f":4}',
+      '__rowid,\u000f,\u001a,\u007f,\\u000f'#10'1,1,2,3,4'#10);
+    OneCsv('{"\u00e9":1}', '__rowid,' + RawBytes([$c3, $a9]) +
+      #10'1,1'#10);
+    OneMd('{"value":"a|b\\c\n<&>\"\t*_[x]"}',
+      '## root'#10#10 +
+      '| __rowid | value |'#10'| --- | --- |'#10 +
+      '| 1 | a\|b\\c<br>&lt;&amp;&gt;&quot;&#9;\*\_\[x\] |'#10#10);
+    OneMd('["a\nb","a\rb","a\r\nb"]',
+      '## root'#10#10 +
+      '| __rowid | value |'#10'| --- | --- |'#10 +
+      '| 1 | a<br>b |'#10'| 2 | a<br>b |'#10'| 3 | a<br>b |'#10#10);
+    Check(JsonToCsv('{"a.b":[1],"a":{"b":[2]}}', csv, info) =
+      tbrSuccess, 'table path escaping');
+    if Check(length(csv) = 3) then
+    begin
+      CheckEqual(csv[1].Name, 'root.a\.b');
+      CheckEqual(csv[2].Name, 'root.a.b');
+    end;
+    Check(JsonToCsv('{"\u001A":[1]}', csv, info) = tbrSuccess);
+    if Check(length(csv) = 2) then
+      CheckEqual(csv[1].Name, 'root.\u001a', 'lowercase escaped table name');
+    Check(JsonToCsv('[1]', csv, info, TABLE_DEFAULT, 'root.x') = tbrSuccess);
+    if Check(length(csv) = 1) then
+      CheckEqual(csv[0].Name, 'root\.x');
+    Check(JsonToCsv('[1]', csv, info, TABLE_DEFAULT, '') = tbrInvalidData);
+    CheckEqual(length(csv), 0);
+    Parity('{"__rowid":1,"a.b":2,"a":{"b":3},"a\\b":4}');
+  end;
+
+  procedure JsonDecoding;
+  begin
+    // the wrappers deliberately keep the existing mORMot decoding semantics
+    OneCsv('"\x41"', '__rowid,value'#10'1,x41'#10);
+    OneCsv('"\u0000"', '__rowid,value'#10'1,?'#10);
+    OneCsv('{"":1,"a":2}', '__rowid,a'#10'1,2'#10);
+    // repeated names follow the first occurrence used by native field lookup
+    OneCsv('{"a":1,"a":2}', '__rowid,a'#10'1,1'#10);
+    OneCsv('{"a":1,"\u0061":2}', '__rowid,a'#10'1,1'#10);
+    OneCsv('{"a":1,"a":{"b":2}}', '__rowid,a'#10'1,1'#10);
+    OneCsv('{"a\u0000b":1}', '__rowid,a?b'#10'1,1'#10);
+    OneCsv('{"value":"a\u0000b"}', '__rowid,value'#10'1,a?b'#10);
+    OneCsv('"raw'#10'line"', '__rowid,value'#10'1,"raw'#10'line"'#10);
+    Parity('"\ud800\u0041"');
+    Parity('{"":1}');
+    Parity('[{"a":1},{"a":2,"ignored":{"":3}}]', [tboFirstRowFields]);
+    OneCsv(RawBytes([$ef, $bb, $bf]) + '[1]', '__rowid,value'#10'1,1'#10);
+  end;
+
+  procedure NativeValues;
+  var
+    v: variant;
+    csv: TTextPairs;
+    s, expected, info: RawUtf8;
+  begin
+    // caller-supplied scalar text is passed through, then escaped for CSV
+    s := 'a'#0',"b';
+    RawUtf8ToVariant(s, v);
+    Check(VariantToCsv(v, csv, info) = tbrSuccess);
+    expected := '__rowid,value'#10'1,"a'#0',""b"'#10;
+    if Check(length(csv) = 1) then
+    begin
+      CheckEqual(csv[0].Value, expected);
+      CheckEqual(length(csv[0].Value), length(expected));
+    end;
+    s := RawBytes([$c0, $af]);
+    RawUtf8ToVariant(s, v);
+    Check(VariantToCsv(v, csv, info) = tbrSuccess);
+    if Check(length(csv) = 1) then
+      CheckEqual(csv[0].Value, '__rowid,value'#10'1,' + s + #10);
+    // native Variant arrays are scalar JSON text, not relational child tables
+    v := VarArrayOf([1, 2]);
+    Check(VariantToCsv(v, csv, info) = tbrSuccess);
+    if Check(length(csv) = 1) then
+      CheckEqual(csv[0].Value, '__rowid,value'#10'1,"[1,2]"'#10);
+    // ignored values do not impose a second validation contract
+    v := _ArrFast([_ObjFast(['a', 1]),
+      _ObjFast(['a', 2, 'ignored', RawUtf8('a'#0'b')])]);
+    Check(VariantToCsv(v, csv, info, [tboFirstRowFields]) =
+      tbrSuccessWithRemarks);
+    if Check(length(csv) = 1) then
+      CheckEqual(csv[0].Value, '__rowid,a'#10'1,1'#10'2,2'#10);
+    // escaping remains unambiguous for native names containing a NUL
+    v := _ObjFast(['a'#0'.b', 1, 'a'#0, _ObjFast(['b', 2])]);
+    Check(VariantToCsv(v, csv, info) = tbrSuccess);
+    if Check(length(csv) = 1) then
+      CheckEqual(csv[0].Value,
+        '__rowid,a\u0000\.b,a\u0000.b'#10'1,1,2'#10);
+  end;
+
+  procedure InvalidJson;
+  var
+    csv: TTextPairs;
+    info: RawUtf8;
+  begin
+    FailJson('');
+    FailJson(' '#9#10#13);
+    FailJson('{');
+    FailJson('[');
+    FailJson('{"a":');
+    FailJson('{"a":1');
+    FailJson('[1');
+    FailJson('"unfinished');
+    FailJson('{"a" 1}');
+    FailJson('{"a":1,}');
+    FailJson('[1,]');
+    FailJson('[1 2]');
+    FailJson('true false');
+    FailJson('{} garbage');
+    FailJson('{}{}');
+    FailJson('[1}');
+    FailJson('{"a":1]');
+    FailJson('01');
+    FailJson('+1');
+    FailJson('1.');
+    FailJson('1e');
+    FailJson('1e+');
+    FailJson('NaN');
+    FailJson('Infinity');
+    FailJson('"\u12"');
+    FailJson('"\ud800"');
+    FailJson('"\udc00"');
+    FailJson('"'#0'"');
+    FailJson('{}'#0);
+    FailJson('"' + RawBytes([$c0, $af]) + '"'); // overlong UTF-8
+    FailJson('"' + RawBytes([$ed, $a0, $80]) + '"'); // encoded surrogate
+    FailJson('"' + RawBytes([$f4, $90, $80, $80]) + '"'); // beyond U+10FFFF
+    FailJson('"' + RawBytes([$e2, $82]) + '"'); // truncated UTF-8 sequence
+    Check(JsonToCsv('{'#13#10'"a":?}', csv, info) = tbrInvalidJson);
+    Check(info <> '', 'CRLF JSON error');
+    Check(JsonToCsv('{'#10'"a":?}', csv, info) = tbrInvalidJson);
+    Check(info <> '', 'LF JSON error');
+  end;
+
+  procedure Depth;
+  var
+    i: PtrInt;
+    json, info, ignored: RawUtf8;
+    csv: TTextPairs;
+    v: variant;
+  begin
+    // every object counts, including the root; flattened fields keep the limit
+    json := '{"value":1}';
+    for i := 2 to TableMaxDepth do
+      json := '{"a":' + json + '}';
+    Check(JsonToCsv(json, csv, info) = tbrSuccess, 'depth boundary');
+    Parity(json);
+    json := '{"a":' + json + '}';
+    FailJson(json, tbrTooDeep);
+    v := _Json(json);
+    FailVariant(v, tbrTooDeep);
+    // fallback containers use the native JSON writer without a pre-walk
+    json := '1';
+    for i := 1 to TableMaxDepth do
+      json := '[' + json + ']';
+    Check(JsonToCsv(json, csv, info, [tboMixedAsJson]) =
+      tbrSuccessWithRemarks, 'nested arrays at the limit');
+    Check(JsonToCsv('[' + json + ']', csv, info, [tboMixedAsJson]) =
+      tbrSuccessWithRemarks, 'native fallback beyond table depth');
+    // ignored fields are not traversed by the table exporter
+    ignored := '1';
+    for i := 3 to TableMaxDepth do
+      ignored := '{"a":' + ignored + '}';
+    json := '[{"a":1},{"a":2,"ignored":' + ignored + '}]';
+    Check(JsonToCsv(json, csv, info, [tboFirstRowFields]) =
+      tbrSuccessWithRemarks, 'ignored depth boundary');
+    json := '[{"a":1},{"a":2,"ignored":{"a":' + ignored + '}}]';
+    Check(JsonToCsv(json, csv, info, [tboFirstRowFields]) =
+      tbrSuccessWithRemarks, 'ignored content does not affect table depth');
+    // structural characters inside strings are not nesting
+    json := '"';
+    for i := 1 to TableMaxDepth * 2 do
+      Append(json, '[{');
+    Append(json, '"');
+    Check(JsonToCsv(json, csv, info) = tbrSuccess, 'brackets in string');
+  end;
+
+  procedure Callbacks;
+  var
+    info: RawUtf8;
+    event: TTableWriteEvent;
+    v: variant;
+    none: TOnTableWrite;
+    savedIgnore: boolean;
+  begin
+    none := nil;
+    Check(JsonToTables('[]', none, info) = tbrOutputError, 'missing callback');
+    Check(info <> '');
+    sink.Clear;
+    Check(JsonToTables('[]', sink.WriteTable, info) = tbrSuccess);
+    CheckEqual(sink.Events, 'B(root)E');
+    Check(not sink.Invalid);
+    sink.Clear;
+    v := _Json('{"n":1}');
+    Check(VariantToTables(v, sink.WriteTable, info) = tbrSuccess);
+    CheckEqual(sink.Events, 'B(root)RE');
+    if Check(length(sink.Tables) = 1) then
+    begin
+      CheckEqual(sink.Tables[0].Rows[0].ID, 1);
+      CheckEqual(sink.Tables[0].Rows[0].ParentID, 0);
+      CheckEqual(sink.Tables[0].Info.ParentName, '');
+    end;
+    // callbacks may fail at any stage; the exception becomes an output result
+    savedIgnore := TSynLog.Family.ExceptionIgnoreCurrentThread;
+    TSynLog.Family.ExceptionIgnoreCurrentThread := true;
+    try
+      for event := low(TTableWriteEvent) to high(TTableWriteEvent) do
+      begin
+        sink.Clear;
+        sink.RaiseAt := event;
+        sink.RaiseEnabled := true;
+        Check(JsonToTables('[1,2]', sink.WriteTable, info) = tbrOutputError);
+        Check(info <> '', 'output error context');
+        case event of
+          tweBegin:
+            CheckEqual(sink.Events, '');
+          tweRow:
+            CheckEqual(sink.Events, 'B(root)');
+          tweEnd:
+            CheckEqual(sink.Events, 'B(root)RR');
+        end;
+        sink.Clear;
+        sink.RaiseAt := event;
+        sink.RaiseEnabled := true;
+        Check(JsonToTables('[[1,2],[3]]', sink.WriteTable, info,
+          [tboMixedAsJson]) = tbrOutputError, 'release shared JSON writer');
+      end;
+    finally
+      TSynLog.Family.ExceptionIgnoreCurrentThread := savedIgnore;
+      sink.Clear;
+    end;
+    // no state from a failed call is retained on the next conversion
+    Check(JsonToTables('[1]', sink.WriteTable, info) = tbrSuccess);
+    CheckEqual(sink.Events, 'B(root)RE');
+    CheckEqual(info, '');
+  end;
+
+  procedure WriterBuffers;
+  var
+    doc: variant;
+    csv: TTextPairs;
+    s, md, info: RawUtf8;
+  begin
+    // cross the writer buffer, then reuse it for a much shorter child table
+    s := RawUtf8(StringOfChar('x', 20000));
+    doc := _ObjFast(['text', s + ',"' + s,
+      'child', _ArrFast(['tiny'])]);
+    Check(VariantToCsv(doc, csv, info) = tbrSuccess);
+    if Check(length(csv) = 2) then
+    begin
+      CheckEqual(csv[0].Value, '__rowid,text'#10'1,"' +
+        s + ',""' + s + '"'#10);
+      CheckEqual(csv[1].Value,
+        '__rowid,__parentid,value'#10'1,1,tiny'#10);
+    end;
+    Check(VariantToMd(doc, md, info) = tbrSuccess);
+    CheckEqual(md, '## root'#10#10 +
+      '| __rowid | text |'#10'| --- | --- |'#10'| 1 | ' +
+      s + '\,&quot;' + s + ' |'#10#10 +
+      '## root\.child'#10#10 +
+      '| __rowid | __parentid | value |'#10 +
+      '| --- | --- | --- |'#10'| 1 | 1 | tiny |'#10#10);
+    // reuse the JSON fallback writer across rows and across child tables
+    doc := _ObjFast(['a', _ArrFast([_ObjFast(['x', s]), 2]),
+      'b', _ArrFast([_Json('[]'), 3])]);
+    sink.Clear;
+    Check(VariantToTables(doc, sink.WriteTable, info, [tboMixedAsJson]) =
+      tbrSuccessWithRemarks);
+    if Check(length(sink.Tables) = 3) then
+    begin
+      CheckEqual(sink.Tables[1].Rows[0].Values[0], '{"x":"' + s + '"}');
+      CheckEqual(sink.Tables[1].Rows[1].Values[0], '2');
+      CheckEqual(sink.Tables[2].Rows[0].Values[0], '[]');
+      CheckEqual(sink.Tables[2].Rows[1].Values[0], '3');
+    end;
+  end;
+
+  procedure ScalarVariants;
+  var
+    v, target: variant;
+    vd: TSynVarData absolute v;
+    s: RawUtf8;
+    d: double;
+    n: integer;
+    u: cardinal;
+    b: WordBool;
+
+    function OneScalar(const Value: variant; const Expected: RawUtf8;
+      Options: TTableOptions = TABLE_DEFAULT): boolean;
+    var
+      info: RawUtf8;
+    begin
+      result := false;
+      sink.Clear;
+      if CheckFailed(VariantToTables(Value, sink.WriteTable, info, Options) =
+           tbrSuccess) or
+         CheckFailed(length(sink.Tables) = 1) then
+        exit;
+      if CheckFailed(length(sink.Tables[0].Rows) = 1) then
+        exit;
+      if CheckFailed(length(sink.Tables[0].Rows[0].Values) = 1) then
+        exit;
+      CheckEqual(sink.Tables[0].Rows[0].Values[0], Expected);
+      CheckEqual(info, '');
+      result := true;
+    end;
+
+  begin
+    // assigning a Single to a Variant may promote it to varDouble
+    vd.VType := varSingle;
+    vd.Data.VSingle := 1.2;
+    OneScalar(v, '1.2');
+    VarClear(v);
+    vd.VType := varBoolean;
+    PWord(@vd.Data.VBoolean)^ := 2;
+    OneScalar(v, 'true');
+    PWord(@vd.Data.VBoolean)^ := $ffff;
+    OneScalar(v, 'true');
+    PWord(@vd.Data.VBoolean)^ := 0;
+    OneScalar(v, 'false');
+    VarClear(v);
+    vd.VType := varLongWord;
+    // bytes outside VLongWord do not belong to an unsigned 32-bit value
+    vd.VInt64 := -1;
+    vd.Data.VLongWord := 17;
+    OneScalar(v, '17');
+    vd.Data.VLongWord := high(cardinal);
+    OneScalar(v, '4294967295');
+    vd.VType := varWord64;
+    vd.VInt64 := 17;
+    OneScalar(v, '17');
+    vd.VInt64 := high(Int64);
+    OneScalar(v, '9223372036854775807');
+    vd.VInt64 := -1;
+    OneScalar(v, '18446744073709551615');
+    // plain RawUtf8 cells keep their source reference through the callback
+    s := RawUtf8(StringOfChar('a', 128)) + RawBytes([$c3, $a9, $e4, $b8, $ad]);
+    RawUtf8ToVariant(s, v);
+    CheckEqual(vd.VType, varString);
+    if OneScalar(v, s) then
+      Check(pointer(sink.Tables[0].Rows[0].Values[0]) = vd.VString,
+        'retain source RawUtf8');
+    // longer UTF-16 text also exercises conversion beyond TTempUtf8.Temp
+    RawUtf8ToVariant(s, vd.Data, varOleStr);
+    CheckEqual(vd.VType, varOleStr);
+    OneScalar(v, s);
+    {$ifdef HASVARUSTRING}
+    RawUtf8ToVariant(s, vd.Data, varUString);
+    CheckEqual(vd.VType, varUString);
+    OneScalar(v, s);
+    {$endif HASVARUSTRING}
+    // retain the native Double formatter's non-finite spelling
+    PInt64(@d)^ := $7ff0000000000000;
+    v := d;
+    OneScalar(v, {$ifndef DOUBLETOSHORT_USEGRISU} 'INF' {$else} '+Inf' {$endif});
+    PQWord(@d)^ := QWord($fff0000000000000);
+    v := d;
+    OneScalar(v, {$ifndef DOUBLETOSHORT_USEGRISU} '-INF' {$else} '-Inf' {$endif});
+    PInt64(@d)^ := $7ff8000000000000;
+    v := d;
+    OneScalar(v, {$ifndef DOUBLETOSHORT_USEGRISU} 'NAN' {$else} 'Nan' {$endif});
+    // typed references use native unreferencing before scalar conversion
+    VarClear(v);
+    vd.VType := varBoolean or varByRef;
+    vd.Data.VPointer := @b;
+    try
+      b := true;
+      OneScalar(v, 'true');
+      b := false;
+      OneScalar(v, 'false');
+      n := -42;
+      vd.VType := varInteger or varByRef;
+      vd.Data.VPointer := @n;
+      OneScalar(v, '-42');
+      u := high(cardinal);
+      vd.VType := varLongWord or varByRef;
+      vd.Data.VPointer := @u;
+      OneScalar(v, '4294967295');
+      d := 2.5;
+      vd.VType := varDouble or varByRef;
+      vd.Data.VPointer := @d;
+      OneScalar(v, '2.5');
+      target := false;
+      vd.VType := varVariantByRef;
+      vd.Data.VPointer := @target;
+      OneScalar(v, 'false');
+      vd.Data.VPointer := nil;
+      OneScalar(v, '');
+      OneScalar(v, 'null', [tboNullAsText]);
+    finally
+      vd.VType := varEmpty;
+      vd.Data.VPointer := nil;
+    end;
+  end;
+
+  procedure LongNamesAndPaths;
+  var
+    doc: variant;
+    csv: TTextPairs;
+    name, encoded, info: RawUtf8;
+  begin
+    // long escaped names and bounded schema diagnostics
+    name := RawUtf8(StringOfChar('n', 5000)) + '.x';
+    encoded := RawUtf8(StringOfChar('n', 5000)) + '\.x';
+    doc := _ObjFast([name, 1]);
+    Check(VariantToCsv(doc, csv, info) = tbrSuccess);
+    if Check(length(csv) = 1) then
+      CheckEqual(csv[0].Value, '__rowid,' + encoded + #10'1,1'#10);
+    Check(VariantToCsv(doc, csv, info, TABLE_DEFAULT, name) = tbrSuccess);
+    if Check(length(csv) = 1) then
+      CheckEqual(csv[0].Name, encoded);
+    doc := _ArrFast([doc, _Json('{}')]);
+    Check(VariantToCsv(doc, csv, info) = tbrSuccessWithRemarks);
+    Check(PosEx('nnnn', info) <> 0, 'schema diagnostic includes field context');
+    Check(length(info) < 320, 'bounded long diagnostic');
+    Check(IsValidUtf8(info));
+    // schema diagnostics identify the logical child table and column
+    Check(JsonToCsv('[{"a":[{"b":[{"x":1}]}]},' +
+      '{"a":[{"b":[{"x":2,"late":3}]}]}]', csv, info) =
+      tbrSuccessWithRemarks);
+    Check(PosEx('$[].a[].b', info) <> 0, 'logical table context');
+    Check(PosEx('late', info) <> 0, 'column context');
+  end;
+
+  procedure Growth;
+  var
+    i, j: PtrInt;
+    json, info: RawUtf8;
+    csv: TTextPairs;
+  begin
+    // exercise independent row, column and table capacity growth
+    json := '[';
+    for i := 0 to 129 do
+    begin
+      if i <> 0 then
+        Append(json, ',');
+      Append(json, '{');
+      for j := 0 to 34 do
+      begin
+        if j <> 0 then
+          Append(json, ',');
+        Append(json, ['"c', Int32ToUtf8(j), '":', Int32ToUtf8(i + j)]);
+      end;
+      Append(json, '}');
+    end;
+    Append(json, ']');
+    sink.Clear;
+    Check(JsonToTables(json, sink.WriteTable, info, TABLE_STRICT) = tbrSuccess);
+    if CheckFailed(length(sink.Tables) = 1) then
+      exit;
+    CheckEqual(length(sink.Tables[0].Info.Columns), 35);
+    if CheckFailed(length(sink.Tables[0].Rows) = 130) then
+      exit;
+    if CheckFailed((length(sink.Tables[0].Rows[129].Values) = 35) and
+                  (length(sink.Tables[0].Rows[0].Values) = 35)) then
+      exit;
+    CheckEqual(sink.Tables[0].Rows[129].ID, 130);
+    CheckEqual(sink.Tables[0].Rows[129].Values[34], '163');
+    CheckEqual(sink.Tables[0].Rows[0].Values[0], '0', 'retained callback copy');
+    Check(not sink.Invalid);
+    json := '{';
+    for i := 0 to 34 do
+    begin
+      if i <> 0 then
+        Append(json, ',');
+      Append(json, ['"child', Int32ToUtf8(i), '":[', Int32ToUtf8(i), ']']);
+    end;
+    Append(json, '}');
+    Check(JsonToCsv(json, csv, info) = tbrSuccess);
+    if Check(length(csv) = 36) then
+    begin
+      CheckEqual(csv[35].Name, 'root.child34');
+      CheckEqual(csv[35].Value, '__rowid,__parentid,value'#10'1,1,34'#10);
+    end;
+    // irregular input must not produce an unbounded diagnostic for every row
+    json := '[{"a":1}';
+    for i := 1 to 100 do
+      Append(json, ',{}');
+    Append(json, ']');
+    Check(JsonToCsv(json, csv, info) = tbrSuccessWithRemarks);
+    Check(length(info) < 9000, 'bounded remarks');
+    Check(PosEx('additional remarks omitted', info) <> 0);
+    if Check(length(csv) = 1) then
+      Check(PosEx(#10'101,'#10, csv[0].Value) <> 0, 'remarks do not stop rows');
+  end;
+
+begin
+  sink := TTableTestWriter.Create;
+  try
+    sink.Clear;
+    Flat;
+    Relations;
+    Schemas;
+    Escaping;
+    JsonDecoding;
+    NativeValues;
+    InvalidJson;
+    Depth;
+    Callbacks;
+    ScalarVariants;
+    WriterBuffers;
+    LongNamesAndPaths;
+    Growth;
+  finally
+    sink.Free;
+  end;
 end;
 
 procedure TTestCoreProcess._i18n;
