@@ -2658,7 +2658,10 @@ begin // see jtSlash support in GotoEnd()
       repeat
         inc(P);
         if P^ = #0 then
+        begin
+          result := P; // end of input also terminates a line comment
           exit;
+        end;
       until P^ = #10;    // till the end of the line
       P := IgnoreAndGotoNextNotSpace(P);
     end
@@ -3062,7 +3065,8 @@ begin
   end
   else
   begin
-    if jrfTrailingComma in Fmt then
+    if (jrfTrailingComma in Fmt) and
+       (StackCount <> 0) then
       W.AddDirect(',');
     if State = stObjectValue then
       State := stObjectName;
@@ -3445,6 +3449,7 @@ ident:    Value := P;
           W.Add(P^);
           inc(P);
           if (jrfTrailingComma in Fmt) and
+             (StackCount <> 0) and
              not (State in [stObjectNameFirst, stValueFirst]) then
             W.AddDirect(',');
           if State = stObjectValue then
@@ -7124,6 +7129,7 @@ function TJsonWriter.AddJsonReformat(Json: PUtf8Char;
 var
   parser: TJsonParser; // reuse the GotoEnd very efficient state machine
   start: PUtf8Char;    // Hjson assume an implicit object
+  level: integer;
 begin
   result := false;
   if Json = nil then
@@ -7137,6 +7143,7 @@ begin
      not Preproc.InheritsFrom(TPreprocAbstract) then
     Preproc := nil;
   parser.InitReformat(Format, self, TPreprocAbstract(Preproc));
+  level := fHumanReadableLevel;
   start := Json;
   if not (start^ in ['{', '[']) then
     start := GotoNextWithoutComment(start);
@@ -7144,6 +7151,8 @@ begin
   begin
     AddDirect('{'); // Hjson may start with an implicit object
     inc(fHumanReadableLevel);
+    parser.Stack[0] := parser.State;
+    parser.StackCount := 1; // account for the opening brace emitted above
     parser.State := stObjectNameFirst;
   end
   else
@@ -7151,6 +7160,13 @@ begin
   result := parser.Reformat(Json);
   if start = nil then // no manual ending } of HJson implicit object
     exit;
+  result := result and
+            (parser.StackCount = 1);
+  if not result then
+  begin
+    fHumanReadableLevel := level;
+    exit; // do not close an incomplete or already-closed implicit object
+  end;
   if (jrfTrailingComma in parser.Fmt) and
      not (parser.State in [stObjectNameFirst, stValueFirst]) then
     AddDirect(',');
