@@ -10532,6 +10532,8 @@ begin
   with Executable do            // retrieve Executable + Host/User info
   begin
     ProgramFileName := ExpandFileName(ParamStr(0)); // main executable from RTL
+    if ParamUtf8 = nil then // e.g. Delphi Android NativeActivity: no argv
+      SetLength(ParamUtf8, 1);
     _toutf8(ProgramFileName, ParamUtf8[0]);
     ProgramFilePath := ExtractFilePath(ProgramFileName);
     ProgramName := GetFileNameWithoutExtOrPath(ProgramFileName);
