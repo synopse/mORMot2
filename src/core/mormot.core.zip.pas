@@ -3201,6 +3201,13 @@ begin
     // prepare for direct in-memory access, if possible
     if e^.fileinfo.offset >= QWord(Offset) then
     begin
+      // check size metadata against actual file layout
+      if (Size < SizeOf(TLocalFileHeader)) or
+         (e^.fileinfo.offset >= QWord(fCentralDirectoryOffset)) then
+        ESynZip.RaiseUtf8('%.Create: invalid local offset', [self]);
+      if e^.fileinfo.offset - QWord(Offset) >
+         QWord(Size - SizeOf(TLocalFileHeader)) then
+        ESynZip.RaiseUtf8('%.Create: truncated local header', [self]);
       // we can unzip directly from the existing memory buffer: store pointer
       e^.local := @BufZip[Int64(e^.fileinfo.offset) - Offset];
       with e^.local^.fileInfo do
