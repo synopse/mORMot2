@@ -1,0 +1,7 @@
+Free Pascal Compiler OOTB v. 3.2.2_glibc225 [2024/07/03] for x86_64
+Copyright (c) 1993-2021 by Florian Klaempfl & friends.
+Target OS: Linux for x86-64
+Compiling src/tools/jop/jop.dpr
+Compiling ./src/tools/jop/jop.main.pas
+Linking /workspace/scratch/2b6514a32b99/validation-v4/cli-agent/bin/jop
+4420 lines compiled, 0.7 sec
