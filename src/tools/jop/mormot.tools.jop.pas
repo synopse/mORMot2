@@ -1,12 +1,12 @@
 /// JSON Oriented Preprocessor Reusable Processing Functions
 // - this unit is a part of the Open Source Synopse mORMot framework 2,
 // licensed under a MPL/GPL/LGPL three license - see LICENSE.md
-unit jop.main;
+unit mormot.tools.jop;
 
 {
   *****************************************************************************
 
-   JSON, YAML, CSV, Markdown and Text Processing
+   JSON, XML, YAML, CSV, Markdown and Text Processing
     - Formats, Options, Errors and Statistics
     - In-memory and Writer Processing Functions
     - File and Batch Processing
@@ -40,6 +40,8 @@ type
   // an implicit root object - these names do not imply RFC validation
   // - jfMd and jfMdPipe are output only: native Markdown with fenced CSV
   // sections or pipe tables; the .md extension selects jfMd
+  // - jfXml follows the native @attribute/#text/repeated-element mapping;
+  // supply a single root field and valid XML names for document output
   TJopFormat = (
     jfAuto,
     jfJson,
@@ -51,7 +53,8 @@ type
     jfCsv,
     jfText,
     jfMd,
-    jfMdPipe);
+    jfMdPipe,
+    jfXml);
 
   /// optional processing features, with no validation enabled by default
   // - input is opaque 8-bit text: jofValidateUtf8 explicitly checks its UTF-8
@@ -63,7 +66,7 @@ type
   // - jofNoExpand bypasses preprocessing, including defines and includes
   // - jofNoComments omits JSON comments, keeping the selected output layout
   // - jofNoNamespaces disables external namespaces, preserving local defines
-  // - jofPreprocessInput explicitly expands YAML/CSV source text before parsing
+  // - jofPreprocessInput expands XML/YAML/CSV source text before parsing
   // - jofDebugComments requires preprocessing and a comment-capable output
   // - jofAllowMissingIncludes skips includes not found by FileExists(); a file
   // found but empty, BOM-only or unreadable is still an include error
@@ -99,10 +102,10 @@ type
     InputFormat: TJopFormat;
     OutputFormat: TJopFormat;
     Flags: TJopFlags;
-    IncludeRoot: TFileName;
-    Defines: TRawUtf8DynArray;
     CsvDelimiter: AnsiChar;
     TableOptions: TTableOptions;
+    IncludeRoot: TFileName;
+    Defines: TRawUtf8DynArray;
     TableRoot: RawUtf8;
   end;
 
@@ -130,7 +133,8 @@ type
     jeInvalidPath,
     jeNoFiles,
     jeCollision,
-    jeException);
+    jeException,
+    jeInvalidXml);
 
   /// accumulating counters, initialized to zero before the first call
   // - FilesSucceeded/Failed count documents for in-memory calls
@@ -158,37 +162,43 @@ type
   EJopException = class(ESynException);
 
 const
-  JOP_JSON_FORMATS = [jfJson, jfJsonC, jfJson5, jfHjson, jfMorml];
-  JOP_INPUT_FORMATS = [jfJson, jfJsonC, jfJson5, jfHjson, jfMorml,
-    jfYaml, jfCsv, jfText];
-  JOP_OUTPUT_FORMATS = JOP_INPUT_FORMATS + [jfMd, jfMdPipe];
+  JOP_JSON_FORMATS  =
+    [jfJson, jfJsonC, jfJson5, jfHjson, jfMorml];
+
+  JOP_INPUT_FORMATS =
+    JOP_JSON_FORMATS + [jfYaml, jfCsv, jfText, jfXml];
+
+  JOP_OUTPUT_FORMATS =
+    JOP_INPUT_FORMATS + [jfMd, jfMdPipe];
+
   JOP_FORMAT_NAMES: array[TJopFormat] of RawUtf8 = (
     'auto', 'json', 'jsonc', 'json5', 'hjson', 'morml', 'yaml', 'csv',
-    'text', 'md', 'md-pipe');
+    'text', 'md', 'md-pipe', 'xml');
   JOP_FORMAT_EXTENSIONS: array[TJopFormat] of TFileName = (
     '', '.json', '.jsonc', '.json5', '.hjson', '.morml', '.yaml', '.csv',
-    '.txt', '.md', '.md');
+    '.txt', '.md', '.md', '.xml');
   JOP_ERROR: array[TJopError] of RawUtf8 = (
-    '',
-    'Invalid processing options',
-    'Unsupported input format',
-    'Embedded NUL in input',
-    'Invalid UTF-8 input',
-    'Invalid JSON',
-    'Invalid YAML',
-    'Invalid CSV',
-    'Preprocessing failed',
-    'Incompatible relational table data',
-    'Relational table nesting is too deep',
-    'CSV has several tables: use JopProcessToCsv',
-    'Input file does not exist',
-    'Could not read input file',
-    'Could not write output',
-    'Source and destination must differ',
-    'Invalid input or output path',
-    'No matching input files',
-    'Input/output collision or duplicate destination',
-    'Unexpected processing exception');
+    '',                                                // jeSuccess
+    'Invalid processing options',                      // jeInvalidOptions
+    'Unsupported input format',                        // jeUnsupportedInput
+    'Embedded NUL in input',                           // jeEmbeddedNul
+    'Invalid UTF-8 input',                             // jeInvalidUtf8
+    'Invalid JSON',                                    // jeInvalidJson
+    'Invalid YAML',                                    // jeInvalidYaml
+    'Invalid CSV',                                     // jeInvalidCsv
+    'Preprocessing failed',                            // jePreprocess
+    'Incompatible relational table data',              // jeTableData
+    'Relational table nesting is too deep',            // jeTableDepth
+    'CSV has several tables: use JopProcessToCsv',     // jeMultipleTables
+    'Input file does not exist',                       // jeNoSource
+    'Could not read input file',                       // jeRead
+    'Could not write output',                          // jeWrite
+    'Source and destination must differ',              // jeSameFile
+    'Invalid input or output path',                    // jeInvalidPath
+    'No matching input files',                         // jeNoFiles
+    'Input/output collision or duplicate destination', // jeCollision
+    'Unexpected processing exception',                 // jeException
+    'Invalid XML');                                    // jeInvalidXml
 
 /// initialize processing parameters, without allocating default strings
 function JopOptions(InputFormat: TJopFormat = jfAuto;
@@ -229,7 +239,7 @@ function JopProcess(var Source: RawUtf8; InputFormat: TJopFormat = jfJson;
 // - default JSON-to-JSON processing writes directly to W in one pass
 // - Source has the same writable, consumed-buffer contract as JopProcess()
 // - dialect conversion, expansion and explicit validation may replace Source;
-// ordinary JSON is decoded in-place for YAML/CSV/Markdown without a buffer copy
+// ordinary JSON is decoded in-place for XML/YAML/CSV/Markdown without a copy
 // - failed calls may have appended partial bytes; discard that transaction
 // - jfCsv requires exactly one table; use JopProcessToCsv() for nested arrays
 function JopProcessToWriter(var Source: RawUtf8; W: TJsonWriter;
@@ -262,6 +272,7 @@ type
     jfsSucceeded,
     jfsFailed,
     jfsSkipped);
+
   TJopFileResult = record
     Source: TFileName;
     Dest: TFileName;
@@ -363,7 +374,8 @@ begin
   else if IdemPropName('markdown', p, n) or
           IdemPropName('md-csv', p, n) then
     Format := jfMd
-  else if IdemPropName('markdown-pipe', p, n) then
+  else if IdemPropName('markdown-pipe', p, n) or
+          IdemPropName('md-pipe', p, n) then
     Format := jfMdPipe
   else
     result := false;
@@ -373,17 +385,29 @@ function JopFormatFromFileName(const FileName: TFileName;
   out Format: TJopFormat): boolean;
 begin
   Format := jfAuto;
-  case SameExt(FileName, ['json', 'jsonc', 'json5', 'hjson', 'morml',
-        'yaml', 'yml', 'csv', 'txt', 'jop', 'ini', 'cnf', 'md', 'markdown'], true) of
-    0: Format := jfJson;
-    1: Format := jfJsonC;
-    2: Format := jfJson5;
-    3: Format := jfHjson;
-    4: Format := jfMorml;
-    5, 6: Format := jfYaml;
-    7: Format := jfCsv;
-    8 .. 11: Format := jfText;
-    12, 13: Format := jfMd;
+  case SameExt(FileName,
+    ['json', 'jsonc', 'json5', 'hjson', 'morml', 'yaml', 'yml', // 1..6
+     'csv', 'txt', 'jop', 'ini', 'cnf', 'md', 'markdown', 'xml'], true) of
+    0:
+      Format := jfJson;
+    1:
+      Format := jfJsonC;
+    2:
+      Format := jfJson5;
+    3:
+      Format := jfHjson;
+    4:
+      Format := jfMorml;
+    5, 6:
+      Format := jfYaml;
+    7:
+      Format := jfCsv;
+    8 .. 11:
+      Format := jfText;
+    12, 13:
+      Format := jfMd;
+    14: 
+      Format := jfXml;
   end;
   result := Format <> jfAuto;
 end;
@@ -414,7 +438,7 @@ begin
   if jofDebugComments in Options.Flags then
     if not (Options.OutputFormat in [jfJsonC, jfJson5, jfHjson, jfText]) or
        (Options.Flags * [jofNoExpand, jofNoComments] <> []) or
-       (Options.InputFormat in [jfYaml, jfCsv]) then
+       (Options.InputFormat in [jfXml, jfYaml, jfCsv]) then
       exit;
   if Options.CsvDelimiter = #0 then
     Options.CsvDelimiter := ',';
@@ -444,7 +468,7 @@ begin
   inc(Dest^.ElapsedMicroSeconds, Added.ElapsedMicroSeconds);
 end;
 
-function JopStart(Statistics: PJopStatistics; out Run: TJopStatistics): Int64;
+function JopStart(Statistics: PJopStatistics; var Run: TJopStatistics): Int64;
 begin
   FillCharFast(Run, SizeOf(Run), 0);
   result := 0;
@@ -474,9 +498,11 @@ end;
 function JopException(E: Exception; Info: PRawUtf8): TJopError;
 begin
   if Info <> nil then
-    Info^ := StringToUtf8(E.Message);
+    StringToUtf8(E.Message, Info^);
   if E.InheritsFrom(EYamlException) then
     result := jeInvalidYaml
+  else if E.InheritsFrom(EXmlException) then
+    result := jeInvalidXml
   else if E.InheritsFrom(EPreprocException) then
     result := jePreprocess
   else if E.InheritsFrom(EStreamError) then
@@ -492,17 +518,27 @@ type
   PJopCsv = ^TTextPairs;
 
 const
-  JOP_EMPTY: array[0..7] of AnsiChar = (#0, #0, #0, #0, #0, #0, #0, #0);
+  JOP_EMPTY: Int64 = 0; // array[0..7] of AnsiChar
+
   JOP_TABLE_ERROR: array[TTableResult] of TJopError = (
-    jeSuccess, jeSuccess, jeInvalidJson, jeTableData, jeTableDepth, jeWrite);
+    jeSuccess,
+    jeSuccess,
+    jeInvalidJson,
+    jeTableData,
+    jeTableDepth,
+    jeWrite);
 
 function JopJsonFormat(Format: TJopFormat; Flags: TJopFlags): TTextWriterJsonFormat;
 begin
   case Format of
-    jfJsonC: result := jsonC;
-    jfJson5: result := json5;
-    jfHjson: result := jsonH;
-    jfMorml: result := jsonMorml;
+    jfJsonC:
+      result := jsonC;
+    jfJson5:
+      result := json5;
+    jfHjson:
+      result := jsonH;
+    jfMorml:
+      result := jsonMorml;
   else
     if jofCompact in Flags then
       result := jsonCompact
@@ -527,8 +563,8 @@ end;
 function JopCheckJson(P: PUtf8Char; Len: PtrInt; Comments: boolean): boolean;
 var
   w: TJsonWriter;
-  temp: TTextWriterStackBuffer;
   settings: TPreprocSettings;
+  temp: TTextWriterStackBuffer;
 begin
   if not Comments then
   begin
@@ -600,8 +636,8 @@ var
     Format: TTextWriterJsonFormat): TJopError;
   var
     writer: TJsonWriter;
-    temp: TTextWriterStackBuffer;
     error: TCsvError;
+    temp: TTextWriterStackBuffer;
   begin
     writer := TJsonWriter.CreateOwnedStream(temp);
     try
@@ -717,7 +753,7 @@ begin
         result := jeSuccess;
       exit;
     end;
-    if (opt.InputFormat in [jfYaml, jfCsv]) and
+    if (opt.InputFormat in [jfXml, jfYaml, jfCsv]) and
        (jofPreprocessInput in opt.Flags) and
        not (jofNoExpand in opt.Flags) then
     begin
@@ -732,6 +768,22 @@ begin
     if comments then
       stage := jsonC;
     case opt.InputFormat of
+      jfXml:
+        begin
+          result := jeInvalidXml;
+          if len = 0 then
+            exit;
+          XmlToVariant(Source, doc);
+          // Keep the native tree for XML/YAML/table output. Only JSON output
+          // or explicit JSON validation needs a serialized staging buffer.
+          if (opt.OutputFormat in JOP_JSON_FORMATS) or
+             (jofValidateJson in opt.Flags) then
+          begin
+            VariantSaveJson(doc, twJsonEscape, Source);
+            p := pointer(Source);
+            len := length(Source);
+          end;
+        end;
       jfYaml:
         begin
           Source := YamlToJson(Source);
@@ -780,25 +832,38 @@ begin
       result := jeSuccess;
       exit;
     end;
-    if opt.OutputFormat = jfYaml then
-      docOptions := JSON_YAML
-    else
-      docOptions := JSON_TABLE;
-    p := GotoNextNotSpace(p);
-    if p^ in ['{', '['] then
+    if opt.InputFormat <> jfXml then
     begin
-      if TDocVariantData(doc).InitJsonInPlace(p, docOptions) = nil then
-        exit;
-    end
-    else
-    begin
-      // InitJsonInPlace handles containers; retain native scalar support.
-      field.Json := p;
-      JsonToAnyVariant(doc, field, @docOptions, {AllowDouble=}true);
-      if field.Json = nil then
-        exit;
+      case opt.OutputFormat of
+        jfXml:
+          docOptions := JSON_XML;
+        jfYaml:
+          docOptions := JSON_YAML;
+      else
+        docOptions := JSON_TABLE;
+      end;
+      p := GotoNextNotSpace(p);
+      if p^ in ['{', '['] then
+      begin
+        if TDocVariantData(doc).InitJsonInPlace(p, docOptions) = nil then
+          exit;
+      end
+      else
+      begin
+        // InitJsonInPlace handles containers; retain native scalar support.
+        field.Json := p;
+        JsonToAnyVariant(doc, field, @docOptions, {AllowDouble=}true);
+        if field.Json = nil then
+          exit;
+      end;
     end;
     case opt.OutputFormat of
+      jfXml:
+        begin
+          W.AddString(XMLUTF8_HEADER);
+          AddVariantToXml(W, doc);
+          result := jeSuccess;
+        end;
       jfYaml:
         begin
           text := VariantToYaml(doc);
@@ -848,8 +913,8 @@ function JopProcessToWriter(var Source: RawUtf8; W: TJsonWriter;
   const Options: TJopOptions; Statistics: PJopStatistics;
   Info: PRawUtf8): TJopError;
 var
-  run: TJopStatistics;
   started: Int64;
+  run: TJopStatistics;
 begin
   started := JopStart(Statistics, run);
   try
@@ -865,9 +930,9 @@ function JopProcess(var Source: RawUtf8; const Options: TJopOptions;
   out Dest: RawUtf8; Statistics: PJopStatistics; Info: PRawUtf8): TJopError;
 var
   w: TJsonWriter;
-  temp: TTextWriterStackBuffer;
-  run: TJopStatistics;
   started: Int64;
+  run: TJopStatistics;
+  temp: TTextWriterStackBuffer;
 begin
   Dest := '';
   if Info <> nil then
@@ -913,9 +978,9 @@ function JopProcessToStream(var Source: RawUtf8; Dest: TStream;
   Info: PRawUtf8): TJopError;
 var
   w: TJsonWriter;
-  temp: TTextWriterStackBuffer;
-  run: TJopStatistics;
   started: Int64;
+  run: TJopStatistics;
+  temp: TTextWriterStackBuffer;
 begin
   if Info <> nil then
     Info^ := '';
@@ -946,8 +1011,8 @@ function JopProcessToCsv(var Source: RawUtf8; const Options: TJopOptions;
   Info: PRawUtf8): TJopError;
 var
   opt: TJopOptions;
-  run: TJopStatistics;
   started: Int64;
+  run: TJopStatistics;
 begin
   Tables := nil;
   started := JopStart(Statistics, run);
@@ -999,12 +1064,12 @@ function JopProcessFile(const Source, Dest: TFileName;
 var
   src, dst, tmp, folder, context: TFileName;
   opt: TJopOptions;
+  failure: TJopError;
   data: RawUtf8;
   f: TFileStreamEx;
   started, finished: Int64;
   inputBytes: PtrInt;
   stats: TJopStatistics;
-  failure: TJopError;
 begin
   result := jeInvalidPath;
   failure := result;
@@ -1074,7 +1139,7 @@ begin
       if not mormot.core.os.ReplaceFile(tmp, dst) then
       begin
         if Info <> nil then
-          Info^ := StringToUtf8(dst);
+          StringToUtf8(dst, Info^);
         exit;
       end;
       tmp := '';
@@ -1084,7 +1149,7 @@ begin
       begin
         result := failure;
         if Info <> nil then
-          Info^ := StringToUtf8(E.Message);
+          StringToUtf8(E.Message, Info^);
       end;
     end;
   finally
@@ -1098,7 +1163,7 @@ begin
       stats.OutputBytes := 0;
       if (Info <> nil) and
          (Info^ = '') then
-        Info^ := StringToUtf8(context);
+        StringToUtf8(context, Info^);
     end;
     QueryPerformanceMicroSeconds(finished);
     stats.ElapsedMicroSeconds := finished - started;
@@ -1117,8 +1182,8 @@ var
   allfiles, excludeoutput: boolean;
   i, j, n, c: PtrInt;
   da: TDynArray;
-  stats: TJopStatistics;
   started, finished: Int64;
+  stats: TJopStatistics;
 begin
   result := jeInvalidPath;
   Files := nil;
@@ -1259,14 +1324,14 @@ begin
       begin
         result := jeException;
         if Info <> nil then
-          Info^ := StringToUtf8(E.Message);
+          StringToUtf8(E.Message, Info^);
       end;
     end;
   finally
     if (result <> jeSuccess) and
        (Info <> nil) and
        (Info^ = '') then
-      Info^ := StringToUtf8(context);
+      StringToUtf8(context, Info^);
     // Recount the final plan once, including errors found before any file opens.
     stats.FilesSucceeded := 0;
     stats.FilesFailed := 0;
@@ -1286,6 +1351,7 @@ begin
   end;
 end;
 
+
 { ************ Random Documents and Compact JSON Comparison }
 
 function JopGenerate(W: TJsonWriter; Depth, Items: integer;
@@ -1299,27 +1365,28 @@ var
     text: TShort31;
   begin
     case random.Next(6) of
-      0:
-        W.AddShort('null');
-      1:
+      0: // null
+        W.AddNull;
+      1: // boolean
         W.Add(random.Next(2) <> 0);
-      2:
+      2: // signed integer
         W.Add(integer(random.Next(2000001)) - 1000000);
       3:
         begin
+          // floating point number
           W.Add(integer(random.Next(2000001)) - 1000000);
-          W.Add('.');
+          W.AddDirect('.');
           W.AddU(random.Next(1000));
         end;
     else
       begin
-        // FillShort31 XORs its buffer: clear it for deterministic seeded output.
-        FillCharFast(text, SizeOf(text), 0);
+        // "text"
+        FillCharFast(text, SizeOf(text), 0); // to be reproducible
         random.FillShort31(text);
         W.Add('"');
         if text[0] <> #0 then
           W.AddJsonEscape(@text[1], length(text));
-        W.Add('"');
+        W.AddDirect('"');
       end;
     end;
   end;
@@ -1343,12 +1410,12 @@ var
     for i := 0 to n - 1 do
     begin
       if i <> 0 then
-        W.Add(',');
+        W.AddDirect(',');
       if not arr then
       begin
-        W.AddShort('"v');
+        W.Add('"', 'v');
         W.AddU(i);
-        W.AddShort('":');
+        W.AddDirect('"', ':');
       end;
       if i = 0 then
         Value(Level - 1)
@@ -1356,9 +1423,9 @@ var
         Scalar;
     end;
     if arr then
-      W.Add(']')
+      W.AddDirect(']')
     else
-      W.Add('}');
+      W.AddDirect('}');
   end;
 
 begin
@@ -1378,10 +1445,10 @@ begin
       for i := 0 to Items - 1 do
       begin
         if i <> 0 then
-          W.Add(',');
+          W.AddDirect(',');
         Value(Depth - 1);
       end;
-      W.Add(']');
+      W.AddDirect(']');
     end;
     result := jeSuccess;
   except
@@ -1412,7 +1479,7 @@ var
     end;
     if (result <> jeSuccess) and
        (Info <> nil) then
-      Info^ := StringToUtf8(Name);
+      StringToUtf8(Name, Info^);
   end;
 
 begin
@@ -1430,9 +1497,10 @@ begin
     begin
       result := jeException;
       if Info <> nil then
-        Info^ := StringToUtf8(E.Message);
+        StringToUtf8(E.Message, Info^);
     end;
   end;
 end;
+
 
 end.
