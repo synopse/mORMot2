@@ -1,0 +1,3 @@
+service:
+  name: "$(name)"
+  enabled: true

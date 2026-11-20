@@ -39,12 +39,12 @@ const
     'convert', 'batch', 'generate', 'compare');
 
   DESCRIPTION: RawUtf8 =
-    'JOP - JSON, XML and text processing with mORMot 2' + CRLF + CRLF +
+    'JOP - JSON, XML and text processing with mORMot ' + SYNOPSE_FRAMEWORK_VERSION + CRLF + CRLF +
     '  jop convert source destination [options]' + CRLF +
     '  jop source destination [options]' + CRLF +
     '  jop batch "input/*.json" output-folder [options]' + CRLF +
     '  jop generate output.json [--depth 3 --items 10 --seed 42]' + CRLF +
-    '  jop compare left.json right.json5' + CRLF + + CRLF +
+    '  jop compare left.json right.json5' + CRLF + CRLF +
     'Use <command> --help for its parameters. Put filenames before switches.' + CRLF +
     'Formats: json, jsonc, json5, hjson, morml, yaml, csv, xml, text.' + CRLF +
     'Output also accepts md/md-csv (fenced CSV) and md-pipe (pipe tables).' + CRLF +

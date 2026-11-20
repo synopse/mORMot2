@@ -1,0 +1,14 @@
+$$
+mode = staging  # will be overwritten by the next line
+mode = production
+port = 8080
+enabled = true
+$$
+{
+  application: "example",
+  mode: $(mode),
+  region: $(region),
+  server: { host: "localhost", port: $(port) },
+  message: $"Deploy $(mode) in $(region)",
+  features: [ $if enabled$ "logging" $else$ "disabled" $endif$ ]
+}

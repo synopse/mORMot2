@@ -1,0 +1,10 @@
+{
+  "catalog": {
+    "@version": "1",
+    "book": [
+      {"@id":"007", "title":"A & B"},
+      {"@id":"008", "title":"Second"}
+    ],
+    "notice": {"@lang":"en", "#text":"Hello & welcome"}
+  }
+}

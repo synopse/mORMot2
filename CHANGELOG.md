@@ -12,7 +12,7 @@ Details are available [on out GitHub repository](https://github.com/synopse/mORM
 - Text resources translation via the new `mormot.core.i18n.pas` unit
 - XML pull/SAX/DOM Parser
 - YAML 1.2 Read and Write Support
-- JOP tool JSON / Text Preprocessor with DSL
+- JOP tool JSON/XML/YAML/CSV/Text processor with DSL
 - HTTP Proxy Cache with FastCGI support
 - HTTP over TFTP proxy
 - SChannel rewrite with full server-side support
