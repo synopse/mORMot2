@@ -3263,6 +3263,7 @@ var
 begin
   fPendingProcessLock.Lock;
   fStopping := true;
+  SetExecuteLoopPause(false); // let an already accepted request complete
   fPendingProcessLock.UnLock;
   repeat
     fPendingProcessLock.Lock;
