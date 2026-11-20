@@ -1230,6 +1230,10 @@ begin
             MoveFileW(W32(aOld, o), W32(aNew, n));
 end;
 
+const // not defined on oldest FPC
+  MOVEFILE_REPLACE_EXISTING       = $00000001;
+  MOVEFILE_WRITE_THROUGH          = $00000008;
+
 function ReplaceFile(const aOld, aNew: TFileName): boolean;
 var
   o, n: TW32Temp;
