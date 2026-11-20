@@ -2404,12 +2404,10 @@ begin
   W.Add('''');
   for i := 0 to Len - 1 do
   begin
-    W.Add('\');
-    W.Add('x');
-    W.Add(HEX[P^[i] shr 4]);
-    W.Add(HEX[P^[i] and 15]);
+    W.Add('\', 'x');
+    W.AddDirect(HEX[P^[i] shr 4], HEX[P^[i] and 15]);
   end;
-  W.AddShort('''::BLOB');
+  W.AddShorter('''::BLOB');
 end;
 
 procedure TSqlDBQuackStatement.AddParam(W: TJsonWriter; Index: integer);
@@ -2420,7 +2418,7 @@ begin
   p := @fParams[Index];
   case p^.VType of
     ftNull:
-      W.AddShort('null');
+      W.AddNull;
     ftInt64:
       W.Add(p^.VInt64);
     ftDouble:
@@ -2442,7 +2440,7 @@ begin
       begin
         W.AddShort('TIMESTAMP ''');
         W.AddDateTime(unaligned(PDateTime(@p^.VInt64)^), {withms=}true);
-        W.Add('''');
+        W.AddDirect('''');
       end;
     ftUtf8:
       W.AddQuotedStr(pointer(p^.VData), length(p^.VData), '''');
