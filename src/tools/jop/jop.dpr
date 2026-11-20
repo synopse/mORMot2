@@ -39,18 +39,18 @@ const
     'convert', 'batch', 'generate', 'compare');
 
   DESCRIPTION: RawUtf8 =
-    'JOP - JSON, XML and text processing with mORMot 2'#13#10 +
-    '  jop convert source destination [options]'#13#10 +
-    '  jop source destination [options]'#13#10 +
-    '  jop batch "input/*.json" output-folder [options]'#13#10 +
-    '  jop generate output.json [--depth 3 --items 10 --seed 42]'#13#10 +
-    '  jop compare left.json right.json5'#13#10 +
-    'Use <command> --help for its parameters. Put filenames before switches.'#13#10 +
-    'Formats: json, jsonc, json5, hjson, morml, yaml, csv, xml, text.'#13#10 +
-    'Output also accepts md/md-csv (fenced CSV) and md-pipe (pipe tables).'#13#10 +
-    'XML uses native @attribute/#text mapping; supply one valid root element.'#13#10 +
-    'Compare uses native compact JSON text, without validation or expansion;'#13#10 +
-    'comments/formatting are ignored, object property order is significant.'#13#10 +
+    'JOP - JSON, XML and text processing with mORMot 2' + CRLF + CRLF +
+    '  jop convert source destination [options]' + CRLF +
+    '  jop source destination [options]' + CRLF +
+    '  jop batch "input/*.json" output-folder [options]' + CRLF +
+    '  jop generate output.json [--depth 3 --items 10 --seed 42]' + CRLF +
+    '  jop compare left.json right.json5' + CRLF + + CRLF +
+    'Use <command> --help for its parameters. Put filenames before switches.' + CRLF +
+    'Formats: json, jsonc, json5, hjson, morml, yaml, csv, xml, text.' + CRLF +
+    'Output also accepts md/md-csv (fenced CSV) and md-pipe (pipe tables).' + CRLF +
+    'XML uses native @attribute/#text mapping; supply one valid root element.' + CRLF +
+    'Compare uses native compact JSON text, without validation or expansion;' + CRLF +
+    'comments/formatting are ignored, object property order is significant.' + CRLF +
     'Exit codes: 0 success/equal, 1 different, 2 usage or processing error.';
 
   FLAG_NAMES: array[TJopFlag] of RawUtf8 = (
@@ -213,6 +213,7 @@ begin
   c.ExeDescription := DESCRIPTION;
   command := jcConvert;
   offset := 0;
+  seed := Random32;
   first := '';
   if length(c.Args) <> 0 then
     first := c.Args[0];
@@ -260,7 +261,6 @@ begin
           error := jeInvalidOptions;
           info := '--items expects a nonnegative integer';
         end;
-        seed := Random32;
         if c.Get('seed', value, 'unsigned 32-bit #seed; default random') then
           if ToInt64(value, number) and
              (number >= 0) and
