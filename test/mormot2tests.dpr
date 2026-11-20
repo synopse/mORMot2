@@ -65,6 +65,7 @@ uses
   test.core.threads        in '.\test.core.threads.pas',
   test.core.data           in '.\test.core.data.pas',
   test.core.crypt          in '.\test.core.crypt.pas',
+  test.core.fmt            in '.\test.core.fmt.pas',
   test.core.ecc            in '.\test.core.ecc.pas',
   test.core.collections    in '.\test.core.collections.pas',
   {$ifdef LIBQUICKJSSTATIC}
