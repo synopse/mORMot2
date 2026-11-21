@@ -985,6 +985,22 @@ type
   TOnNetTlsAcceptServerName = function(Context: PNetTlsContext; TLS: pointer;
     ServerName: PUtf8Char): pointer of object;
 
+  /// extended TLS options, as stored in TNetTlsContext.Options
+  // - ntoIgnoreNoRevocationCheck let a SChannel client ignore the
+  // CRYPT_E_NO_REVOCATION_CHECK error, i.e. when the revocation status could
+  // not be retrieved at all (e.g. CRL/OCSP endpoints blocked by a proxy or a
+  // firewall, TLS inspection proxy, or internal CA without CRL/AIA): the chain
+  // and server name are still validated, and a known revoked certificate is
+  // still rejected - same as the SChannelIgnoreNoRevocationCheck global flag,
+  // but for this connection only; useless with IgnoreCertificateErrors=true,
+  // and not used on OpenSSL
+  TNetTlsOption = (
+    ntoIgnoreNoRevocationCheck);
+
+  /// set of extended TLS options, as stored in TNetTlsContext.Options
+  // - new options are expected to be added here, instead of new boolean fields
+  TNetTlsOptions = set of TNetTlsOption;
+
   /// TLS Options and Information for a given TCrtSocket/INetTls connection
   // - implemented by mormot.lib.openssl11 or the native Windows SChannel
   // backend; some options remain specific to OpenSSL
@@ -1021,6 +1037,9 @@ type
     /// input: if TLS 1.3 should be avoided and fallback to TLS 1.2
     // - could be useful if the server has some trouble with TLS 1.3
     DisableTls13: boolean;
+    /// input: extended options for this connection
+    // - e.g. ntoIgnoreNoRevocationCheck - see TNetTlsOption
+    Options: TNetTlsOptions;
     /// input: enable two-way TLS for the server
     // - trust may come from Windows defaults, the CA fields, or a callback
     // - on OpenSSL client or server, set SSL_VERIFY_FAIL_IF_NO_PEER_CERT mode
@@ -1283,6 +1302,8 @@ var
   // or behind a TLS inspection proxy whose CA has no revocation data
   // - chain and server name validation are still performed
   // - read when each connection starts, so won't affect any already opened one
+  // - process-wide: prefer TNetTlsContext.Options := [ntoIgnoreNoRevocationCheck]
+  // to enable it only for some connections
   // - useless with TNetTlsContext.IgnoreCertificateErrors=true
   // - default false keeps the standard SChannel revocation behavior
   SChannelIgnoreNoRevocationCheck: boolean = false;
@@ -4931,6 +4952,7 @@ begin
      ((tls1.IgnoreCertificateErrors       = tls2.IgnoreCertificateErrors) and
       (tls1.AllowDeprecatedTls            = tls2.AllowDeprecatedTls) and
       (tls1.DisableTls13                  = tls2.DisableTls13) and
+      (tls1.Options                       = tls2.Options) and
       (tls1.ClientAllowUnsafeRenegotation = tls2.ClientAllowUnsafeRenegotation) and
       (tls1.CertificateFile               = tls2.CertificateFile) and
       (tls1.CertificateBin                = tls2.CertificateBin) and

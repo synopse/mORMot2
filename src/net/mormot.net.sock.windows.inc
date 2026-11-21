@@ -2929,7 +2929,8 @@ begin
   begin
     f := f or SCH_CRED_REVOCATION_CHECK_CHAIN or
               SCH_CRED_IGNORE_REVOCATION_OFFLINE;
-    if SChannelIgnoreNoRevocationCheck then
+    if SChannelIgnoreNoRevocationCheck or
+       (ntoIgnoreNoRevocationCheck in Context.Options) then
       f := f or SCH_CRED_IGNORE_NO_REVOCATION_CHECK;
   end;
   CredInit(cred, Context, f, nil, nil);

@@ -5494,7 +5494,8 @@ begin
     'tu', TLS.ClientAllowUnsafeRenegotation,
     'cf', TLS.CertificateFile,
     'ca', TLS.CACertificatesFile,
-    'pf', TLS.PrivateKeyFile], JSON_FAST, {dontAddDefault=}true);
+    'pf', TLS.PrivateKeyFile,
+    'tr', ntoIgnoreNoRevocationCheck in TLS.Options], JSON_FAST, {dontAddDefault=}true);
   if (TLS.PrivateKeyFile <> '') and
      (TLS.PrivatePassword <> '') then
     TDocVariantData(result).AddValueText('pp',
@@ -5504,6 +5505,8 @@ end;
 
 procedure LoadNetTlsContext(var TLS: TNetTlsContext; const V: TDocVariantData;
   const Secret: RawByteString);
+var
+  b: boolean;
 begin
   V.GetAsBoolean('te', TLS.Enabled);
   V.GetAsBoolean('ti', TLS.IgnoreCertificateErrors);
@@ -5513,6 +5516,11 @@ begin
   V.GetAsRawUtf8('cf', TLS.CertificateFile);
   V.GetAsRawUtf8('ca', TLS.CACertificatesFile);
   V.GetAsRawUtf8('pf', TLS.PrivateKeyFile);
+  if V.GetAsBoolean('tr', b) then
+    if b then
+      include(TLS.Options, ntoIgnoreNoRevocationCheck)
+    else
+      exclude(TLS.Options, ntoIgnoreNoRevocationCheck);
   if (TLS.PrivateKeyFile <> '') and
      V.GetAsRawUtf8('pp', TLS.PrivatePassword) then
     TLS.PrivatePassword := CryptDataWithSecret(Base64uriToBin(TLS.PrivatePassword),
