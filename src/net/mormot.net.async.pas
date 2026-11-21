@@ -2009,6 +2009,11 @@ begin
         begin
           inc(fReadCount); // no lock since informative only
           inc(fReadBytes, added);
+          // a new connection may be processed by atpReadPending threads before
+          // SubscribeConnection: register it now, so that e.g. an AsyncResponse()
+          // from another thread during this OnRead could find its handle
+          if not (fRegistered in connection.fFlags) then
+            RegisterConnection(connection);
           try
             // process connection.fRd incoming data (outside of the lock)
             if connection.OnRead = soClose then

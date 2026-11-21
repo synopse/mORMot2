@@ -1490,7 +1490,7 @@ procedure TNetworkProtocols.DoHttpAsyncResponses(Sender: TObject);
 const
   RESET_ROUNDS = 24;
 var
-  srv: THttpAsyncServer;
+  srv, srv3: THttpAsyncServer;
   ctx: THttpAsyncResponseRegression;
   raw: TCrtSocket;
   i, tested: integer;
@@ -1503,7 +1503,7 @@ var
     len: integer;
   begin
     result := false;
-    client := TCrtSocket.Open('127.0.0.1', srv.SockPort, nlTcp, 5000);
+    client := TCrtSocket.Open('127.0.0.1', ctx.Server.SockPort, nlTcp, 5000);
     try
       try
         client.CreateSockIn;
@@ -1557,6 +1557,7 @@ begin
   TSynLog.Family.ExceptionIgnore.Add(ENetSock); // expected after TCP RST
   ctx := THttpAsyncResponseRegression.Create;
   srv := nil;
+  srv3 := nil;
   wedged := false;
   try
     srv := THttpAsyncServer.Create('8878', nil, nil, 'asyncissues', 1);
@@ -1611,6 +1612,23 @@ begin
       inc(tested);
     end;
     CheckEqual(tested, RESET_ROUNDS, '#750 reset rounds');
+
+    // same as #743, but with several reading threads: a new connection was
+    // registered only after its first OnRead() returned, so an AsyncResponse()
+    // made while OnRequest was still running did not find it, and was lost
+    srv3 := THttpAsyncServer.Create('8873', nil, nil, 'asyncfirst', 3);
+    ctx.Server := srv3;
+    srv3.OnRequest := ctx.OnRequest;
+    srv3.WaitStarted(10);
+    for i := 1 to 2 do
+    begin
+      ctx.Reset;
+      ctx.ResetPeer := false;
+      ctx.DelayMS := 150;
+      ReadOk('/early', 'early'); // first request of a new connection
+      if not JoinWorker('first read') then
+        break;
+    end;
   finally
     ctx.ReleaseRead.SetEvent;
     ctx.ReleaseAnswer.SetEvent;
@@ -1625,6 +1643,7 @@ begin
         wedged := true;
     if not wedged then
     begin
+      srv3.Free;
       srv.Free;
       ctx.Free;
     end;
@@ -1724,7 +1743,14 @@ begin
         CheckEqual(shutdownrequests, 16, 'fast requests');
         {$ifndef USE_WINIOCP}
         if mode = 1 then
-          CheckEqual(srv.Async.ConnectionHigh, 0, 'fast requests not registered');
+        begin
+          // registered before their first OnRead(), then released once closed
+          endtix := GetTickCount64 + 2000;
+          while (srv.Async.ConnectionCount <> 0) and
+                (GetTickCount64 < endtix) do
+            SleepHiRes(1);
+          CheckEqual(srv.Async.ConnectionCount, 0, 'fast requests released');
+        end;
         {$endif USE_WINIOCP}
         for i := first to high(client) do
         begin
