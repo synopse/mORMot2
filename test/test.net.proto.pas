@@ -200,6 +200,12 @@ type
     {$endif USE_WINIOCP}
     /// regressions #743 and #750: early async replies and failed sends
     procedure DoHttpAsyncResponses(Sender: TObject);
+    /// validate TPollSockets.Modify to pause and resume the read events
+    procedure DoPollSocketsModify(Sender: TObject);
+    /// validate TPollAsyncSockets.SetReadPaused on a TAsyncServer
+    procedure DoAsyncReadPause(Sender: TObject);
+    procedure DoAsyncReadPauseLog(Level: TSynLogLevel; const Fmt: RawUtf8;
+      const Args: array of const; Instance: TObject);
     /// validate that hsoHeadersUnfiltered applies to kept-alive requests
     procedure DoHttpKeepAliveOptions(Sender: TObject);
     function DoKeepAliveOptionsRequest(Ctxt: THttpServerRequestAbstract): cardinal;
@@ -677,6 +683,8 @@ begin
   Run(DoTWebSocketAsyncServer, self, 'WSBroadcast', true, false);
   Run(DoHttpAsyncShutdown, self, 'HttpAsyncShutdown', true, false);
   Run(DoHttpAsyncResponses, self, 'HttpAsyncResponses', true, false);
+  Run(DoPollSocketsModify, self, 'PollSocketsModify', true, false);
+  Run(DoAsyncReadPause, self, 'AsyncReadPause', true, false);
   Run(DoHttpKeepAliveOptions, self, 'HttpKeepAliveOptions', true, false);
   Run(DoHttpLongLine, self, 'HttpLongLine', true, false);
   Run(DoHttpReadMaxBytes, self, 'HttpReadMaxBytes', true, false);
@@ -1484,6 +1492,198 @@ begin
     RequestError := 'client reset was not signaled to handler';
   SleepHiRes(DelayMS);
   result := HTTP_ASYNCRESPONSE;
+end;
+
+procedure TNetworkProtocols.DoPollSocketsModify(Sender: TObject);
+var
+  srv: TCrtSocket;
+  poll: TPollSockets;
+  cli, acc: TNetSocket;
+  addr: TNetAddr;
+  notif: TPollSocketResult;
+  b: byte;
+  len, i, n: integer;
+begin
+  srv := TCrtSocket.Bind('127.0.0.1:0'); // ephemeral port
+  poll := TPollSockets.Create;
+  cli := nil;
+  acc := nil;
+  try
+    if not Check(NewSocket(cLocalHost, srv.Port, nlTcp, {bind=}false,
+         0, 1000, 1000, 0, cli) = nrOk, 'connect') or
+       not Check(srv.Sock.Accept(acc, addr, {async=}false) = nrOk, 'accept') then
+      exit;
+    Check(poll.Subscribe(acc, [pseRead], 1234), 'subscribe');
+    b := 1;
+    len := 1;
+    Check(cli.Send(@b, len) = nrOk, 'send');
+    Check(poll.GetOne(1000, 'modify', notif) and
+          (ResToTag(notif) = 1234), 'readable');
+    // no read interest: the pending input should not be notified any more
+    Check(poll.Modify(acc, [], 1234), 'pause');
+    n := 0;
+    for i := 1 to 20 do
+      if poll.GetOne(10, 'modify', notif) then
+        inc(n);
+    CheckEqual(n, 0, 'paused');
+    // read interest again: the very same input is notified
+    Check(poll.Modify(acc, [pseRead], 1234), 'resume');
+    Check(poll.GetOne(1000, 'modify', notif) and
+          (ResToTag(notif) = 1234), 'resumed');
+  finally
+    poll.Free;
+    if acc <> nil then
+      acc.ShutdownAndClose({rdwr=}false);
+    if cli <> nil then
+      cli.ShutdownAndClose({rdwr=}false);
+    srv.Free;
+  end;
+end;
+
+type
+  TReadPauseConnection = class(TAsyncConnection)
+  protected
+    function OnRead: TPollAsyncSocketOnReadWrite; override;
+  end;
+
+var
+  readpausesafe: TLightLock;
+  readpausegot: RawByteString;
+  readpausehandle: TConnectionAsyncHandle;
+  readpausecalls, readpausepaused, readpauseevents: integer;
+  readpauseinread: boolean;
+
+function TReadPauseConnection.OnRead: TPollAsyncSocketOnReadWrite;
+begin
+  result := soContinue;
+  readpausesafe.Lock;
+  try
+    AppendBufferToRawByteString(readpausegot, fRd.Buffer^, fRd.Len);
+    inc(readpausecalls);
+    if readpauseinread and
+       (readpausehandle = 0) then
+    begin
+      readpausehandle := Handle;
+      // twice, since it should be idempotent
+      if Owner.Sockets.SetReadPaused(self, true) and
+         Owner.Sockets.SetReadPaused(self, true) then
+        readpausepaused := 1;
+    end;
+  finally
+    readpausesafe.UnLock;
+  end;
+  fRd.Reset;
+end;
+
+procedure TNetworkProtocols.DoAsyncReadPauseLog(Level: TSynLogLevel;
+  const Fmt: RawUtf8; const Args: array of const; Instance: TObject);
+begin
+  if IdemPChar(pointer(Fmt), 'GETONEPENDING') then
+    LockedInc32(@readpauseevents); // a read event was dispatched
+end;
+
+procedure TNetworkProtocols.DoAsyncReadPause(Sender: TObject);
+const
+  SENT = 32 shl 10; // should fit in the OS socket buffers on all systems
+var
+  srv: TAsyncServer;
+  cli: TCrtSocket;
+  c: TAsyncConnection;
+  data: RawByteString;
+  threads, n: integer;
+  endtix: Int64;
+
+  function Received: integer;
+  begin
+    readpausesafe.Lock;
+    result := length(readpausegot);
+    readpausesafe.UnLock;
+  end;
+
+  function WaitReceived(len: integer): boolean;
+  begin
+    endtix := GetTickCount64 + 5000;
+    while (Received < len) and
+          (GetTickCount64 < endtix) do
+      SleepHiRes(1);
+    result := Received = len;
+  end;
+
+begin
+  SetLength(data, SENT);
+  FillCharFast(pointer(data)^, SENT, ord('b'));
+  // 1 thread for atpReadSingle, 2 threads for atpReadPoll + atpReadPending
+  for threads := 1 to 2 do
+  begin
+    readpausegot := '';
+    readpausehandle := 0;
+    readpausecalls := 0;
+    readpausepaused := 0;
+    readpauseinread := true;
+    srv := TAsyncServer.Create('8871', nil, nil, TReadPauseConnection,
+      'readpause', TSynLog, [], threads);
+    try
+      srv.WaitStarted(10);
+      {$ifndef USE_WINIOCP}
+      // count the read events, set with no connection, i.e. no event to poll
+      srv.Sockets.PollRead.OnLog := DoAsyncReadPauseLog;
+      {$endif USE_WINIOCP}
+      cli := TCrtSocket.Open('127.0.0.1', '8871', nlTcp, 5000);
+      try
+        // the first OnRead pauses its own connection
+        cli.SndLow('A');
+        Check(WaitReceived(1), 'first read');
+        CheckEqual(readpausepaused, 1, 'paused within OnRead');
+        SleepHiRes(50); // let OnRead return
+        // the client data stays in the socket while paused
+        readpauseevents := 0;
+        cli.SndLow(data);
+        SleepHiRes(200);
+        CheckEqual(Received, 1, 'not read while paused');
+        CheckEqual(readpausecalls, 1, 'no OnRead while paused');
+        {$ifndef USE_WINIOCP}
+        // the poll should not notify any read event, nor loop
+        CheckUtf8(readpauseevents = 0, 'read events while paused: %',
+          [readpauseevents]);
+        {$endif USE_WINIOCP}
+        // resume from another thread: the pending data is read with no new input
+        c := srv.ConnectionFind(readpausehandle);
+        if not Check(c <> nil, 'find') then
+          exit;
+        Check(srv.Sockets.SetReadPaused(c, false), 'resume');
+        Check(srv.Sockets.SetReadPaused(c, false), 'resume twice');
+        Check(WaitReceived(SENT + 1), 'read after resume');
+        Check(readpausegot = 'A' + data, 'content');
+        // pause from another thread, then close it while paused
+        Check(srv.Sockets.SetReadPaused(c, true), 'pause again');
+        Check(srv.ConnectionRemove(readpausehandle), 'remove while paused');
+        Check(not srv.Sockets.SetReadPaused(c, false), 'closed');
+      finally
+        cli.Free;
+      end;
+      // the server is still fully usable
+      readpausegot := '';
+      readpauseinread := false;
+      cli := TCrtSocket.Open('127.0.0.1', '8871', nlTcp, 5000);
+      try
+        cli.SndLow('C');
+        Check(WaitReceived(1), 'next connection');
+      finally
+        cli.Free;
+      end;
+      endtix := GetTickCount64 + 5000;
+      repeat
+        n := srv.ConnectionCount;
+        if (n = 0) or
+           (GetTickCount64 > endtix) then
+          break;
+        SleepHiRes(1);
+      until false;
+      CheckEqual(n, 0, 'released');
+    finally
+      srv.Free;
+    end;
+  end;
 end;
 
 procedure TNetworkProtocols.DoHttpAsyncResponses(Sender: TObject);

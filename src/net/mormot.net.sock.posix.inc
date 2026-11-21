@@ -1825,6 +1825,8 @@ type
     function Subscribe(socket: TNetSocket; events: TPollSocketEvents;
       tag: TPollSocketTag): boolean; override;
     function Unsubscribe(socket: TNetSocket): boolean; override;
+    function Modify(socket: TNetSocket; events: TPollSocketEvents;
+      tag: TPollSocketTag): boolean; override;
     function WaitForModified(var results: TPollSocketResults;
       timeoutMS: integer): boolean; override;
   end;
@@ -1941,6 +1943,32 @@ begin
     else
       inc(p);
   result := false;
+end;
+
+function TPollSocketPoll.Modify(socket: TNetSocket; events: TPollSocketEvents;
+  tag: TPollSocketTag): boolean;
+var
+  i: PtrInt;
+  s: integer;
+  p: PPollFD;
+begin
+  result := false;
+  if (self = nil) or
+     (socket = nil) then
+    exit;
+  s := PtrUInt(socket);
+  p := pointer(fFD);
+  for i := 0 to fFDCount - 1 do
+    if (p^.fd = s) and
+       (fTags[i] = tag) then // the socket may have been reused
+    begin
+      p^.events := PseToPollEvent(events); // 0 still reports POLLERR/POLLHUP
+      p^.revents := 0;
+      result := true;
+      exit;
+    end
+    else
+      inc(p);
 end;
 
 function PollEventToPse(r: integer): TPollSocketEvents; inline;
@@ -2097,6 +2125,9 @@ type
       tag: TPollSocketTag): boolean; override;
     // directly calls epoll's EPOLL_CTL_DEL control interface
     function Unsubscribe(socket: TNetSocket): boolean; override;
+    // directly calls epoll's EPOLL_CTL_MOD control interface
+    function Modify(socket: TNetSocket; events: TPollSocketEvents;
+      tag: TPollSocketTag): boolean; override;
     // directly calls epool_wait() function
     function WaitForModified(var results: TPollSocketResults;
       timeoutMS: integer): boolean; override;
@@ -2189,6 +2220,22 @@ begin
   result := false;
 end;
 
+procedure SetEpollEvent(var e: TEPoll_Event; events: TPollSocketEvents;
+  tag: TPollSocketTag);
+begin
+  e.data.ptr := pointer(tag); // don't use data.u64
+  if pseRead in events then
+    if pseWrite in events then
+      e.events := EPOLLIN or EPOLLPRI or EPOLLOUT or EPOLLMODE
+    else
+      e.events := EPOLLIN or EPOLLPRI or EPOLLMODE
+  else if pseWrite in events then
+    e.events := EPOLLOUT or EPOLLMODE
+  else
+    e.events := 0;
+  // EPOLLERR and EPOLLHUP are always implicitly tracked
+end;
+
 function TPollSocketEpoll.Subscribe(socket: TNetSocket; events: TPollSocketEvents;
   tag: TPollSocketTag): boolean;
 var
@@ -2203,22 +2250,29 @@ begin
      (PtrUInt(socket) = PtrUInt(fWakeFD)) or
      (byte(events) = 0) then
     exit;
-  e.data.ptr := pointer(tag); // don't use data.u64
-  if pseRead in events then
-    if pseWrite in events then
-      e.events := EPOLLIN or EPOLLPRI or EPOLLOUT or EPOLLMODE
-    else
-      e.events := EPOLLIN or EPOLLPRI or EPOLLMODE
-  else if pseWrite in events then
-    e.events := EPOLLOUT or EPOLLMODE
-  else
-    e.events := 0;
-  // EPOLLERR and EPOLLHUP are always implicitly tracked
+  SetEpollEvent(e, events, tag);
   result := EpollCtlNoEIntr(fEPFD, EPOLL_CTL_ADD, socket, e);
   if not result then
     exit;
   LockedInc32(@fCount);
   fMaxSockets := fCount; // TPollSocketEpoll has no actual limitation
+end;
+
+function TPollSocketEpoll.Modify(socket: TNetSocket; events: TPollSocketEvents;
+  tag: TPollSocketTag): boolean;
+var
+  e: TEPoll_Event;
+begin
+  result := false;
+  if (self = nil) or
+     (socket = nil) or
+     fTerminated or
+     (fEPFD <= 0) or
+     (PtrUInt(socket) = PtrUInt(fEPFD)) or
+     (PtrUInt(socket) = PtrUInt(fWakeFD)) then
+    exit;
+  SetEpollEvent(e, events, tag); // events=[] is allowed here
+  result := EpollCtlNoEIntr(fEPFD, EPOLL_CTL_MOD, socket, e);
 end;
 
 function TPollSocketEpoll.Unsubscribe(socket: TNetSocket): boolean;
