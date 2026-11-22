@@ -176,18 +176,28 @@ const
     {$endif CPU32}
   {$else}
     {$ifdef OSANDROID}
-      {$define NOOPENSSL3} // unsupported yet
+      {$ifdef OPENSSLANDROIDSTATIC}
+      // legacy static linking of OpenSSL 1.1 libcrypto/libssl-android*.a
+      {$define NOOPENSSL3} // static linking is 1.1 only
       {$ifdef CPU32}
       LIB_CRYPTO1 = 'libcrypto-android32.a';
       LIB_SSL1    = 'libssl-android32.a';
-      _PU = '';
-      {$define OPENSSLSTATIC}
       {$else}
       LIB_CRYPTO1 = 'libcrypto-android64.a';
       LIB_SSL1    = 'libssl-android64.a';
-      _PU = '';
-      {$define OPENSSLSTATIC}
       {$endif CPU32}
+      {$define OPENSSLSTATIC}
+      {$else}
+      // OpenSSL 3.x/4.x shared libraries packaged in the APK lib/<abi> folder
+      // - Android only packages and loads unversioned lib*.so file names
+      LIB_CRYPTO1 = 'libcrypto.so';
+      LIB_SSL1    = 'libssl.so';
+      LIB_CRYPTO3 = 'libcrypto.so';
+      LIB_SSL3    = 'libssl.so';
+      LIB_CRYPTO4 = 'libcrypto.so';
+      LIB_SSL4    = 'libssl.so';
+      {$endif OPENSSLANDROIDSTATIC}
+      _PU = '';
     {$else}
       {$ifdef OSDARWIN}
         {$ifdef CPUINTEL}

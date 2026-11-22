@@ -9,6 +9,22 @@
             <Overwrite>True</Overwrite>
             <Required>True</Required>
         </DeployFile>
+        <DeployFile Include="..\..\static\arm64-v8a\libcrypto.so">
+            <RemoteDir>$(MSBuildProjectName)\library\lib\arm64-v8a\</RemoteDir>
+            <RemoteName>libcrypto.so</RemoteName>
+            <DeployClass>File</DeployClass>
+            <Operation>1</Operation>
+            <Overwrite>True</Overwrite>
+            <Required>True</Required>
+        </DeployFile>
+        <DeployFile Include="..\..\static\arm64-v8a\libssl.so">
+            <RemoteDir>$(MSBuildProjectName)\library\lib\arm64-v8a\</RemoteDir>
+            <RemoteName>libssl.so</RemoteName>
+            <DeployClass>File</DeployClass>
+            <Operation>1</Operation>
+            <Overwrite>True</Overwrite>
+            <Required>True</Required>
+        </DeployFile>
     </ItemGroup>
     <Target Name="StageAndroidPackage" BeforeTargets="_AndroidMergeManifestFiles" Condition="'$(Platform)'=='Android64'">
         <MakeDir Directories="$(APK_RootDir);$(APK_ResDir)\drawable;$(APK_ResDir)\drawable-xxxhdpi;$(APK_ResDir)\values;$(APK_ResDir)\values-night-v21;$(APK_ResDir)\values-v21;$(APK_ResDir)\values-v35;$(APK_LibraryDir)"/>

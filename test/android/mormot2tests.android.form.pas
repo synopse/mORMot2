@@ -184,7 +184,7 @@ begin
       RegisterOpenSsl;
       RegisterX509;
       if not OpenSslIsAvailable then
-        raise Exception.Create('Android OpenSSL 1.1 static libraries unavailable');
+        raise Exception.Create('Android OpenSSL libcrypto.so/libssl.so unavailable');
       Tests := TAndroidIntegrationTests.Create('mORMot2 Android Regression Tests');
       if FRestriction = 'thread-checks' then
         Tests.Restrict := ['CoreBase._TSynQueue', 'CoreThreads.ExclusiveLocks']

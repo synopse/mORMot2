@@ -7,8 +7,8 @@ user to tap **Run tests**; launching it does not start the suite.
 **Native libraries are required before compilation and packaging.** Place
 these ARM64 files in `../../static/arm64-v8a`:
 
-- `libcrypto-android64.a`
-- `libssl-android64.a`
+- `libcrypto.so` (OpenSSL 3.x)
+- `libssl.so` (OpenSSL 3.x)
 - `libsqlite.so`
 
 Those native binaries are local dependencies in this repository's ignored

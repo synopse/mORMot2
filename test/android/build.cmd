@@ -10,8 +10,8 @@ if /I not "%CONFIG%"=="Debug" if /I not "%CONFIG%"=="Release" (
 )
 
 set "NATIVE_DIR=%PROJECT_DIR%..\..\static\arm64-v8a"
-if not exist "%NATIVE_DIR%\libcrypto-android64.a" goto :missing_native
-if not exist "%NATIVE_DIR%\libssl-android64.a" goto :missing_native
+if not exist "%NATIVE_DIR%\libcrypto.so" goto :missing_native
+if not exist "%NATIVE_DIR%\libssl.so" goto :missing_native
 if not exist "%NATIVE_DIR%\libsqlite.so" goto :missing_native
 
 if not defined BDS call :setup_delphi
@@ -31,7 +31,7 @@ exit /b 0
 
 :missing_native
 echo Missing Android64 native libraries in "%NATIVE_DIR%".
-echo Required: libcrypto-android64.a, libssl-android64.a, libsqlite.so
+echo Required: libcrypto.so, libssl.so, libsqlite.so
 exit /b 2
 
 :build_failed

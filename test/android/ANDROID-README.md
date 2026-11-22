@@ -5,8 +5,8 @@ three native ARM64 files in the repository's `static/arm64-v8a` directory:
 
 | File | Purpose | Source |
 | --- | --- | --- |
-| `libcrypto-android64.a` | Static OpenSSL crypto library | Build OpenSSL 1.1.1 for Android ARM64 as described in [ANDROID_OPENSSL.md](../../docs/ANDROID_OPENSSL.md). |
-| `libssl-android64.a` | Static OpenSSL TLS library | Same OpenSSL build. |
+| `libcrypto.so` | OpenSSL 3.x crypto library packaged in the APK | Build OpenSSL 3.x for Android ARM64 as described in [ANDROID_OPENSSL.md](../../docs/ANDROID_OPENSSL.md). |
+| `libssl.so` | OpenSSL 3.x TLS library packaged in the APK | Same OpenSSL build. |
 | `libsqlite.so` | SQLite shared library packaged in the APK | Link the Android64 `libsqlite.a` supplied with Delphi as shown below. |
 
 The `static` directory is ignored by Git. The libraries are not included in
@@ -33,7 +33,7 @@ prompt with `BDS` and `ANDROID_NDK_HOME` set:
 ```
 
 Run the command from the repository root after creating `static\arm64-v8a`.
-The Delphi archive and the OpenSSL archives must be compatible with the
+The Delphi archive and the OpenSSL libraries must be compatible with the
 Android64 compiler and NDK used for the APK. Check the redistribution terms
 of any native binaries before sharing them.
 
