@@ -554,9 +554,7 @@ const
   EVP_PKEY_CTRL_RSA_KEYGEN_BITS = EVP_PKEY_ALG_CTRL + 3;
   EVP_PKEY_CTRL_RSA_PADDING = EVP_PKEY_ALG_CTRL + 1;
   EVP_PKEY_CTRL_RSA_PSS_SALTLEN = EVP_PKEY_ALG_CTRL + 2;
-  {$ifdef OSANDROID}
   RSA_PSS_SALTLEN_DIGEST = -1;
-  {$endif OSANDROID}
   EVP_PKEY_CTRL_RSA_KEYGEN_PUBEXP = EVP_PKEY_ALG_CTRL + 4;
   EVP_PKEY_CTRL_RSA_MGF1_MD = EVP_PKEY_ALG_CTRL + 5;
   EVP_PKEY_CTRL_GET_RSA_PADDING = EVP_PKEY_ALG_CTRL + 6;
@@ -2711,9 +2709,7 @@ function BigNumFromDecimal(const Text: RawUtf8): PBIGNUM;
 function BigNumHexFromDecimal(const Text: RawUtf8): RawUtf8;
 function EVP_PKEY_CTX_set_rsa_padding(ctx: PEVP_PKEY_CTX; padding: integer): integer;
 function EVP_PKEY_CTX_set_rsa_mgf1_md(ctx: PEVP_PKEY_CTX; md: PEVP_MD): integer;
-{$ifdef OSANDROID}
 function EVP_PKEY_CTX_set_rsa_pss_saltlen(ctx: PEVP_PKEY_CTX; len: integer): integer;
-{$endif OSANDROID}
 function EVP_PKEY_CTX_set_rsa_oaep_md(ctx: PEVP_PKEY_CTX; md: PEVP_MD): integer;
 function EVP_PKEY_assign_RSA(pkey: PEVP_PKEY; rsa: PRSA): integer;
 function EVP_PKEY_assign_EC_KEY(pkey: PEVP_PKEY; ec: PEC_KEY): integer;
@@ -10314,9 +10310,7 @@ end;
 function EVP_PKEY.Sign(Algo: PEVP_MD; Msg: pointer; Len: integer): RawByteString;
 var
   ctx: PEVP_MD_CTX;
-  {$ifdef OSANDROID}
   pctx: PEVP_PKEY_CTX;
-  {$endif OSANDROID}
   s: PtrUInt;
 begin
   // expects @self to be a private key
@@ -10326,15 +10320,14 @@ begin
   try
     // note: ED25519 requires single-pass EVP_DigestSign()
     s := 0;
-    {$ifdef OSANDROID}
+    // RSA-PSS (e.g. JWA PS256/384/512) expects salt length = digest length:
+    // OpenSSL may default to the maximum length, which other implementations
+    // reject - MGF1 already defaults to the signature digest
     pctx := nil;
     if (EVP_DigestSignInit(ctx, @pctx, Algo, nil, @self) = OPENSSLSUCCESS) and
-       ((EVP_PKEY_id(@self) <> EVP_PKEY_RSA_PSS) or
-        ((EVP_PKEY_CTX_set_rsa_pss_saltlen(pctx, RSA_PSS_SALTLEN_DIGEST) = OPENSSLSUCCESS) and
-         (EVP_PKEY_CTX_set_rsa_mgf1_md(pctx, Algo) = OPENSSLSUCCESS))) and
-    {$else}
-    if (EVP_DigestSignInit(ctx, nil, Algo, nil, @self) = OPENSSLSUCCESS) and
-    {$endif OSANDROID}
+       ((Algo = nil) or
+        (EVP_PKEY_id(@self) <> EVP_PKEY_RSA_PSS) or
+        (EVP_PKEY_CTX_set_rsa_pss_saltlen(pctx, RSA_PSS_SALTLEN_DIGEST) = OPENSSLSUCCESS)) and
        (EVP_DigestSign(ctx, nil, s, Msg, Len) = OPENSSLSUCCESS) then
     begin
       SetLength(result, s); // here size is maximum s bytes
@@ -10355,9 +10348,6 @@ function EVP_PKEY.Verify(Algo: PEVP_MD;
   Sig, Msg: pointer; SigLen, MsgLen: integer): boolean;
 var
   ctx: PEVP_MD_CTX;
-  {$ifdef OSANDROID}
-  pctx: PEVP_PKEY_CTX;
-  {$endif OSANDROID}
 begin
   // expects @self to be a public (or private) key
   // we don't check "if @self = nil" because may be called without EVP_PKEY
@@ -10365,19 +10355,9 @@ begin
   ctx := EVP_MD_CTX_new;
   try
     // note: ED25519 requires single-pass EVP_DigestVerify()
-    {$ifdef OSANDROID}
-    pctx := nil;
-    result :=
-      (EVP_DigestVerifyInit(ctx, @pctx, Algo, nil, @self) = OPENSSLSUCCESS) and
-      ((EVP_PKEY_id(@self) <> EVP_PKEY_RSA_PSS) or
-       ((EVP_PKEY_CTX_set_rsa_pss_saltlen(pctx, RSA_PSS_SALTLEN_DIGEST) = OPENSSLSUCCESS) and
-        (EVP_PKEY_CTX_set_rsa_mgf1_md(pctx, Algo) = OPENSSLSUCCESS))) and
-      (EVP_DigestVerify(ctx, Sig, SigLen, Msg, MsgLen) = OPENSSLSUCCESS);
-    {$else}
     result :=
       (EVP_DigestVerifyInit(ctx, nil, Algo, nil, @self) = OPENSSLSUCCESS) and
       (EVP_DigestVerify(ctx, Sig, SigLen, Msg, MsgLen) = OPENSSLSUCCESS);
-    {$endif OSANDROID}
   finally
     EVP_MD_CTX_free(ctx);
   end;
@@ -11027,13 +11007,13 @@ begin
     EVP_PKEY_CTRL_RSA_MGF1_MD, 0, md);
 end;
 
-{$ifdef OSANDROID}
 function EVP_PKEY_CTX_set_rsa_pss_saltlen(ctx: PEVP_PKEY_CTX; len: integer): integer;
 begin
+  // OpenSSL 1.1 macro, but with optype = -1: EVP_PKEY_OP_* bits changed in
+  // OpenSSL 3.x, and EVP_DigestSignInit() uses EVP_PKEY_OP_SIGNCTX there
   result := {$ifndef OPENSSLSTATIC}libcrypto.{$endif}RSA_pkey_ctx_ctrl(ctx,
-    EVP_PKEY_OP_TYPE_SIG, EVP_PKEY_CTRL_RSA_PSS_SALTLEN, len, nil);
+    -1, EVP_PKEY_CTRL_RSA_PSS_SALTLEN, len, nil);
 end;
-{$endif OSANDROID}
 
 function EVP_PKEY_assign_RSA(pkey: PEVP_PKEY; rsa: PRSA): integer;
 begin
