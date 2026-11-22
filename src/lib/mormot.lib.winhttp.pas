@@ -510,9 +510,7 @@ type
     // map the HTTP API 2.0 extended information
     pResponseInfo: PHTTP_RESPONSE_INFO;
     // will set both StatusCode and Reason
-    // - OutStatus is a temporary variable which will be field with the
-    // corresponding text
-    procedure SetStatus(code: integer; var OutStatus: RawUtf8);
+    function SetStatus(code: integer): PRawUtf8;
     // will set the content of the reponse, and ContentType header
     procedure SetContent(var DataChunk: HTTP_DATA_CHUNK_INMEMORY; const Content:
       RawByteString; const ContentType: RawUtf8 = 'text/html');
@@ -524,8 +522,8 @@ type
     /// add one header value to the internal headers
     // - SetHeaders() method should have been called before to initialize the
     // internal UnknownHeaders[] array
-    function AddCustomHeader(P: PUtf8Char; var UnknownHeaders:
-      HTTP_UNKNOWN_HEADERS; ForceCustomHeader: boolean): PUtf8Char;
+    function AddCustomHeader(P: PUtf8Char; var UnknownHeaders: HTTP_UNKNOWN_HEADERS;
+      ForceCustomHeader: boolean): PUtf8Char;
   end;
   PHTTP_RESPONSE = ^HTTP_RESPONSE;
 
@@ -956,6 +954,25 @@ const
     'Translate',
     'User-Agent');
 
+  VERB_TEXT: array[hvOPTIONS..pred(hvMaximum)] of RawUtf8 = (
+    'OPTIONS',
+    'GET',
+    'HEAD',
+    'POST',
+    'PUT',
+    'DELETE',
+    'TRACE',
+    'CONNECT',
+    'TRACK',
+    'MOVE',
+    'COPY',
+    'PROPFIND',
+    'PROPPATCH',
+    'MKCOL',
+    'LOCK',
+    'UNLOCK',
+    'SEARCH');
+
 type
   HTTP_SERVER_PROPERTY = (
     HttpServerAuthenticationProperty,
@@ -1021,7 +1038,7 @@ type
     /// receives additional entity body data for a specified HTTP request
     ReceiveRequestEntityBody: function(ReqQueueHandle: THandle; RequestId:
       HTTP_REQUEST_ID; Flags: ULONG; pBuffer: pointer; BufferLength: cardinal;
-      var pBytesReceived: cardinal; pOverlapped: pointer = nil): HRESULT; stdcall;
+      pBytesReceived: PCardinal; pOverlapped: pointer = nil): HRESULT; stdcall;
     /// sends entity-body data associated with an HTTP response.
     SendResponseEntityBody: function(ReqQueueHandle: THandle; RequestId:
       HTTP_REQUEST_ID; Flags: integer; EntityChunkCount: word;
@@ -1235,9 +1252,9 @@ function HttpApiAuthorize(const aRoot, aPort: RawUtf8; Https: boolean;
   const aDomainName: RawUtf8; OnlyDelete: boolean = false): RawUtf8;
 
 /// low-level adjustement of the HTTP_REQUEST headers
-function RetrieveHeadersAndGetRemoteIPConnectionID(const Request: HTTP_REQUEST;
+procedure RetrieveHeadersAndGetRemoteIPConnectionID(const Request: HTTP_REQUEST;
   const RemoteIPHeadUp, ConnectionIDHeadUp: RawUtf8; out RemoteIP: RawUtf8;
-  var ConnectionID: QWord): RawUtf8;
+  var ConnectionID: QWord; var Headers: RawUtf8);
 
 
 { ******************** winhttp.dll Windows API Definitions }
@@ -1381,7 +1398,7 @@ const
   WINHTTP_FLAG_SECURE_PROTOCOL_TLS1   = $00000080;
   WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_1 = $00000200;
   WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_2 = $00000800;
-  WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_3 = $00002000; // Windows 11 or Windows Server 2022 ;)
+  WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_3 = $00002000; // Windows 11 or Server 2022
 
   // values for WINHTTP_OPTION_REDIRECT_POLICY
   WINHTTP_OPTION_REDIRECT_POLICY_NEVER                  = 0;
@@ -1611,7 +1628,7 @@ procedure WinHttpSecurityErrorCallback(hInternet: hInternet; dwContext: PDWORD;
   dwStatusInformationLength: cardinal); stdcall;
 
 type
-  /// proxy information as returned by GetProxyInfo()
+  /// proxy information as returned by WinHttpGetProxyInfo()
   TProxyInfo = record
     /// the proxy server address and port, e.g. '10.0.0.8:7985'
     URL: SynUnicode;
@@ -1619,7 +1636,7 @@ type
     Bypass: SynUnicode;
     /// if the Proxy settings were auto-detected by Internet Explorer
     AutoDetected: Boolean;
-    /// detailed error message, if GetProxyInfo() returned a non 0 error code
+    /// detailed error message, if WinHttpGetProxyInfo() returned a non 0 error code
     ErrorMessage: string;
   end;
 
@@ -1714,8 +1731,8 @@ type
       PWEB_SOCKET_HTTP_HEADER; ulRequestHeaderCount: ULONG; out pResponseHeaders:
       PWEB_SOCKET_HTTP_HEADER; out pulResponseHeaderCount: ULONG): HRESULT; stdcall;
     /// completes an action started by WebSocketGetAction
-    CompleteAction: function(hWebSocket: WEB_SOCKET_HANDLE;
-      pvActionContext: pointer; ulBytesTransferred: ULONG): HRESULT; stdcall;
+    CompleteAction: procedure(hWebSocket: WEB_SOCKET_HANDLE;
+      pvActionContext: pointer; ulBytesTransferred: ULONG); stdcall;
     /// creates a client-side WebSocket session handle
     CreateClientHandle: function(const pProperties: PWEB_SOCKET_PROPERTY;
       ulPropertyCount: ULONG; out phWebSocket: WEB_SOCKET_HANDLE): HRESULT; stdcall;
@@ -1914,9 +1931,9 @@ const
   REMOTEIP_HEADERLEN = 10;
   REMOTEIP_HEADER: string[REMOTEIP_HEADERLEN] = 'RemoteIP: ';
 
-function RetrieveHeadersAndGetRemoteIPConnectionID(const Request: HTTP_REQUEST;
+procedure RetrieveHeadersAndGetRemoteIPConnectionID(const Request: HTTP_REQUEST;
   const RemoteIPHeadUp, ConnectionIDHeadUp: RawUtf8; out RemoteIP: RawUtf8;
-  var ConnectionID: QWord): RawUtf8;
+  var ConnectionID: QWord; var Headers: RawUtf8);
 var
   i, L, Lip: integer;
   H: THttpApiHeader;
@@ -1980,7 +1997,7 @@ begin
       inc(P);
     end;
   // set headers content
-  D := FastSetString(result{%H-}, L);
+  D := FastSetString(Headers, L);
   for H := low(HTTP_KNOWNHEADERS) to high(HTTP_KNOWNHEADERS) do
     if Request.Headers.KnownHeaders[H].RawValueLength <> 0 then
     begin
@@ -2022,10 +2039,11 @@ begin
     PWord(D)^ := EOLW;
     inc(D, 2);
   end;
-  Lip := D - pointer(result);
+  Lip := D - pointer(Headers);
   if Lip <> L then // e.g. if external 'RemoteIP:' was filtered
-    FakeLength(result, Lip);
+    FakeLength(Headers, Lip);
 end;
+
 
 procedure HttpApiInitialize;
 var
@@ -2154,12 +2172,12 @@ end;
 
 { HTTP_RESPONSE }
 
-procedure HTTP_RESPONSE.SetStatus(code: integer; var OutStatus: RawUtf8);
+function HTTP_RESPONSE.SetStatus(code: integer): PRawUtf8;
 begin
   StatusCode := code;
-  StatusCodeToReason(code, OutStatus);
-  ReasonLength := length(OutStatus);
-  pReason      := pointer(OutStatus);
+  result := StatusCodeToText(code); // directly return HTTP_REASON[] constant text
+  ReasonLength := length(result^);
+  pReason      := pointer(result^);
 end;
 
 procedure HTTP_RESPONSE.SetContent(var DataChunk: HTTP_DATA_CHUNK_INMEMORY;
@@ -2217,14 +2235,17 @@ const
     'CONTENT-MD5:|CONTENT-RANGE:|EXPIRES:|LAST-MODIFIED:|ACCEPT-RANGES:|AGE:|' +
     'ETAG:|LOCATION:|PROXY-AUTHENTICATE:|RETRY-AFTER:|SERVER:|SET-COOKIE:|' +
     'VARY:|WWW-AUTHENTICATE:|';
+  MULTI_HEADERS = [reqConnection, respSetCookie,
+    // todo: need HTTP.sys API v2 HTTP_MULTIPLE_KNOWN_HEADERS for those ?
+    respWwwAuthenticate, respProxyAuthenticate];
 
 function HTTP_RESPONSE.AddCustomHeader(P: PUtf8Char;
   var UnknownHeaders: HTTP_UNKNOWN_HEADERS;
   ForceCustomHeader: boolean): PUtf8Char;
 var
   name: PUtf8Char;
-  known: PHTTP_KNOWN_HEADER;
-  unknown: PHTTP_UNKNOWN_HEADER;
+  k: PHTTP_KNOWN_HEADER;
+  u: PHTTP_UNKNOWN_HEADER;
   i: integer;
 begin
   if ForceCustomHeader then
@@ -2232,19 +2253,20 @@ begin
   else
     i := IdemPCharSep(P, KNOWNHEADERS);
   if (i >= 0) and
-     // WebSockets need reqConnection / CONNECTION: as unknown header
-     (THttpApiHeader(i) <> reqConnection) then
+     // WebSockets require reqConnection / CONNECTION: as u header
+     // and there could be several respSetCookie / Set-Cookie: values
+     not (THttpApiHeader(i) in MULTI_HEADERS) then
   begin
     while P^ <> ':' do
       inc(P);
     inc(P); // jump ':'
     while P^ = ' ' do
       inc(P);
-    known := @Headers.KnownHeaders[THttpApiHeader(i)];
-    known^.pRawValue := pointer(P);
+    k := @Headers.KnownHeaders[THttpApiHeader(i)];
+    k^.pRawValue := pointer(P);
     while P^ >= ' ' do
       inc(P);
-    known^.RawValueLength := P - known^.pRawValue;
+    k^.RawValueLength := P - k^.pRawValue;
   end
   else
   begin
@@ -2254,16 +2276,16 @@ begin
       inc(P);
     if P^ = ':' then
     begin
-      unknown := @UnknownHeaders[Headers.UnknownHeaderCount];
-      unknown^.pName := name;
-      unknown^.NameLength := P - name;
+      u := @UnknownHeaders[Headers.UnknownHeaderCount];
+      u^.pName := name;
+      u^.NameLength := P - name;
       repeat
         inc(P)
       until P^ <> ' ';
-      unknown^.pRawValue := pointer(P);
+      u^.pRawValue := pointer(P);
       while P^ >= ' ' do
         inc(P);
-      unknown^.RawValueLength := P - unknown^.pRawValue;
+      u^.RawValueLength := P - u^.pRawValue;
       if Headers.UnknownHeaderCount = high(UnknownHeaders) then
       begin
         SetLength(UnknownHeaders, Headers.UnknownHeaderCount + 32);
@@ -2314,28 +2336,34 @@ procedure WinHttpSecurityErrorCallback(hInternet: hInternet; dwContext: PDWORD;
 var
   err: string;
   code: DWord;
+
+  procedure AddErr(const Name: string);
+  begin
+    err := err + ' WINHTTP_CALLBACK_STATUS_FLAG_' + Name;
+  end;
+
 begin
   code := PDWORD(lpvStatusInformation)^;
   if code and $00000001 <> 0 then
-    err := err + ' WINHTTP_CALLBACK_STATUS_FLAG_CERT_REV_FAILED';
+    AddErr('CERT_REV_FAILED');
   if code and $00000002 <> 0 then
-    err := err + ' WINHTTP_CALLBACK_STATUS_FLAG_INVALID_CERT';
+    AddErr('INVALID_CERT');
   if code and $00000004 <> 0 then
-    err := err + ' WINHTTP_CALLBACK_STATUS_FLAG_CERT_REVOKED';
+    AddErr('CERT_REVOKED');
   if code and $00000008 <> 0 then
-    err := err + ' WINHTTP_CALLBACK_STATUS_FLAG_INVALID_CA';
+    AddErr('INVALID_CA');
   if code and $00000010 <> 0 then
-    err := err + ' WINHTTP_CALLBACK_STATUS_FLAG_CERT_CN_INVALID';
+    AddErr('CERT_CN_INVALID');
   if code and $00000020 <> 0 then
-    err := err + ' WINHTTP_CALLBACK_STATUS_FLAG_CERT_DATE_INVALID';
+    AddErr('CERT_DATE_INVALID');
   if code and $00000040 <> 0 then
-    err := err + ' WINHTTP_CALLBACK_STATUS_FLAG_CERT_WRONG_USAGE';
+    AddErr('CERT_WRONG_USAGE');
   if code and $80000000 <> 0 then
-    err := err + ' WINHTTP_CALLBACK_STATUS_FLAG_SECURITY_CHANNEL_ERROR';
+    AddErr('SECURITY_CHANNEL_ERROR');
   // in case lpvStatusInformation^=-2147483648 this is attempt to connect to
   // non-https socket wrong port - perhaps must be 443?
   raise EWinHttp.CreateFmt(
-    'WinHttp security error. Status %d, StatusInfo: %d ($%x%s)',
+    'WinHttp security error - Status: %d, StatusInfo: %d ($%x%s)',
     [dwInternetStatus, code, code, err]);
 end;
 

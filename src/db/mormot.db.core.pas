@@ -189,7 +189,8 @@ const
     [ftInt64, ftDouble, ftCurrency, ftDate];
 
   /// conversion matrix from TSqlDBFieldType into VCL/LCL variant type
-  // - will use varSynUnicode to enhance Delphi and Windows compatibility
+  // - will use SynUnicode to enhance old Delphi and Windows compatibility: set
+  // ForceUtf8=true in TSqlDBStatement.ColumnToVariant() for RawUtf8/varString
   MAP_FIELDTYPE2VARTYPE: array[TSqlDBFieldType] of Word = (
     varEmpty,       // ftUnknown
     varNull,        // ftNull
@@ -3196,7 +3197,7 @@ begin
       AddShort(',"values":["');
       // first row is FieldNames in non-expanded format
     end;
-    AddShort(aColName, len);
+    AddNoJsonEscape(aColName, len); // may be > 255 bytes
     if aColIndex = aColCount - 1 then
     begin
       // last AddColumn() call would finalize the non-expanded header
@@ -3375,7 +3376,7 @@ var
         exit; // end of string before end quote -> incorrect
       RawUtf8ToVariant(Where.Value, Where.ValueVariant);
     end
-    else if (PInteger(P)^ and $DFDFDFDF = NULL_HI) and
+    else if (PInteger(P)^ and $DFDFDFDF = NULL_HI) and // case-insentive
             (P[4] in [#0..' ', ';']) then
     begin
       // NULL statement
@@ -4514,7 +4515,7 @@ begin
   n := 0;
   for f := 0 to FieldCount - 1 do
     if not IsRowID(FieldNames^[f]) and
-       (StrIComp(pointer(KeyFieldName), FieldNames^[f]) <> 0) then
+       (mormot.core.unicode.StrIComp(pointer(KeyFieldName), FieldNames^[f]) <> 0) then
     begin
       // the key itself is never assigned: it is what identifies the conflict
       FieldBitSet(assignable, f);

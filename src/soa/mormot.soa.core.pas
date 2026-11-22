@@ -696,6 +696,7 @@ type
   // - used to maintain a list of interfaces implementation
   // - inherits from TInterfaceResolverInjected and its Resolve() methods,
   // compatible with TInjectableObject
+  // - this class is NOT thread-safe: the caller should protect each instance
   TServiceContainer = class(TInterfaceResolverInjected)
   protected
     fOwner: TInterfaceResolver; // is a TRest instance
@@ -703,8 +704,8 @@ type
     fInterfaces: TDynArrayHashed;
     // list of service.method ['Calculator.Add','Calculator.Multiply',...]
     fInterfaceMethod: TServiceContainerInterfaceMethods; // dynamic array
-    fInterfaceMethods: TDynArrayHashed;
     fExpectMangledUri: boolean;
+    fInterfaceMethods: TDynArrayHashed;
     fAsSoa: TDocVariantData;
     procedure SetExpectMangledUri(Mangled: boolean);
     procedure SetInterfaceMethodBits(MethodNamesCsv: PUtf8Char;
@@ -1890,7 +1891,7 @@ begin
     for result := 0 to Count - 1 do
       if List[result].PublicUri.Equals(aPublicUri) then
         if (fTimeOut = 0) or
-           (fTimeoutTix[result] < tix) then
+           (tix < fTimeoutTix[result]) then
           exit;
     result := -1;
   finally
@@ -1913,7 +1914,7 @@ begin
       // downwards to return the latest first
       if FindPropName(List[i].Names, aServiceName) >= 0 then
         if (fTimeOut = 0) or
-           (fTimeoutTix[i] < tix) then
+           (tix < fTimeoutTix[i]) then
         begin
           SetLength(result, n + 1);
           result[n] := List[i].PublicUri;
@@ -1940,7 +1941,7 @@ begin
       // downwards to return the latest first
       if FindPropName(List[i].Names, aServiceName) >= 0 then
         if (fTimeOut = 0) or
-           (fTimeoutTix[i] < tix) then
+           (tix < fTimeoutTix[i]) then
           AddRawUtf8(TRawUtf8DynArray(result), n, List[i].PublicUri.Uri);
   finally
     Safe.ReadUnLock;
@@ -1963,7 +1964,7 @@ begin
       // for RegisterFromServer: return all TServicesPublishedInterfaces
       for i := 0 to Count - 1 do
         if (fTimeOut = 0) or
-           (fTimeoutTix[i] < aTix64) then
+           (aTix64 < fTimeoutTix[i]) then
         begin
           aWriter.AddRecordJson(@List[i], TypeInfo(TServicesPublishedInterfaces));
           aWriter.AddComma;
@@ -1975,7 +1976,7 @@ begin
       for i := Count - 1 downto 0 do        // downwards to return the latest first
         if FindPropName(List[i].Names, aServiceName) >= 0 then
           if (fTimeOut = 0) or
-             (fTimeoutTix[i] < aTix64) then
+             (aTix64 < fTimeoutTix[i]) then
           begin
             aWriter.AddRecordJson(@List[i].PublicUri, TypeInfo(TRestServerUri));
             aWriter.AddComma;
@@ -2035,7 +2036,8 @@ begin
     exit;
   crc := crc32c(0, pointer(PublishedJson), length(PublishedJson));
   if (self = nil) or
-     ((fLastPublishedJson <> 0) and
+     ((fTimeOut = 0) and
+      (fLastPublishedJson <> 0) and
       (crc = fLastPublishedJson)) then
     // rough but efficient in practice, when similar _contract_
     exit;

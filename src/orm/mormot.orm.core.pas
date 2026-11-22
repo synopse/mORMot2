@@ -8275,6 +8275,8 @@ begin
   end;
   props := TOrm(Instance).Orm.Fields;
   W.BlockBegin('{', Options);
+  if woStoreClassName in Options then // as in _JS_RttiCustom()
+    W.AddPropJsonShort('ClassName', ClassNameShort(PClass(Instance)^)^);
   if woIDAsIDstr in Options then
   begin
     W.AddPropInt64('ID', TOrm(Instance).fID);
@@ -10130,7 +10132,7 @@ procedure TOrmModel.SqlFromSelectWhere(const Tables: array of TOrmClass;
           Append(Sql, ',', p[i].Sql.TableSimpleFields[true, true]);
       end
     else
-      Join(['SELECT ', SqlSelect]);
+      Join(['SELECT ', SqlSelect], Sql);
     Append(Sql, ' FROM ', p[0].Props.SqlTableName);
     for i := 1 to high(Tables) do
       Append(Sql, ',', p[i].Props.SqlTableName);

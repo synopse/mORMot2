@@ -5323,13 +5323,13 @@ end;
 
 function _BC_PUtf8Char(A, B: PPUtf8Char; Info: PRttiInfo; out Compared: integer): PtrInt;
 begin
-  compared := StrComp(A^, B^);
+  compared := mormot.core.base.StrComp(A^, B^);
   result := SizeOf(pointer);
 end;
 
 function _BCI_PUtf8Char(A, B: PPUtf8Char; Info: PRttiInfo; out Compared: integer): PtrInt;
 begin
-  compared := StrIComp(A^, B^);
+  compared := mormot.core.unicode.StrIComp(A^, B^);
   result := SizeOf(pointer);
 end;
 

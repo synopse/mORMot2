@@ -20,7 +20,7 @@
 
 // those functions use global variables, so are not PIC-compatible
 
-procedure AesEncryptAsm(const ctxt: TAesContext; bi, bo: PBlock128);
+procedure AesEncryptAsm(const ctxt: TAes; bi, bo: PBlock128);
   {$ifdef FPC}nostackframe; assembler;{$endif}
 asm // rolled optimized encryption asm version by A. Bouchez
         push    ebx
@@ -30,7 +30,7 @@ asm // rolled optimized encryption asm version by A. Bouchez
         add     esp, - 24
         mov     [esp + 4], ecx
         mov     ecx, eax // ecx=pk
-        movzx   eax, byte ptr [eax].TAesContext.Rounds
+        movzx   eax, byte ptr [eax].TAes.Rounds
         dec     eax
         mov     [esp + 20], eax
         mov     ebx, [edx]
@@ -195,7 +195,7 @@ asm // rolled optimized encryption asm version by A. Bouchez
         pop     ebx
 end;
 
-procedure aesdecrypt386(const ctxt: TAesContext; bi, bo: PBlock128);
+procedure aesdecrypt386(const ctxt: TAes; bi, bo: PBlock128);
   {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
         push    ebx
@@ -204,7 +204,7 @@ asm
         push    ebp
         add     esp, - 20
         mov     [esp], ecx
-        movzx   ecx, byte ptr [eax].TAesContext.Rounds
+        movzx   ecx, byte ptr [eax].TAes.Rounds
         lea     esi, [4 * ecx]
         lea     ecx, [ecx - 1]
         lea     eax, [eax + 4 * esi] // eax=@ctx.rk[ctx.rounds]=pk
@@ -1142,6 +1142,947 @@ asm
         pop    ebx
 end;
 
+procedure _mult128({$ifdef FPC}constref{$else}const{$endif} l, r: THash128Rec;
+  out product: THash256Rec);
+  {$ifdef FPC}nostackframe; assembler;{$endif}
+asm
+        push    ebx
+        push    esi
+        push    edi
+        push    ebp
+        sub     esp, 32                 // local copy of both input operands
+        mov     esi, ecx                // @product (output)
+        mov     ebp, eax                // @l
+        mov     edi, edx                // @r
+        mov     ebx, dword ptr[ebp]
+        mov     dword ptr[esp], ebx
+        mov     ebx, dword ptr[edi]
+        mov     dword ptr[esp + 16], ebx
+        mov     ebx, dword ptr[ebp + 4]
+        mov     dword ptr[esp + 4], ebx
+        mov     ebx, dword ptr[edi + 4]
+        mov     dword ptr[esp + 20], ebx
+        mov     ebx, dword ptr[ebp + 8]
+        mov     dword ptr[esp + 8], ebx
+        mov     ebx, dword ptr[edi + 8]
+        mov     dword ptr[esp + 24], ebx
+        mov     ebx, dword ptr[ebp + 12]
+        mov     dword ptr[esp + 12], ebx
+        mov     ebx, dword ptr[edi + 12]
+        mov     dword ptr[esp + 28], ebx
+        // Column 0: no incoming carry
+        mov     eax, dword ptr[esp]
+        mul     dword ptr[esp + 16]
+        mov     dword ptr[esi], eax
+        mov     ebx, edx     // low accumulator for column 1
+        xor     edi, edi
+        xor     ebp, ebp
+        // Column 1: l0*r1, l1*r0
+        mov     eax, dword ptr[esp]
+        mul     dword ptr[esp + 20]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esp + 4]
+        mul     dword ptr[esp + 16]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     dword ptr[esi + 4], ebx
+        mov     ebx, edi
+        mov     edi, ebp
+        xor     ebp, ebp
+        // Column 2: l0*r2, l1*r1, l2*r0
+        mov     eax, dword ptr[esp]
+        mul     dword ptr[esp + 24]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esp + 4]
+        mul     dword ptr[esp + 20]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esp + 8]
+        mul     dword ptr[esp + 16]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     dword ptr[esi + 8], ebx
+        mov     ebx, edi
+        mov     edi, ebp
+        xor     ebp, ebp
+        // Column 3: l0*r3, l1*r2, l2*r1, l3*r0
+        mov     eax, dword ptr[esp]
+        mul     dword ptr[esp + 28]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esp + 4]
+        mul     dword ptr[esp + 24]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esp + 8]
+        mul     dword ptr[esp + 20]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esp + 12]
+        mul     dword ptr[esp + 16]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     dword ptr[esi + 12], ebx
+        mov     ebx, edi
+        mov     edi, ebp
+        xor     ebp, ebp
+        // Column 4: l1*r3, l2*r2, l3*r1
+        mov     eax, dword ptr[esp + 4]
+        mul     dword ptr[esp + 28]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esp + 8]
+        mul     dword ptr[esp + 24]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esp + 12]
+        mul     dword ptr[esp + 20]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     dword ptr[esi + 16], ebx
+        mov     ebx, edi
+        mov     edi, ebp
+        xor     ebp, ebp
+        // Column 5: l2*r3, l3*r2
+        mov     eax, dword ptr[esp + 8]
+        mul     dword ptr[esp + 28]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esp + 12]
+        mul     dword ptr[esp + 24]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     dword ptr[esi + 20], ebx
+        mov     ebx, edi
+        mov     edi, ebp
+        xor     ebp, ebp
+        // Column 6: l3*r3
+        mov     eax, dword ptr[esp + 12]
+        mul     dword ptr[esp + 28]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     dword ptr[esi + 24], ebx
+        mov     dword ptr[esi + 28], edi
+        add     esp, 32
+        pop     ebp
+        pop     edi
+        pop     esi
+        pop     ebx
+end;
+
+procedure _mult256(out Output: THash512Rec; const Left, Right: THash256Rec);
+  {$ifdef FPC} nostackframe; assembler; {$endif}
+asm
+        // Accumulator (EBP:EDI:EBX) is a 96-bit unsigned Comba column
+        push    ebx
+        push    esi
+        push    edi
+        push    ebp
+        sub     esp, 68           // 64-byte product + saved Output pointer
+        mov     dword ptr[esp + 64], eax
+        mov     esi, edx          // Left; ECX remains Right
+        xor     ebx, ebx          // Column low
+        xor     edi, edi          // Column middle
+        xor     ebp, ebp          // Column high
+        // column 0: L0*R0
+        mov     eax, dword ptr[esi]
+        mul     dword ptr[ecx]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     dword ptr[esp + 0], ebx
+        mov     ebx, edi
+        mov     edi, ebp
+        xor     ebp, ebp
+        // column 1: L0*R1, L1*R0
+        mov     eax, dword ptr[esi]
+        mul     dword ptr[ecx + 4]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esi + 4]
+        mul     dword ptr[ecx]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     dword ptr[esp + 4], ebx
+        mov     ebx, edi
+        mov     edi, ebp
+        xor     ebp, ebp
+        // column 2: L0*R2, L1*R1, L2*R0
+        mov     eax, dword ptr[esi]
+        mul     dword ptr[ecx + 8]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esi + 4]
+        mul     dword ptr[ecx + 4]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esi + 8]
+        mul     dword ptr[ecx]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     dword ptr[esp + 8], ebx
+        mov     ebx, edi
+        mov     edi, ebp
+        xor     ebp, ebp
+        // column 3: L0*R3, L1*R2, L2*R1, L3*R0
+        mov     eax, dword ptr[esi]
+        mul     dword ptr[ecx + 12]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esi + 4]
+        mul     dword ptr[ecx + 8]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esi + 8]
+        mul     dword ptr[ecx + 4]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esi + 12]
+        mul     dword ptr[ecx]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     dword ptr[esp + 12], ebx
+        mov     ebx, edi
+        mov     edi, ebp
+        xor     ebp, ebp
+        // column 4: L0*R4, L1*R3, L2*R2, L3*R1, L4*R0
+        mov     eax, dword ptr[esi]
+        mul     dword ptr[ecx + 16]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esi + 4]
+        mul     dword ptr[ecx + 12]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esi + 8]
+        mul     dword ptr[ecx + 8]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esi + 12]
+        mul     dword ptr[ecx + 4]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esi + 16]
+        mul     dword ptr[ecx]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     dword ptr[esp + 16], ebx
+        mov     ebx, edi
+        mov     edi, ebp
+        xor     ebp, ebp
+        // column 5: L0*R5, L1*R4, L2*R3, L3*R2, L4*R1, L5*R0
+        mov     eax, dword ptr[esi]
+        mul     dword ptr[ecx + 20]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esi + 4]
+        mul     dword ptr[ecx + 16]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esi + 8]
+        mul     dword ptr[ecx + 12]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esi + 12]
+        mul     dword ptr[ecx + 8]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esi + 16]
+        mul     dword ptr[ecx + 4]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esi + 20]
+        mul     dword ptr[ecx]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     dword ptr[esp + 20], ebx
+        mov     ebx, edi
+        mov     edi, ebp
+        xor     ebp, ebp
+        // column 6: L0*R6, L1*R5, L2*R4, L3*R3, L4*R2, L5*R1, L6*R0
+        mov     eax, dword ptr[esi]
+        mul     dword ptr[ecx + 24]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esi + 4]
+        mul     dword ptr[ecx + 20]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esi + 8]
+        mul     dword ptr[ecx + 16]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esi + 12]
+        mul     dword ptr[ecx + 12]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esi + 16]
+        mul     dword ptr[ecx + 8]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esi + 20]
+        mul     dword ptr[ecx + 4]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esi + 24]
+        mul     dword ptr[ecx]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     dword ptr[esp + 24], ebx
+        mov     ebx, edi
+        mov     edi, ebp
+        xor     ebp, ebp
+        // column 7: L0*R7, L1*R6, L2*R5, L3*R4, L4*R3, L5*R2, L6*R1, L7*R0
+        mov     eax, dword ptr[esi]
+        mul     dword ptr[ecx + 28]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esi + 4]
+        mul     dword ptr[ecx + 24]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esi + 8]
+        mul     dword ptr[ecx + 20]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esi + 12]
+        mul     dword ptr[ecx + 16]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esi + 16]
+        mul     dword ptr[ecx + 12]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esi + 20]
+        mul     dword ptr[ecx + 8]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esi + 24]
+        mul     dword ptr[ecx + 4]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esi + 28]
+        mul     dword ptr[ecx]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     dword ptr[esp + 28], ebx
+        mov     ebx, edi
+        mov     edi, ebp
+        xor     ebp, ebp
+        // column 8: L1*R7, L2*R6, L3*R5, L4*R4, L5*R3, L6*R2, L7*R1
+        mov     eax, dword ptr[esi + 4]
+        mul     dword ptr[ecx + 28]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esi + 8]
+        mul     dword ptr[ecx + 24]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esi + 12]
+        mul     dword ptr[ecx + 20]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esi + 16]
+        mul     dword ptr[ecx + 16]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esi + 20]
+        mul     dword ptr[ecx + 12]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esi + 24]
+        mul     dword ptr[ecx + 8]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esi + 28]
+        mul     dword ptr[ecx + 4]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     dword ptr[esp + 32], ebx
+        mov     ebx, edi
+        mov     edi, ebp
+        xor     ebp, ebp
+        // column 9: L2*R7, L3*R6, L4*R5, L5*R4, L6*R3, L7*R2
+        mov     eax, dword ptr[esi + 8]
+        mul     dword ptr[ecx + 28]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esi + 12]
+        mul     dword ptr[ecx + 24]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esi + 16]
+        mul     dword ptr[ecx + 20]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esi + 20]
+        mul     dword ptr[ecx + 16]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esi + 24]
+        mul     dword ptr[ecx + 12]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esi + 28]
+        mul     dword ptr[ecx + 8]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     dword ptr[esp + 36], ebx
+        mov     ebx, edi
+        mov     edi, ebp
+        xor     ebp, ebp
+        // column 10: L3*R7, L4*R6, L5*R5, L6*R4, L7*R3
+        mov     eax, dword ptr[esi + 12]
+        mul     dword ptr[ecx + 28]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esi + 16]
+        mul     dword ptr[ecx + 24]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esi + 20]
+        mul     dword ptr[ecx + 20]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esi + 24]
+        mul     dword ptr[ecx + 16]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esi + 28]
+        mul     dword ptr[ecx + 12]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     dword ptr[esp + 40], ebx
+        mov     ebx, edi
+        mov     edi, ebp
+        xor     ebp, ebp
+        // column 11: L4*R7, L5*R6, L6*R5, L7*R4
+        mov     eax, dword ptr[esi + 16]
+        mul     dword ptr[ecx + 28]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esi + 20]
+        mul     dword ptr[ecx + 24]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esi + 24]
+        mul     dword ptr[ecx + 20]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esi + 28]
+        mul     dword ptr[ecx + 16]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     dword ptr[esp + 44], ebx
+        mov     ebx, edi
+        mov     edi, ebp
+        xor     ebp, ebp
+        // column 12: L5*R7, L6*R6, L7*R5
+        mov     eax, dword ptr[esi + 20]
+        mul     dword ptr[ecx + 28]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esi + 24]
+        mul     dword ptr[ecx + 24]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esi + 28]
+        mul     dword ptr[ecx + 20]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     dword ptr[esp + 48], ebx
+        mov     ebx, edi
+        mov     edi, ebp
+        xor     ebp, ebp
+        // column 13: L6*R7, L7*R6
+        mov     eax, dword ptr[esi + 24]
+        mul     dword ptr[ecx + 28]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr[esi + 28]
+        mul     dword ptr[ecx + 24]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     dword ptr[esp + 52], ebx
+        mov     ebx, edi
+        mov     edi, ebp
+        xor     ebp, ebp
+        // column 14: L7*R7
+        mov     eax, dword ptr[esi + 28]
+        mul     dword ptr[ecx + 28]
+        add     ebx, eax
+        adc     edi, edx
+        adc     ebp, 0
+        mov     dword ptr[esp + 56], ebx
+        mov     dword ptr[esp + 60], edi
+        // copy the complete product after all input reads
+        mov     edi, dword ptr[esp + 64]
+        mov     esi, esp
+        mov     ecx, 16
+        cld
+        rep     movsd
+        add     esp, 68
+        pop     ebp
+        pop     edi
+        pop     esi
+        pop     ebx
+end;
+
+procedure _square256(out Output: THash512Rec; const Left: THash256Rec);
+  {$ifdef FPC}nostackframe; assembler;{$endif}
+asm
+        push    ebx
+        push    esi
+        push    edi
+        push    ebp
+        sub     esp, 32
+        mov     edi, eax       // @Output
+        mov     esi, edx       // @Left
+        // Load the entire input before writing to Output.
+        mov     ebx, dword ptr [esi + 0]
+        mov     dword ptr [esp + 0], ebx
+        mov     ebx, dword ptr [esi + 4]
+        mov     dword ptr [esp + 4], ebx
+        mov     ebx, dword ptr [esi + 8]
+        mov     dword ptr [esp + 8], ebx
+        mov     ebx, dword ptr [esi + 12]
+        mov     dword ptr [esp + 12], ebx
+        mov     ebx, dword ptr [esi + 16]
+        mov     dword ptr [esp + 16], ebx
+        mov     ebx, dword ptr [esi + 20]
+        mov     dword ptr [esp + 20], ebx
+        mov     ebx, dword ptr [esi + 24]
+        mov     dword ptr [esp + 24], ebx
+        mov     ebx, dword ptr [esi + 28]
+        mov     dword ptr [esp + 28], ebx
+        // The three-limb unsigned accumulator is EBP:ESI:EBX.
+        xor     ebx, ebx
+        xor     esi, esi
+        xor     ebp, ebp
+        // Column 0: a0*a0
+        mov     eax, dword ptr [esp + 0]
+        mul     dword ptr [esp + 0]
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        mov     dword ptr [edi + 0], ebx
+        mov     ebx, esi
+        mov     esi, ebp
+        xor     ebp, ebp
+        // Column 1: a0*a1 doubled
+        mov     eax, dword ptr [esp + 0]
+        mul     dword ptr [esp + 4]
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        mov     dword ptr [edi + 4], ebx
+        mov     ebx, esi
+        mov     esi, ebp
+        xor     ebp, ebp
+        // Column 2: a0*a2 doubled, a1*a1
+        mov     eax, dword ptr [esp + 0]
+        mul     dword ptr [esp + 8]
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr [esp + 4]
+        mul     dword ptr [esp + 4]
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        mov     dword ptr [edi + 8], ebx
+        mov     ebx, esi
+        mov     esi, ebp
+        xor     ebp, ebp
+        // Column 3: a0*a3 doubled, a1*a2 doubled
+        mov     eax, dword ptr [esp + 0]
+        mul     dword ptr [esp + 12]
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr [esp + 4]
+        mul     dword ptr [esp + 8]
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        mov     dword ptr [edi + 12], ebx
+        mov     ebx, esi
+        mov     esi, ebp
+        xor     ebp, ebp
+        // Column 4: a0*a4 doubled, a1*a3 doubled, a2*a2
+        mov     eax, dword ptr [esp + 0]
+        mul     dword ptr [esp + 16]
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr [esp + 4]
+        mul     dword ptr [esp + 12]
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr [esp + 8]
+        mul     dword ptr [esp + 8]
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        mov     dword ptr [edi + 16], ebx
+        mov     ebx, esi
+        mov     esi, ebp
+        xor     ebp, ebp
+        // Column 5: a0*a5 doubled, a1*a4 doubled, a2*a3 doubled
+        mov     eax, dword ptr [esp + 0]
+        mul     dword ptr [esp + 20]
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr [esp + 4]
+        mul     dword ptr [esp + 16]
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr [esp + 8]
+        mul     dword ptr [esp + 12]
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        mov     dword ptr [edi + 20], ebx
+        mov     ebx, esi
+        mov     esi, ebp
+        xor     ebp, ebp
+        // Column 6: a0*a6 doubled, a1*a5 doubled, a2*a4 doubled, a3*a3
+        mov     eax, dword ptr [esp + 0]
+        mul     dword ptr [esp + 24]
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr [esp + 4]
+        mul     dword ptr [esp + 20]
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr [esp + 8]
+        mul     dword ptr [esp + 16]
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr [esp + 12]
+        mul     dword ptr [esp + 12]
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        mov     dword ptr [edi + 24], ebx
+        mov     ebx, esi
+        mov     esi, ebp
+        xor     ebp, ebp
+        // Column 7: a0*a7 doubled, a1*a6 doubled, a2*a5 doubled, a3*a4 doubled
+        mov     eax, dword ptr [esp + 0]
+        mul     dword ptr [esp + 28]
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr [esp + 4]
+        mul     dword ptr [esp + 24]
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr [esp + 8]
+        mul     dword ptr [esp + 20]
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr [esp + 12]
+        mul     dword ptr [esp + 16]
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        mov     dword ptr [edi + 28], ebx
+        mov     ebx, esi
+        mov     esi, ebp
+        xor     ebp, ebp
+        // Column 8: a1*a7 doubled, a2*a6 doubled, a3*a5 doubled, a4*a4
+        mov     eax, dword ptr [esp + 4]
+        mul     dword ptr [esp + 28]
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr [esp + 8]
+        mul     dword ptr [esp + 24]
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr [esp + 12]
+        mul     dword ptr [esp + 20]
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr [esp + 16]
+        mul     dword ptr [esp + 16]
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        mov     dword ptr [edi + 32], ebx
+        mov     ebx, esi
+        mov     esi, ebp
+        xor     ebp, ebp
+        // Column 9: a2*a7 doubled, a3*a6 doubled, a4*a5 doubled
+        mov     eax, dword ptr [esp + 8]
+        mul     dword ptr [esp + 28]
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr [esp + 12]
+        mul     dword ptr [esp + 24]
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr [esp + 16]
+        mul     dword ptr [esp + 20]
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        mov     dword ptr [edi + 36], ebx
+        mov     ebx, esi
+        mov     esi, ebp
+        xor     ebp, ebp
+        // Column 10: a3*a7 doubled, a4*a6 doubled, a5*a5
+        mov     eax, dword ptr [esp + 12]
+        mul     dword ptr [esp + 28]
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr [esp + 16]
+        mul     dword ptr [esp + 24]
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr [esp + 20]
+        mul     dword ptr [esp + 20]
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        mov     dword ptr [edi + 40], ebx
+        mov     ebx, esi
+        mov     esi, ebp
+        xor     ebp, ebp
+        // Column 11: a4*a7 doubled, a5*a6 doubled
+        mov     eax, dword ptr [esp + 16]
+        mul     dword ptr [esp + 28]
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr [esp + 20]
+        mul     dword ptr [esp + 24]
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        mov     dword ptr [edi + 44], ebx
+        mov     ebx, esi
+        mov     esi, ebp
+        xor     ebp, ebp
+        // Column 12: a5*a7 doubled, a6*a6
+        mov     eax, dword ptr [esp + 20]
+        mul     dword ptr [esp + 28]
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        mov     eax, dword ptr [esp + 24]
+        mul     dword ptr [esp + 24]
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        mov     dword ptr [edi + 48], ebx
+        mov     ebx, esi
+        mov     esi, ebp
+        xor     ebp, ebp
+        // Column 13: a6*a7 doubled
+        mov     eax, dword ptr [esp + 24]
+        mul     dword ptr [esp + 28]
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        mov     dword ptr [edi + 52], ebx
+        mov     ebx, esi
+        mov     esi, ebp
+        xor     ebp, ebp
+        // Column 14: a7*a7
+        mov     eax, dword ptr [esp + 28]
+        mul     dword ptr [esp + 28]
+        add     ebx, eax
+        adc     esi, edx
+        adc     ebp, 0
+        mov     dword ptr [edi + 56], ebx
+        mov     dword ptr [edi + 60], esi
+        add     esp, 32
+        pop     ebp
+        pop     edi
+        pop     esi
+        pop     ebx
+end;
+
+
 // use CF flag to propagate 32-bit additions carry
 function _xasmadd(Value, Adds: pointer; Carry: PtrUInt): PtrUInt;
   {$ifdef FPC}nostackframe; assembler;{$endif}
@@ -1150,11 +2091,11 @@ asm     // Value=eax Adds=edx Carry=ecx
         push   esi
         push   edi
         mov    ebx, dword ptr [edx]
-        add    ebx, ecx
+        bt     ecx, 0 // inject incoming carry without overflowing ebx
         mov    esi, dword ptr [edx + 4]
         mov    edi, dword ptr [edx + 4 * 2]
         mov    ecx, dword ptr [edx + 4 * 3]
-        add    dword ptr [eax], ebx
+        adc    dword ptr [eax], ebx
         adc    dword ptr [eax + 4], esi
         adc    dword ptr [eax + 4 * 2], edi
         adc    dword ptr [eax + 4 * 3], ecx
@@ -1197,11 +2138,11 @@ asm     // Value=eax Subs=edx Carry=ecx
         push   esi
         push   edi
         mov    ebx, dword ptr [edx]
-        add    ebx, ecx
+        bt     ecx, 0 // inject incoming carry without overflowing ebx
         mov    esi, dword ptr [edx + 4]
         mov    edi, dword ptr [edx + 4 * 2]
         mov    ecx, dword ptr [edx + 4 * 3]
-        sub    dword ptr [eax], ebx
+        sbb    dword ptr [eax], ebx
         sbb    dword ptr [eax + 4], esi
         sbb    dword ptr [eax + 4 * 2], edi
         sbb    dword ptr [eax + 4 * 3], ecx
@@ -1480,6 +2421,311 @@ asm     // Src=eax Dst=edx Factor=ecx Carry=[ebp]
         pop    ebx
 end;
 
+procedure _xasmsquarediagonal(Src, Dst: pointer; Count: PtrUInt);
+  {$ifdef FPC} nostackframe; assembler; {$endif}
+asm
+        push    ebx
+        push    esi
+        push    edi
+        mov     esi, eax        // esi=Src
+        mov     edi, edx        // edi=Dst
+        xor     ebx, ebx        // ebx=carry
+@s:     movzx   eax, word ptr [esi]
+        imul    eax, eax
+        lea     eax, [eax + ebx]
+        mov     edx, dword ptr [edi]
+        xor     ebx, ebx
+        add     edx, edx
+        adc     ebx, 0
+        add     edx, eax
+        adc     ebx, 0
+        mov     dword ptr [edi], edx
+        add     esi, 2
+        add     edi, 4
+        dec     ecx             // ecx=Count
+        jnz     @s
+        pop     edi
+        pop     esi
+        pop     ebx
+end;
+
+procedure _mmodP(out Output: THash256Rec; var Product: THash512Rec);
+  {$ifdef FPC}nostackframe; assembler;{$endif}
+asm
+        push   ebx
+        push   esi
+        push   edi
+        sub    esp, 32          // eight 32-bit result limbs on stack
+        mov    edi, eax         // @Output
+        mov    esi, edx         // @Product
+        xor    ebx, ebx         // signed carry
+        // Fold word 0
+        mov     eax, dword ptr [esi + 0]
+        xor     edx, edx
+        mov     ecx, ebx
+        sar     ecx, 31
+        add     eax, ebx
+        adc     edx, ecx
+        add     eax, dword ptr [esi + 32]
+        adc     edx, 0
+        add     eax, dword ptr [esi + 36]
+        adc     edx, 0
+        sub     eax, dword ptr [esi + 44]
+        sbb     edx, 0
+        sub     eax, dword ptr [esi + 48]
+        sbb     edx, 0
+        sub     eax, dword ptr [esi + 52]
+        sbb     edx, 0
+        sub     eax, dword ptr [esi + 56]
+        sbb     edx, 0
+        mov     dword ptr [esp + 0], eax
+        mov     ebx, edx
+        // Fold word 1
+        mov     eax, dword ptr [esi + 4]
+        xor     edx, edx
+        mov     ecx, ebx
+        sar     ecx, 31
+        add     eax, ebx
+        adc     edx, ecx
+        add     eax, dword ptr [esi + 36]
+        adc     edx, 0
+        add     eax, dword ptr [esi + 40]
+        adc     edx, 0
+        sub     eax, dword ptr [esi + 48]
+        sbb     edx, 0
+        sub     eax, dword ptr [esi + 52]
+        sbb     edx, 0
+        sub     eax, dword ptr [esi + 56]
+        sbb     edx, 0
+        sub     eax, dword ptr [esi + 60]
+        sbb     edx, 0
+        mov     dword ptr [esp + 4], eax
+        mov     ebx, edx
+        // Fold word 2
+        mov     eax, dword ptr [esi + 8]
+        xor     edx, edx
+        mov     ecx, ebx
+        sar     ecx, 31
+        add     eax, ebx
+        adc     edx, ecx
+        add     eax, dword ptr [esi + 40]
+        adc     edx, 0
+        add     eax, dword ptr [esi + 44]
+        adc     edx, 0
+        sub     eax, dword ptr [esi + 52]
+        sbb     edx, 0
+        sub     eax, dword ptr [esi + 56]
+        sbb     edx, 0
+        sub     eax, dword ptr [esi + 60]
+        sbb     edx, 0
+        mov     dword ptr [esp + 8], eax
+        mov     ebx, edx
+        // Fold word 3
+        mov     eax, dword ptr [esi + 12]
+        xor     edx, edx
+        mov     ecx, ebx
+        sar     ecx, 31
+        add     eax, ebx
+        adc     edx, ecx
+        sub     eax, dword ptr [esi + 32]
+        sbb     edx, 0
+        sub     eax, dword ptr [esi + 36]
+        sbb     edx, 0
+        add     eax, dword ptr [esi + 44]
+        adc     edx, 0
+        add     eax, dword ptr [esi + 44]
+        adc     edx, 0
+        add     eax, dword ptr [esi + 48]
+        adc     edx, 0
+        add     eax, dword ptr [esi + 48]
+        adc     edx, 0
+        add     eax, dword ptr [esi + 52]
+        adc     edx, 0
+        sub     eax, dword ptr [esi + 60]
+        sbb     edx, 0
+        mov     dword ptr [esp + 12], eax
+        mov     ebx, edx
+        // Fold word 4
+        mov     eax, dword ptr [esi + 16]
+        xor     edx, edx
+        mov     ecx, ebx
+        sar     ecx, 31
+        add     eax, ebx
+        adc     edx, ecx
+        sub     eax, dword ptr [esi + 36]
+        sbb     edx, 0
+        sub     eax, dword ptr [esi + 40]
+        sbb     edx, 0
+        add     eax, dword ptr [esi + 48]
+        adc     edx, 0
+        add     eax, dword ptr [esi + 48]
+        adc     edx, 0
+        add     eax, dword ptr [esi + 52]
+        adc     edx, 0
+        add     eax, dword ptr [esi + 52]
+        adc     edx, 0
+        add     eax, dword ptr [esi + 56]
+        adc     edx, 0
+        mov     dword ptr [esp + 16], eax
+        mov     ebx, edx
+        // F    old word 5
+        mov     eax, dword ptr [esi + 20]
+        xor     edx, edx
+        mov     ecx, ebx
+        sar     ecx, 31
+        add     eax, ebx
+        adc     edx, ecx
+        sub     eax, dword ptr [esi + 40]
+        sbb     edx, 0
+        sub     eax, dword ptr [esi + 44]
+        sbb     edx, 0
+        add     eax, dword ptr [esi + 52]
+        adc     edx, 0
+        add     eax, dword ptr [esi + 52]
+        adc     edx, 0
+        add     eax, dword ptr [esi + 56]
+        adc     edx, 0
+        add     eax, dword ptr [esi + 56]
+        adc     edx, 0
+        add     eax, dword ptr [esi + 60]
+        adc     edx, 0
+        mov     dword ptr [esp + 20], eax
+        mov     ebx, edx
+        // Fold word 6
+        mov     eax, dword ptr [esi + 24]
+        xor     edx, edx
+        mov     ecx, ebx
+        sar     ecx, 31
+        add     eax, ebx
+        adc     edx, ecx
+        sub     eax, dword ptr [esi + 32]
+        sbb     edx, 0
+        sub     eax, dword ptr [esi + 36]
+        sbb     edx, 0
+        add     eax, dword ptr [esi + 52]
+        adc     edx, 0
+        add     eax, dword ptr [esi + 56]
+        adc     edx, 0
+        add     eax, dword ptr [esi + 56]
+        adc     edx, 0
+        add     eax, dword ptr [esi + 56]
+        adc     edx, 0
+        add     eax, dword ptr [esi + 60]
+        adc     edx, 0
+        add     eax, dword ptr [esi + 60]
+        adc     edx, 0
+        mov     dword ptr [esp + 24], eax
+        mov     ebx, edx
+        // Fold word 7
+        mov     eax, dword ptr [esi + 28]
+        xor     edx, edx
+        mov     ecx, ebx
+        sar     ecx, 31
+        add     eax, ebx
+        adc     edx, ecx
+        add     eax, dword ptr [esi + 32]
+        adc     edx, 0
+        sub     eax, dword ptr [esi + 40]
+        sbb     edx, 0
+        sub     eax, dword ptr [esi + 44]
+        sbb     edx, 0
+        sub     eax, dword ptr [esi + 48]
+        sbb     edx, 0
+        sub     eax, dword ptr [esi + 52]
+        sbb     edx, 0
+        add     eax, dword ptr [esi + 60]
+        adc     edx, 0
+        add     eax, dword ptr [esi + 60]
+        adc     edx, 0
+        add     eax, dword ptr [esi + 60]
+        adc     edx, 0
+        mov     dword ptr [esp + 28], eax
+        mov     ebx, edx
+        // Carry C from the 256-bit fold: Result = Low + C*2^256
+        // Since 2^256 = p + D and D=2^224 - 2^192 - 2^96 + 1,
+        // adjust Result modulo p by +C -C*2^96 -C*2^192 +C*2^224
+        mov     ecx, ebx
+        sar     ecx, 31          // sign extension of signed C
+        xor     edx, edx         // 9th word of signed 288-bit accumulator
+        add     dword ptr [esp + 0], ebx
+        adc     dword ptr [esp + 4], ecx
+        adc     dword ptr [esp + 8], ecx
+        adc     dword ptr [esp + 12], ecx
+        adc     dword ptr [esp + 16], ecx
+        adc     dword ptr [esp + 20], ecx
+        adc     dword ptr [esp + 24], ecx
+        adc     dword ptr [esp + 28], ecx
+        adc     edx, ecx
+        sub     dword ptr [esp + 12], ebx
+        sbb     dword ptr [esp + 16], ecx
+        sbb     dword ptr [esp + 20], ecx
+        sbb     dword ptr [esp + 24], ecx
+        sbb     dword ptr [esp + 28], ecx
+        sbb     edx, ecx
+        sub     dword ptr [esp + 24], ebx
+        sbb     dword ptr [esp + 28], ecx
+        sbb     edx, ecx
+        add     dword ptr [esp + 28], ebx
+        adc     edx, ecx
+        // -p < signed Result < 2*p, so at most one correction.
+        test    edx, edx
+        js      @add_p
+        jnz     @sub_p
+        // Compare unsigned Low with p, most-significant limb first.
+        cmp     dword ptr [esp + 28], -1
+        jne     @done
+        cmp     dword ptr [esp + 24], 1
+        ja      @sub_p
+        jb      @done
+        mov     eax, dword ptr [esp + 12]
+        or      eax, dword ptr [esp + 16]
+        or      eax, dword ptr [esp + 20]
+        jnz     @sub_p
+        cmp     dword ptr [esp + 8], -1
+        jne     @done
+        cmp     dword ptr [esp + 4], -1
+        jne     @done
+        cmp     dword ptr [esp + 0], -1
+        jne     @done
+@sub_p: sub     dword ptr [esp + 0], -1
+        sbb     dword ptr [esp + 4], -1
+        sbb     dword ptr [esp + 8], -1
+        sbb     dword ptr [esp + 12], 0
+        sbb     dword ptr [esp + 16], 0
+        sbb     dword ptr [esp + 20], 0
+        sbb     dword ptr [esp + 24], 1
+        sbb     dword ptr [esp + 28], -1
+        jmp     @done
+@add_p: add     dword ptr [esp + 0], -1
+        adc     dword ptr [esp + 4], -1
+        adc     dword ptr [esp + 8], -1
+        adc     dword ptr [esp + 12], 0
+        adc     dword ptr [esp + 16], 0
+        adc     dword ptr [esp + 20], 0
+        adc     dword ptr [esp + 24], 1
+        adc     dword ptr [esp + 28], -1
+@done:  mov     eax, dword ptr [esp + 0]
+        mov     edx, dword ptr [esp + 4]
+        mov     [edi + 0], eax
+        mov     [edi + 4], edx
+        mov     eax, dword ptr [esp + 8]
+        mov     edx, dword ptr [esp + 12]
+        mov     [edi + 8], eax
+        mov     [edi + 12], edx
+        mov     eax, dword ptr [esp + 16]
+        mov     edx, dword ptr [esp + 20]
+        mov     [edi + 16], eax
+        mov     [edi + 20], edx
+        mov     eax, dword ptr [esp + 24]
+        mov     edx, dword ptr [esp + 28]
+        mov     [edi + 24], eax
+        mov     [edi + 28], edx
+        add     esp, 32
+        pop     edi
+        pop     esi
+        pop     ebx
+end;
+
 {$ifdef ASMSSE2}
 procedure Xor512(dst, src: PPtrIntArray);
 {$ifdef FPC}nostackframe; assembler;{$endif}
@@ -1515,6 +2761,7 @@ asm
         movups  dqword ptr [dst + 48], xmm3
 end;
 {$endif ASMSSE2}
+
 
 procedure Sha1ExpandMessageBlocks(W: PCardinalArray; n: cardinal);
 // semi-unrolled optimized asm version by A. Bouchez
@@ -1563,9 +2810,9 @@ end;
 
 procedure AesNiTrailer; // = TAesAbstractSyn.EncryptTrailer from AES-NI procs
   {$ifdef FPC}nostackframe; assembler;{$endif}
-asm // eax=TAesContext ecx=len xmm7=IV esi=BufIn edi=BufOut
-        call   dword ptr [eax].TAesContext.AesNi32 // = AES.Encrypt(fIV,fIV)
-        lea    edx, [eax].TAesContext.buf // used as temporary buffer
+asm // eax=TAes ecx=len xmm7=IV esi=BufIn edi=BufOut
+        call   dword ptr [eax].TAes.AesNi32 // = AES.Encrypt(fIV,fIV)
+        lea    edx, [eax].TAes.buf // used as temporary buffer
         movups [edx], xmm7
         cld
 @s:     lodsb
@@ -1725,7 +2972,7 @@ end;
 
 procedure AesNiEncryptXmm7_128;
   {$ifdef FPC}nostackframe; assembler;{$endif}
-asm // input: eax=TAesContext, xmm7=data; output: eax=TAesContext, xmm7=data
+asm // input: eax=TAes, xmm7=data; output: eax=TAes, xmm7=data
         movups  xmm0, [eax + $00]
         movups  xmm1, [eax + $10]
         movups  xmm2, [eax + $20]
@@ -1802,7 +3049,7 @@ end;
 
 procedure AesNiEncryptXmm7_192;
   {$ifdef FPC}nostackframe; assembler;{$endif}
-asm // input: eax=TAesContext, xmm7=data; output: eax=TAesContext, xmm7=data
+asm // input: eax=TAes, xmm7=data; output: eax=TAes, xmm7=data
         movups  xmm0, [eax + $00]
         movups  xmm1, [eax + $10]
         movups  xmm2, [eax + $20]
@@ -1859,7 +3106,7 @@ end;
 
 procedure AesNiEncryptXmm7_256;
   {$ifdef FPC}nostackframe; assembler;{$endif}
-asm // input: eax=TAesContext, xmm7=data; output: eax=TAesContext, xmm7=data
+asm // input: eax=TAes, xmm7=data; output: eax=TAes, xmm7=data
         movups  xmm0, [eax + $00]
         movups  xmm1, [eax + $10]
         movups  xmm2, [eax + $20]
@@ -2122,10 +3369,10 @@ asm
         movups  xmm7, dqword ptr [eax].TAesCfb.fIV
         lea     eax, [eax].TAesCfb.fAes
         push    ecx
-        shr     ecx, AesBlockShift
+        shr     ecx, AES_SHIFT
         jz      @z
         {$ifdef FPC} align 16 {$endif}
-@s:     call    dword ptr [eax].TAesContext.AesNi32 // AES.Encrypt(fIV,fIV)
+@s:     call    dword ptr [eax].TAes.AesNi32 // AES.Encrypt(fIV,fIV)
         movups  xmm0, dqword ptr [esi]
         movaps  xmm1, xmm0
         pxor    xmm0, xmm7
@@ -2155,10 +3402,10 @@ asm
         movups  xmm7, dqword ptr [eax].TAesCfb.fIV
         lea     eax, [eax].TAesCfb.fAes
         push    ecx
-        shr     ecx, AesBlockShift
+        shr     ecx, AES_SHIFT
         jz      @z
         {$ifdef FPC} align 16 {$endif}
-@s:     call    dword ptr [eax].TAesContext.AesNi32 // AES.Encrypt(fIV,fIV)
+@s:     call    dword ptr [eax].TAes.AesNi32 // AES.Encrypt(fIV,fIV)
         movups  xmm0, dqword ptr [esi]
         pxor    xmm7, xmm0
         movups  dqword ptr [edi], xmm7  // fOut := fIn xor fIV
@@ -2189,7 +3436,7 @@ asm
         mov     edx, esi
         call    crcblock // using SSE4.2 or fast tables
         lea     eax, [ebx].TAesCfc.fAes
-        call    dword ptr [eax].TAesContext.AesNi32 // AES.Encrypt(fIV,fIV)
+        call    dword ptr [eax].TAes.AesNi32 // AES.Encrypt(fIV,fIV)
         movups  xmm0, dqword ptr [esi]
         movaps  xmm1, xmm0
         pxor    xmm0, xmm7
@@ -2223,7 +3470,7 @@ asm
         mov     edx, esi
         call    crcblock
         lea     eax, [ebx].TAesCfc.fAes
-        call    dword ptr [eax].TAesContext.AesNi32 // AES.Encrypt(fIV,fIV)
+        call    dword ptr [eax].TAes.AesNi32 // AES.Encrypt(fIV,fIV)
         movups  xmm0, dqword ptr [esi]
         pxor    xmm7, xmm0
         movups  dqword ptr [edi], xmm7  // fOut := fIn xor fIV  +  fIV := fOut^
@@ -2254,7 +3501,7 @@ asm
         mov     edx, esi
         call    crcblock
         lea     eax, [ebx].TAesOfc.fAes
-        call    dword ptr [eax].TAesContext.AesNi32 // AES.Encrypt(fIV,fIV)
+        call    dword ptr [eax].TAes.AesNi32 // AES.Encrypt(fIV,fIV)
         movups  xmm0, dqword ptr [esi]
         pxor    xmm0, xmm7
         movups  dqword ptr [edi], xmm0  // fOut := fIn xor fIV
@@ -2285,7 +3532,7 @@ asm
         call    crcblock // it is actually slower when inlining the crc32c
         lea     eax, [ebx].TAesCtc.fAes
         movups  xmm7, dqword ptr [ebx].TAesCtc.fIV
-        call    dword ptr [eax].TAesContext.AesNi32 // AES.Encrypt(fIV,tmp)
+        call    dword ptr [eax].TAes.AesNi32 // AES.Encrypt(fIV,tmp)
         movups  xmm0, dqword ptr [esi]
         inc     byte ptr [ebx + 15].TAesCtc.fIV
         jnz     @nov
@@ -2319,10 +3566,10 @@ asm
         movups  xmm7, dqword ptr [eax].TAesOfb.fIV
         lea     eax, [eax].TAesOfb.fAes
         push    ecx
-        shr     ecx, AesBlockShift
+        shr     ecx, AES_SHIFT
         jz      @z
         {$ifdef FPC} align 16 {$endif}
-@s:     call    dword ptr [eax].TAesContext.AesNi32 // AES.Encrypt(fIV,fIV)
+@s:     call    dword ptr [eax].TAes.AesNi32 // AES.Encrypt(fIV,fIV)
         movups  xmm0, dqword ptr [esi]
         pxor    xmm0, xmm7
         movups  dqword ptr [edi], xmm0  // fOut := fIn xor fIV
@@ -2348,14 +3595,14 @@ asm     // called from TAesC64.Encrypt
         mov     edi, BufOut
         mov     ecx, Count
         push    ecx
-        shr     ecx, AesBlockShift
+        shr     ecx, AES_SHIFT
         jz      @z
         mov     ebx, eax
         lea     eax, [eax].TAesC64.fAes
         {$ifdef FPC} align 16 {$endif}
 @s:     movups  xmm7, dqword ptr [ebx].TAesC64.fIV
         mov     edx, dword ptr [ebx].TAesC64.fCTROffset
-        call    dword ptr [eax].TAesContext.AesNi32 // AES.Encrypt(fIV,tmp)
+        call    dword ptr [eax].TAes.AesNi32 // AES.Encrypt(fIV,tmp)
         movups  xmm0, dqword ptr [esi]
         inc     byte ptr [ebx + edx].TAesC64.fIV
         jnz     @nov
@@ -2380,25 +3627,287 @@ asm     // called from TAesC64.Encrypt
         pop     ebx
 end;
 
+{$ifdef ASMAESNI}
+
+{
+  Four-way interleaved AES-NI ECB block transforms for TAes.DoBlocks.
+  The caller passes groups of four 16-byte blocks; remaining 0..3 blocks
+  are handled by the existing DoBlock path.
+  Only XMM0..XMM4 are used, so Win64 nonvolatile XMM6..XMM15 are intact.
+  No TAes field is written; the routine is reentrant/thread-safe.
+}
+
+procedure AesNiEncryptBlocks4(var p: TAesNiBlocks4Params);
+  {$ifdef FPC}nostackframe; assembler;{$endif}
+asm
+        push    ebx
+        push    esi
+        push    edi
+        mov     ebx, dword ptr [eax].TAesNiBlocks4Params.groups
+        mov     esi, dword ptr [eax].TAesNiBlocks4Params.src
+        mov     edi, dword ptr [eax].TAesNiBlocks4Params.dst
+        mov     eax, dword ptr [eax].TAesNiBlocks4Params.ctxt
+        test    ebx, ebx
+        jz      @done
+        {$ifdef FPC} align 16 {$endif}
+@by4:   // four independent AES-NI streams, 64 input bytes
+        movups  xmm0, dqword ptr [esi]
+        movups  xmm1, dqword ptr [esi + $10]
+        movups  xmm2, dqword ptr [esi + $20]
+        movups  xmm3, dqword ptr [esi + $30]
+        movups  xmm4, dqword ptr [eax]  // RK[0]
+        pxor    xmm0, xmm4
+        pxor    xmm1, xmm4
+        pxor    xmm2, xmm4
+        pxor    xmm3, xmm4
+        movups  xmm4, dqword ptr [eax + $10]
+        aesenc  xmm0, xmm4
+        aesenc  xmm1, xmm4
+        aesenc  xmm2, xmm4
+        aesenc  xmm3, xmm4
+        movups  xmm4, dqword ptr [eax + $20]
+        aesenc  xmm0, xmm4
+        aesenc  xmm1, xmm4
+        aesenc  xmm2, xmm4
+        aesenc  xmm3, xmm4
+        movups  xmm4, dqword ptr [eax + $30]
+        aesenc  xmm0, xmm4
+        aesenc  xmm1, xmm4
+        aesenc  xmm2, xmm4
+        aesenc  xmm3, xmm4
+        movups  xmm4, dqword ptr [eax + $40]
+        aesenc  xmm0, xmm4
+        aesenc  xmm1, xmm4
+        aesenc  xmm2, xmm4
+        aesenc  xmm3, xmm4
+        movups  xmm4, dqword ptr [eax + $50]
+        aesenc  xmm0, xmm4
+        aesenc  xmm1, xmm4
+        aesenc  xmm2, xmm4
+        aesenc  xmm3, xmm4
+        movups  xmm4, dqword ptr [eax + $60]
+        aesenc  xmm0, xmm4
+        aesenc  xmm1, xmm4
+        aesenc  xmm2, xmm4
+        aesenc  xmm3, xmm4
+        movups  xmm4, dqword ptr [eax + $70]
+        aesenc  xmm0, xmm4
+        aesenc  xmm1, xmm4
+        aesenc  xmm2, xmm4
+        aesenc  xmm3, xmm4
+        movups  xmm4, dqword ptr [eax + $80]
+        aesenc  xmm0, xmm4
+        aesenc  xmm1, xmm4
+        aesenc  xmm2, xmm4
+        aesenc  xmm3, xmm4
+        movups  xmm4, dqword ptr [eax + $90]
+        aesenc  xmm0, xmm4
+        aesenc  xmm1, xmm4
+        aesenc  xmm2, xmm4
+        aesenc  xmm3, xmm4
+        cmp     byte ptr [eax].TAes.Rounds, 10
+        ja      @x192
+        movups  xmm4, dqword ptr [eax + $a0]
+        aesenclast xmm0, xmm4
+        aesenclast xmm1, xmm4
+        aesenclast xmm2, xmm4
+        aesenclast xmm3, xmm4
+        jmp     @wr
+@x192:  movups  xmm4, dqword ptr [eax + $a0]
+        aesenc  xmm0, xmm4
+        aesenc  xmm1, xmm4
+        aesenc  xmm2, xmm4
+        aesenc  xmm3, xmm4
+        movups  xmm4, dqword ptr [eax + $b0]
+        aesenc  xmm0, xmm4
+        aesenc  xmm1, xmm4
+        aesenc  xmm2, xmm4
+        aesenc  xmm3, xmm4
+        cmp     byte ptr [eax].TAes.Rounds, 12
+        ja      @x256
+        movups  xmm4, dqword ptr [eax + $c0]
+        aesenclast xmm0, xmm4
+        aesenclast xmm1, xmm4
+        aesenclast xmm2, xmm4
+        aesenclast xmm3, xmm4
+        jmp     @wr
+@x256:  movups  xmm4, dqword ptr [eax + $c0]
+        aesenc  xmm0, xmm4
+        aesenc  xmm1, xmm4
+        aesenc  xmm2, xmm4
+        aesenc  xmm3, xmm4
+        movups  xmm4, dqword ptr [eax + $d0]
+        aesenc  xmm0, xmm4
+        aesenc  xmm1, xmm4
+        aesenc  xmm2, xmm4
+        aesenc  xmm3, xmm4
+        movups  xmm4, dqword ptr [eax + $e0]
+        aesenclast xmm0, xmm4
+        aesenclast xmm1, xmm4
+        aesenclast xmm2, xmm4
+        aesenclast xmm3, xmm4
+@wr:    // safe when src=dst, all four blocks were loaded first
+        movups  dqword ptr [edi], xmm0
+        movups  dqword ptr [edi + $10], xmm1
+        movups  dqword ptr [edi + $20], xmm2
+        movups  dqword ptr [edi + $30], xmm3
+        add     esi, $40
+        add     edi, $40
+        dec     ebx
+        jnz     @by4
+@done:  // no round-key material left in XMM0..XMM4
+        pxor    xmm0, xmm0
+        pxor    xmm1, xmm1
+        pxor    xmm2, xmm2
+        pxor    xmm3, xmm3
+        pxor    xmm4, xmm4
+        pop     edi
+        pop     esi
+        pop     ebx
+end;
+
+procedure AesNiDecryptBlocks4(var p: TAesNiBlocks4Params);
+  {$ifdef FPC}nostackframe; assembler;{$endif}
+asm
+        push    ebx
+        push    esi
+        push    edi
+        mov     ebx, dword ptr [eax].TAesNiBlocks4Params.groups
+        mov     esi, dword ptr [eax].TAesNiBlocks4Params.src
+        mov     edi, dword ptr [eax].TAesNiBlocks4Params.dst
+        mov     eax, dword ptr [eax].TAesNiBlocks4Params.ctxt
+        test    ebx, ebx
+        jz      @done
+        movzx   ecx, byte ptr [eax].TAes.Rounds
+        shl     ecx, 4
+        lea     edx, [eax + ecx] // RK[Rounds]
+        {$ifdef FPC} align 16 {$endif}
+@by4:   // four independent AES-NI streams, 64 input bytes
+        movups  xmm0, dqword ptr [esi]
+        movups  xmm1, dqword ptr [esi + $10]
+        movups  xmm2, dqword ptr [esi + $20]
+        movups  xmm3, dqword ptr [esi + $30]
+        movups  xmm4, dqword ptr [edx]  // RK[Rounds]
+        pxor    xmm0, xmm4
+        pxor    xmm1, xmm4
+        pxor    xmm2, xmm4
+        pxor    xmm3, xmm4
+        movups  xmm4, dqword ptr [edx - $10]
+        aesdec  xmm0, xmm4
+        aesdec  xmm1, xmm4
+        aesdec  xmm2, xmm4
+        aesdec  xmm3, xmm4
+        movups  xmm4, dqword ptr [edx - $20]
+        aesdec  xmm0, xmm4
+        aesdec  xmm1, xmm4
+        aesdec  xmm2, xmm4
+        aesdec  xmm3, xmm4
+        movups  xmm4, dqword ptr [edx - $30]
+        aesdec  xmm0, xmm4
+        aesdec  xmm1, xmm4
+        aesdec  xmm2, xmm4
+        aesdec  xmm3, xmm4
+        movups  xmm4, dqword ptr [edx - $40]
+        aesdec  xmm0, xmm4
+        aesdec  xmm1, xmm4
+        aesdec  xmm2, xmm4
+        aesdec  xmm3, xmm4
+        movups  xmm4, dqword ptr [edx - $50]
+        aesdec  xmm0, xmm4
+        aesdec  xmm1, xmm4
+        aesdec  xmm2, xmm4
+        aesdec  xmm3, xmm4
+        movups  xmm4, dqword ptr [edx - $60]
+        aesdec  xmm0, xmm4
+        aesdec  xmm1, xmm4
+        aesdec  xmm2, xmm4
+        aesdec  xmm3, xmm4
+        movups  xmm4, dqword ptr [edx - $70]
+        aesdec  xmm0, xmm4
+        aesdec  xmm1, xmm4
+        aesdec  xmm2, xmm4
+        aesdec  xmm3, xmm4
+        movups  xmm4, dqword ptr [edx - $80]
+        aesdec  xmm0, xmm4
+        aesdec  xmm1, xmm4
+        aesdec  xmm2, xmm4
+        aesdec  xmm3, xmm4
+        movups  xmm4, dqword ptr [edx - $90]
+        aesdec  xmm0, xmm4
+        aesdec  xmm1, xmm4
+        aesdec  xmm2, xmm4
+        aesdec  xmm3, xmm4
+        cmp     byte ptr [eax].TAes.Rounds, 10
+        ja      @x192
+@last:  movups  xmm4, dqword ptr [eax] // RK[0], unchanged by AESIMC
+        aesdeclast xmm0, xmm4
+        aesdeclast xmm1, xmm4
+        aesdeclast xmm2, xmm4
+        aesdeclast xmm3, xmm4
+        jmp     @wr
+@x192:  movups  xmm4, dqword ptr [edx - $a0]
+        aesdec  xmm0, xmm4
+        aesdec  xmm1, xmm4
+        aesdec  xmm2, xmm4
+        aesdec  xmm3, xmm4
+        movups  xmm4, dqword ptr [edx - $b0]
+        aesdec  xmm0, xmm4
+        aesdec  xmm1, xmm4
+        aesdec  xmm2, xmm4
+        aesdec  xmm3, xmm4
+        cmp     byte ptr [eax].TAes.Rounds, 12
+        jbe     @last
+        movups  xmm4, dqword ptr [edx - $c0]
+        aesdec  xmm0, xmm4
+        aesdec  xmm1, xmm4
+        aesdec  xmm2, xmm4
+        aesdec  xmm3, xmm4
+        movups  xmm4, dqword ptr [edx - $d0]
+        aesdec  xmm0, xmm4
+        aesdec  xmm1, xmm4
+        aesdec  xmm2, xmm4
+        aesdec  xmm3, xmm4
+        jmp     @last
+@wr:    // safe when src=dst, all four blocks were loaded first
+        movups  dqword ptr [edi], xmm0
+        movups  dqword ptr [edi + $10], xmm1
+        movups  dqword ptr [edi + $20], xmm2
+        movups  dqword ptr [edi + $30], xmm3
+        add     esi, $40
+        add     edi, $40
+        dec     ebx
+        jnz     @by4
+@done:  // no round-key material left in XMM0..XMM4
+        pxor    xmm0, xmm0
+        pxor    xmm1, xmm1
+        pxor    xmm2, xmm2
+        pxor    xmm3, xmm3
+        pxor    xmm4, xmm4
+        pop     edi
+        pop     esi
+        pop     ebx
+end;
+
+{$endif ASMAESNI}
 
 {$ifdef USEAESNICTR}
 
-// use TAesContext.buf as state machine: c0=src c1=dst c2=iv c3=blocks
+// use TAes.buf as state machine: c0=src c1=dst c2=iv c3=blocks
 
 // AES-CTR over a 32-bit counter - handle a few blocks until 4x alignment
-procedure AesNiEncryptCtrNist32By1(ctxt: PAesContext);
+procedure AesNiEncryptCtrNist32By1(ctxt: PAes);
   {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
         push    esi
         push    edi
-        mov     esi, [eax].TAesContext.buf.c0  // esi=src
-        mov     edi, [eax].TAesContext.buf.c1  // edi=dst
-        mov     edx, [eax].TAesContext.buf.c2  // edx=iv
+        mov     esi, [eax].TAes.buf.c0  // esi=src
+        mov     edi, [eax].TAes.buf.c1  // edi=dst
+        mov     edx, [eax].TAes.buf.c2  // edx=iv
         mov     ecx, [edx].THash128Rec.c3      // ecx=ctr
         {$ifdef FPC} align 8 {$endif}
 @by1:   movups  xmm7, [edx]
         bswap   ecx
-        call    dword ptr [eax].TAesContext.AesNi32 // AES.Encrypt(xmm7)
+        call    dword ptr [eax].TAes.AesNi32 // AES.Encrypt(xmm7)
         add     ecx, 1
         movups  xmm0, [esi]
         lea     esi, dword ptr [esi + 16]
@@ -2407,22 +3916,22 @@ asm
         movups  [edi], xmm0
         lea     edi, dword ptr [edi + 16]
         mov     [edx].THash128Rec.c3, ecx
-        dec     dword ptr [eax].TAesContext.buf.c3 // blocks
+        dec     dword ptr [eax].TAes.buf.c3 // blocks
         jnz     @by1
-        mov     [eax].TAesContext.buf.c0, esi
-        mov     [eax].TAesContext.buf.c1, edi
+        mov     [eax].TAes.buf.c0, esi
+        mov     [eax].TAes.buf.c1, edi
 @done:  pop     edi
         pop     esi
 end;
 
 // AES-CTR with 4x AES-NI interleave factor and SSE 4.1 over a 32-bit counter
-procedure AesNiEncryptCtrNist32By4(ctxt: PAesContext);
+procedure AesNiEncryptCtrNist32By4(ctxt: PAes);
   {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
         push    esi
         push    edi
         push    ebx
-        mov     edx, [eax].TAesContext.buf.c2  // edx=iv
+        mov     edx, [eax].TAes.buf.c2  // edx=iv
         lea     eax, dword ptr [eax + $70] // for smaller codegen
         // prepare ecx = 32-bit ctr
         mov     ecx, [edx].THash128Rec.c3
@@ -2447,9 +3956,9 @@ asm
         bswap   ecx
         lea     ecx, [ecx + 4]
         // 4x interleaved AES process
-        mov     esi, [eax - $70].TAesContext.buf.c0  // esi=src
-        mov     edi, [eax - $70].TAesContext.buf.c1  // edi=dst
-        mov     bl, byte ptr [eax - $70].TAesContext.Rounds
+        mov     esi, [eax - $70].TAes.buf.c0  // esi=src
+        mov     edi, [eax - $70].TAes.buf.c1  // edi=dst
+        mov     bl, byte ptr [eax - $70].TAes.Rounds
         movups  xmm4, [eax + $00 - $70]
         movups  xmm5, [eax + $10 - $70]
         movups  xmm6, [eax + $20 - $70]
@@ -2514,18 +4023,18 @@ asm
         movups  xmm6, [esi + $20]
         movups  xmm7, [esi + $30]
         lea     esi, dword ptr [esi + $40]
-        mov     [eax - $70].TAesContext.buf.c0, esi
+        mov     [eax - $70].TAes.buf.c0, esi
         pxor    xmm4, xmm0
         pxor    xmm5, xmm1
         pxor    xmm6, xmm2
         pxor    xmm7, xmm3
         lea     esi, dword ptr [edi + $40]
-        mov     [eax - $70].TAesContext.buf.c1, esi
+        mov     [eax - $70].TAes.buf.c1, esi
         movups  [edi + $00], xmm4
         movups  [edi + $10], xmm5
         movups  [edi + $20], xmm6
         movups  [edi + $30], xmm7
-        dec     dword ptr [eax - $70].TAesContext.buf.c3 // 4x blocks
+        dec     dword ptr [eax - $70].TAes.buf.c3 // 4x blocks
         jnz     @by4
 @done:  pop     ebx
         pop     edi
@@ -2593,9 +4102,9 @@ end;
 
 // AES-NI + SSE 4.1 asm with 4x interleave factor
 procedure AesNiEncryptCtrNist32(
-  src, dst: pointer; blocks: PtrUInt; ctxt: PAesContext; iv: PHash128Rec); inline;
+  src, dst: pointer; blocks: PtrUInt; ctxt: PAes; iv: PHash128Rec); inline;
 var
-  state: PHash128Rec; // = TAesContext.buf
+  state: PHash128Rec; // = TAes.buf
 begin
   if blocks = 0 then
     exit;

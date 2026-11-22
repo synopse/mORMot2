@@ -1875,14 +1875,16 @@ SYSV aarch64:
     {$endif OSANDROID}
   {$endif ABIA32}
   {$ifdef ABIA64}
-    {$if defined(OSANDROID) or defined(IOS)}
+    {$if defined(OSANDROID) or defined(OSDARWIN)}
       // Delphi's LLVM aarch64 compiler follows AAPCS64 and passes a by-ref
       // result in the dedicated X8 register, so it does not consume X1 as FPC
       // does: the external aarch64fakestub (assembled from delphi-aarch64.s)
       // saves X8 into TFakeCallStack.Frame, and no integer register is
       // reserved for the result
       // - the very same code is used as ELF for Android and as Mach-O for iOS
-      // - macOS/Windows aarch64 would need their own object: not done yet
+      // - macOS aarch64 links the very same Mach-O code (delphi-macos-arm64.o:
+      // delphi-ios-arm64.o with LC_BUILD_VERSION retargeted to macOS 11.0)
+      // - Windows aarch64 would need its own object: not done yet
       {$define DELPHI_AARCH64_RESULT_X8}
       // iOS terminates an app which runs code it wrote itself, so the VMT
       // entry points come compiled in (aarch64fakethunks) instead of JITted
@@ -2260,6 +2262,7 @@ type
     optErrorOnMissingParam,
     optForceStandardJson,
     optDontStoreVoidJson,
+    optCleanMagicJson,
     optIgnoreException,
     optFreeTimeout);
 
@@ -2303,6 +2306,7 @@ type
   // you can set optForceStandardJson to ensure standard JSON is always returned
   // - optDontStoreVoidJson will reduce the JSON object verbosity by not writing
   // void (e.g. 0 or '') properties when serializing objects and records
+  // - optCleanMagicJson will apply RemoveMagicFromJson() to the JSON result
   // - any exceptions will be propagated during execution, unless
   // optIgnoreException is set and the exception is trapped (not to be used
   // unless you know what you are doing)
@@ -3192,7 +3196,7 @@ begin
            (vIsDynArrayString in arginfo^.ValueKindAsm) then
           W.AddJsonString(value)
         else
-          W.AddShort(pointer(value), length(value));
+          W.AddNoJsonEscape(pointer(value), length(value));
         if arginfo^.ValueType = imvDynArray then
           W.AddDirect(']');
       end;
@@ -4923,6 +4927,8 @@ const
       '../../res/static/delphillvm/delphi-android-arm64.o'  // ELF
     {$elseif defined(IOSSIMULATOR)}
       '../../res/static/delphillvm/delphi-iossim-arm64.o'   // Mach-O
+    {$elseif not defined(IOS)}
+      '../../res/static/delphillvm/delphi-macos-arm64.o'    // Mach-O macOS
     {$else}
       '../../res/static/delphillvm/delphi-ios-arm64.o'      // Mach-O
     {$ifend};
@@ -5989,6 +5995,9 @@ begin
   r := pointer(Rtti.FindType(PPointer(PPAnsiChar(self)^ + vmtTypeInfo)^));
   {$else}
   r := PPointer(PPAnsiChar(self)^ + vmtAutoTable)^;
+  if (r <> nil) and
+     Rtti.RegisterSafe.IsLocked then
+    Rtti.RegisterSafe.WaitUnlocked;
   {$endif NOPATCHVMT}
   if (r = nil) or
      not (rcfAutoCreateFields in r.Flags) then
@@ -6577,7 +6586,7 @@ begin
 end;
 
 type
-  TInterfaceStubExecutesToLog = packed record
+  TInterfaceStubExecutesToLog = record
     Log: TSynLogClass;
     LogLevel: TSynLogLevel;
     Kind: TInterfaceMethodParamsDocVariantKind;
@@ -8002,7 +8011,7 @@ begin
     // on thread contention, will use a transient temporary instance
     result := TInterfaceMethodExecuteCached.Create(
       fFactory, fMethod, ExecuteOptions);
-  fWR.CustomOptions := WROptions;
+  result.fWR.CustomOptions := WROptions;
 end;
 
 procedure TInterfaceMethodExecuteCached.Release(exec: TInterfaceMethodExecuteCached);

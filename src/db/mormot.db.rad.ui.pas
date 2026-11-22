@@ -712,7 +712,7 @@ var
   f: TField;
   blob: TRawByteStringStream;
 begin
-  result := 'null';
+  result := NULL_STR_VAR;
   if Data = nil then
     exit;
   Data.First;

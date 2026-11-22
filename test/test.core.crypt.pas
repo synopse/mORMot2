@@ -22,6 +22,7 @@ uses
   mormot.crypt.other,
   mormot.crypt.openssl,
   mormot.crypt.secure,
+  mormot.crypt.factory,
   mormot.crypt.ecc256r1,
   mormot.core.perf,
   mormot.core.test,
@@ -33,7 +34,9 @@ uses
   mormot.crypt.jwt,
   mormot.crypt.ecc,
   mormot.crypt.rsa,
-  mormot.crypt.x509;
+  mormot.crypt.x509,
+  mormot.crypt.win,
+  mormot.misc.pecoff;
 
 type
   /// regression tests for mormot.crypt.core and mormot.crypt.jwt features
@@ -50,6 +53,9 @@ type
     procedure CatalogRunStore(Context: TObject);
     procedure RsaSlow(Context: TObject);
     procedure CrcSlow(Context: TObject); // 32-bit, 64-bit and 128-bit hash
+    procedure RsaBarrett;
+    procedure RsaSquare;
+    procedure RsaMillerRabin;
     procedure Rfc(a: TSignAlgo; const P, S: RawUtf8; c, l: integer;
       const exp, msg: RawUtf8);
     procedure Kdf(a: TSignAlgo; const key, exp, msg: RawUtf8;
@@ -80,6 +86,8 @@ type
     procedure _RSA;
     /// X509 Certificates
     procedure _X509;
+    /// Authenticode signature of Windows executables
+    procedure _Authenticode;
     /// stream-oriented cryptography
     procedure Streams;
     /// Base64/Base58/Base32 encoding/decoding functions
@@ -892,7 +900,7 @@ procedure TTestCoreCrypto._SHA3;
 begin
   DoTest;
   {$ifdef ASMX64AVX1}
-  if cpuAVX2 in X64CpuFeatures then // validate without KeccakPermutationAvx2()
+  if HasKeccakAvx2 then // validate without KeccakPermutationAvx2()
   begin
     Exclude(X64CpuFeatures, cpuAVX2);
     DoTest;
@@ -965,26 +973,29 @@ begin
   Check(not IsEqual(b1, b2));
   Check(not CompareMem(@b1, @b2, SizeOf(b1)));
   // validate reusable MakeStrongPassWord() algorithm
-  Check(MakeStrongPassWord(spi));
+  Check(MakeStrongPassWord(spi, nil));
   spi := ' ';
-  Check(MakeStrongPassWord(spi));
+  Check(MakeStrongPassWord(spi, nil));
   CheckEqual(spi, 'G');
   spi := '  ';
-  Check(MakeStrongPassWord(spi));
+  Check(MakeStrongPassWord(spi, nil));
   CheckEqual(spi, 'GG');
   spi := '    ';
-  Check(MakeStrongPassWord(spi));
+  Check(MakeStrongPassWord(spi, nil));
   CheckEqual(spi, 'GGGG');
+  clo := 0;
   spi := '     ';
-  CheckNot(MakeStrongPassWord(spi));
+  CheckNot(MakeStrongPassWord(spi, @clo));
+  CheckEqual(clo, 1);
   CheckEqual(spi, 'GGGGG');
-  Check(not MakeStrongPassWord(spi));
+  Check(not MakeStrongPassWord(spi, nil));
   CheckEqual(spi, 'jjjjj');
   spi := '0123456789';
-  CheckNot(MakeStrongPassWord(spi));
+  CheckNot(MakeStrongPassWord(spi, nil));
   CheckEqual(spi, 'WXYZ012345');
-  Check(MakeStrongPassWord(spi));
+  Check(MakeStrongPassWord(spi, @clo));
   CheckEqual(spi, 'z+BCWXYZ01');
+  CheckEqual(clo, 1);
   // validate this PRNG class
   clo := 0;
   chi := 0;
@@ -1026,6 +1037,14 @@ begin
         Check(not (IsUpper(s1) or IsLower(s1)), 'rndpass case');
       for j := 1 to i do
         check(s1[j] in [#33 .. #126]);
+      a1.FillRandomNotZero(pointer(s1), i);
+      a2.FillRandomNotZero(pointer(s2), i);
+      if i > 4 then
+        checkUtf8(s1 <> s2, 'prngzero len=%', [i]);
+      for j := 1 to i do
+        check(s1[j] <> #0);
+      for j := 1 to i do
+        check(s2[j] <> #0);
       // verify Random32 / RandomDouble / RandomDouble distribution
       c := a1.Random32;
       if c < cardinal(maxint) then
@@ -1980,6 +1999,7 @@ var
   buf: RawByteString;
   u, pw, nfo, nfo2, exp, db, proof, mech, sec, pin: RawUtf8;
   iv: Int64;
+  t: TUnixTime;
   P: PAnsiChar;
   unalign: PtrInt;
   n, rnd, dig: integer;
@@ -2411,18 +2431,27 @@ begin
       pin := TotpGenerate(sec, dig, s);
       Check(pin <> '', 'TotpGenerate');
       CheckEqual(length(pin), dig);
-      Check(TotpValidate(sec, pin, 1, s), 'TotpValidate with current time');
-      Check(TotpValidate(Base32ToBin(sec), pin, 1, s, -1, true), 'Totp bin');
-      Check(TotpValidate(sec, pin, 0, s, 123) =
+      Check(TotpValidate(sec, pin, dig, 1, s), 'TotpValidate with current time');
+      Check(TotpValidate(Base32ToBin(sec), pin, dig, 1, s, -1, nil, true), 'Totp bin');
+      Check(TotpValidate(sec, pin, dig, 0, s, 123) =
             (TotpGenerate(sec, dig, s, false, 123) = pin),
             'TotpValidate with time=123');
       CheckEqual(TotpGenerate('', 6, s), '', 'no sec');
       CheckEqual(TotpGenerate(sec, 3, s), '', 'dig=3<4');
       CheckEqual(TotpGenerate(sec, 9, s), '', 'dig=9>8');
-      Check(not TotpValidate(sec, '', 1, s));
-      Check(not TotpValidate(sec, '123', 1, s));
-      Check(not TotpValidate(sec, '123456789', 1, s));
+      Check(not TotpValidate(sec, '', dig, 1, s));
+      Check(not TotpValidate(sec, '123', dig, 1, s));
+      Check(not TotpValidate(sec, '123456789', dig, 1, s));
     end;
+  sec := 'GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ';
+  t := 0;
+  Check(TotpValidate(sec, '287082', 6, 0, saSha1, 1, @t));
+  CheckEqual(t, 1);
+  Check(not TotpValidate(sec, '7082', 6, 0, saSha1, 1, @t));
+  Check(TotpValidate(sec, '94287082', 8, 0, saSha1, 1, @t));
+  CheckEqual(t, 1);
+  Check(not TotpValidate(sec, '123456', 6, 0, saSha1, 1, @t));
+  CheckEqual(t, 1);
   CheckEqual(TotpUrl('Google', 'alice@google.com', 'JBSWY3DPEHPK3PXP'),
     'otpauth://totp/Google:alice%40google.com?secret=JBSWY3DPEHPK3PXP&issuer=' +
     'Google&digits=6&period=30');
@@ -2833,11 +2862,11 @@ procedure TTestCoreCrypto._AES;
     Check(plain <> '');
     Check((length(iv) = 16) or
           (iv = ''));
-    CheckEqual(length(plain) and AesBlockMod, 0);
+    CheckEqual(length(plain) and AES_MOD, 0);
     k := mormot.core.text.HexToBin(Key);
     Check(length(k) in [16, 24, 32]);
     e := mormot.core.text.HexToBin(expected);
-    CheckEqual(length(e) and AesBlockMod, 0);
+    CheckEqual(length(e) and AES_MOD, 0);
     CheckEqual(length(k) shl 3, ks);
     SetLength(c, length(plain));
     SetLength(d, length(plain));
@@ -2911,16 +2940,15 @@ begin
   backup := CpuFeatures;
   {$endif ASMINTEL}
   CheckEqual(SizeOf(TMd5Buf), SizeOf(TMd5Digest));
-  CheckEqual(1 shl AesBlockShift, SizeOf(TAesBlock));
-  CheckEqual(SizeOf(TAes), AES_CONTEXT_SIZE);
-  Check(AES_CONTEXT_SIZE <= 300); // lib/static/libsqlite3/sqlite3mc.c KEYLENGTH
+  CheckEqual(1 shl AES_SHIFT, SizeOf(TAesBlock));
+  Check(SizeOf(TAes) <= 300, 'lib/static/libsqlite3/sqlite3mc.c KEYLENGTH');
   {$ifndef PUREMORMOT2}
   CheckEqual(SizeOf(TAesFullHeader), SizeOf(TAesBlock));
   {$endif PUREMORMOT2}
-  CheckEqual(SizeOf(TSha1), SHA_CONTEXT_SIZE);
-  CheckEqual(SizeOf(TSha256), SHA_CONTEXT_SIZE);
+  CheckEqual(SizeOf(TSha1), SizeOf(TShaContext));
+  CheckEqual(SizeOf(TSha256), SizeOf(TShaContext));
   CheckEqual(SizeOf(TSha256), SizeOf(TSha1));
-  CheckEqual(SizeOf(TSha3), SHA3_CONTEXT_SIZE);
+  CheckEqual(SizeOf(TSha3), SizeOf(TSha3Context));
   Check(SizeOf(TSha512) > SizeOf(TSha256));
   Check(SizeOf(TSha3) > SizeOf(TSha512));
   CheckEqual(SizeOf(TSha384), SizeOf(TSha384512));
@@ -3463,7 +3491,7 @@ const
     avx: boolean;
     pt, ct: array[0..511] of byte;
   begin
-    for avx := false to true do
+    for avx := false to HasAesGcmAvx do
     begin
       FillCharFast(pt, SizeOf(pt), 0);
       CheckUtf8(ctxt.FullDecryptAndVerify(key, kbits, pIV, pAAD, ctp, @pt, ptag,
@@ -3474,32 +3502,30 @@ const
         IV_Len, aLen, cLen, tag, avx), 'FullEncryptAndAuthenticate #%', [tn]);
       CheckUtf8(CompareMem(@tag, ptag, tlen), 'Tag #%', [tn]);
       CheckUtf8(CompareMem(@ct, ctp, cLen), 'Encoded #%', [tn]);
-      {$ifndef ASMX64AVX0}
-      break;
-      {$endif ASMX64AVX0}
     end;
   end;
 
 var
   ctxt: TAesGcmEngine;
   key, tag: TAesBlock;
-  buf: THash512;
+  buf, cipher, plain: THash512;
+  aad: THash256;
   n: integer;
   avx: boolean;
 begin
-  for avx := false to true do
+  for avx := false to HasAesGcmAvx do
   begin
     key := PAesBlock(@hex32)^;
     FillZero(buf);
     FillZero(tag);
-    check(ctxt.FullEncryptAndAuthenticate(key, 128,
-      @hex32, nil, @buf, @buf, 12, 0, SizeOf(buf), tag, avx));
+    check(ctxt.FullEncryptAndAuthenticate(key, 128, @hex32, nil,
+      @buf, @buf, 12, 0, SizeOf(buf), tag, avx));
     CheckEqual(CardinalToHex(crc32c(0, @buf, SizeOf(buf))), 'AC3DDD17');
     CheckEqual(Md5DigestToString(tag), '0332c40f9926bd3cdadf33148912c672');
   end;
   for n := 1 to 32 do
   begin
-    Check(ctxt.Init(key, 128, false));
+    Check(ctxt.Init(key, 128));
     Check(ctxt.Reset(@hex32, n));
     Check(ctxt.Add_AAD(@hex32, n));
     Check(ctxt.Encrypt(@hex32, @buf, n));
@@ -3528,6 +3554,49 @@ begin
        @C10, SizeOf(C10), @P10, 10);
   test(@T11, 16, K11, 8 * SizeOf(K11), @I11, SizeOf(I11), @H11, SizeOf(H11),
        @C11, SizeOf(C11), @P11, 11);
+  for n := 1 to SizeOf(buf) do // 64 bytes - AVX is used only if n mod 16 = 0
+    for avx := false to HasAesGcmAvx do
+    begin
+      FillZero(cipher);
+      Check(ctxt.FullEncryptAndAuthenticate(key, 128, @hex32, @hex32,
+        @buf, @cipher, 12, 16, n, tag, avx));
+      FillZero(plain);
+      CheckUtf8(ctxt.FullDecryptAndVerify(key, 128, @hex32, @hex32,
+        @cipher, @plain, @tag, 12, 16, n, 16, avx),
+        'verify n=% avx=%', [n, avx]);
+      Check(CompareMem(@buf, @plain, n));
+      inc(cipher[0]); // should detect a forged ciphertext, tag or AAD
+      CheckUtf8(not ctxt.FullDecryptAndVerify(key, 128, @hex32, @hex32,
+        @cipher, @plain, @tag, 12, 16, n, 16, avx),
+        'forged ctp n=% avx=%', [n, avx]);
+      dec(cipher[0]);
+      inc(tag[15]);
+      CheckUtf8(not ctxt.FullDecryptAndVerify(key, 128, @hex32, @hex32,
+        @cipher, @plain, @tag, 12, 16, n, 16, avx),
+        'forged tag n=% avx=%', [n, avx]);
+      dec(tag[15]);
+      CheckUtf8(not ctxt.FullDecryptAndVerify(key, 128, @hex32, @hex32,
+        @cipher, @plain, @tag, 12, 15, n, 16, avx),
+        'truncated aad n=% avx=%', [n, avx]);
+      FillZero(plain);
+      aad := hex32;
+      CheckUtf8(ctxt.FullDecryptAndVerify(key, 128, @hex32, @aad,
+        @cipher, @plain, @tag, 12, 16, n, 16, avx),
+        'verify again n=% avx=%', [n, avx]);
+      Check(CompareMem(@buf, @plain, n));
+      inc(aad[15]);
+      CheckUtf8(not ctxt.FullDecryptAndVerify(key, 128, @hex32, @aad,
+        @cipher, @plain, @tag, 12, 16, n, 16, avx),
+        'forged aad n=% avx=%', [n, avx]);
+      FillZero(cipher);
+      Check(ctxt.FullEncryptAndAuthenticate(key, 128, @hex32, @hex32,
+        @buf, @cipher, 12, 10, n, tag, avx));
+      FillZero(plain);
+      CheckUtf8(ctxt.FullDecryptAndVerify(key, 128, @hex32, @hex32,
+        @cipher, @plain, @tag, 12, 10, n, 16, avx),
+        'trunc aad n=% avx=%', [n, avx]);
+      Check(CompareMem(@buf, @plain, n));
+    end;
 end;
 
 {$ifndef PUREMORMOT2}
@@ -3703,6 +3772,37 @@ var
   dig: TDigestAuthServerFile;
   users, pwds, users2: TRawUtf8DynArray;
   bak: RawByteString;
+
+  function ValueOf(const resp, name: RawUtf8): RawUtf8;
+  var
+    i, j: PtrInt;
+  begin
+    result := '';
+    i := PosEx(name, resp);
+    if i = 0 then
+      exit;
+    inc(i, length(name));
+    j := PosEx('"', resp, i);
+    if j > i then
+      result := copy(resp, i, j - i);
+  end;
+
+  procedure CheckVoidValue(const challenge, aRealm, aNonce: RawUtf8);
+  var
+    resp, expected: RawUtf8;
+  begin
+    CheckEqual(DigestRealm(challenge), aRealm, 'void realm');
+    resp := DigestClient(daMD5, challenge, 'POST', '/onvif/device_service',
+      'admin', 'pass');
+    CheckUtf8(resp <> '', 'void value in %', [challenge]);
+    CheckEqual(ValueOf(resp, ',nonce="'), aNonce, 'void nonce');
+    // RFC 7616 3.4.1 with qop=auth
+    expected := Md5(Join([Md5(Join(['admin:', aRealm, ':pass'])), ':', aNonce,
+      ':00000001:', ValueOf(resp, ',cnonce="'), ':auth:',
+      Md5('POST:/onvif/device_service')]));
+    CheckEqual(ValueOf(resp, ',response="'), expected, 'void response');
+  end;
+
 begin
   // validate raw client-server Digest access authentication
   Check(DigestServerInit(daUndefined, '', '', '', 0) = '');
@@ -3738,6 +3838,18 @@ begin
     end;
   end;
   Check(DigestServerInit(daUndefined, realm, '', '', opaque) = '');
+  // a parameter value may be void (RFC 9110 5.6.4 quoted-string), e.g. the
+  // opaque="" of the WWW-Authenticate header sent by some IP cameras - with
+  // their exact layout, but anonymized realm and nonce values
+  CheckVoidValue('realm="Login to 0123456789ABCDEF",qop="auth",' +
+    'nonce="A4C123B1612DD272D1371C17149D439536B3216FDAEEB975729FAE923D5A4FD", ' +
+    'opaque="", stale="false"', 'Login to 0123456789ABCDEF',
+    'A4C123B1612DD272D1371C17149D439536B3216FDAEEB975729FAE923D5A4FD');
+  CheckVoidValue('realm="Login to 0123456789abcdef0123456789abcdef",qop="auth", ' +
+    'algorithm="MD5", nonce="b252aWYtZGlnZXN0OjEyMzQ1Njc4OTAx", opaque="", ' +
+    'stale="false"', 'Login to 0123456789abcdef0123456789abcdef',
+    'b252aWYtZGlnZXN0OjEyMzQ1Njc4OTAx');
+  CheckVoidValue('realm="r",opaque="",nonce="n"', 'r', 'n');
   // validate TDigestAuthServerFile
   SetLength(users, 100);
   SetLength(pwds, length(users));
@@ -4097,11 +4209,13 @@ end;
 procedure TTestCoreCrypto.CatalogRunAsym(Context: TObject);
 var
   asy: TCryptAsym absolute Context;
+  pk: ICryptPublicKey;
+  sk: ICryptPrivateKey;
   pub, pub2, priv, priv2: RawUtf8;
   n, s: RawByteString;
   timer: TPrecisionTimer;
 begin
-  Check(mormot.crypt.secure.Asym(asy.AlgoName) = asy);
+  Check(mormot.crypt.factory.Asym(asy.AlgoName) = asy);
   if (asy.KeyAlgo in CKA_RSA) and
      not fCatalogAllGenerate then
   begin
@@ -4128,6 +4242,14 @@ begin
   inc(n[1]);
   Check(not asy.Verify(n, pub, s));
   dec(n[1]);
+  // regression for #652: public/private keys must not be interchangeable
+  if asy.KeyAlgo = ckaEcc256 then
+  begin
+    pk := CryptPublicKey[ckaEcc256].Create;
+    Check(not pk.Load(ckaEcc256, priv), 'private as public');
+    sk := CryptPrivateKey[ckaEcc256].Create;
+    Check(not sk.Load(ckaEcc256, nil, pub, ''), 'public as private');
+  end;
 end;
 
 procedure TTestCoreCrypto.CatalogRunCert(Context: TObject);
@@ -4679,7 +4801,7 @@ begin
   begin
     rnd := alg[a] as TCryptRandom;
     NotifyProgress([rnd.AlgoName]);
-    Check(mormot.crypt.secure.Rnd(rnd.AlgoName) = rnd);
+    Check(mormot.crypt.factory.Rnd(rnd.AlgoName) = rnd);
     timer.Start;
     cprev := 0;
     dprev := 0;
@@ -4717,7 +4839,7 @@ begin
   begin
     hsh := alg[a] as TCryptHasher;
     NotifyProgress([hsh.AlgoName]);
-    Check(mormot.crypt.secure.Hasher(hsh.AlgoName) = hsh);
+    Check(mormot.crypt.factory.Hasher(hsh.AlgoName) = hsh);
     h := hsh.Full(n);
     for i := 1 to length(n) do
     begin
@@ -4733,7 +4855,7 @@ begin
   begin
     sig := alg[a] as TCryptSigner;
     NotifyProgress([sig.AlgoName]);
-    Check(mormot.crypt.secure.Signer(sig.AlgoName) = sig);
+    Check(mormot.crypt.factory.Signer(sig.AlgoName) = sig);
     h := sig.Full('key', n);
     for i := 1 to length(n) do
     begin
@@ -4756,7 +4878,7 @@ begin
   begin
     cip := alg[a] as TCryptCipherAlgo;
     NotifyProgress([cip.AlgoName]);
-    Check(mormot.crypt.secure.CipherAlgo(cip.AlgoName) = cip);
+    Check(mormot.crypt.factory.CipherAlgo(cip.AlgoName) = cip);
     if cip.IsAead then
       aead := cip.AlgoName
     else
@@ -4903,6 +5025,16 @@ begin
   finally
     gen.Free;
   end;
+  // exercise invalidation and subsequent generator destruction (#650)
+  gen := TBinaryCookieGenerator.Create('probe');
+  try
+    i := gen.Generate(bak, 60);
+    Check(i <> 0);
+    CheckEqual(gen.Validate(bak, nil, nil, nil, nil, true), i);
+    CheckEqual(gen.Validate(bak), 0);
+  finally
+    gen.Free;
+  end;
 end;
 
 procedure TTestCoreCrypto.Pkcs11;
@@ -4971,6 +5103,10 @@ var
   bin, hash, signed, encrypted: RawByteString;
   timer: TPrecisionTimer;
 begin
+  // validate Barret Reduction, Square and Miller-Rabin algorithms
+  RsaBarrett;
+  RsaSquare;
+  RsaMillerRabin;
   // validate RSA key generation - in a background thread for this slow process
   hash := HexToBin(_hash);
   CheckEqual(length(hash), SizeOf(TSha256Digest));
@@ -5018,6 +5154,342 @@ begin
     encrypted := c.Seal(bin); // bin is typically > 1KB long
     Check(encrypted <> '', 'Seal');
     Check(c.Open(encrypted) = bin, 'Open');
+  finally
+    c.Free;
+  end;
+end;
+
+procedure TTestCoreCrypto.RsaMillerRabin;
+const
+  VALUES: array[0..7] of RawUtf8 = (
+    '00010001', // common exponent: early return
+    '00010003', // 65539
+    '78000001', // 2013265921: many Miller-Rabin squarings (s = 27)
+    '7fffffff', // 2^31 - 1
+    '0000000100000001', // 641 * 6700417: passes bspFast sieve
+    '1fffffffffffffff', // 2^61 - 1
+    '3fffffff00000001', // (2^31 - 1)^2: passes even bspAll sieve
+    '7fffffffffffffffffffffffffffffff'); // 2^127 - 1
+  PRIME: array[0..7] of boolean = (true, true, true, true, false, true, false, true);
+var
+  c: TRsaContext;
+  m, t, mu, e, a, b: PBigInt;
+  slot: TRsaModulo;
+  i, j, bak, active: integer;
+  hex: RawUtf8;
+begin
+  c := TRsaContext.Create;
+  try
+    // IsPrime must preserve all loaded RSA caches and CurrentModulo
+    for slot := low(TRsaModulo) to high(TRsaModulo) do
+      c.SetModulo(c.AllocateFrom(257 + ord(slot)).SetPermanent, slot);
+    c.CurrentModulo := rmQ;
+    for i := 0 to high(VALUES) do
+    begin
+      m := c.AllocateFromHex(VALUES[i]).Trim;
+      hex := m^.ToHexa;
+      // compare cached modular powers with the independent division path
+      m^.SetPermanent;
+      t := c.AllocateFrom(1).LeftShift(2 * m^.Size);
+      mu := t^.Divide(m);
+      t.Release;
+      e := m^.Clone.IntSub(1);
+      e^.ShrBits(e^.FindMinBit);
+      for j := 1 to 3 do
+      begin
+        if j = 3 then // initial base outside Barrett's bound: division fallback
+          t := c.AllocateFrom(1).LeftShift(2 * m^.Size)
+        else
+          t := c.AllocateFrom(j * 2 + 1);
+        a := c.ModPower(t^.Copy, e^.Copy, m);
+        b := c.ModPower(t, e^.Copy, m, mu);
+        CheckEqual(a^.Compare(b), 0, 'Miller-Rabin Barrett vs division');
+        CheckEqual(mu^.RefCnt, 1, 'borrowed Barrett reciprocal');
+        a.Release;
+        b.Release;
+      end;
+      e.Release;
+      mu.Release;
+      // successful and composite exits preserve normal, shared and permanent m
+      for j := 0 to 2 do
+      begin
+        case j of
+          0: m^.RefCnt := 1;
+          1: m^.Copy;
+          2:
+            begin
+              m.Release; // drop the shared reference before making permanent
+              m^.SetPermanent;
+            end;
+        end;
+        bak := m^.RefCnt;
+        active := c.ActiveCount;
+        Check(m^.IsPrime(bspFast, 10) = PRIME[i], 'Miller-Rabin prime');
+        CheckEqual(m^.RefCnt, bak, 'candidate references preserved');
+        CheckEqual(m^.ToHexa, hex, 'candidate value preserved');
+        CheckEqual(c.ActiveCount, active, 'Miller-Rabin temporaries released');
+        Check(c.CurrentModulo = rmQ, 'current RSA modulus preserved');
+      end;
+      m^.ResetPermanentAndRelease;
+      for slot := low(TRsaModulo) to high(TRsaModulo) do
+      begin
+        c.CurrentModulo := slot;
+        a := c.Reduce(c.AllocateFrom(1000), nil);
+        CheckEqual(a^.Compare(1000 mod (257 + ord(slot))), 0, 'RSA cache preserved');
+        a.Release;
+      end;
+      c.CurrentModulo := rmQ;
+      CheckEqual(c.ActiveCount, 9, 'only RSA caches remain');
+    end;
+    for slot := low(TRsaModulo) to high(TRsaModulo) do
+      c.ResetModulo(slot);
+    CheckEqual(c.ActiveCount, 0, 'Miller-Rabin tests released');
+  finally
+    c.Free;
+  end;
+end;
+
+procedure TTestCoreCrypto.RsaBarrett;
+const
+  SIZES: array[0..10] of integer = (1, 2, 3, 15, 16, 17, 31, 32, 33, 64, 128);
+var
+  c: TRsaContext;
+  a, b, m, full, expected, actual: PBigInt;
+  seed: cardinal;
+  si, sj, pattern, i, j, n, count: integer;
+  slot: TRsaModulo;
+
+  function Number(limbs, kind: integer): PBigInt;
+  var
+    l: integer;
+  begin
+    result := c.Allocate(limbs);
+    for l := 0 to limbs - 1 do
+      case kind of
+        0:
+          result^.Value[l] := high(HalfUInt);
+        1:
+          if l and 1 = 0 then
+            result^.Value[l] := high(HalfUInt);
+        2:
+          begin
+            seed := seed xor (seed shl 13);
+            seed := seed xor (seed shr 17);
+            seed := seed xor (seed shl 5);
+            result^.Value[l] := HalfUInt(seed);
+          end;
+      end;
+    result^.Trim;
+  end;
+
+  procedure CheckReduction(x: PBigInt);
+  var
+    e, r: PBigInt;
+  begin
+    e := x^.Divide(m^.Copy, bidMod);
+    r := c.Reduce(x, nil); // consumes x
+    CheckEqual(r^.Compare(e), 0, 'Barrett vs division');
+    Check(r^.Compare(m) < 0, 'canonical remainder');
+    r.Release;
+    e.Release;
+    CheckEqual(c.ActiveCount, 3, 'modulus and two cached constants');
+  end;
+
+begin
+  seed := $12345678;
+  c := TRsaContext.Create;
+  try
+    for si := 0 to high(SIZES) do
+      for sj := 0 to high(SIZES) do
+        for pattern := 0 to 3 do
+        begin
+          a := Number(SIZES[si], pattern);
+          b := Number(SIZES[sj], pattern);
+          full := a^.Copy.Multiply(b^.Copy);
+          for i := -1 to 7 do
+          begin
+            case i of
+              -1, 0, 1: count := i;
+              2: count := SIZES[si] - 1;
+              3: count := SIZES[si];
+              4: count := SIZES[si] + 1;
+              5: count := SIZES[sj];
+              6: count := a^.Size + b^.Size;
+            else
+              count := a^.Size + b^.Size + 1;
+            end;
+            expected := full^.Clone;
+            if count <= 0 then
+            begin
+              expected^.Size := 1;
+              expected^.Value[0] := 0;
+            end
+            else if expected^.Size > count then
+              expected^.Size := count;
+            expected^.Trim;
+            actual := a^.Copy.MultiplyLow(b^.Copy, count);
+            CheckEqual(actual^.Compare(expected), 0, 'MultiplyLow');
+            CheckEqual(a^.RefCnt, 1, 'left retained');
+            CheckEqual(b^.RefCnt, 1, 'right retained');
+            actual.Release;
+            expected.Release;
+          end;
+          full.Release;
+          // aliased operands and permanent operands must survive unchanged
+          expected := a^.Copy.Multiply(a^.Copy);
+          actual := a^.Copy.MultiplyLow(a^.Copy, 2 * a^.Size);
+          CheckEqual(actual^.Compare(expected), 0, 'MultiplyLow alias');
+          actual.Release;
+          expected.Release;
+          a^.SetPermanent;
+          actual := a^.MultiplyLow(b^.Copy, 1);
+          CheckEqual(a^.RefCnt, -1, 'permanent retained');
+          actual.Release;
+          a^.ResetPermanentAndRelease;
+          b.Release;
+          CheckEqual(c.ActiveCount, 0, 'MultiplyLow released');
+        end;
+    // carry/borrow entering a later assembly block whose first word is all ones
+    a := Number(128, 0);
+    expected := a^.Copy.IntMultiply(2);
+    actual := a^.Clone.Add(a^.Copy);
+    CheckEqual(actual^.Compare(expected), 0, 'carry across all-ones block');
+    actual.Release;
+    expected.Release;
+    actual := c.Allocate(128).Substract(a^.Copy);
+    CheckEqual(actual^.Compare(1), 0, 'borrow across all-ones block');
+    actual.Release;
+    a.Release;
+    CheckEqual(c.ActiveCount, 0, 'carry tests released');
+    for slot := low(TRsaModulo) to high(TRsaModulo) do
+      for si := 0 to high(SIZES) do
+        for pattern := 0 to 3 do
+        begin
+          n := SIZES[si];
+          case pattern of
+            0: m := c.AllocateFrom(1).LeftShift(n - 1);
+            1: m := c.AllocateFrom(1).LeftShift(n - 1).IntAdd(1);
+            2: m := Number(n, 0);
+          else
+            begin
+              m := Number(n, 2);
+              m^.Value[m^.Size - 1] := m^.Value[m^.Size - 1] or 1;
+            end;
+          end;
+          c.SetModulo(m^.SetPermanent, slot);
+          c.CurrentModulo := slot;
+          CheckReduction(c.AllocateFrom(0));
+          CheckReduction(m^.Clone.IntSub(1));
+          CheckReduction(m^.Clone);
+          CheckReduction(m^.Clone.IntAdd(1));
+          CheckReduction(m^.Copy.Multiply(m^.Copy).IntSub(1));
+          CheckReduction(Number(2 * n, 0));
+          // outside Barrett's input bound: exercise the division fallback
+          CheckReduction(c.AllocateFrom(1).LeftShift(2 * n));
+          for j := 1 to 20 do
+            CheckReduction(Number(2 * n, 2));
+          c.ResetModulo(slot);
+          CheckEqual(c.ActiveCount, 0, 'Barrett released');
+        end;
+  finally
+    c.Free;
+  end;
+end;
+
+procedure TTestCoreCrypto.RsaSquare;
+const
+  SIZES: array[0 .. 26] of integer = (1, 2, 3, 7, 8, 9, 15, 16, 17, 31, 32, 33,
+    47, 48, 49, 63, 64, 65, 95, 96, 97, 127, 128, 129, 255, 256, 257);
+var
+  c: TRsaContext;
+  a, expected, actual: PBigInt;
+  hex: RawUtf8;
+  seed: cardinal;
+  v: PHalfUInt;
+  si, kind, i, n: integer;
+begin
+  c := TRsaContext.Create;
+  seed := $a5a55a5a;
+  try
+    for si := 0 to high(SIZES) do
+      for kind := 0 to 105 do
+      begin
+        n := SIZES[si];
+        a := c.Allocate(n);
+        if kind <> 0 then // kind=0: all zero, even with untrimmed leading limbs
+        begin
+          v := pointer(a^.Value);
+          for i := 0 to n - 1 do
+          begin
+            case kind of
+              1:
+                v^ := high(HalfUInt);   // maximal carry chains
+              2:
+                if i and 1 = 0 then
+                  v^ := high(HalfUInt); // odd
+              3:
+                if i = n - 1 then
+                  v^ := high(HalfUInt); // last
+              4:
+                if i = 0 then
+                  v^ := high(HalfUInt) // first
+                else
+                  break;
+              5:
+                v^ := HalfUInt(1) shl (HALF_BITS - 1);
+            else
+              begin
+                seed := seed xor (seed shl 13); // some random diffusion
+                seed := seed xor (seed shr 17);
+                seed := seed xor (seed shl 5);
+                v^ := seed;
+              end;
+            end;
+            inc(v);
+          end;
+        end;
+        hex := a^.ToHexa;
+        expected := a^.Copy.Multiply(a^.Copy);
+        actual := a^.Copy.Square;
+        CheckEqual(actual^.Compare(expected), 0, 'Square vs Multiply');
+        CheckEqual(a^.ToHexa, hex, 'Square source preserved');
+        CheckEqual(a^.RefCnt, 1, 'Square shared source retained');
+        actual.Release;
+        // squaring a permanent operand must leave its value and ownership intact
+        a^.SetPermanent;
+        actual := a^.Square;
+        CheckEqual(actual^.Compare(expected), 0, 'Square permanent');
+        CheckEqual(a^.RefCnt, -1, 'Square permanent source retained');
+        CheckEqual(a^.ToHexa, hex, 'Square permanent value preserved');
+        actual.Release;
+        expected.Release;
+        a^.ResetPermanentAndRelease;
+        CheckEqual(c.ActiveCount, 0, 'Square temporaries released');
+      end;
+    // empty storage must not enter the positive-count diagonal loop
+    a := c.Allocate(0);
+    expected := a^.Copy.Multiply(a^.Copy);
+    actual := a^.Square;
+    CheckEqual(actual^.Compare(expected), 0, 'Square empty');
+    actual.Release;
+    expected.Release;
+    CheckEqual(c.ActiveCount, 0, 'Square empty released');
+    // an unshared input is consumed by Square
+    a := c.AllocateFrom(123);
+    actual := a^.Square;
+    CheckEqual(actual^.Compare(15129), 0, 'Square unshared');
+    CheckEqual(c.ActiveCount, 1, 'Square consumes unshared source');
+    actual.Release;
+    CheckEqual(c.ActiveCount, 0, 'Square unshared result released');
+    // three-limb case to test consumption by the optimized path
+    a := c.AllocateFrom(1).LeftShift(2).IntAdd(123);
+    expected := a^.Copy.Multiply(a^.Copy);
+    actual := a^.Square;
+    CheckEqual(actual^.Compare(expected), 0, 'Square unshared large');
+    CheckEqual(c.ActiveCount, 2, 'unshared source consumed');
+    actual.Release;
+    expected.Release;
+    CheckEqual(c.ActiveCount, 0, 'Square unshared large released');
   finally
     c.Free;
   end;
@@ -5121,7 +5593,7 @@ var
   rnd: HalfUInt; // truncated to 16-bit or 32-bit value
   a, b, s, d, e, m, v: PBigInt;
   cu, pem, txt: RawUtf8;
-  bin, pub, hash, signed, encrypted: RawByteString;
+  bin, pub, hash, signed, encrypted, exp: RawByteString;
   pub1, pub2: TRsaPublicKey;
   pri1, pri2: TRsaPrivateKey;
   timer: TPrecisionTimer;
@@ -5389,6 +5861,12 @@ begin
     v.ResetPermanentAndRelease;
     a.Release;
     e.Release;
+    a := c.AllocateFrom(1);
+    exp := a.SaveFixed(256, true);
+    CheckEqual(length(exp), 256);
+    for i := 1 to 255 do
+      CheckEqual(ord(exp[i]), 0);
+    CheckEqual(ord(exp[256]), 1);
   finally
     c.Free;
   end;
@@ -5716,6 +6194,74 @@ procedure TTestCoreCrypto._X509;
     CheckEqual(y.AsDNText, s);
   end;
 
+  procedure CheckPkcs8;
+  const
+    // openssl ecparam -name prime256v1 -genkey | openssl pkcs8 -topk8 -nocrypt
+    PLAIN =
+      '-----BEGIN PRIVATE KEY-----'#13#10 +
+      'MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgL+IJzqADgkK/dKJQ'#13#10 +
+      '0BhnJXk3NLjzl1bGFdHTGoKvc8ahRANCAAQMuf8uzGKxan691Ya9r1r0lR6MHQ4A'#13#10 +
+      '5CeNET6n6mDpQy/az73fpul5azOdTZm8GRftdpys1ILLzdSkewAvnXC+'#13#10 +
+      '-----END PRIVATE KEY-----'#13#10;
+    // openssl pkcs8 -topk8 -v2 aes256 -passout pass:mORMot
+    // i.e. PBES2 + PBKDF2 hmacWithSHA256 2048 rounds + aes-256-cbc
+    AES256 =
+      '-----BEGIN ENCRYPTED PRIVATE KEY-----'#13#10 +
+      'MIHsMFcGCSqGSIb3DQEFDTBKMCkGCSqGSIb3DQEFDDAcBAgDOk7oWWdhRQICCAAw'#13#10 +
+      'DAYIKoZIhvcNAgkFADAdBglghkgBZQMEASoEEKWNbINuOw7sxZWVHakCRn8EgZDJ'#13#10 +
+      'Qrg3osAb7FtbJOcHlZ6DZ2hPm7FqCqybDmeMaiCwr7PEA7EUfUMrozMohx7jgG/B'#13#10 +
+      'G+QOw62Y15qpuASAfKj8Eisnra8sOPMxDz7btpi6p9KQHhMa/7s1ei//ucfrPBCT'#13#10 +
+      'YSqb1a4I/Mqy5GpBJxaYLYlC0gDguzBlek6Yf6ZkdjGCCK0vjvaMsdMScGmTdag='#13#10 +
+      '-----END ENCRYPTED PRIVATE KEY-----'#13#10;
+    // openssl pkcs8 -topk8 -v2 aes128 -v2prf hmacWithSHA1 -iter 1000
+    // i.e. PBES2 + PBKDF2 with default prf (SHA-1) + aes-128-cbc
+    AES128 =
+      '-----BEGIN ENCRYPTED PRIVATE KEY-----'#13#10 +
+      'MIHeMEkGCSqGSIb3DQEFDTA8MBsGCSqGSIb3DQEFDDAOBAiGl/GZEHIuugICA+gw'#13#10 +
+      'HQYJYIZIAWUDBAECBBDhzRcd2uZZA5KywGKgrr/YBIGQp5ZNuWRl+kCnVmXvyPBI'#13#10 +
+      'gWVewTFkGXh1I04bnqU5XHvJgpsGcy+60J6uIUoIJqmOn7ORZiNJV78pCRCgaTfd'#13#10 +
+      'j2YsW3ms9hZAz9uA2bLEDPi7XpjE+pI0tXXxEPLn6QAe6stFsl7NUcgM/DnEfx5/'#13#10 +
+      '0+jKs6Rir7wavUFYDQQ01GkDIZKP3cJrfQusuXml9vDo'#13#10 +
+      '-----END ENCRYPTED PRIVATE KEY-----'#13#10;
+  var
+    der8, dec: RawByteString;
+    k1, k2: ICryptPrivateKey;
+  begin
+    der8 := PemToDer(PLAIN);
+    Check(der8 <> '', 'plain');
+    Check(IsPemEncrypted(AES256), 'enc');
+    dec := Pkcs8DecryptPrivateKey(AES256, 'mORMot');
+    CheckEqual(dec, der8, 'aes256');
+    dec := Pkcs8DecryptPrivateKey(PemToDer(AES256), 'mORMot');
+    CheckEqual(dec, der8, 'aes256der');
+    dec := Pkcs8DecryptPrivateKey(AES128, 'mORMot');
+    CheckEqual(dec, der8, 'aes128');
+    CheckEqual(Pkcs8DecryptPrivateKey(AES256, 'mormot'), '', 'wrongpwd');
+    CheckEqual(Pkcs8DecryptPrivateKey(AES128, ''), '', 'nopwd');
+    CheckEqual(Pkcs8DecryptPrivateKey(PLAIN, 'mORMot'), '', 'notenc');
+    // TCryptPrivateKey.Load should now support OpenSSL encrypted keys
+    k1 := TCryptPrivateKeyEcc.Create;
+    Check(k1.Load(ckaEcc256, nil, AES256, 'mORMot'), 'load256');
+    k2 := TCryptPrivateKeyEcc.Create;
+    Check(k2.Load(ckaEcc256, nil, PLAIN, ''), 'loadplain');
+    CheckEqual(k1.ToDer, k2.ToDer, 'toder');
+    k1 := TCryptPrivateKeyEcc.Create;
+    Check(not k1.Load(ckaEcc256, nil, AES128, 'wrong'), 'loadwrong');
+    // PKCS#8 encryption round-trip
+    dec := Pkcs8EncryptPrivateKey(der8, 'mORMot', 1000);
+    Check(dec <> '', 'encrypt');
+    CheckEqual(Pkcs8DecryptPrivateKey(dec, 'mORMot'), der8, 'roundtrip');
+    CheckEqual(Pkcs8DecryptPrivateKey(dec, 'mormot'), '', 'roundtripwrong');
+    CheckEqual(Pkcs8EncryptPrivateKey(der8, ''), '', 'encnopwd');
+    // TCryptPrivateKey.Save should now generate standard PKCS#8 by default
+    Check(PrivateKeySavePkcs8, 'savepkcs8');
+    dec := k2.Save({aspem=}true, 'mORMot');
+    Check(IdemPChar(pointer(dec), '-----BEGIN ENCRYPTED PRIVATE KEY-----'), 'pem');
+    k1 := TCryptPrivateKeyEcc.Create;
+    Check(k1.Load(ckaEcc256, nil, dec, 'mORMot'), 'reload');
+    CheckEqual(k1.ToDer, k2.ToDer, 'resave');
+  end;
+
 var
   bin, der: RawByteString;
   pem, sav, sn: RawUtf8;
@@ -5735,6 +6281,8 @@ var
   utc: TDateTime;
   timer: TPrecisionTimer;
 begin
+  // validate standard PKCS#8 encrypted private keys
+  CheckPkcs8;
   // validate XName 500 normalization and escaping
   Check(TextToXa('') = xaNone);
   for a1 := succ(low(a1)) to high(a1) do
@@ -6275,6 +6823,57 @@ begin
   Check(st.IsRevoked(chain[1]) = crrNotRevoked);
   Check(st.IsRevoked(chain[2]) = crrServerCompromised);
 end;
+
+procedure TTestCoreCrypto._Authenticode;
+var
+  fn: TFileName;
+  {$ifdef OSWINDOWS}
+  wvs: TWinVerifyStatus;
+  exe: TFileName;
+  sig, bin: RawByteString;
+  {$endif OSWINDOWS}
+begin
+  // cross-platform PE certificate table parsing
+  fn := WorkDir + 'authenticode.dll';
+  Check(FileFromString('this is not a PE executable', fn));
+  try
+    CheckEqual(GetExeSignature(fn), '', 'not PE');
+    Check(not IsExeSigned(fn), 'not PE');
+    Check(not IsExeSigned(fn + '.missing'), 'missing');
+    {$ifdef OSWINDOWS}
+    // genuine verification via WinVerifyTrust()
+    Check(WinVerifyExeSignature('') = wvsError, 'empty');
+    Check(WinVerifyExeSignature(fn + '.missing') = wvsError, 'missing');
+    Check(WinVerifyExeSignature(fn) <> wvsValid, 'not PE');
+    // kernel32.dll is likely to have an embedded signature (i.e. not from a
+    // catalog), in the PE32 or PE32+ format matching the current bitness
+    exe := GetEnvironmentVariable('SystemRoot') + '\System32\kernel32.dll';
+    wvs := WinVerifyExeSignature(exe);
+    if wvs <> wvsValid then
+      AddConsole('% returned % - skipped', [exe, ToText(wvs)^])
+    else
+    begin
+      sig := GetExeSignature(exe);
+      Check((sig <> '') and
+            (sig[1] = #$30), 'kernel32 PKCS#7'); // DER ASN.1 SEQUENCE
+      Check(IsExeSigned(exe), 'kernel32 IsExeSigned');
+      Check(IsExeSignatureValid(exe), 'kernel32 IsExeSignatureValid');
+      // tampered content is detected, even if the signature itself is intact
+      bin := StringFromFile(exe);
+      if not CheckUtf8(bin <> '', '% load', [exe]) then
+        exit;
+      PByteArray(bin)[length(bin) shr 2] := PByteArray(bin)[length(bin) shr 2] xor $ff;
+      Check(FileFromString(bin, fn), 'fn');
+      CheckEqual(GetExeSignature(fn), sig, 'tampered GetExeSignature');
+      Check(WinVerifyExeSignature(fn) = wvsBadDigest, 'tampered WinVerifyExeSignature');
+      Check(not IsExeSignatureValid(fn), 'tampered IsExeSignatureValid');
+    end;
+    {$endif OSWINDOWS}
+  finally
+    DeleteFile(fn);
+  end;
+end;
+
 (*
 var
   i, v, v2, n, c, d: PtrInt;

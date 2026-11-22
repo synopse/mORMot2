@@ -98,6 +98,7 @@ uses
   mormot.core.threads,
   mormot.core.log,
   mormot.core.zip,
+  mormot.crypt.zip,
   mormot.core.test,
   mormot.lib.z,
   mormot.lib.lizard,
@@ -117,7 +118,7 @@ uses
   mormot.rest.server,
   mormot.net.client,
   mormot.net.server,
-  mormot.net.async,
+  mormot.net.proxy,
   mormot.net.ldap,
   test.core.base;
 
@@ -155,6 +156,8 @@ type
     procedure I18nIniAndFiles;
     /// the FPC resourcestring table rewriting channel
     procedure I18nResourceStrings;
+    /// validate JOP like processing
+    procedure TestJopProcess;
   public
     /// SAX-level tokens over elements, attributes, text and CData
     procedure XmlSaxTokens;
@@ -228,6 +231,8 @@ type
     procedure _XML;
     /// regression tests for the mormot.core.fmt YAML parser
     procedure _YAML;
+    /// regression tests for the mormot.core.fmt relational table exporters
+    procedure _Tables;
     /// regression tests for the mormot.core.i18n unit
     procedure _i18n;
   end;
@@ -248,24 +253,24 @@ type
     procedure Run7zExtract(const Params: array of const);
     procedure Run7zUpdate(const Params: array of const);
     {$endif OSWINDOWS}
+    /// direct deflate/inflate/synlz functions
+    procedure InMemoryCompression(Sender: TObject);
+    procedure DoSynLZ;
+    /// .zip archive handling
+    procedure ZipFormat(Sender: TObject);
+    procedure ZipEncryption(Sender: TObject);
+    /// TAlgoCompress classes
+    procedure _TAlgoCompress(Sender: TObject);
   public
     procedure Setup; override;
     procedure CleanUp; override;
   published
-    /// direct deflate/inflate functions
-    procedure InMemoryCompression;
-    /// .gzip archive handling
-    procedure GZIPFormat;
-    /// .zip archive handling
-    procedure ZIPFormat;
+    /// validate all supported formats and archives
+    procedure Algorithms;
     {$ifdef OSWINDOWS}
     /// validate the 7z.dll wrapper in mormot.lib.win7zip
     procedure _7Zip;
     {$endif OSWINDOWS}
-    /// SynLZ internal format
-    procedure _SynLZ;
-    /// TAlgoCompress classes
-    procedure _TAlgoCompress;
   end;
 
 type
@@ -506,6 +511,7 @@ end;
 procedure TTestCoreProcess.Variants;
 var
   v: Variant;
+  c: currency;
   u: SynUnicode;
   i64: Int64;
   d: double;
@@ -807,6 +813,57 @@ begin
   CheckEqual(i64, 12);
   Check(AnyVariantToDouble(v, d));
   Check(d = 12.0, '12');
+  // VariantSaveJson: Boolean and TDateTime regression (#766)
+  v := true;
+  CheckEqual(vd.VType, varBoolean);
+  CheckEqual(VariantSaveJson(v), 'true');
+  CheckEqual(VariantSaveJson(v, twNone), 'true');
+  v := false;
+  CheckEqual(vd.VType, varBoolean);
+  CheckEqual(VariantSaveJson(v), 'false');
+  CheckEqual(VariantSaveJson(v, twNone), 'false');
+  // Date and time
+  dt := EncodeDate(2030, 1, 1) + EncodeTime(8, 30, 45, 0);
+  v := VarAsType(dt, varDate);
+  CheckEqual(vd.VType, varDate);
+  CheckEqual(VariantSaveJson(v), '"2030-01-01T08:30:45"');
+  CheckEqual(VariantSaveJson(v, twNone), '2030-01-01T08:30:45');
+  // Date only
+  v := VarAsType(EncodeDate(2030, 1, 1), varDate);
+  CheckEqual(VariantSaveJson(v), '"2030-01-01"');
+  CheckEqual(VariantSaveJson(v, twNone), '2030-01-01');
+  // Time only
+  v := VarAsType(EncodeTime(8, 30, 45, 0), varDate);
+  CheckEqual(VariantSaveJson(v), '"T08:30:45"');
+  CheckEqual(VariantSaveJson(v, twNone), 'T08:30:45');
+  // Milliseconds are not serialized
+  dt := EncodeDate(2030, 1, 1) + EncodeTime(8, 30, 45, 123);
+  v := VarAsType(dt, varDate);
+  CheckEqual(VariantSaveJson(v), '"2030-01-01T08:30:45"');
+  // Zero TDateTime
+  v := VarAsType(0, varDate);
+  CheckEqual(vd.VType, varDate);
+  CheckEqual(VariantSaveJson(v), 'null');
+  CheckEqual(VariantSaveJson(v, twNone), 'null');
+  // Reusing the same destination RawUtf8
+  s := 'previous value';
+  v := true;
+  VariantSaveJson(v, twJsonEscape, s);
+  CheckEqual(s, 'true');
+  v := false;
+  VariantSaveJson(v, twJsonEscape, s);
+  CheckEqual(s, 'false');
+  v := VarAsType(EncodeDate(2030, 1, 1), varDate);
+  VariantSaveJson(v, twJsonEscape, s);
+  CheckEqual(s, '"2030-01-01"');
+  v := VarAsType(0, varDate);
+  VariantSaveJson(v, twJsonEscape, s);
+  CheckEqual(s, 'null');
+  // Currency serialization remains unchanged
+  c := 1.5;
+  v := c;
+  CheckEqual(vd.VType, varCurrency);
+  CheckEqual(VariantSaveJson(v), '1.50');
 end;
 
 type
@@ -1136,6 +1193,590 @@ begin
     Result := FormatVariant('a=%,b=%', [U['a'], i['b']]);
 end;
 
+procedure TTestCoreProcess.TestJopProcess;
+
+  procedure TestJop(const src, exp: RawUtf8; nest: boolean = true);
+  var
+    j, k: RawUtf8;
+    s: TTextWriterJsonFormat;
+  begin
+    j := JsonPreprocess(src, jsonUnquotedPropNameCompact);
+    Check(j <> '');
+    CheckEqual(j, exp, src);
+    if nest then
+      for s := low(s) to high(s) do
+      begin
+        k := JsonPreprocess(src, s);
+        if s = jsonCompact then
+          Check(IsValidJson(k, {strict=}true), 'valid');
+        if s = jsonUnquotedPropNameCompact then
+          CheckEqual(k, j)
+        else
+          CheckEqual(JsonReformat(k, jsonUnquotedPropNameCompact), j);
+      end;
+  end;
+
+  procedure TestJopText;
+  var
+    mainFile, outerFile, innerFile: TFileName;
+    insertFile, rawFile: TFileName;
+    src: RawUtf8;
+  begin
+    // P0 #1: basic text processing and pointer handling
+    CheckEqual(TextPreprocess('hello world'), 'hello world');
+    CheckEqual(JsonPreprocess('{a:"unterminated', jsonCompact), '');
+    CheckEqual(TextPreprocess('a$b'), 'a$b');
+    CheckEqual(TextPreprocess('a$ident$b'), 'a$ident$b');
+    CheckEqual(TextPreprocess('a$(missing)b'), 'ab');
+    CheckEqual(TextPreprocess(
+      '$$'#10 +
+      'name = world'#10 +
+      '$$'#10 +
+      'Hello $(name)!'),
+      'Hello world!');
+    CheckEqual(TextPreprocess(
+      '$$'#10 +
+      'value = 42'#10 +
+      '$$'#10 +
+      'before $(value) middle $(value) after'),
+      'before 42 middle 42 after');
+    CheckEqual(TextPreprocess(
+      '$$'#10 +
+      'enabled = true'#10 +
+      '$$'#10 +
+      'A$if enabled$B$else$C$endif$D'),
+      'ABD');
+    // Verbatim $$$ ... $$$ sections
+    CheckEqual(TextPreprocess(
+      '$$'#10 +
+      'answer = 42'#10 +
+      '$$'#10 +
+      '$$$'#10 +
+      'raw $(answer)'#10 +
+      '$$$'#10 +
+      'done=$(answer)'),
+      'raw $(answer)'#10 +
+      'done=42');
+    // Missing $endif$ must not cause an access violation
+    CheckEqual(TextPreprocess(
+      'before $if missing$skipped'),
+      'before ');
+    // Normal conditional skipping remains unchanged
+    CheckEqual(TextPreprocess(
+      'before $if missing$skipped$else$kept$endif$ after'),
+      'before kept after');
+    // Valid nested fallback
+    CheckEqual(TextPreprocess(
+      'before $(missing|$(also|yes))'),
+      'before yes');
+    // Missing outer closing parenthesis: no out-of-bounds scan
+    CheckEqual(TextPreprocess(
+      'before $(missing|$(also)'),
+      'before ');
+    // # and // inside quoted DSL values are not treated as comments
+    TestJop(
+      '$$'#10 +
+      'message = "hello # world"'#10 +
+      '$$'#10 +
+      '{value:$(message)}',
+      '{value:"hello # world"}');
+    TestJop(
+      '$$'#10 +
+      'message = "hello // world"'#10 +
+      '$$'#10 +
+      '{value:$(message)}',
+      '{value:"hello // world"}');
+    TestJop(
+      '$$'#10 +
+      'name = "hello"'#10 +
+      'message = "$(name)#tag"'#10 +
+      '$$'#10 +
+      '{value:$(message)}',
+      '{value:"hello#tag"}');
+    // } or ] inside single-quoted template strings
+    TestJop(
+      '$$'#10 +
+      'obj = {text:''a}b'', count:2}'#10 +
+      '$$'#10 +
+      '{data:{$(obj)}}',
+      '{data:{text:"a}b",count:2}}');
+    // Unterminated strings inside a template must not read past #0
+    CheckEqual(TextPreprocess(
+      '$$'#10 +
+      'obj = {text:"unterminated'),
+      '');
+    CheckEqual(TextPreprocess(
+      '$$'#10 +
+      'obj = {text:''unterminated'),
+      '');
+    // P0 #2: recursive includes
+    mainFile   := WorkDir + 'jop-test-main.jop';
+    outerFile  := WorkDir + 'jop-test-outer.jop';
+    innerFile  := WorkDir + 'jop-test-inner.jop';
+    insertFile := WorkDir + 'jop-test-insert.jop';
+    rawFile    := WorkDir + 'jop-test-raw.jop';
+    try
+      // inner.jop: defines a variable, then uses it
+      Check(FileFromString(
+        '$$'#10 +
+        'answer = 42'#10 +
+        '$$'#10 +
+        '$if answer = 42$inner=$(answer)$endif$'#10,
+        innerFile));
+      // outer.jop: recursively includes inner.jop
+      Check(FileFromString(
+        '$$'#10 +
+        'include "jop-test-inner.jop"'#10 +
+        '$$'#10 +
+        'outer=$(answer)'#10,
+        outerFile));
+      // main.jop: recursively includes outer.jop
+      Check(FileFromString(
+        '$$'#10 +
+        'include "jop-test-outer.jop"'#10 +
+        '$$'#10 +
+        'result=$(answer)',
+        mainFile));
+      src := RawUtf8FromFile(mainFile);
+      CheckEqual(
+        TextPreprocess(src, [], WorkDir),
+        'inner=42'#10 +
+        'outer=42'#10 +
+        'result=42',
+        'recursive include');
+      // insert: file contents must NOT be preprocessed
+      Check(FileFromString(
+        'raw=$(answer)'#10 +
+        '$if answer$verbatim$endif$'#10,
+        rawFile));
+      Check(FileFromString(
+        '$$'#10 +
+        'answer = 42'#10 +
+        'insert "jop-test-raw.jop"'#10 +
+        '$$'#10 +
+        'after=$(answer)',
+        insertFile));
+      src := RawUtf8FromFile(insertFile);
+      CheckEqual(
+        TextPreprocess(src, [], WorkDir),
+        'raw=$(answer)'#10 +
+        '$if answer$verbatim$endif$'#10 +
+        'after=42',
+        'verbatim insert');
+    finally
+      DeleteFile(mainFile);
+      DeleteFile(outerFile);
+      DeleteFile(innerFile);
+      DeleteFile(insertFile);
+      DeleteFile(rawFile);
+    end;
+    Check(not TextPreprocessToFile('', mainFile));
+  end;
+
+  procedure TestJopP1;
+  var
+    tmp: TSynTempAdder;
+    src, actual: RawUtf8;
+    fn: TFileName;
+  begin
+    TestJop(
+      '$$'#10 +
+      'message = "a\"b"'#10 +
+      '$$'#10 +
+      '{value:$(message)}',
+      '{value:"a\"b"}');
+    TestJop(
+      '$$'#10 +
+      'message = "a\"b"'#10 +
+      '$$'#10 +
+      '{value:$"$(message)"}',
+      '{value:"a\"b"}');
+    // P1.2: remove comments without duplicating preceding content
+    TestJop(
+      '$$'#10 +
+      'obj = {'#10 +
+      '  a: 1  # comment'#10 +
+      '  b: 2'#10 +
+      '}'#10 +
+      '$$'#10 +
+      '{data: {$(obj)}}',
+      '{data:{a:1,b:2}}');
+    // P1.3: debug comments should be explicitly enabled
+    src := '$$'#10'a=1'#10'$$'#10'{a:$(a)}';
+    Check(PosEx('debug:', JsonPreprocess(src, json5)) = 0);
+    Check(PosEx('debug:', JsonPreprocess(src, json5, [jppDebugComment])) > 0);
+    // P1.4A: raw fallback content must be JSON-escaped
+    TestJop('{value:$"$(missing|a"b\c)"}', '{value:"a\"b\\c"}');
+    // P1.4A: numeric constants must not be modified
+    TestJop(
+      '$$'#10 +
+      'number = 42'#10 +
+      '$$'#10 +
+      '{value:$"$(number)"}',
+      '{value:"42"}');
+    // P1.4A: already-escaped strings must not be escaped twice
+    TestJop(
+      '$$'#10 +
+      'message = "a\"b"'#10 +
+      '$$'#10 +
+      '{value:$"$(message)"}',
+      '{value:"a\"b"}');
+    // P1.4B: escape raw values when registering a quoted definition
+    TestJop(
+      '$$'#10 +
+      'name = He said "hello"'#10 +
+      'message = "User: $(name)"'#10 +
+      '$$'#10 +
+      '{value:$(message)}',
+      '{value:"User: He said \"hello\""}');
+    // P1.4B: escape backslashes during early expansion
+    TestJop(
+      '$$'#10 +
+      'path = C:\work\test'#10 +
+      'message = "Path: $(path)"'#10 +
+      '$$'#10 +
+      '{value:$(message)}',
+      '{value:"Path: C:\\work\\test"}');
+    // P1.4B: constant values inside quoted definitions
+    TestJop(
+      '$$'#10 +
+      'number = 42'#10 +
+      'message = "number=$(number)"'#10 +
+      '$$'#10 +
+      '{value:$(message)}',
+      '{value:"number=42"}');
+    // Direct unit test for AdderJsonEscape()
+    // Covers quotes, backslashes, LF, TAB, #1 and embedded #0.
+    src := 'a'#0'"\'#10#9#1;
+    tmp.Init;
+    tmp.Add('[');
+    AdderJsonEscape(tmp, pointer(src), PUtf8Char(pointer(src)) + length(src));
+    tmp.Add(']');
+    tmp.Done(actual);
+    CheckEqual(actual, '[a\u0000\"\\\n\t\u0001]',
+      'AdderJsonEscape');
+    // Fast path: content without escaping
+    tmp.Init;
+    src := 'hello';
+    AdderJsonEscape(tmp, pointer(src), PUtf8Char(pointer(src)) + 5);
+    tmp.Done(actual);
+    CheckEqual(actual, 'hello', 'AdderJsonEscape plain');
+    // P1.1 / P1.5: include filename parsing and absolute paths
+    fn := ExpandFileName(WorkDir + 'jop-p1-include.txt');
+    Check(FileFromString('included'#10, fn));
+    try
+      // P1.1: unquoted filename followed by spaces and comment
+      CheckEqual(TextPreprocess(
+        '$$'#10 +
+        'include jop-p1-include.txt   # comment'#10 +
+        '$$'#10 +
+        'done', [], WorkDir),
+        'included'#10'done',
+        'include with comment');
+      // P1.1: trim trailing whitespace without a comment
+      CheckEqual(TextPreprocess(
+        '$$'#10 +
+        'include jop-p1-include.txt   '#10 +
+        '$$'#10 +
+        'done', [], WorkDir),
+        'included'#10'done',
+        'include trailing spaces');
+      // P1.5: absolute include without an IncludeRoot
+      src := '$$'#10 +
+        'include "' + StringToUtf8(fn) + '"'#10 +
+        '$$'#10 +
+        'done';
+      CheckEqual(TextPreprocess(src, [jppIncludeAbsolute]),
+        'included'#10'done',
+        'absolute include');
+      // P1.5: absolute include rejected without its flag
+      CheckEqual(TextPreprocess(src),
+        'done',
+        'absolute include rejected');
+      // Recognize // comments after unquoted include filenames
+      CheckEqual(TextPreprocess(
+        '$$'#10 +
+        'include jop-p1-include.txt // comment'#10 +
+        '$$'#10 +
+        'done', [], WorkDir),
+        'included'#10'done',
+        'include with // comment');
+    finally
+      DeleteFile(fn);
+    end;
+    // Quoted include filenames containing #
+    fn := WorkDir + 'jop#config.txt';
+    Check(FileFromString('included'#10, fn));
+    try
+      CheckEqual(TextPreprocess(
+        '$$'#10 +
+        'include "jop#config.txt"'#10 +
+        '$$'#10 +
+        'done', [], WorkDir),
+        'included'#10'done');
+    finally
+      DeleteFile(fn);
+    end;
+    // Comment markers immediately after macro expansion
+    TestJop(
+      '$$'#10 +
+      'name = hello'#10 +
+      'obj = {text:"$(name)#tag"}'#10 +
+      '$$'#10 +
+      '{data:{$(obj)}}',
+      '{data:{text:"hello#tag"}}');
+    TestJop(
+      '$$'#10 +
+      'name = hello'#10 +
+      'obj = {text:"$(name)//tag"}'#10 +
+      '$$'#10 +
+      '{data:{$(obj)}}',
+      '{data:{text:"hello//tag"}}');
+    // URL should not be truncated at //
+    TestJop(
+      '$$'#10 +
+      'url = https://example.org/api'#10 +
+      '$$'#10 +
+      '{url:$(url)}',
+      '{url:"https://example.org/api"}');
+    // A real trailing // comment must still be ignored
+    TestJop(
+      '$$'#10 +
+      'url = https://example.org/api // comment'#10 +
+      '$$'#10 +
+      '{url:$(url)}',
+      '{url:"https://example.org/api"}');
+    // Preserve # and // inside quoted definitions
+    TestJop(
+      '$$'#10 +
+      'url = "https://example.org/api#section"'#10 +
+      '$$'#10 +
+      '{url:$(url)}',
+      '{url:"https://example.org/api#section"}');
+    // Preserve URLs inside object templates
+    TestJop(
+      '$$'#10 +
+      'obj = {url:"https://example.org/api"}'#10 +
+      '$$'#10 +
+      '{data:{$(obj)}}',
+      '{data:{url:"https://example.org/api"}}');
+    TestJop(
+      '$$'#10 +
+      'url = https://example.org/api#section'#10 +
+      '$$'#10 +
+      '{url:$(url)}',
+      '{url:"https://example.org/api#section"}');
+    TestJop(
+      '$$'#10 +
+      'url = https://example.org/api # comment'#10 +
+      '$$'#10 +
+      '{url:$(url)}',
+      '{url:"https://example.org/api"}');
+    TestJop(
+      '$$'#10 +
+      'obj = {a:123}'#10 +
+      '$$'#10 +
+      '{data:{$(obj)}}',
+      '{data:{a:123}}');
+    TestJop(
+      '$$'#10'empty=""'#10'$$'#10 +
+      '[ $if empty$ 1 $else$ 2 $endif$ ]',
+      '[2]');
+    TestJop(
+      '$$'#10'empty=""'#10'$$'#10 +
+      '[ $ifdef empty$ 1 $else$ 2 $endif$ ]',
+      '[2]');
+    TestJop(
+      '$$'#10'filled="yes"'#10'$$'#10 +
+      '[ $ifdef filled$ 1 $else$ 2 $endif$ ]',
+      '[1]');
+  end;
+
+var
+  J: RawUtf8;
+begin
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'{a:$a$}',
+    '{a:1}');
+  TestJop(
+    '$$'#10'a= 1'#10'$$'#10'{a:$(a)}',
+    '{a:1}');
+  TestJop(
+    '$$'#10'a =1'#10'$$'#10'{a:$a$}',
+    '{a:1}');
+  TestJop(
+    '$$'#10' a = 1 '#10'$$'#10'{a:$a$}',
+    '{a:1}');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'{a:$(os:name)}',
+    Join(['{a:"', OSVersionShort,'"}']));
+  J := GlobalInfoFind('net:mac');
+  if J <> '' then
+    TestJop(
+      '$$'#10'a=1'#10'$$'#10'{a:$net:mac$}',
+      Join(['{a:"', J,'"}']));
+  TestJop(
+    '$$'#10'a=b'#10'$$'#10'{a:$a$,b:$net:none$,c:$"$a$ ${os:nope|$a$}+"}',
+    '{a:"b",b:null,c:"b b+"}');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'{a:$a|0$,b:$b|2$}',
+    '{a:1,b:2}');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'{a:$(a|b),b:$b|a$}',
+    '{a:1,b:"a"}');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'{a:$(a|b),b:$b|$(a)$}',
+    '{a:1,b:1}');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'{a:$(a|b),b:$b|$(c|a)$}',
+    '{a:1,b:"a"}');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'{a:$(a|b),b:$(b|$(c|a))}',
+    '{a:1,b:"a"}');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'{a:$a$,b:$"$a$"}',
+    '{a:1,b:"1"}');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'{a:$a$,b:"$a$",c{d:$(a)}}',
+    '{a:1,b:"$a$",c:{d:1}}');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'{a:$none|$a$$,b:$"$a$"}',
+    '{a:1,b:"1"}');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'{a:$none|"1"$,b:$"$a$"}',
+    '{a:"1",b:"1"}');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'{a:$no|$ne|$a$$$,b:$"$a$"}',
+    '{a:1,b:"1"}');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'{a:${no|${ne|${a}}},b:$"$a$"}',
+    '{a:1,b:"1"}');
+  J := '# comment'#10'$$'#10'# comment'#10'var=1'#10'a=number $var$'#10'$$'#10;
+  TestJop(
+    J + '[ 1 2 ]',
+    '[1,2]');
+  TestJop(
+    J + '[ $if a$ 1 $endif$ 2 ]',
+    '[1,2]');
+  TestJop(
+    J + '[ $if a$ 1 $if var$ 2 $endif$ $endif$ 3 ]',
+    '[1,2,3]');
+  TestJop(
+    J + '[ $if a$ 1 $if var$ 2 $else$ 3 $endif$ $else$ 4 $endif$5]',
+    '[1,2,5]');
+  TestJop(
+    J + '[ $if a$ 1 $if no$ 2 $else$ 3 $endif$ $else$ 4 $endif$ 5 ]',
+    '[1,3,5]');
+  TestJop(
+    J + '[ $if b$ 1 $if var$ 2 $else$ 3 $endif$ $else$ 4 $endif$ 5 ]',
+    '[4,5]');
+  J := '$$'#10'var=1'#10'a="number $var$" '#10'$$'#10;
+  TestJop(
+    J + '{a:$a$,b:$"$a$",c:$var$,d: $"$var$" ,e:"$var$",f:$"5432$var$0"}',
+    '{a:"number 1",b:"number 1",c:1,d:"1",e:"$var$",f:"543210"}');
+  TestJop(
+    J + '{$a$:0,b:$exe:arch$,c:$"http://toto/$exe:arch$",d:$os:none$,e:$"a$os:no$s"}',
+    '{"number 1":0,b:"' + CPU_ARCH_TEXT + '",c:"http://toto/' + CPU_ARCH_TEXT +
+     '",d:null,e:"as"}');
+  TestJop(
+    J + '# comment 2'#10'$$ section 2'#10'$ifdef a$ b=10'#10'$endif$'#10'$$'#10 +
+    '[$ifdef b$ 99 $else$ 0 $endif$ $(b) $(a) 100]',
+    '[99,10,"number 1",100]');
+  TestJop(
+    J + '$$ section 2'#10'$ifdef a$ b=1'#10'a=2'#10'$endif$'#10'$$'#10 +
+    '[$ifdef b$ $(b) $else$ 0 $endif$ $(b) $(a) 10]',
+    '[1,1,2,10]');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'{ $if a$ a:$a$ $endif$, b:$"$a$"}',
+    '{a:1,b:"1"}');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'{$if b$a:$a$$endif$b:$"$a$"}',
+    '{b:"1"}');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'{$ifdef a$ $else$ a:$a$ $endif$, b:$"$a$"}',
+    '{b:"1"}');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'{$ifdef a$$else$a:$a$$endif$b:$"$a$"}',
+    '{b:"1"}');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'{ $if a = 1$ a:$a$ $endif$, b:$"$a$"}',
+    '{a:1,b:"1"}');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'{ $if a = x$ a:$a$ $endif$, b:$"$a$"}',
+    '{b:"1"}');
+  TestJop(
+    '$$'#10'a=x'#10'$$'#10'{ $if a = x$ a:$a$ $endif$, b:$"$a$"}',
+    '{a:"x",b:"x"}');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'{ $if a = $a$$ a:$a$ $endif$, b:$"$a$"}',
+    '{a:1,b:"1"}');
+  TestJop(
+    '$$'#10'a=xy'#10'$$'#10'{ $if a = $a$ $ a:$a$ $endif$, $a$:$"$a$"}',
+    '{a:"xy","xy":"xy"}', {nest=}false);
+  TestJop(
+    '$$'#10'a=xy'#10'$$'#10'{ $if yz > $a$ $ a:$a$ $endif$, $a$:$"$a$"}',
+    '{"xy":"xy"}', {nest=}false);
+  TestJop(
+    '$$'#10'a=xy'#10'$$'#10'{ $if a < yz $ a:$a$ $endif$, $a$:$"$a$"}',
+    '{a:"xy","xy":"xy"}', {nest=}false);
+  TestJop(
+    '$$'#10'a =1'#10'$$'#10'{ $if a <> 0 $ a:$a$ $endif$, b:$"$a$"}',
+    '{a:1,b:"1"}');
+  TestJop(
+    '$$'#10'a=10'#10'$$'#10'{ $if a > 5 $ a:$a$ $endif$, b:$"$a$"}',
+    '{a:10,b:"10"}');
+  TestJop(
+    '$$'#10'a=10'#10'five=5'#10'$$'#10'{ $if a > $five$ $ a:$a$ $endif$, b:$"$a$"}',
+    '{a:10,b:"10"}');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'{$if a=1$a:$a$$endif$b:$"$a$"}',
+    '{a:1,b:"1"}');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'{ $if a = 0$ a:$a$ $endif$, b:$"$a$"}',
+    '{b:"1"}');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'{ $if a = 10$ a:$a$ $endif$, b:$"$a$"}',
+    '{b:"1"}');
+  TestJop(
+    '$$'#10'a=1'#10'b=$a$'#10'$$'#10'{ $if a = $b$$ a:$a$ $endif$, b:$"$a$"}',
+    '{a:1,b:"1"}');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'[ $ifdef a$ 1 $else$ 2 $endif$ ]', '[1]');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'[ $if a>0$ 1 $else$ 2 $endif$ ]', '[1]');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'[ $if a<10$ 1 $else$ 2 $endif$ ]', '[1]');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'[ $if a > 01 $ 1 $else$ 2 $endif$ ]', '[2]');
+  TestJop(
+    '$$'#10'a=10'#10'$$'#10'[ $if a > 9 $ 1 $else$ 2 $endif$ ]', '[1]');
+  TestJop(
+    '$$'#10'a=10'#10'$$'#10'[ $if a > 9 $ $else$ 2 $endif$ ]', '[]');
+  TestJop(
+    '[ $if cpu:threads > 0 $ 1 $else$ 2 $endif$ ]', '[1]');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'[ $ifdef a$ 1 $else$ 2 $endif$ ]', '[1]');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'[ $if a$ 1 $if no$ 2 $endif$ 4 $else$ 5 $endif$ 6 ]',
+    '[1,4,6]');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'[ $if a$ 1 $if no$ 2 $else$ 3 $endif$ 4 $else$ 5 $endif$ 6 ]',
+    '[1,3,4,6]');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'[ $if no$ 1 $if a$ 2 $else$ 3 $endif$ 4 $else$ 5 $endif$ 6 ]',
+    '[5,6]');
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'[ $if no$ 1 $if a$ 2 $else$ 3 $endif$ 4 $else$ 5 $else$ 6 $else$ 7 $endif$ 8 ]',
+    '[5,7,8]'); // $else$ is just a non-recursive toggle ;)
+  TestJop(
+    '$$'#10'a=1'#10'$$'#10'[ $if a$ 1 $if no$ 2 $endif$ 4 $else$ 5 $else$ 6 $endif$ 7 ]',
+    '[1,4,6,7]');
+  TestJop(
+    '[ $if no$ 1 $if no$ 2 $else$ 3 $endif$ 4 $else$ 5 $endif$ 6 ]',
+    '[5,6]');
+  TestJopText;
+  TestJopP1;
+end;
 
 
 { TCollTestsI }
@@ -1662,6 +2303,7 @@ var
   var
     c: AnsiChar;
     jc: TJsonChar;
+    bak, json, abc, def, void: RawUtf8;
     // _JSONCHARS: array[0 .. 127] of byte; if needs recompute
   begin
     // validate JSON_CHARS[] pre-computed table
@@ -1689,6 +2331,90 @@ var
         include(jc, jcJsonIdentifier);           // _-.[]$0..9a..zA..Z
       Check(JSON_CHARS[c] = jc, 'JSON_CHARS');
     end;
+    // validate RemoveMagicFromJson()
+    abc  := BinToBase64WithMagic('abc');
+    def  := BinToBase64WithMagic('def');
+    void := BinToBase64WithMagic('');
+    json := '{"a":"normal","b":123}'; // no magic
+    bak := json;
+    RemoveMagicFromJson(json);
+    CheckEqual(json, bak);
+    Check(pointer(json) = pointer(bak), 'idem1');
+    json := '["' + abc + '"]'; // single magic
+    RemoveMagicFromJson(json);
+    CheckEqual(json, '["YWJj"]');
+    json := '["' + abc + '","' + def + '"]'; // consecutive magic
+    RemoveMagicFromJson(json);
+    CheckEqual(json, '["YWJj","ZGVm"]');
+    json := '["' + abc + '","one","two",3,"' + def + '","three"]';
+    RemoveMagicFromJson(json); // normal strings between magic strings
+    CheckEqual(json, '["YWJj","one","two",3,"ZGVm","three"]');
+    json := '{"text":"one\"two","blob":"' + abc + '"}'; // escaped quote
+    RemoveMagicFromJson(json);
+    CheckEqual(json, '{"text":"one\"two","blob":"YWJj"}');
+    json := '{"blob":"' + abc + '"}';
+    bak := json; // shared instance
+    RemoveMagicFromJson(json);
+    CheckEqual(json, '{"blob":"YWJj"}');
+    Check(pointer(json) <> pointer(bak), 'idem2');
+    CheckEqual(bak, '{"blob":"' + abc + '"}');
+    bak := json;
+    RemoveMagicFromJson(json); // idempotent
+    CheckEqual(json, bak);
+    json := ''; // empty input
+    RemoveMagicFromJson(json);
+    CheckEqual(json, '');
+    json := '[1,2,3,true,false,null]'; // no JSON strings at all
+    bak := json;
+    RemoveMagicFromJson(json);
+    CheckEqual(json, bak);
+    Check(pointer(json) = pointer(bak), 'idem3');
+    json := '"' + abc + '"'; // top-level string
+    RemoveMagicFromJson(json);
+    CheckEqual(json, '"YWJj"');
+    // empty BLOB - assuming BinToBase64WithMagic('') emits the magic prefix
+    json := '["' + void + '"]';
+    RemoveMagicFromJson(json);
+    CheckEqual(json, '[""]');
+    // magic occurs inside a string, but not as its prefix: must stay untouched
+    json := '["prefix' + abc + '"]';
+    bak := json;
+    RemoveMagicFromJson(json);
+    CheckEqual(json, bak);
+    // textual "\uFFF0" JSON escape is not the actual UTF-8 magic marker
+    json := '["\uFFF0YWJj"]';
+    bak := json;
+    RemoveMagicFromJson(json);
+    CheckEqual(json, bak);
+    // magic in a property name
+    json := '{"' + abc + '":"value"}';
+    RemoveMagicFromJson(json);
+    CheckEqual(json, '{"YWJj":"value"}');
+    // magic in both property name and value
+    json := '{"' + abc + '":"' + def + '"}';
+    RemoveMagicFromJson(json);
+    CheckEqual(json, '{"YWJj":"ZGVm"}');
+    // escaped backslash just before the closing quote
+    json := '{"text":"one\\","blob":"' + abc + '"}';
+    RemoveMagicFromJson(json);
+    CheckEqual(json, '{"text":"one\\","blob":"YWJj"}');
+    // several escaped quotes/backslashes before the magic string
+    json := '{"text":"a\"b\\c\"d","blob":"' + abc + '"}';
+    RemoveMagicFromJson(json);
+    CheckEqual(json, '{"text":"a\"b\\c\"d","blob":"YWJj"}');
+    // unique string should really be compacted in place
+    json := '["' + abc + '","tail"]';
+    p := UniqueRawUtf8(json);
+    RemoveMagicFromJson(json);
+    Check(pointer(json) = p, 'inplace');
+    CheckEqual(json, '["YWJj","tail"]');
+    // several consecutive empty/non-empty BLOBs
+    json := '["' + void + '","' + abc + '","' + void + '","' + def + '"]';
+    RemoveMagicFromJson(json);
+    CheckEqual(json, '["","YWJj","","ZGVm"]');
+    json := '["' + abc + ',"unfinished';
+    RemoveMagicFromJson(json);
+    CheckEqual(json, '["YWJj,"unfinished');
   end;
 
   procedure TestMyColl(MyColl: TMyCollection);
@@ -2038,7 +2764,6 @@ var
   O, O2: TPersistentToJson;
   E: TSynBackgroundThreadProcessStep;
   EndOfObject: AnsiChar;
-var
   Va, Vb: Variant;
   c: currency;
 
@@ -2844,30 +3569,10 @@ var
     end;
   end;
 
-  procedure TestJop(const src, exp: RawUtf8; nest: boolean = true);
-  var
-    j, k: RawUtf8;
-    s: TTextWriterJsonFormat;
-  begin
-    j := JsonPreprocess(src, jsonUnquotedPropNameCompact);
-    Check(j <> '');
-    CheckEqual(j, exp, src);
-    if nest then
-      for s := low(s) to high(s) do
-      begin
-        k := JsonPreprocess(src, s);
-        if s = jsonCompact then
-          Check(IsValidJson(k, {strict=}true), 'valid');
-        if s = jsonUnquotedPropNameCompact then
-          CheckEqual(k, j)
-        else
-          CheckEqual(JsonReformat(k, jsonUnquotedPropNameCompact), j);
-      end;
-  end;
-
 begin
   JsonConstants;
   TestSimpleEnum;
+  TestJopProcess;
   TestJsonArrayAsCsv('', '');
   TestJsonArrayAsCsv('123', '');
   TestJsonArrayAsCsv('[1]', '1');
@@ -3350,188 +4055,21 @@ begin
   TestReformat(
     'one:{a:1,b:2}'#10'two:2',
     '{one:{a:1,b:2},two:2}');
+  // content bigger than the TTextWriterStackBuffer (was a stack overflow)
+  U2 := RawUtf8OfChar('1', 70000);
+  TestReformat('[' + U2 + ']', '[' + U2 + ']', jsonCompact);
+  U2 := StringReplaceAll(RawUtf8OfChar('x', 5000), 'x', '[],');
+  TestReformat('[' + U2 + '1]', '[' + U2 + '1]', jsonCompact);
+  U2 := StringReplaceAll(RawUtf8OfChar('x', 5000), 'x', '{},');
+  TestReformat('[' + U2 + '{}]', '[' + U2 + '{}]', jsonCompact);
+  K := RawUtf8OfChar('k', 20000);
+  J2 := '{"' + K + '":1,"b":2}';
+  CheckEqual(JsonObjectAsJsonArrays(pointer(J2), y, U2), 2);
+  CheckEqual(y, '["' + K + '","b"]');
+  CheckEqual(U2, '[1,2]');
   CheckEqual(JsonReformat(
     #10' // test'#10' # ignored'#10'one: 1'#10'"two": 2'#10, jsonCompact),
     '{"one":1,"two":2}');
-  TestJop(
-    '$$'#10'a=1'#10'$$'#10'{a:$a$}',
-    '{a:1}');
-  TestJop(
-    '$$'#10'a= 1'#10'$$'#10'{a:$(a)}',
-    '{a:1}');
-  TestJop(
-    '$$'#10'a =1'#10'$$'#10'{a:$a$}',
-    '{a:1}');
-  TestJop(
-    '$$'#10' a = 1 '#10'$$'#10'{a:$a$}',
-    '{a:1}');
-  TestJop(
-    '$$'#10'a=1'#10'$$'#10'{a:$(os:name)}',
-    Join(['{a:"', OSVersionShort,'"}']));
-  J := GlobalInfoFind('net:mac');
-  if J <> '' then
-    TestJop(
-      '$$'#10'a=1'#10'$$'#10'{a:$net:mac$}',
-      Join(['{a:"', J,'"}']));
-  TestJop(
-    '$$'#10'a=b'#10'$$'#10'{a:$a$,b:$net:none$,c:$"$a$ ${os:nope|$a$}+"}',
-    '{a:"b",b:null,c:"b b+"}');
-  TestJop(
-    '$$'#10'a=1'#10'$$'#10'{a:$a|0$,b:$b|2$}',
-    '{a:1,b:2}');
-  TestJop(
-    '$$'#10'a=1'#10'$$'#10'{a:$(a|b),b:$b|a$}',
-    '{a:1,b:"a"}');
-  TestJop(
-    '$$'#10'a=1'#10'$$'#10'{a:$(a|b),b:$b|$(a)$}',
-    '{a:1,b:1}');
-  TestJop(
-    '$$'#10'a=1'#10'$$'#10'{a:$(a|b),b:$b|$(c|a)$}',
-    '{a:1,b:"a"}');
-  TestJop(
-    '$$'#10'a=1'#10'$$'#10'{a:$(a|b),b:$(b|$(c|a))}',
-    '{a:1,b:"a"}');
-  TestJop(
-    '$$'#10'a=1'#10'$$'#10'{a:$a$,b:$"$a$"}',
-    '{a:1,b:"1"}');
-  TestJop(
-    '$$'#10'a=1'#10'$$'#10'{a:$a$,b:"$a$",c{d:$(a)}}',
-    '{a:1,b:"$a$",c:{d:1}}');
-  TestJop(
-    '$$'#10'a=1'#10'$$'#10'{a:$none|$a$$,b:$"$a$"}',
-    '{a:1,b:"1"}');
-  TestJop(
-    '$$'#10'a=1'#10'$$'#10'{a:$none|"1"$,b:$"$a$"}',
-    '{a:"1",b:"1"}');
-  TestJop(
-    '$$'#10'a=1'#10'$$'#10'{a:$no|$ne|$a$$$,b:$"$a$"}',
-    '{a:1,b:"1"}');
-  TestJop(
-    '$$'#10'a=1'#10'$$'#10'{a:${no|${ne|${a}}},b:$"$a$"}',
-    '{a:1,b:"1"}');
-  J := '# comment'#10'$$'#10'# comment'#10'var=1'#10'a=number $var$'#10'$$'#10;
-  TestJop(
-    J + '[ 1 2 ]',
-    '[1,2]');
-  TestJop(
-    J + '[ $if a$ 1 $endif$ 2 ]',
-    '[1,2]');
-  TestJop(
-    J + '[ $if a$ 1 $if var$ 2 $endif$ $endif$ 3 ]',
-    '[1,2,3]');
-  TestJop(
-    J + '[ $if a$ 1 $if var$ 2 $else$ 3 $endif$ $else$ 4 $endif$5]',
-    '[1,2,5]');
-  TestJop(
-    J + '[ $if a$ 1 $if no$ 2 $else$ 3 $endif$ $else$ 4 $endif$ 5 ]',
-    '[1,3,5]');
-  TestJop(
-    J + '[ $if b$ 1 $if var$ 2 $else$ 3 $endif$ $else$ 4 $endif$ 5 ]',
-    '[4,5]');
-  J := '$$'#10'var=1'#10'a="number $var$" '#10'$$'#10;
-  TestJop(
-    J + '{a:$a$,b:$"$a$",c:$var$,d: $"$var$" ,e:"$var$",f:$"5432$var$0"}',
-    '{a:"number 1",b:"number 1",c:1,d:"1",e:"$var$",f:"543210"}');
-  TestJop(
-    J + '{$a$:0,b:$exe:arch$,c:$"http://toto/$exe:arch$",d:$os:none$,e:$"a$os:no$s"}',
-    '{"number 1":0,b:"' + CPU_ARCH_TEXT + '",c:"http://toto/' + CPU_ARCH_TEXT +
-     '",d:null,e:"as"}');
-  TestJop(
-    J + '# comment 2'#10'$$ section 2'#10'$ifdef a$ b=10'#10'$endif$'#10'$$'#10 +
-    '[$ifdef b$ 99 $else$ 0 $endif$ $(b) $(a) 100]',
-    '[99,10,"number 1",100]');
-  TestJop(
-    J + '$$ section 2'#10'$ifdef a$ b=1'#10'a=2'#10'$endif$'#10'$$'#10 +
-    '[$ifdef b$ $(b) $else$ 0 $endif$ $(b) $(a) 10]',
-    '[1,1,2,10]');
-  TestJop(
-    '$$'#10'a=1'#10'$$'#10'{ $if a$ a:$a$ $endif$, b:$"$a$"}',
-    '{a:1,b:"1"}');
-  TestJop(
-    '$$'#10'a=1'#10'$$'#10'{$if b$a:$a$$endif$b:$"$a$"}',
-    '{b:"1"}');
-  TestJop(
-    '$$'#10'a=1'#10'$$'#10'{$ifdef a$ $else$ a:$a$ $endif$, b:$"$a$"}',
-    '{b:"1"}');
-  TestJop(
-    '$$'#10'a=1'#10'$$'#10'{$ifdef a$$else$a:$a$$endif$b:$"$a$"}',
-    '{b:"1"}');
-  TestJop(
-    '$$'#10'a=1'#10'$$'#10'{ $if a = 1$ a:$a$ $endif$, b:$"$a$"}',
-    '{a:1,b:"1"}');
-  TestJop(
-    '$$'#10'a=1'#10'$$'#10'{ $if a = x$ a:$a$ $endif$, b:$"$a$"}',
-    '{b:"1"}');
-  TestJop(
-    '$$'#10'a=x'#10'$$'#10'{ $if a = x$ a:$a$ $endif$, b:$"$a$"}',
-    '{a:"x",b:"x"}');
-  TestJop(
-    '$$'#10'a=1'#10'$$'#10'{ $if a = $a$$ a:$a$ $endif$, b:$"$a$"}',
-    '{a:1,b:"1"}');
-  TestJop(
-    '$$'#10'a=xy'#10'$$'#10'{ $if a = $a$ $ a:$a$ $endif$, $a$:$"$a$"}',
-    '{a:"xy","xy":"xy"}', {nest=}false);
-  TestJop(
-    '$$'#10'a=xy'#10'$$'#10'{ $if yz > $a$ $ a:$a$ $endif$, $a$:$"$a$"}',
-    '{"xy":"xy"}', {nest=}false);
-  TestJop(
-    '$$'#10'a=xy'#10'$$'#10'{ $if a < yz $ a:$a$ $endif$, $a$:$"$a$"}',
-    '{a:"xy","xy":"xy"}', {nest=}false);
-  TestJop(
-    '$$'#10'a =1'#10'$$'#10'{ $if a <> 0 $ a:$a$ $endif$, b:$"$a$"}',
-    '{a:1,b:"1"}');
-  TestJop(
-    '$$'#10'a=10'#10'$$'#10'{ $if a > 5 $ a:$a$ $endif$, b:$"$a$"}',
-    '{a:10,b:"10"}');
-  TestJop(
-    '$$'#10'a=10'#10'five=5'#10'$$'#10'{ $if a > $five$ $ a:$a$ $endif$, b:$"$a$"}',
-    '{a:10,b:"10"}');
-  TestJop(
-    '$$'#10'a=1'#10'$$'#10'{$if a=1$a:$a$$endif$b:$"$a$"}',
-    '{a:1,b:"1"}');
-  TestJop(
-    '$$'#10'a=1'#10'$$'#10'{ $if a = 0$ a:$a$ $endif$, b:$"$a$"}',
-    '{b:"1"}');
-  TestJop(
-    '$$'#10'a=1'#10'$$'#10'{ $if a = 10$ a:$a$ $endif$, b:$"$a$"}',
-    '{b:"1"}');
-  TestJop(
-    '$$'#10'a=1'#10'b=$a$'#10'$$'#10'{ $if a = $b$$ a:$a$ $endif$, b:$"$a$"}',
-    '{a:1,b:"1"}');
-  TestJop(
-    '$$'#10'a=1'#10'$$'#10'[ $ifdef a$ 1 $else$ 2 $endif$ ]', '[1]');
-  TestJop(
-    '$$'#10'a=1'#10'$$'#10'[ $if a>0$ 1 $else$ 2 $endif$ ]', '[1]');
-  TestJop(
-    '$$'#10'a=1'#10'$$'#10'[ $if a<10$ 1 $else$ 2 $endif$ ]', '[1]');
-  TestJop(
-    '$$'#10'a=1'#10'$$'#10'[ $if a > 01 $ 1 $else$ 2 $endif$ ]', '[2]');
-  TestJop(
-    '$$'#10'a=10'#10'$$'#10'[ $if a > 9 $ 1 $else$ 2 $endif$ ]', '[1]');
-  TestJop(
-    '$$'#10'a=10'#10'$$'#10'[ $if a > 9 $ $else$ 2 $endif$ ]', '[]');
-  TestJop(
-    '[ $if cpu:threads > 0 $ 1 $else$ 2 $endif$ ]', '[1]');
-  TestJop(
-    '$$'#10'a=1'#10'$$'#10'[ $ifdef a$ 1 $else$ 2 $endif$ ]', '[1]');
-  TestJop(
-    '$$'#10'a=1'#10'$$'#10'[ $if a$ 1 $if no$ 2 $endif$ 4 $else$ 5 $endif$ 6 ]',
-    '[1,4,6]');
-  TestJop(
-    '$$'#10'a=1'#10'$$'#10'[ $if a$ 1 $if no$ 2 $else$ 3 $endif$ 4 $else$ 5 $endif$ 6 ]',
-    '[1,3,4,6]');
-  TestJop(
-    '$$'#10'a=1'#10'$$'#10'[ $if no$ 1 $if a$ 2 $else$ 3 $endif$ 4 $else$ 5 $endif$ 6 ]',
-    '[5,6]');
-  TestJop(
-    '$$'#10'a=1'#10'$$'#10'[ $if no$ 1 $if a$ 2 $else$ 3 $endif$ 4 $else$ 5 $else$ 6 $else$ 7 $endif$ 8 ]',
-    '[5,7,8]'); // $else$ is just a non-recursive toggle ;)
-  TestJop(
-    '$$'#10'a=1'#10'$$'#10'[ $if a$ 1 $if no$ 2 $endif$ 4 $else$ 5 $else$ 6 $endif$ 7 ]',
-    '[1,4,6,7]');
-  TestJop(
-    '[ $if no$ 1 $if no$ 2 $else$ 3 $endif$ 4 $else$ 5 $endif$ 6 ]',
-    '[5,6]');
   J := '{"RowID":  210 ,"Name":"Alice","Role":"User","Last Login":null, ' +
     '// comment'#13#10'"First Login" : /* to be ignored */  null  ,  "Department"' +
     ' :    "{\"relPath\":\"317\\\\\",\"revision\":1}" } ]';
@@ -6044,8 +6582,9 @@ end;
 procedure TTestCoreProcess._BSON;
 const
   BSONAWESOME = '{"BSON":["awesome",5.05,1986]}';
-  BSONAWESOMEBIN = #$31#0#0#0#4'BSON'#0#$26#0#0#0#2'0'#0#8#0#0#0'awesome'#0 +
-    #1'1'#0'333333'#$14#$40#$10'2'#0#$c2#7#0#0#0#0;
+  BSONAWESOMEHEX = // BSONAWESOME as BSON binary, in hexadecimal for Delphi
+    '310000000442534f4e002600000002300008000000617765736f6d6500' +
+    '0131003333333333331440103200c20700000000';
   BSONID = '507F191E810C19729DE860EA';
   REGEX = '{"$regex":"acme.*corp","$options":"i"}';
   REGEX2 = '{name:"John",field:/acme.*corp/i}';
@@ -6069,7 +6608,7 @@ var
   d, d2: TDateTime;
   oid, oid2: TBsonObjectID;
   oids: array of TBsonObjectID;
-  bsonDat, temp, bin: RawByteString;
+  bsonDat, temp, bin, awesomeBin: RawByteString;
   i, j: integer;
   b: PByte;
   elem, item: TBsonElement;
@@ -6106,6 +6645,7 @@ var
   end;
 
 begin
+  awesomeBin := HexToBin(BSONAWESOMEHEX);
   if CheckFailed(BsonVariantType <> nil, 'no BsonVariantType') then
     exit;
   if CheckFailed(BsonVariantVType <> 0, 'no BsonVariantVType') then
@@ -6232,7 +6772,7 @@ begin
   o := _Json('{"BSON": ["awesome", 5.05, 1986]}');
   bsonDat := Bson(TDocVariantData(o));
   Check(length(bsonDat) = $31);
-  Check(bsonDat = BSONAWESOMEBIN);
+  Check(bsonDat = awesomeBin);
   b := pointer(bsonDat);
   Check(BsonParseLength(b, $31) = length(bsonDat));
   Check(elem.FromNext(b));
@@ -6331,16 +6871,16 @@ begin
   Check(VariantSaveJson(_Json('{BSON:["awesome",5.05,1986]}')) = BSONAWESOME);
   Check(VariantSaveJson(_JsonFast('{ BSON : ["awesome", 5.05, 1986] }')) = BSONAWESOME);
   Check(VariantSaveJson(_JsonFast('{ ''BSON'' : ["awesome", 5.05, 1986] } ')) = BSONAWESOME);
-  Check(Bson('{BSON:["awesome",5.05,1986]}', [], []) = BSONAWESOMEBIN);
-  Check(Bson('{ BSON : ["awesome", 5.05, 1986] }', [], []) = BSONAWESOMEBIN);
-  Check(Bson('{ ''BSON'' : ["awesome", 5.05, 1986] } ', [], []) = BSONAWESOMEBIN);
-  Check(Bson('{%:[?,?,?]}', ['BSON'], ['awesome', 5.05, 1986]) = BSONAWESOMEBIN);
-  Check(Bson('{%:?}', ['BSON'], [_Arr(['awesome', 5.05, 1986])]) = BSONAWESOMEBIN);
-  Check(Bson(['BSON', '[', 'awesome', 5.05, 1986, ']']) = BSONAWESOMEBIN);
+  Check(Bson('{BSON:["awesome",5.05,1986]}', [], []) = awesomeBin);
+  Check(Bson('{ BSON : ["awesome", 5.05, 1986] }', [], []) = awesomeBin);
+  Check(Bson('{ ''BSON'' : ["awesome", 5.05, 1986] } ', [], []) = awesomeBin);
+  Check(Bson('{%:[?,?,?]}', ['BSON'], ['awesome', 5.05, 1986]) = awesomeBin);
+  Check(Bson('{%:?}', ['BSON'], [_Arr(['awesome', 5.05, 1986])]) = awesomeBin);
+  Check(Bson(['BSON', '[', 'awesome', 5.05, 1986, ']']) = awesomeBin);
   temp := Bson(['BSON', '[', 'awesome', 5.05, 1986]);
-  Check(temp = BSONAWESOMEBIN);
+  Check(temp = awesomeBin);
   temp := Bson(['BSON', '[', 'awesome', 5.05, 1986]);
-  Check(temp = BSONAWESOMEBIN);
+  Check(temp = awesomeBin);
   o2 := BsonVariantType[bsonDat];
   Check(VariantSaveJson(o2) = u);
   _Json('{BSON: ["test", 5.05, 1986]}', o);
@@ -6374,7 +6914,7 @@ begin
   u := VariantSaveMongoJson(o, modMongoStrict);
   CheckEqual(u, FormatUtf8('{"id":{"$oid":"%"},"name":"John","date":{"$date":"%"}}',
     [BSONID, st]));
-  Check(u3 = u);
+  CheckEqual(u3, u);
   _Json(u, o2);
   u := VariantSaveMongoJson(o2, modMongoShell);
   CheckEqual(u, FormatUtf8('{id:ObjectId("%"),name:"John",date:ISODate("%")}',
@@ -9046,7 +9586,7 @@ type
 
 const
   // golden cases, covering the I/O matrix of spec-yaml-support.md
-  GOLDEN: array[0..31] of TYamlGoldenCase = (
+  GOLDEN: array[0..36] of TYamlGoldenCase = (
     (Name: 'empty-flow-map';
      Yaml: '{}';
      ExpectedJson: '{}'),
@@ -9189,10 +9729,34 @@ const
      // that depth continue the inner seq. Discovered via GitHub REST spec
      // line 223996 (sort_by: [[123, asc], [456, desc]]).
      Yaml: 'k:'#10'- - 1'#10'  - 2'#10'- - 3'#10'  - 4';
-     ExpectedJson: '{"k":[[1,2],[3,4]]}')
+     ExpectedJson: '{"k":[[1,2],[3,4]]}'),
+    (Name: 'flow-quoted-double-seq';
+     // regression: SkipQuoted() already advances past the ending quote
+     Yaml: 'k: ["a", "b"]';
+     ExpectedJson: '{"k":["a","b"]}'),
+    (Name: 'flow-quoted-map-value';
+     Yaml: '{k: "a", j: 1}';
+     ExpectedJson: '{"k":"a","j":1}'),
+    (Name: 'flow-quoted-embedded-comma';
+     // commas within quotes must not split a flow value
+     Yaml: 'k: [''a,b'', "c,d"]';
+     ExpectedJson: '{"k":["a,b","c,d"]}'),
+    (Name: 'flow-quoted-nested-map';
+     Yaml: 'k: ["a", {j: "b"}, ''c'']';
+     ExpectedJson: '{"k":["a",{"j":"b"},"c"]}'),
+    (Name: 'flow-plain-mid-scalar-quotes';
+     // quotes inside a plain scalar are literal characters
+     Yaml: 'k: [it''s, x"y]';
+     ExpectedJson: '{"k":["it''s","x\"y"]}')
   );
 
-  ERRORS: array[0..8] of TYamlGoldenCase = (
+  ERRORS: array[0..21] of TYamlGoldenCase = (
+    (Name: 'quoted-double-json-injection';
+     Yaml: 'user: "x","admin":true,"y":"z"';
+     ExpectedJson: ''),
+    (Name: 'quoted-single-json-injection';
+     Yaml: 'user: ''x'',"admin":true';
+     ExpectedJson: ''),
     (Name: 'anchor';
      Yaml: 'a: &ref 1'#10'b: *ref';
      ExpectedJson: ''),
@@ -9220,6 +9784,43 @@ const
     (Name: 'explicit-indent-zero';
      // YAML 1.2 §8.1.1.1 forbids 0 as an explicit indent indicator
      Yaml: 'k: |0'#10'  x';
+     ExpectedJson: ''),
+    // Embedded #0 is forbidden anywhere in the YAML input buffer
+    (Name: 'nul-float';
+     Yaml: 'a: 1.2'#0'.3'#10'b: 2';
+     ExpectedJson: ''),
+    (Name: 'nul-boolean';
+     Yaml: 'b: true'#0#10'i: 3';
+     ExpectedJson: ''),
+    (Name: 'nul-exponent';
+     Yaml: 'c: 1e3'#0#10'admin: false';
+     ExpectedJson: ''),
+    (Name: 'nul-after-newline';
+     // regression: old FillLines() stopped at lineStart^ = #0
+     Yaml: 'a: 1'#10#0'admin: true';
+     ExpectedJson: ''),
+    (Name: 'nul-trailing-byte';
+     // #0 is within length(Yaml), not the implicit terminator
+     Yaml: 'a: 1'#0;
+     ExpectedJson: ''),
+    (Name: 'nul-inside-quoted-scalar';
+     Yaml: 'a: "ab'#0'cd"';
+     ExpectedJson: ''),
+    (Name: 'nul-inside-literal-block';
+     Yaml: 'k: |'#10'  ab'#0'cd';
+     ExpectedJson: ''),
+    (Name: 'nul-after-crlf';
+     Yaml: 'a: 1'#13#10#0'b: 2';
+     ExpectedJson: ''),
+     // Quoted flow scalars must have a valid separator afterwards
+    (Name: 'flow-quoted-missing-comma';
+     Yaml: 'k: ["a" "b"]';
+     ExpectedJson: ''),
+    (Name: 'flow-map-quoted-missing-comma';
+     Yaml: '{k: "a" j: 1}';
+     ExpectedJson: ''),
+    (Name: 'flow-quoted-trailing-text';
+     Yaml: 'k: ["a"junk, "b"]';
      ExpectedJson: '')
   );
 
@@ -9295,9 +9896,25 @@ end;
 procedure TTestCoreProcess.YamlErrorCases;
 var
   i: PtrInt;
+  json: RawUtf8;
 begin
   for i := low(ERRORS) to high(ERRORS) do
-    YamlExpectRaise(Join([' for ', ERRORS[i].Name]), ERRORS[i].Yaml);
+  with ERRORS[i] do
+  begin
+    TSynLog.Family.ExceptionIgnoreCurrentThread := true;
+    try
+      YamlExpectRaise(Join([' for ', Name]), Yaml);
+      if not IdemPChar(pointer(Name), 'NUL-') then
+        continue;
+      CheckNotEqual(StrLen(pointer(Yaml)), length(Yaml), Name);
+      json := SmallUInt32Utf8[i];
+      CheckUtf8(not TryYamlToJson(Yaml, json), // specific call to detect #0
+        'YamlToJson should reject %', [Name]);
+      CheckEqual(json, '');
+    finally
+      TSynLog.Family.ExceptionIgnoreCurrentThread := false;
+    end;
+  end;
 end;
 
 procedure TTestCoreProcess.YamlFileApi;
@@ -9353,6 +9970,13 @@ begin
     YamlMaxDepth := 100;
     YamlToVariant(yaml, doc);
     Check(doc.Count <> 0,  'depth 20 must parse when YamlMaxDepth=100');
+    // Compact one-line nested sequences must use the same depth limit.
+    yaml := '';
+    for i := 1 to 100 do
+      Append(yaml, '- ');
+    Append(yaml, 'x');
+    YamlMaxDepth := 8;
+    YamlExpectRaise('compact nested sequence must respect YamlMaxDepth', yaml);
   finally
     YamlMaxDepth := saved;
   end;
@@ -10291,6 +10915,1235 @@ begin
   CheckEqual(n, 0);
 end;
 
+{ relational table export regression tests }
+
+type
+  // own copies of callback data, whose lifetime is otherwise limited to the call
+  TTableTestData = record
+    Info: TTableInfo;
+    Rows: array of TTableRow;
+  end;
+
+  TTableTestWriter = class
+  public
+    Tables: array of TTableTestData;
+    Events: RawUtf8;
+    Active: PtrInt;
+    Invalid: boolean;
+    RaiseEnabled: boolean;
+    RaiseMemory: boolean;
+    RaiseAt: TTableWriteEvent;
+    procedure Clear;
+    procedure WriteTable(Event: TTableWriteEvent;
+      const Table: TTableInfo; Row: PTableRow);
+  end;
+
+procedure TTableTestWriter.Clear;
+begin
+  Tables := nil;
+  Events := '';
+  Active := -1;
+  Invalid := false;
+  RaiseEnabled := false;
+  RaiseMemory := false;
+end;
+
+procedure TTableTestWriter.WriteTable(Event: TTableWriteEvent;
+  const Table: TTableInfo; Row: PTableRow);
+var
+  n: PtrInt;
+begin
+  if RaiseEnabled and
+     (Event = RaiseAt) then
+    if RaiseMemory then
+      OutOfMemoryError // use the RTL-owned preallocated exception
+    else
+      raise ESynLogSilent.Create('table test output failure');
+  case Event of
+    tweBegin:
+      begin
+        Invalid := Invalid or (Active <> -1) or (Row <> nil);
+        Active := length(Tables);
+        SetLength(Tables, Active + 1);
+        Tables[Active].Info := Table;
+        Tables[Active].Info.Columns := copy(Table.Columns, 0,
+          length(Table.Columns));
+        Append(Events, ['B(', Table.Name, ')']);
+      end;
+    tweRow:
+      begin
+        if (Active < 0) or
+           (Row = nil) then
+        begin
+          Invalid := true;
+          exit;
+        end;
+        Invalid := Invalid or (Table.Name <> Tables[Active].Info.Name) or
+          (length(Row^.Values) <> length(Table.Columns));
+        n := length(Tables[Active].Rows);
+        SetLength(Tables[Active].Rows, n + 1);
+        // retain the managed array: the exporter must preserve this snapshot
+        Tables[Active].Rows[n] := Row^;
+        Append(Events, 'R');
+      end;
+    tweEnd:
+      begin
+        if Active < 0 then
+          Invalid := true
+        else
+          Invalid := Invalid or (Row <> nil) or
+            (Table.Name <> Tables[Active].Info.Name);
+        Append(Events, 'E');
+        Active := -1;
+      end;
+  end;
+end;
+
+function RawBytes(const Bytes: array of byte): RawUtf8;
+var
+  i: PtrInt;
+  p: PByteArray;
+begin
+  // avoid Delphi re-encoding non-ASCII character literals as UTF-8
+  p := FastSetString(result, length(Bytes));
+  for i := 0 to high(Bytes) do
+    p[i] := Bytes[i];
+end;
+
+procedure TTestCoreProcess._Tables;
+var
+  sink: TTableTestWriter;
+
+  procedure OneCsv(const Json, Expected: RawUtf8;
+    ExpectedResult: TTableResult = tbrSuccess;
+    Options: TTableOptions = TABLE_DEFAULT);
+  var
+    csv: TTextPairs;
+    info: RawUtf8;
+    res: TTableResult;
+  begin
+    SetLength(csv, 1);
+    csv[0].Name := 'old';
+    csv[0].Value := 'old';
+    info := 'old';
+    res := JsonToCsv(Json, csv, info, Options);
+    CheckEqual(ord(res), ord(ExpectedResult), Json);
+    if CheckFailed(length(csv) = 1, 'one csv') then
+      exit;
+    CheckEqual(csv[0].Name, 'root', 'logical name, without .csv');
+    CheckEqual(csv[0].Value, Expected, Json);
+    if ExpectedResult = tbrSuccess then
+      CheckEqual(info, '', 'no stale diagnostics')
+    else
+      Check(info <> '', 'remarks');
+  end;
+
+  procedure OneMd(const Json, Expected: RawUtf8;
+    Options: TTableOptions = TABLE_DEFAULT);
+  var
+    md, info: RawUtf8;
+  begin
+    md := 'old';
+    info := 'old';
+    CheckUtf8(JsonToMd(Json, md, info, Options, 'root',
+      ttfMarkdownPipe) = tbrSuccess, Json);
+    CheckEqual(md, Expected, Json);
+    CheckEqual(info, '');
+  end;
+
+  procedure FailJson(const Json: RawUtf8;
+    Expected: TTableResult = tbrInvalidJson;
+    Options: TTableOptions = TABLE_DEFAULT);
+  var
+    csv: TTextPairs;
+    md, info: RawUtf8;
+  begin
+    SetLength(csv, 1);
+    csv[0].Name := 'old';
+    csv[0].Value := 'old';
+    info := '';
+    CheckEqual(ord(JsonToCsv(Json, csv, info, Options)), ord(Expected), Json);
+    CheckEqual(length(csv), 0, 'no partial csv on failure');
+    Check(info <> '', 'csv error context');
+    md := 'old';
+    info := '';
+    CheckEqual(ord(JsonToMd(Json, md, info, Options)), ord(Expected), Json);
+    CheckEqual(md, '', 'no partial markdown on failure');
+    Check(info <> '', 'markdown error context');
+    sink.Clear;
+    info := '';
+    CheckEqual(ord(JsonToTables(Json, sink.WriteTable, info, Options)),
+      ord(Expected), Json);
+    CheckEqual(sink.Events, '', 'no callback on schema/input error');
+    Check(info <> '', 'callback error context');
+  end;
+
+  procedure FailVariant(const Doc: variant;
+    Expected: TTableResult = tbrInvalidData;
+    Options: TTableOptions = TABLE_DEFAULT);
+  var
+    csv: TTextPairs;
+    md, info: RawUtf8;
+  begin
+    SetLength(csv, 1);
+    csv[0].Value := 'old';
+    CheckEqual(ord(VariantToCsv(Doc, csv, info, Options)), ord(Expected));
+    CheckEqual(length(csv), 0, 'no partial variant csv');
+    Check(info <> '', 'variant csv error context');
+    md := 'old';
+    CheckEqual(ord(VariantToMd(Doc, md, info, Options)), ord(Expected));
+    CheckEqual(md, '', 'no partial variant markdown');
+    Check(info <> '', 'variant markdown error context');
+    sink.Clear;
+    CheckEqual(ord(VariantToTables(Doc, sink.WriteTable, info, Options)),
+      ord(Expected));
+    CheckEqual(sink.Events, '', 'no callback on schema error');
+  end;
+
+  procedure Parity(const Json: RawUtf8;
+    Options: TTableOptions = TABLE_DEFAULT);
+  var
+    doc, alias: variant;
+    c1, c2: TTextPairs;
+    m1, m2, i1, i2, before: RawUtf8;
+    r1, r2: TTableResult;
+    i: PtrInt;
+  begin
+    if CheckFailed(VariantLoadJson(doc, Json, @JSON_TABLE, true),
+       'native JSON decoding') then
+      exit;
+    alias := doc;
+    before := VariantSaveJson(doc);
+    r1 := JsonToCsv(Json, c1, i1, Options);
+    r2 := VariantToCsv(doc, c2, i2, Options);
+    CheckEqual(ord(r1), ord(r2), 'json/variant csv result');
+    CheckEqual(i1, i2, 'json/variant csv diagnostics');
+    if Check(length(c1) = length(c2), 'json/variant csv count') then
+      for i := 0 to high(c1) do
+      begin
+        CheckEqual(c1[i].Name, c2[i].Name);
+        CheckEqual(c1[i].Value, c2[i].Value);
+      end;
+    r1 := JsonToMd(Json, m1, i1, Options);
+    r2 := VariantToMd(doc, m2, i2, Options);
+    CheckEqual(ord(r1), ord(r2), 'json/variant markdown result');
+    CheckEqual(m1, m2, 'json/variant markdown');
+    CheckEqual(i1, i2, 'json/variant markdown diagnostics');
+    CheckEqual(VariantSaveJson(doc), before, 'input is read only');
+    CheckEqual(VariantSaveJson(alias), before, 'shared input is read only');
+  end;
+
+  procedure Flat;
+  var
+    doc: variant;
+    dv: TSynVarData absolute doc;
+    csv: TTextPairs;
+    info: RawUtf8;
+  begin
+    OneCsv('[{"name":"John","age":42},{"name":"Jane","age":39}]',
+      '__rowid,name,age'#10'1,John,42'#10'2,Jane,39'#10);
+    OneCsv('{"name":"John","age":42}',
+      '__rowid,name,age'#10'1,John,42'#10);
+    OneCsv('[{"b":2,"a":1},{"a":3,"b":4}]',
+      '__rowid,b,a'#10'1,2,1'#10'2,4,3'#10);
+    OneCsv('[1,2,3]', '__rowid,value'#10'1,1'#10'2,2'#10'3,3'#10);
+    OneCsv('[true,false]', '__rowid,value'#10'1,true'#10'2,false'#10);
+    OneCsv('["a","b"]', '__rowid,value'#10'1,a'#10'2,b'#10);
+    OneCsv('42', '__rowid,value'#10'1,42'#10);
+    OneCsv('true', '__rowid,value'#10'1,true'#10);
+    OneCsv('"hello"', '__rowid,value'#10'1,hello'#10);
+    OneCsv('null', '__rowid,value'#10'1,'#10);
+    OneCsv('null', '__rowid,value'#10'1,null'#10,
+      tbrSuccess, [tboNullAsText]);
+    OneCsv('[]', '__rowid,value'#10);
+    OneCsv('{}', '__rowid'#10'1'#10);
+    OneCsv('[{},{}]', '__rowid'#10'1'#10'2'#10);
+    OneCsv('{"a":{"b":1,"c":{"d":2}},"e":3}',
+      '__rowid,a.b,a.c.d,e'#10'1,1,2,3'#10);
+    OneCsv('[{"n":null},{"n":2}]', '__rowid,n'#10'1,'#10'2,2'#10);
+    OneCsv('[1,null,2]', '__rowid,value'#10'1,1'#10'2,'#10'3,2'#10);
+    OneCsv('[1,null,2]', '__rowid,value'#10'1,1'#10'2,null'#10'3,2'#10,
+      tbrSuccess, [tboNullAsText]);
+    OneCsv('[{"Name":1,"name":2}]', '__rowid,Name,name'#10'1,1,2'#10);
+    // the existing decoder uses Currency, whose writer retains two decimals
+    OneCsv('[1,2.5]', '__rowid,value'#10'1,1'#10'2,2.50'#10);
+    OneCsv('[1,2.5]', '__rowid,value'#10'1,1'#10'2,2.50'#10,
+      tbrSuccess, TABLE_STRICT);
+    OneCsv('[null,1]', '__rowid,__index,value'#10'1,0,'#10'2,1,1'#10,
+      tbrSuccess, [tboKeepArrayIndex]);
+    OneCsv('{"n":1}', '__rowid,n'#10'1,1'#10,
+      tbrSuccess, [tboKeepArrayIndex]);
+    OneMd('[{"name":"John"},{"name":"Jane"}]',
+      '## root'#10#10 +
+      '| __rowid | name |'#10 +
+      '| --- | --- |'#10 +
+      '| 1 | John |'#10 +
+      '| 2 | Jane |'#10#10);
+    OneMd('[]', '## root'#10#10 +
+      '| __rowid | value |'#10'| --- | --- |'#10#10);
+    OneMd('{}', '## root'#10#10 +
+      '| __rowid |'#10'| --- |'#10'| 1 |'#10#10);
+    // scalar Variant entry points do not need a document wrapper
+    doc := 42;
+    Check(VariantToCsv(doc, csv, info) = tbrSuccess);
+    if Check(length(csv) = 1) then
+      CheckEqual(csv[0].Value, '__rowid,value'#10'1,42'#10);
+    doc := Null;
+    Check(VariantToCsv(doc, csv, info, [tboNullAsText]) = tbrSuccess);
+    if Check(length(csv) = 1) then
+      CheckEqual(csv[0].Value, '__rowid,value'#10'1,null'#10);
+    dv.VType := varEmpty;
+    Check(VariantToCsv(doc, csv, info) = tbrSuccess);
+    if Check(length(csv) = 1) then
+      CheckEqual(csv[0].Value, '__rowid,value'#10'1,'#10);
+    Check(VariantToCsv(doc, csv, info, [tboNullAsText]) = tbrSuccess);
+    if Check(length(csv) = 1) then
+      CheckEqual(csv[0].Value, '__rowid,value'#10'1,null'#10);
+    dv.VType := varInt64;
+    dv.VInt64 := high(Int64);
+    Check(VariantToCsv(doc, csv, info) = tbrSuccess);
+    if Check(length(csv) = 1) then
+      CheckEqual(csv[0].Value, '__rowid,value'#10'1,9223372036854775807'#10);
+    dv.VType := varInt64;
+    dv.VInt64 := low(Int64);
+    Check(VariantToCsv(doc, csv, info) = tbrSuccess);
+    if Check(length(csv) = 1) then
+      CheckEqual(csv[0].Value, '__rowid,value'#10'1,-9223372036854775808'#10);
+    dv.VType := varDouble;
+    dv.VDouble := 2.5;
+    Check(VariantToCsv(doc, csv, info) = tbrSuccess);
+    if Check(length(csv) = 1) then
+      CheckEqual(csv[0].Value, '__rowid,value'#10'1,2.5'#10);
+    doc := VarFromDateTime(EncodeDate(2024, 1, 2) + EncodeTime(3, 4, 5, 0));
+    Check(VariantToCsv(doc, csv, info) = tbrSuccess);
+    if Check(length(csv) = 1) then
+      CheckEqual(csv[0].Value, '__rowid,value'#10'1,2024-01-02T03:04:05'#10);
+    Parity('[{"Name":1,"name":2,"child":{"value":3}}]');
+    Parity('[{"a":1},{"a":2,"b":3}]');
+    Parity('[{"a":null},{"a":2}]', [tboNullAsText]);
+  end;
+
+  procedure Relations;
+  const
+    JSON: RawUtf8 =
+      '[{"name":"A","orders":[{"sku":"X","tags":["red","big"]},' +
+      '{"sku":"Y","tags":[]}],"phones":["111","222"]},' +
+      '{"name":"B","orders":[{"sku":"Z","tags":["blue"]}],' +
+      '"phones":["333"]}]';
+  var
+    csv: TTextPairs;
+    info, md: RawUtf8;
+  begin
+    Check(JsonToCsv(JSON, csv, info) = tbrSuccess, 'relations');
+    if CheckFailed(length(csv) = 4, 'four tables') then
+      exit;
+    CheckEqual(csv[0].Name, 'root');
+    CheckEqual(csv[0].Value, '__rowid,name'#10'1,A'#10'2,B'#10);
+    CheckEqual(csv[1].Name, 'root.orders');
+    CheckEqual(csv[1].Value,
+      '__rowid,__parentid,sku'#10'1,1,X'#10'2,1,Y'#10'3,2,Z'#10);
+    CheckEqual(csv[2].Name, 'root.orders.tags');
+    CheckEqual(csv[2].Value,
+      '__rowid,__parentid,value'#10'1,1,red'#10'2,1,big'#10'3,3,blue'#10);
+    CheckEqual(csv[3].Name, 'root.phones');
+    CheckEqual(csv[3].Value,
+      '__rowid,__parentid,value'#10'1,1,111'#10'2,1,222'#10'3,2,333'#10);
+    sink.Clear;
+    Check(JsonToTables(JSON, sink.WriteTable, info) = tbrSuccess);
+    Check(not sink.Invalid, 'callback arguments');
+    CheckEqual(sink.Active, -1);
+    CheckEqual(sink.Events,
+      'B(root)RREB(root.orders)RRREB(root.orders.tags)RRREB(root.phones)RRRE');
+    if CheckFailed(length(sink.Tables) = 4) then
+      exit;
+    CheckEqual(sink.Tables[0].Info.Path, '$');
+    CheckEqual(sink.Tables[0].Info.ParentName, '');
+    CheckEqual(sink.Tables[1].Info.Path, '$[].orders');
+    CheckEqual(sink.Tables[1].Info.ParentName, 'root');
+    CheckEqual(sink.Tables[2].Info.Path, '$[].orders[].tags');
+    CheckEqual(sink.Tables[2].Info.ParentName, 'root.orders');
+    if Check(length(sink.Tables[1].Info.Columns) = 1) then
+      CheckEqual(sink.Tables[1].Info.Columns[0], 'sku');
+    if CheckFailed((length(sink.Tables[2].Rows) = 3) and
+                  (length(sink.Tables[3].Rows) = 3)) then
+      exit;
+    CheckEqual(sink.Tables[2].Rows[2].ID, 3);
+    CheckEqual(sink.Tables[2].Rows[2].ParentID, 3);
+    CheckEqual(sink.Tables[3].Rows[2].ParentID, 2);
+    // indexes are local to each parent array; generated IDs are per table
+    Check(JsonToCsv(JSON, csv, info, [tboKeepArrayIndex]) = tbrSuccess);
+    if CheckFailed(length(csv) = 4) then
+      exit;
+    CheckEqual(csv[0].Value,
+      '__rowid,__index,name'#10'1,0,A'#10'2,1,B'#10);
+    CheckEqual(csv[1].Value,
+      '__rowid,__parentid,__index,sku'#10'1,1,0,X'#10'2,1,1,Y'#10'3,2,0,Z'#10);
+    CheckEqual(csv[2].Value,
+      '__rowid,__parentid,__index,value'#10 +
+      '1,1,0,red'#10'2,1,1,big'#10'3,3,0,blue'#10);
+    // an empty child is represented by a header, without a fictitious row
+    Check(JsonToCsv('{"list":[]}', csv, info) = tbrSuccess);
+    if Check(length(csv) = 2) then
+    begin
+      CheckEqual(csv[0].Value, '__rowid'#10'1'#10);
+      CheckEqual(csv[1].Value, '__rowid,__parentid,value'#10);
+    end;
+    sink.Clear;
+    Check(JsonToTables('{"a":{"list":[1]}}', sink.WriteTable, info) =
+      tbrSuccess);
+    if Check(length(sink.Tables) = 2) then
+    begin
+      CheckEqual(sink.Tables[1].Info.Name, 'root.a.list');
+      CheckEqual(sink.Tables[1].Info.Path, '$.a.list');
+      CheckEqual(sink.Tables[1].Info.ParentName, 'root');
+      CheckEqual(sink.Tables[1].Rows[0].ParentID, 1);
+    end;
+    // child Markdown has the same parent link as CSV
+    Check(JsonToMd('{"items":[1]}', md, info, TABLE_DEFAULT, 'root',
+      ttfMarkdownPipe) = tbrSuccess);
+    CheckEqual(md, '## root'#10#10 +
+      '| __rowid |'#10'| --- |'#10'| 1 |'#10#10 +
+      '## root\.items'#10#10 +
+      '| __rowid | __parentid | value |'#10 +
+      '| --- | --- | --- |'#10'| 1 | 1 | 1 |'#10#10);
+    Parity(JSON);
+    Parity(JSON, [tboKeepArrayIndex]);
+  end;
+
+  procedure Schemas;
+  var
+    doc: variant;
+    d: double;
+    c: currency;
+    csv: TTextPairs;
+    info, before: RawUtf8;
+  begin
+    OneCsv('[{"a":1},{"a":2,"b":3}]',
+      '__rowid,a,b'#10'1,1,'#10'2,2,3'#10, tbrSuccessWithRemarks);
+    OneCsv('[{"a":1,"b":2},{"a":3}]',
+      '__rowid,a,b'#10'1,1,2'#10'2,3,'#10, tbrSuccessWithRemarks);
+    OneCsv('[{"a":null},{"b":2}]',
+      '__rowid,a,b'#10'1,null,'#10'2,,2'#10,
+      tbrSuccessWithRemarks, [tboNullAsText]);
+    OneCsv('[{"a":1},{"a":2,"b":3}]',
+      '__rowid,a'#10'1,1'#10'2,2'#10,
+      tbrSuccessWithRemarks, [tboFirstRowFields]);
+    OneCsv('[{"a":1,"b":2},{"a":3}]',
+      '__rowid,a,b'#10'1,1,2'#10'2,3,'#10,
+      tbrSuccessWithRemarks, [tboFirstRowFields]);
+    OneCsv('[{"a":1},{"a":"two"}]',
+      '__rowid,a'#10'1,1'#10'2,two'#10);
+    OneCsv('[1,"two",false]',
+      '__rowid,value'#10'1,1'#10'2,two'#10'3,false'#10);
+    FailJson('[{"a":1},{"a":2,"b":3}]', tbrInvalidData,
+      [tboStrictFields]);
+    FailJson('[{"a":1,"b":2},{"a":3}]', tbrInvalidData,
+      [tboStrictFields]);
+    FailJson('[{"a":1},{"a":2,"b":3}]', tbrInvalidData,
+      [tboFirstRowFields, tboStrictFields]);
+    FailJson('[{"a":1},{"a":"two"}]', tbrInvalidData,
+      [tboStrictTypes]);
+    FailJson('[1,"two"]', tbrInvalidData, [tboStrictTypes]);
+    FailJson('[1,true]', tbrInvalidData, [tboStrictTypes]);
+    d := 2.5;
+    c := 3.25;
+    doc := _ArrFast([1, d, c]);
+    Check(VariantToCsv(doc, csv, info, [tboStrictTypes]) = tbrSuccess,
+      'native numeric Variant kinds are compatible');
+    doc := _ArrFast([VarFromDateTime(EncodeDate(2024, 1, 2)), 'plain text']);
+    Check(VariantToCsv(doc, csv, info, [tboStrictTypes]) = tbrSuccess,
+      'dates and strings use text cells');
+    // nullable fields keep the shape and non-null type of their other rows
+    OneCsv('[{"a":null},{"a":1}]', '__rowid,a'#10'1,'#10'2,1'#10,
+      tbrSuccess, TABLE_STRICT);
+    OneCsv('[{"a":null},{"a":{"b":1}}]',
+      '__rowid,a.b'#10'1,'#10'2,1'#10);
+    OneCsv('[{"a":null},{"a":{"b":1}}]',
+      '__rowid,a.b'#10'1,'#10'2,1'#10,
+      tbrSuccess, [tboNullAsText]);
+    OneCsv('[{"a":null},{"a":{"b":1}}]',
+      '__rowid,a.b'#10'1,'#10'2,1'#10,
+      tbrSuccess, TABLE_STRICT);
+    FailJson('[{"a":1},{"a":{"b":2}}]', tbrInvalidData);
+    FailJson('[{"a":[1]},{"a":2}]', tbrInvalidData);
+    FailJson('[{"a":{"b":1}},{"a":[2]}]', tbrInvalidData);
+    // late child columns are discovered across all parents of that table
+    Check(JsonToCsv('[{"items":[{"a":1}]},' +
+      '{"items":[{"a":2,"b":3}]}]', csv, info) =
+      tbrSuccessWithRemarks);
+    if Check(length(csv) = 2) then
+      CheckEqual(csv[1].Value,
+        '__rowid,__parentid,a,b'#10'1,1,1,'#10'2,2,2,3'#10);
+    Check(info <> '');
+    FailJson('[{"items":[{"a":1}]},' +
+      '{"items":[{"a":2,"b":3}]}]', tbrInvalidData, TABLE_STRICT);
+    FailJson('[{"a":1},2]', tbrInvalidData);
+    FailJson('[null,{"a":1}]', tbrInvalidData);
+    FailJson('[[1],[2]]', tbrInvalidData);
+    OneCsv('[{"a":1},2]',
+      '__rowid,value'#10'1,"{""a"":1}"'#10'2,2'#10,
+      tbrSuccessWithRemarks, [tboMixedAsJson]);
+    OneCsv('[null,{"a":1}]',
+      '__rowid,value'#10'1,'#10'2,"{""a"":1}"'#10,
+      tbrSuccessWithRemarks, [tboMixedAsJson]);
+    OneCsv('[null,{"a":1}]',
+      '__rowid,value'#10'1,null'#10'2,"{""a"":1}"'#10,
+      tbrSuccessWithRemarks, [tboMixedAsJson, tboNullAsText]);
+    OneCsv('[[1,2],[3]]',
+      '__rowid,value'#10'1,"[1,2]"'#10'2,[3]'#10,
+      tbrSuccessWithRemarks, [tboMixedAsJson]);
+    FailJson('[{"a":1},2]', tbrInvalidData,
+      [tboMixedAsJson, tboStrictTypes]);
+    Parity('[{"a":1},2]', [tboMixedAsJson]);
+    Parity('[[1,2],[3]]', [tboMixedAsJson]);
+    Parity('[{"a":1},{"a":2,"b":3}]', [tboFirstRowFields]);
+    // JSON fallback must be standard even if the document requests extended JSON
+    doc := _Json('[{"a":{"b":1}},2]', JSON_FAST_FLOAT +
+      [dvoSerializeAsExtendedJson, dvoNameCaseSensitive]);
+    before := VariantSaveJson(doc);
+    Check(VariantToCsv(doc, csv, info, [tboMixedAsJson]) =
+      tbrSuccessWithRemarks);
+    if Check(length(csv) = 1) then
+      CheckEqual(csv[0].Value,
+        '__rowid,value'#10'1,"{""a"":{""b"":1}}"'#10'2,2'#10);
+    CheckEqual(VariantSaveJson(doc), before, 'keep source JSON options');
+  end;
+
+  procedure Escaping;
+  var
+    csv: TTextPairs;
+    info: RawUtf8;
+  begin
+    OneCsv('["a,b","a\"b","a\nb","a\rb","a\r\nb",""]',
+      '__rowid,value'#10 +
+      '1,"a,b"'#10'2,"a""b"'#10'3,"a'#10'b"'#10 +
+      '4,"a'#13'b"'#10'5,"a'#13#10'b"'#10'6,'#10);
+    OneCsv('{"a,b":1,"a\"b":2}',
+      '__rowid,"a,b","a""b"'#10'1,1,2'#10);
+    OneCsv('["\u00e9","\u4e2d","\ud83d\ude00"]',
+      '__rowid,value'#10'1,' + RawBytes([$c3, $a9]) + #10 +
+      '2,' + RawBytes([$e4, $b8, $ad]) + #10 +
+      '3,' + RawBytes([$f0, $9f, $98, $80]) + #10);
+    OneCsv('{"__rowid":1,"__parentid":2,"__index":3,' +
+      '"a.b":4,"a":{"b":5},"a\\b":6,"c[0]":7}',
+      '__rowid,\__rowid,\__parentid,\__index,a\.b,a.b,a\\b,c\[0\]'#10 +
+      '1,1,2,3,4,5,6,7'#10);
+    OneCsv('{"a/b":1,"a\"b":2}',
+      '__rowid,a/b,"a""b"'#10'1,1,2'#10);
+    OneCsv('{"\u000F":1,"\u001a":2,"\u007F":3,"\\u000f":4}',
+      '__rowid,\u000f,\u001a,\u007f,\\u000f'#10'1,1,2,3,4'#10);
+    OneCsv('{"\u00e9":1}', '__rowid,' + RawBytes([$c3, $a9]) +
+      #10'1,1'#10);
+    OneMd('{"value":"a|b\\c\n<&>\"\t*_[x]"}',
+      '## root'#10#10 +
+      '| __rowid | value |'#10'| --- | --- |'#10 +
+      '| 1 | a\|b\\c<br>&lt;&amp;&gt;&quot;&#9;\*\_\[x\] |'#10#10);
+    OneMd('["a\nb","a\rb","a\r\nb"]',
+      '## root'#10#10 +
+      '| __rowid | value |'#10'| --- | --- |'#10 +
+      '| 1 | a<br>b |'#10'| 2 | a<br>b |'#10'| 3 | a<br>b |'#10#10);
+    Check(JsonToCsv('{"a.b":[1],"a":{"b":[2]}}', csv, info) =
+      tbrSuccess, 'table path escaping');
+    if Check(length(csv) = 3) then
+    begin
+      CheckEqual(csv[1].Name, 'root.a\.b');
+      CheckEqual(csv[2].Name, 'root.a.b');
+    end;
+    Check(JsonToCsv('{"\u001A":[1]}', csv, info) = tbrSuccess);
+    if Check(length(csv) = 2) then
+      CheckEqual(csv[1].Name, 'root.\u001a', 'lowercase escaped table name');
+    Check(JsonToCsv('[1]', csv, info, TABLE_DEFAULT, 'root.x') = tbrSuccess);
+    if Check(length(csv) = 1) then
+      CheckEqual(csv[0].Name, 'root\.x');
+    Check(JsonToCsv('[1]', csv, info, TABLE_DEFAULT, '') = tbrInvalidData);
+    CheckEqual(length(csv), 0);
+    Parity('{"__rowid":1,"a.b":2,"a":{"b":3},"a\\b":4}');
+  end;
+
+  procedure JsonDecoding;
+  begin
+    // the wrappers deliberately keep the existing mORMot decoding semantics
+    OneCsv('"\x41"', '__rowid,value'#10'1,x41'#10);
+    OneCsv('"\u0000"', '__rowid,value'#10'1,?'#10);
+    OneCsv('{"":1,"a":2}', '__rowid,a'#10'1,2'#10);
+    // repeated names follow the first occurrence used by native field lookup
+    OneCsv('{"a":1,"a":2}', '__rowid,a'#10'1,1'#10);
+    OneCsv('{"a":1,"\u0061":2}', '__rowid,a'#10'1,1'#10);
+    OneCsv('{"a":1,"a":{"b":2}}', '__rowid,a'#10'1,1'#10);
+    OneCsv('{"a\u0000b":1}', '__rowid,a?b'#10'1,1'#10);
+    OneCsv('{"value":"a\u0000b"}', '__rowid,value'#10'1,a?b'#10);
+    OneCsv('"raw'#10'line"', '__rowid,value'#10'1,"raw'#10'line"'#10);
+    Parity('"\ud800\u0041"');
+    Parity('{"":1}');
+    Parity('[{"a":1},{"a":2,"ignored":{"":3}}]', [tboFirstRowFields]);
+    OneCsv(RawBytes([$ef, $bb, $bf]) + '[1]', '__rowid,value'#10'1,1'#10);
+  end;
+
+  procedure NativeValues;
+  var
+    v: variant;
+    csv: TTextPairs;
+    s, expected, info: RawUtf8;
+  begin
+    // caller-supplied scalar text is passed through, then escaped for CSV
+    s := 'a'#0',"b';
+    RawUtf8ToVariant(s, v);
+    Check(VariantToCsv(v, csv, info) = tbrSuccess);
+    expected := '__rowid,value'#10'1,"a'#0',""b"'#10;
+    if Check(length(csv) = 1) then
+    begin
+      CheckEqual(csv[0].Value, expected);
+      CheckEqual(length(csv[0].Value), length(expected));
+    end;
+    s := RawBytes([$c0, $af]);
+    RawUtf8ToVariant(s, v);
+    Check(VariantToCsv(v, csv, info) = tbrSuccess);
+    if Check(length(csv) = 1) then
+      CheckEqual(csv[0].Value, '__rowid,value'#10'1,' + s + #10);
+    // native Variant arrays are scalar JSON text, not relational child tables
+    v := VarArrayOf([1, 2]);
+    Check(VariantToCsv(v, csv, info) = tbrSuccess);
+    if Check(length(csv) = 1) then
+      CheckEqual(csv[0].Value, '__rowid,value'#10'1,"[1,2]"'#10);
+    // ignored values do not impose a second validation contract
+    v := _ArrFast([_ObjFast(['a', 1]),
+      _ObjFast(['a', 2, 'ignored', RawUtf8('a'#0'b')])]);
+    Check(VariantToCsv(v, csv, info, [tboFirstRowFields]) =
+      tbrSuccessWithRemarks);
+    if Check(length(csv) = 1) then
+      CheckEqual(csv[0].Value, '__rowid,a'#10'1,1'#10'2,2'#10);
+    // escaping remains unambiguous for native names containing a NUL
+    v := _ObjFast(['a'#0'.b', 1, 'a'#0, _ObjFast(['b', 2])]);
+    Check(VariantToCsv(v, csv, info) = tbrSuccess);
+    if Check(length(csv) = 1) then
+      CheckEqual(csv[0].Value,
+        '__rowid,a\u0000\.b,a\u0000.b'#10'1,1,2'#10);
+  end;
+
+  procedure InvalidJson;
+  var
+    csv: TTextPairs;
+    info: RawUtf8;
+  begin
+    FailJson('');
+    FailJson(' '#9#10#13);
+    FailJson('{');
+    FailJson('[');
+    FailJson('{"a":');
+    FailJson('{"a":1');
+    FailJson('[1');
+    FailJson('"unfinished');
+    FailJson('{"a" 1}');
+    FailJson('{"a":1,}');
+    FailJson('[1,]');
+    FailJson('[1 2]');
+    FailJson('true false');
+    FailJson('{} garbage');
+    FailJson('{}{}');
+    FailJson('[1}');
+    FailJson('{"a":1]');
+    FailJson('01');
+    FailJson('+1');
+    FailJson('1.');
+    FailJson('1e');
+    FailJson('1e+');
+    FailJson('NaN');
+    FailJson('Infinity');
+    FailJson('"\u12"');
+    FailJson('"\ud800"');
+    FailJson('"\udc00"');
+    FailJson('"'#0'"');
+    FailJson('{}'#0);
+    FailJson('"' + RawBytes([$c0, $af]) + '"'); // overlong UTF-8
+    FailJson('"' + RawBytes([$ed, $a0, $80]) + '"'); // encoded surrogate
+    FailJson('"' + RawBytes([$f4, $90, $80, $80]) + '"'); // beyond U+10FFFF
+    FailJson('"' + RawBytes([$e2, $82]) + '"'); // truncated UTF-8 sequence
+    Check(JsonToCsv('{'#13#10'"a":?}', csv, info) = tbrInvalidJson);
+    Check(info <> '', 'CRLF JSON error');
+    Check(JsonToCsv('{'#10'"a":?}', csv, info) = tbrInvalidJson);
+    Check(info <> '', 'LF JSON error');
+  end;
+
+  procedure Depth;
+  var
+    i: PtrInt;
+    json, info, ignored: RawUtf8;
+    csv: TTextPairs;
+    v: variant;
+  begin
+    // every object counts, including the root; flattened fields keep the limit
+    json := '{"value":1}';
+    for i := 2 to TableMaxDepth do
+      json := '{"a":' + json + '}';
+    Check(JsonToCsv(json, csv, info) = tbrSuccess, 'depth boundary');
+    Parity(json);
+    json := '{"a":' + json + '}';
+    FailJson(json, tbrTooDeep);
+    v := _Json(json);
+    FailVariant(v, tbrTooDeep);
+    // fallback containers use the native JSON writer without a pre-walk
+    json := '1';
+    for i := 1 to TableMaxDepth do
+      json := '[' + json + ']';
+    Check(JsonToCsv(json, csv, info, [tboMixedAsJson]) =
+      tbrSuccessWithRemarks, 'nested arrays at the limit');
+    Check(JsonToCsv('[' + json + ']', csv, info, [tboMixedAsJson]) =
+      tbrSuccessWithRemarks, 'native fallback beyond table depth');
+    // ignored fields are not traversed by the table exporter
+    ignored := '1';
+    for i := 3 to TableMaxDepth do
+      ignored := '{"a":' + ignored + '}';
+    json := '[{"a":1},{"a":2,"ignored":' + ignored + '}]';
+    Check(JsonToCsv(json, csv, info, [tboFirstRowFields]) =
+      tbrSuccessWithRemarks, 'ignored depth boundary');
+    json := '[{"a":1},{"a":2,"ignored":{"a":' + ignored + '}}]';
+    Check(JsonToCsv(json, csv, info, [tboFirstRowFields]) =
+      tbrSuccessWithRemarks, 'ignored content does not affect table depth');
+    // structural characters inside strings are not nesting
+    json := '"';
+    for i := 1 to TableMaxDepth * 2 do
+      Append(json, '[{');
+    Append(json, '"');
+    Check(JsonToCsv(json, csv, info) = tbrSuccess, 'brackets in string');
+  end;
+
+  procedure Callbacks;
+  var
+    info: RawUtf8;
+    event: TTableWriteEvent;
+    v: variant;
+    none: TOnTableWrite;
+    savedIgnore, raised: boolean;
+  begin
+    none := nil;
+    Check(JsonToTables('[]', none, info) = tbrOutputError, 'missing callback');
+    Check(info <> '');
+    sink.Clear;
+    Check(JsonToTables('[]', sink.WriteTable, info) = tbrSuccess);
+    CheckEqual(sink.Events, 'B(root)E');
+    Check(not sink.Invalid);
+    sink.Clear;
+    v := _Json('{"n":1}');
+    Check(VariantToTables(v, sink.WriteTable, info) = tbrSuccess);
+    CheckEqual(sink.Events, 'B(root)RE');
+    if Check(length(sink.Tables) = 1) then
+    begin
+      CheckEqual(sink.Tables[0].Rows[0].ID, 1);
+      CheckEqual(sink.Tables[0].Rows[0].ParentID, 0);
+      CheckEqual(sink.Tables[0].Info.ParentName, '');
+    end;
+    // callbacks may fail at any stage; the exception becomes an output result
+    savedIgnore := TSynLog.Family.ExceptionIgnoreCurrentThread;
+    TSynLog.Family.ExceptionIgnoreCurrentThread := true;
+    try
+      for event := low(TTableWriteEvent) to high(TTableWriteEvent) do
+      begin
+        sink.Clear;
+        sink.RaiseAt := event;
+        sink.RaiseEnabled := true;
+        Check(JsonToTables('[1,2]', sink.WriteTable, info) = tbrOutputError);
+        Check(info <> '', 'output error context');
+        case event of
+          tweBegin:
+            CheckEqual(sink.Events, '');
+          tweRow:
+            CheckEqual(sink.Events, 'B(root)');
+          tweEnd:
+            CheckEqual(sink.Events, 'B(root)RR');
+        end;
+        sink.Clear;
+        sink.RaiseAt := event;
+        sink.RaiseEnabled := true;
+        Check(JsonToTables('[[1,2],[3]]', sink.WriteTable, info,
+          [tboMixedAsJson]) = tbrOutputError, 'release shared JSON writer');
+        sink.Clear;
+        sink.RaiseAt := event;
+        sink.RaiseEnabled := true;
+        sink.RaiseMemory := true;
+        raised := false;
+        try
+          JsonToTables('[1,2]', sink.WriteTable, info);
+        except
+          on EOutOfMemory do
+            raised := true;
+        end;
+        Check(raised, 'JSON callback allocation failure propagates');
+        sink.Clear;
+        sink.RaiseAt := event;
+        sink.RaiseEnabled := true;
+        sink.RaiseMemory := true;
+        raised := false;
+        try
+          VariantToTables(v, sink.WriteTable, info);
+        except
+          on EOutOfMemory do
+            raised := true;
+        end;
+        Check(raised, 'Variant callback allocation failure propagates');
+      end;
+    finally
+      TSynLog.Family.ExceptionIgnoreCurrentThread := savedIgnore;
+      sink.Clear;
+    end;
+    // no state from a failed call is retained on the next conversion
+    Check(JsonToTables('[1]', sink.WriteTable, info) = tbrSuccess);
+    CheckEqual(sink.Events, 'B(root)RE');
+    CheckEqual(info, '');
+  end;
+
+  procedure WriterBuffers;
+  var
+    doc: variant;
+    csv: TTextPairs;
+    s, md, info: RawUtf8;
+  begin
+    // cross the writer buffer, then reuse it for a much shorter child table
+    s := RawUtf8(StringOfChar('x', 20000));
+    doc := _ObjFast(['text', s + ',"' + s,
+      'child', _ArrFast(['tiny'])]);
+    Check(VariantToCsv(doc, csv, info) = tbrSuccess);
+    if Check(length(csv) = 2) then
+    begin
+      CheckEqual(csv[0].Value, '__rowid,text'#10'1,"' +
+        s + ',""' + s + '"'#10);
+      CheckEqual(csv[1].Value,
+        '__rowid,__parentid,value'#10'1,1,tiny'#10);
+    end;
+    Check(VariantToMd(doc, md, info, TABLE_DEFAULT, 'root',
+      ttfMarkdownPipe) = tbrSuccess);
+    CheckEqual(md, '## root'#10#10 +
+      '| __rowid | text |'#10'| --- | --- |'#10'| 1 | ' +
+      s + '\,&quot;' + s + ' |'#10#10 +
+      '## root\.child'#10#10 +
+      '| __rowid | __parentid | value |'#10 +
+      '| --- | --- | --- |'#10'| 1 | 1 | tiny |'#10#10);
+    // fenced CSV uses a second writer and must reset the first after flushing
+    Check(VariantToMd(doc, md, info) = tbrSuccess);
+    CheckEqual(md,
+      '### root.csv'#10'```csv'#10'__rowid,text'#10'1,"' +
+      s + ',""' + s + '"'#10'```'#10#10 +
+      '### root.child.csv'#10'```csv'#10 +
+      '__rowid,__parentid,value'#10'1,1,tiny'#10'```'#10#10);
+    CheckEqual(info, '');
+    // reuse the JSON fallback writer across rows and across child tables
+    doc := _ObjFast(['a', _ArrFast([_ObjFast(['x', s]), 2]),
+      'b', _ArrFast([_Json('[]'), 3])]);
+    sink.Clear;
+    Check(VariantToTables(doc, sink.WriteTable, info, [tboMixedAsJson]) =
+      tbrSuccessWithRemarks);
+    if Check(length(sink.Tables) = 3) then
+    begin
+      CheckEqual(sink.Tables[1].Rows[0].Values[0], '{"x":"' + s + '"}');
+      CheckEqual(sink.Tables[1].Rows[1].Values[0], '2');
+      CheckEqual(sink.Tables[2].Rows[0].Values[0], '[]');
+      CheckEqual(sink.Tables[2].Rows[1].Values[0], '3');
+    end;
+  end;
+
+  procedure ScalarVariants;
+  var
+    v, target: variant;
+    vd: TSynVarData absolute v;
+    s: RawUtf8;
+    d: double;
+    n: integer;
+    u: cardinal;
+    b: WordBool;
+
+    function OneScalar(const Value: variant; const Expected: RawUtf8;
+      Options: TTableOptions = TABLE_DEFAULT): boolean;
+    var
+      info: RawUtf8;
+    begin
+      result := false;
+      sink.Clear;
+      if CheckFailed(VariantToTables(Value, sink.WriteTable, info, Options) =
+           tbrSuccess) or
+         CheckFailed(length(sink.Tables) = 1) then
+        exit;
+      if CheckFailed(length(sink.Tables[0].Rows) = 1) then
+        exit;
+      if CheckFailed(length(sink.Tables[0].Rows[0].Values) = 1) then
+        exit;
+      CheckEqual(sink.Tables[0].Rows[0].Values[0], Expected);
+      CheckEqual(info, '');
+      result := true;
+    end;
+
+  begin
+    // assigning a Single to a Variant may promote it to varDouble
+    vd.VType := varSingle;
+    vd.Data.VSingle := 1.2;
+    OneScalar(v, '1.2');
+    VarClear(v);
+    vd.VType := varBoolean;
+    PWord(@vd.Data.VBoolean)^ := 2;
+    OneScalar(v, 'true');
+    PWord(@vd.Data.VBoolean)^ := $ffff;
+    OneScalar(v, 'true');
+    PWord(@vd.Data.VBoolean)^ := 0;
+    OneScalar(v, 'false');
+    VarClear(v);
+    vd.VType := varLongWord;
+    // bytes outside VLongWord do not belong to an unsigned 32-bit value
+    vd.VInt64 := -1;
+    vd.Data.VLongWord := 17;
+    OneScalar(v, '17');
+    vd.Data.VLongWord := high(cardinal);
+    OneScalar(v, '4294967295');
+    vd.VType := varWord64;
+    vd.VInt64 := 17;
+    OneScalar(v, '17');
+    vd.VInt64 := high(Int64);
+    OneScalar(v, '9223372036854775807');
+    vd.VInt64 := -1;
+    OneScalar(v, '18446744073709551615');
+    // plain RawUtf8 cells keep their source reference through the callback
+    s := RawUtf8(StringOfChar('a', 128)) + RawBytes([$c3, $a9, $e4, $b8, $ad]);
+    RawUtf8ToVariant(s, v);
+    CheckEqual(vd.VType, varString);
+    if OneScalar(v, s) then
+      Check(pointer(sink.Tables[0].Rows[0].Values[0]) = vd.VString,
+        'retain source RawUtf8');
+    // longer UTF-16 text also exercises conversion beyond TTempUtf8.Temp
+    RawUtf8ToVariant(s, vd.Data, varOleStr);
+    CheckEqual(vd.VType, varOleStr);
+    OneScalar(v, s);
+    {$ifdef HASVARUSTRING}
+    RawUtf8ToVariant(s, vd.Data, varUString);
+    CheckEqual(vd.VType, varUString);
+    OneScalar(v, s);
+    {$endif HASVARUSTRING}
+    // retain the native Double formatter's non-finite spelling
+    PInt64(@d)^ := $7ff0000000000000;
+    v := d;
+    OneScalar(v, {$ifndef DOUBLETOSHORT_USEGRISU} 'INF' {$else} '+Inf' {$endif});
+    PQWord(@d)^ := QWord($fff0000000000000);
+    v := d;
+    OneScalar(v, {$ifndef DOUBLETOSHORT_USEGRISU} '-INF' {$else} '-Inf' {$endif});
+    PInt64(@d)^ := $7ff8000000000000;
+    v := d;
+    OneScalar(v, {$ifndef DOUBLETOSHORT_USEGRISU} 'NAN' {$else} 'Nan' {$endif});
+    // typed references use native unreferencing before scalar conversion
+    VarClear(v);
+    vd.VType := varBoolean or varByRef;
+    vd.Data.VPointer := @b;
+    try
+      b := true;
+      OneScalar(v, 'true');
+      b := false;
+      OneScalar(v, 'false');
+      n := -42;
+      vd.VType := varInteger or varByRef;
+      vd.Data.VPointer := @n;
+      OneScalar(v, '-42');
+      u := high(cardinal);
+      vd.VType := varLongWord or varByRef;
+      vd.Data.VPointer := @u;
+      OneScalar(v, '4294967295');
+      d := 2.5;
+      vd.VType := varDouble or varByRef;
+      vd.Data.VPointer := @d;
+      OneScalar(v, '2.5');
+      target := false;
+      vd.VType := varVariantByRef;
+      vd.Data.VPointer := @target;
+      OneScalar(v, 'false');
+      vd.Data.VPointer := nil;
+      OneScalar(v, '');
+      OneScalar(v, 'null', [tboNullAsText]);
+    finally
+      vd.VType := varEmpty;
+      vd.Data.VPointer := nil;
+    end;
+  end;
+
+  procedure LongNamesAndPaths;
+  var
+    doc: variant;
+    csv: TTextPairs;
+    name, encoded, info: RawUtf8;
+  begin
+    // long escaped names and bounded schema diagnostics
+    name := RawUtf8(StringOfChar('n', 5000)) + '.x';
+    encoded := RawUtf8(StringOfChar('n', 5000)) + '\.x';
+    doc := _ObjFast([name, 1]);
+    Check(VariantToCsv(doc, csv, info) = tbrSuccess);
+    if Check(length(csv) = 1) then
+      CheckEqual(csv[0].Value, '__rowid,' + encoded + #10'1,1'#10);
+    Check(VariantToCsv(doc, csv, info, TABLE_DEFAULT, name) = tbrSuccess);
+    if Check(length(csv) = 1) then
+      CheckEqual(csv[0].Name, encoded);
+    doc := _ArrFast([doc, _Json('{}')]);
+    Check(VariantToCsv(doc, csv, info) = tbrSuccessWithRemarks);
+    Check(PosEx('nnnn', info) <> 0, 'schema diagnostic includes field context');
+    Check(length(info) < 320, 'bounded long diagnostic');
+    Check(IsValidUtf8(info));
+    // schema diagnostics identify the logical child table and column
+    Check(JsonToCsv('[{"a":[{"b":[{"x":1}]}]},' +
+      '{"a":[{"b":[{"x":2,"late":3}]}]}]', csv, info) =
+      tbrSuccessWithRemarks);
+    Check(PosEx('$[].a[].b', info) <> 0, 'logical table context');
+    Check(PosEx('late', info) <> 0, 'column context');
+  end;
+
+  procedure Growth;
+  var
+    i, j: PtrInt;
+    json, info: RawUtf8;
+    csv: TTextPairs;
+  begin
+    // exercise independent row, column and table capacity growth
+    json := '[';
+    for i := 0 to 129 do
+    begin
+      if i <> 0 then
+        Append(json, ',');
+      Append(json, '{');
+      for j := 0 to 34 do
+      begin
+        if j <> 0 then
+          Append(json, ',');
+        Append(json, ['"c', Int32ToUtf8(j), '":', Int32ToUtf8(i + j)]);
+      end;
+      Append(json, '}');
+    end;
+    Append(json, ']');
+    sink.Clear;
+    Check(JsonToTables(json, sink.WriteTable, info, TABLE_STRICT) = tbrSuccess);
+    if CheckFailed(length(sink.Tables) = 1) then
+      exit;
+    CheckEqual(length(sink.Tables[0].Info.Columns), 35);
+    if CheckFailed(length(sink.Tables[0].Rows) = 130) then
+      exit;
+    if CheckFailed((length(sink.Tables[0].Rows[129].Values) = 35) and
+                  (length(sink.Tables[0].Rows[0].Values) = 35)) then
+      exit;
+    CheckEqual(sink.Tables[0].Rows[129].ID, 130);
+    CheckEqual(sink.Tables[0].Rows[129].Values[34], '163');
+    CheckEqual(sink.Tables[0].Rows[0].Values[0], '0', 'retained callback copy');
+    Check(not sink.Invalid);
+    json := '{';
+    for i := 0 to 34 do
+    begin
+      if i <> 0 then
+        Append(json, ',');
+      Append(json, ['"child', Int32ToUtf8(i), '":[', Int32ToUtf8(i), ']']);
+    end;
+    Append(json, '}');
+    Check(JsonToCsv(json, csv, info) = tbrSuccess);
+    if Check(length(csv) = 36) then
+    begin
+      CheckEqual(csv[35].Name, 'root.child34');
+      CheckEqual(csv[35].Value, '__rowid,__parentid,value'#10'1,1,34'#10);
+    end;
+    // irregular input must not produce an unbounded diagnostic for every row
+    json := '[{"a":1}';
+    for i := 1 to 100 do
+      Append(json, ',{}');
+    Append(json, ']');
+    Check(JsonToCsv(json, csv, info) = tbrSuccessWithRemarks);
+    Check(length(info) < 9000, 'bounded remarks');
+    Check(PosEx('additional remarks omitted', info) <> 0);
+    if Check(length(csv) = 1) then
+      Check(PosEx(#10'101,'#10, csv[0].Value) <> 0, 'remarks do not stop rows');
+  end;
+
+  procedure MarkdownCsv;
+  var
+    md, info: RawUtf8;
+
+    procedure One(const Json, Expected: RawUtf8;
+      Options: TTableOptions = TABLE_DEFAULT);
+    begin
+      md := 'old';
+      info := 'old';
+      CheckUtf8(JsonToMd(Json, md, info, Options) = tbrSuccess, Json);
+      CheckEqual(md, Expected, Json);
+      CheckEqual(info, '', 'default Markdown clears diagnostics');
+      Parity(Json, Options);
+    end;
+
+  begin
+    One('[{"name":"John"},{"name":"Jane"}]',
+      '### root.csv'#10'```csv'#10 +
+      '__rowid,name'#10'1,John'#10'2,Jane'#10'```'#10#10);
+    One('[]', '### root.csv'#10'```csv'#10 +
+      '__rowid,value'#10'```'#10#10);
+    One('{}', '### root.csv'#10'```csv'#10 +
+      '__rowid'#10'1'#10'```'#10#10);
+    One('null', '### root.csv'#10'```csv'#10 +
+      '__rowid,value'#10'1,'#10'```'#10#10);
+    One('null', '### root.csv'#10'```csv'#10 +
+      '__rowid,value'#10'1,null'#10'```'#10#10, [tboNullAsText]);
+    One('{"items":[1],"empty":[]}',
+      '### root.csv'#10'```csv'#10'__rowid'#10'1'#10'```'#10#10 +
+      '### root.items.csv'#10'```csv'#10 +
+      '__rowid,__parentid,value'#10'1,1,1'#10'```'#10#10 +
+      '### root.empty.csv'#10'```csv'#10 +
+      '__rowid,__parentid,value'#10'```'#10#10);
+    One('["a,b\"c","a\nb","a\rb","a\r\nb"]',
+      '### root.csv'#10'```csv'#10'__rowid,value'#10 +
+      '1,"a,b""c"'#10'2,"a'#10'b"'#10'3,"a'#13'b"'#10 +
+      '4,"a'#13#10'b"'#10'```'#10#10);
+    // each table chooses a fence longer than every backtick run in its CSV
+    One('{"a":["\n```\n"],"b":["\n````\n"],"c":["\n`````\n"]}',
+      '### root.csv'#10'```csv'#10'__rowid'#10'1'#10'```'#10#10 +
+      '### root.a.csv'#10'````csv'#10 +
+      '__rowid,__parentid,value'#10'1,1,"'#10'```'#10'"'#10'````'#10#10 +
+      '### root.b.csv'#10'`````csv'#10 +
+      '__rowid,__parentid,value'#10'1,1,"'#10'````'#10'"'#10'`````'#10#10 +
+      '### root.c.csv'#10'``````csv'#10 +
+      '__rowid,__parentid,value'#10'1,1,"'#10'`````'#10'"'#10'``````'#10#10);
+    One('{"```":1}', '### root.csv'#10'````csv'#10 +
+      '__rowid,```'#10'1,1'#10'````'#10#10);
+    One('[1,null]', '### root.csv'#10'```csv'#10 +
+      '__rowid,__index,value'#10'1,0,1'#10'2,1,null'#10'```'#10#10,
+      [tboKeepArrayIndex, tboNullAsText]);
+    // requesting the CSV-only format from a Markdown wrapper is an error
+    md := 'old';
+    info := '';
+    Check(JsonToMd('[1]', md, info, TABLE_DEFAULT, 'root', ttfCsv) =
+      tbrInvalidData);
+    CheckEqual(md, '');
+    Check(info <> '');
+    md := 'old';
+    info := '';
+    Check(VariantToMd(1, md, info, TABLE_DEFAULT, 'root', ttfCsv) =
+      tbrInvalidData);
+    CheckEqual(md, '');
+    Check(info <> '');
+  end;
+
+  procedure JsonBoundaries;
+  var
+    bom: RawUtf8;
+
+    procedure Root(const Json, Expected: RawUtf8;
+      Options: TTableOptions = TABLE_DEFAULT);
+    var
+      source, alias, before, md, info: RawUtf8;
+    begin
+      source := Json;
+      alias := source;
+      FastSetString(before, pointer(source), length(source));
+      OneCsv(source, '__rowid,value'#10'1,' + Expected + #10,
+        tbrSuccess, Options);
+      sink.Clear;
+      info := 'old';
+      Check(JsonToTables(source, sink.WriteTable, info, Options) = tbrSuccess,
+        'scalar root callback');
+      CheckEqual(info, '', 'scalar callback clears diagnostics');
+      CheckEqual(sink.Events, 'B(root)RE');
+      if Check(length(sink.Tables) = 1) then
+      begin
+        if Check(length(sink.Tables[0].Info.Columns) = 1) then
+          CheckEqual(sink.Tables[0].Info.Columns[0], 'value');
+        if Check(length(sink.Tables[0].Rows) = 1) then
+        begin
+          CheckEqual(sink.Tables[0].Rows[0].ID, 1);
+          CheckEqual(sink.Tables[0].Rows[0].ParentID, 0);
+          if Check(length(sink.Tables[0].Rows[0].Values) = 1) then
+            CheckEqual(sink.Tables[0].Rows[0].Values[0], Expected);
+        end;
+      end;
+      md := 'old';
+      info := 'old';
+      Check(JsonToMd(source, md, info, Options) = tbrSuccess,
+        'scalar root Markdown');
+      CheckEqual(md, '### root.csv'#10'```csv'#10 +
+        '__rowid,value'#10'1,' + Expected + #10'```'#10#10);
+      CheckEqual(info, '', 'scalar Markdown clears diagnostics');
+      CheckEqual(source, before, 'JSON source remains unchanged');
+      CheckEqual(alias, before, 'shared JSON source remains unchanged');
+    end;
+
+  begin
+    Root('0', '0');
+    Root('false', 'false');
+    Root('""', '');
+    Root(' '#9'42'#13#10, '42');
+    Root(' true '#10, 'true');
+    Root(' null '#13, '');
+    Root(' null '#13, 'null', [tboNullAsText]);
+    Root(' "hello" '#10, 'hello');
+    Root('-12.5 ', '-12.50');
+    bom := RawBytes([$ef, $bb, $bf]);
+    Root(bom + '42', '42');
+    Root(bom + 'true', 'true');
+    Root(bom + 'null', '');
+    Root(bom + 'null', 'null', [tboNullAsText]);
+    Root(bom + '"hello"', 'hello');
+    OneCsv(bom + ' {"n":1} '#10, '__rowid,n'#10'1,1'#10);
+    // an end delimiter alone cannot prove that the decoder consumed one value
+    FailJson('"hello" garbage');
+    FailJson('"a" "b"');
+    FailJson('{"a":"hello" garbage}');
+    FailJson('42 garbage');
+    FailJson('42,');
+    FailJson('1+2');
+    FailJson('1-2');
+    FailJson('1e1e2');
+    FailJson('null true');
+    FailJson('[1] garbage');
+    FailJson('[1],2');
+    FailJson('{},');
+    FailJson('{} []');
+    FailJson(bom);
+    FailJson(bom + '{} garbage');
+    FailJson(bom + '"' + RawBytes([$c0, $af]) + '"');
+    FailJson('42'#0'garbage');
+  end;
+
+  procedure LookupOrder;
+  begin
+    OneCsv('[{"a":1,"b":2,"c":3},{"a":4,"b":5,"c":6}]',
+      '__rowid,a,b,c'#10'1,1,2,3'#10'2,4,5,6'#10);
+    OneCsv('[{"a":1,"b":2,"c":3},{"c":4,"a":5,"b":6}]',
+      '__rowid,a,b,c'#10'1,1,2,3'#10'2,5,6,4'#10);
+    OneCsv('[{"a":1,"b":2,"c":3},{"c":4,"a":5,"c":99,"b":6}]',
+      '__rowid,a,b,c'#10'1,1,2,3'#10'2,5,6,4'#10);
+    OneCsv('[{"a":1,"b":2,"c":3},{"c":4,"a":5}]',
+      '__rowid,a,b,c'#10'1,1,2,3'#10'2,5,,4'#10,
+      tbrSuccessWithRemarks);
+    // equal counts do not imply equal positions or unique input names
+    OneCsv('[{"a":1,"b":2,"c":3},{"a":4,"a":5,"c":6}]',
+      '__rowid,a,b,c'#10'1,1,2,3'#10'2,4,,6'#10,
+      tbrSuccessWithRemarks);
+    OneCsv('[{"a":1,"b":2},{"b":3,"b":4}]',
+      '__rowid,a,b'#10'1,1,2'#10'2,,3'#10,
+      tbrSuccessWithRemarks);
+    OneCsv('[{"o":{"a":1,"b":2}},{"o":{"b":3,"a":4}}]',
+      '__rowid,o.a,o.b'#10'1,1,2'#10'2,4,3'#10);
+    OneCsv('[{"A":1,"a":2},{"a":3,"A":4}]',
+      '__rowid,A,a'#10'1,1,2'#10'2,4,3'#10);
+  end;
+
+begin
+  sink := TTableTestWriter.Create;
+  try
+    sink.Clear;
+    Flat;
+    Relations;
+    Schemas;
+    Escaping;
+    JsonDecoding;
+    JsonBoundaries;
+    MarkdownCsv;
+    LookupOrder;
+    NativeValues;
+    InvalidJson;
+    Depth;
+    Callbacks;
+    ScalarVariants;
+    WriterBuffers;
+    LongNamesAndPaths;
+    Growth;
+  finally
+    sink.Free;
+  end;
+end;
+
 procedure TTestCoreProcess._i18n;
 begin
   I18nLanguageTable;
@@ -11176,7 +13029,7 @@ end;
 
 const
   // regression tests use a const table instead of our runtime-computed array
-  c32t: array[byte] of cardinal = ($00000000, $77073096, $EE0E612C,
+  c32t: TByteToCardinal = ($00000000, $77073096, $EE0E612C,
     $990951BA, $076DC419, $706AF48F, $E963A535, $9E6495A3, $0EDB8832, $79DCB8A4,
     $E0D5E91E, $97D2D988, $09B64C2B, $7EB17CBD, $E7B82D07, $90BF1D91, $1DB71064,
     $6AB020F2, $F3B97148, $84BE41DE, $1ADAD47D, $6DDDE4EB, $F4D4B551, $83D385C7,
@@ -11229,7 +13082,7 @@ begin
   result := not result;
 end;
 
-procedure TTestCoreCompression.GZipFormat;
+procedure TTestCoreCompression.Algorithms;
 var
   Z: TSynZipCompressor;
   L, n: integer;
@@ -11239,6 +13092,8 @@ var
   s, tmp: RawByteString;
   gzr: TGZRead;
 begin
+  Run(InMemoryCompression, self, 'deflate synlz', true, true);
+  NotifyProgress(['gzip']);
   Check(crc32(0, @c32t, 5) = $DF4EC16C, 'crc32');
   Check(ReferenceCrc32(0, @c32t, 5) = $DF4EC16C, 'crc32');
   Check(crc32(0, @c32t, 1024) = $6FCF9E13, 'crc32');
@@ -11270,7 +13125,7 @@ begin
     inc(P, n);
     dec(L, n);
   end;
-  Check(crc0 = ReferenceCrc32(0, Pointer(Data), length(Data)));
+  CheckEqual(crc0, ReferenceCrc32(0, Pointer(Data), length(Data)), 'crc32');
   Check(crc0 = Z.CRC, '0crc32');
   Check(crc2 = crc0,  '2crc32');
   Check(crc3 = crc0,  '3crc32');
@@ -11294,23 +13149,29 @@ begin
   s := '';
   repeat
     n := gzr.ZStreamNext;
-    if n = 0 then
-      break;
-    s := s + copy(tmp, 1, n);
-  until false;
-  check(gzr.ZStreamDone, 'ZStreamDone');
+    Check(n >= 0, 'ZStreamNext');
+    Append(s, pointer(tmp), n);
+  until n = 0;
+  Check(gzr.ZStreamDone, 'ZStreamDone');
   Check(gzr.uncomplen32 = Cardinal(length(s)));
-  check(s = Data);
+  CheckEqual(s, Data);
   s := Data;
-  Check(CompressGZip(s, {compress=}true) = 'gzip');
+  CheckEqual(CompressGZip(s, {compress=}true), 'gzip');
   //FileFromString(s, 'test.plain.gz');
-  Check(CompressGZip(s, {compress=}false) = 'gzip');
+  CheckEqual(CompressGZip(s, {compress=}false), 'gzip');
   //FileFromString(s, 'test.plain');
-  Check(s = Data, 'compressGZip');
+  CheckEqual(s, Data, 'compressGZip');
   s := Data;
-  Check(CompressDeflate(s, true) = 'deflate');
-  Check(CompressDeflate(s, false) = 'deflate');
+  CheckEqual(CompressDeflate(s, true), 'deflate');
+  CheckEqual(CompressDeflate(s, false), 'deflate');
   Check(s = Data, 'CompressDeflate');
+  Run(ZipFormat, self, '.zip', true, true);
+  Run(ZipEncryption, pointer(0), 'zipcrypt0', true, true);
+  Run(ZipEncryption, pointer(1), 'zipcrypt1', true, true);
+  Run(ZipEncryption, pointer(2), 'zipcrypt2', true, true);
+  Run(ZipEncryption, pointer(3), 'zipcrypt3', true, true);
+  Run(ZipEncryption, pointer(4), 'zipcrypt4', true, true);
+  Run(_TAlgoCompress, self, 'TAlgoCompress', true, true);
 end;
 
 procedure TTestCoreCompression.InMemoryCompression;
@@ -11330,9 +13191,23 @@ begin
     CompressZLib(tmp, false);
     CheckHash(tmp, hash, 'CompressZLib');
   end;
+  DoSynLZ;
 end;
 
-procedure TTestCoreCompression.ZipFormat;
+function W(p: PAnsiChar; value, bytes: PtrUInt): PAnsiChar;
+  {$ifdef HASINLINE} inline; {$endif}
+begin
+  PCardinal(p)^ := value; // little-endian, as the .zip format
+  result := @p[bytes];
+end;
+
+function WS(p: PAnsiChar; const text: RawUtf8): PAnsiChar;
+begin
+  MoveFast(pointer(text)^, p^, length(text));
+  result := @p[length(text)];
+end;
+
+procedure TTestCoreCompression.ZipFormat(Sender: TObject);
 var
   FN, FN2: TFileName;
   S: TRawByteStringStream;
@@ -11424,6 +13299,118 @@ var
     end;
   end;
 
+  procedure StreamLevel0;
+  // AddDeflatedStream(..., CompressLevel=0) should create a valid entry
+  var
+    w: TRawByteStringStream;
+    s: TStream;
+    z: TZipWrite;
+  begin
+    w := TRawByteStringStream.Create;
+    try
+      z := TZipWrite.Create(w);
+      try
+        s := z.AddDeflatedStream('lvl0.txt', 0, 0);
+        try
+          s.WriteBuffer(pointer(Data)^, length(Data));
+        finally
+          s.Free;
+        end;
+      finally
+        z.Free;
+      end;
+      with TZipRead.Create(pointer(w.DataString), length(w.DataString)) do
+      try
+        if CheckEqual(Count, 1, 'lvl0 count') then
+        begin
+          Check(TestAll, 'lvl0 testall');
+          Check(UnZip(0) = Data, 'lvl0 unzip');
+        end;
+      finally
+        Free;
+      end;
+    finally
+      w.Free;
+    end;
+  end;
+
+  procedure DataDescriptorLastEntry;
+  // some tools (e.g. LibreOffice for .xlsx) set FLAG_DATADESCRIPTOR on all
+  // entries: retrieving the last one from a memory buffer should not need fSource
+  const
+    DATA: array[0..1] of RawUtf8 = ('first content', 'second stored content');
+  var
+    crc, offs: array[0..1] of cardinal;
+    cdoffs, v: cardinal;
+    i: PtrInt;
+    p: PAnsiChar;
+    tmp: TTemp512;
+  begin
+    p := @tmp;
+    for i := 0 to 1 do
+    begin
+      offs[i] := p - PAnsiChar(@tmp);
+      crc[i] := crc32(0, pointer(DATA[i]), length(DATA[i]));
+      p := W(p, $04034b50, 4);           // local file header with no crc/sizes
+      p := W(p, 20, 2);
+      p := W(p, 8, 2);                   // FLAG_DATADESCRIPTOR
+      p := W(p, 0, 2);                   // stored
+      p := W(p, 0, 4);                   // time+date
+      p := W(p, 0, 4);
+      p := W(p, 0, 4);
+      p := W(p, 0, 4);
+      p := W(p, 5, 2);                   // name length
+      p := W(p, 0, 2);
+      p := WS(p, FormatUtf8('f%.tx', [i]));
+      p := WS(p, DATA[i]);
+      p := W(p, $08074b50, 4);           // data descriptor
+      p := W(p, crc[i], 4);
+      p := W(p, length(DATA[i]), 4);
+      p := W(p, length(DATA[i]), 4);
+    end;
+    cdoffs := p - PAnsiChar(@tmp);
+    for i := 0 to 1 do
+    begin
+      p := W(p, $02014b50, 4);           // central directory with crc/sizes
+      p := W(p, 20, 2);
+      p := W(p, 20, 2);
+      p := W(p, 8, 2);                   // FLAG_DATADESCRIPTOR
+      p := W(p, 0, 2);
+      p := W(p, 0, 4);
+      p := W(p, crc[i], 4);
+      p := W(p, length(DATA[i]), 4);
+      p := W(p, length(DATA[i]), 4);
+      p := W(p, 5, 2);
+      p := W(p, 0, 4);                   // extra + comment length
+      p := W(p, 0, 4);                   // disk + internal attr
+      p := W(p, 0, 4);                   // external attr
+      p := W(p, offs[i], 4);
+      p := WS(p, FormatUtf8('f%.tx', [i]));
+    end;
+    v := cardinal(p - PAnsiChar(@tmp)) - cdoffs;
+    p := W(p, $06054b50, 4);             // last header
+    p := W(p, 0, 4);
+    p := W(p, 2, 2);
+    p := W(p, 2, 2);
+    p := W(p, v, 4);
+    p := W(p, cdoffs, 4);
+    p := W(p, 0, 2);
+    CheckHash(@tmp, p - PAnsiChar(@tmp), $032B1637);
+    try
+      with TZipRead.Create(@tmp, p - PAnsiChar(@tmp)) do
+      try
+        CheckEqual(Count, 2, 'datadesc count');
+        for i := 0 to Count - 1 do
+          CheckEqual(UnZip(i), DATA[i], 'datadesc unzip');
+      finally
+        Free;
+      end;
+    except
+      on E: Exception do
+        FailedRaised(E);
+    end;
+  end;
+
 var
   i, m: integer;
   mem: QWord;
@@ -11449,12 +13436,36 @@ begin
       end;
   except
     on E: Exception do
-      Check(false, E.Message);
+      FailedRaised(E);
   end;
   Check(DeleteFile(FN));
   TZipWrite.Create(FN).Free;
   CheckEqual(FileSize(FN), SizeOf(minim), 'TZipWrite void .zip');
   Check(DeleteFile(FN));
+  DataDescriptorLastEntry;
+  // AddEmptyFolder() should store crc32=0 for a folder entry (no data)
+  S := TRawByteStringStream.Create;
+  try
+    with TZipWrite.Create(S) do
+    try
+      AddEmptyFolder('emptydir\');
+      CheckEqual(Count, 1, 'emptydir1');
+    finally
+      Free;
+    end;
+    with TZipRead.Create(pointer(S.DataString), length(S.DataString)) do
+    try
+      CheckEqual(Count, 1, 'emptydir2');
+      Check(Entry[0].dir^.fileInfo.zcrc32 = 0, 'emptydir crc');
+      Check(Entry[0].local^.fileInfo.zcrc32 = 0, 'emptydir local crc');
+      Check(TestAll, 'emptydir testall');
+    finally
+      Free;
+    end;
+  finally
+    S.Free;
+  end;
+  StreamLevel0;
   // onprog := TStreamRedirect.ProgressInfoToConsole;
   onprog := TSynLog.ProgressInfo;
   for m := 1 to 2 do
@@ -11565,6 +13576,882 @@ begin
   end;
 end;
 
+procedure TTestCoreCompression.ZipEncryption(Sender: TObject);
+const
+  INFOZIP: array[0..151] of byte = (
+    $50, $4b, $03, $04, $0a, $00, $09, $00, $00, $00, $26, $a3, $5f, $5d,
+    $15, $3f, $91, $3f, $1c, $00, $00, $00, $10, $00, $00, $00, $05, $00,
+    $00, $00, $61, $2e, $74, $78, $74, $01, $4d, $91, $b2, $a2, $9e, $8c,
+    $23, $5d, $b5, $18, $64, $ea, $89, $3b, $ec, $c5, $f6, $b7, $c1, $78,
+    $e8, $6c, $0e, $91, $41, $b7, $5b, $50, $4b, $07, $08, $15, $3f, $91,
+    $3f, $1c, $00, $00, $00, $10, $00, $00, $00, $50, $4b, $01, $02, $1e,
+    $03, $0a, $00, $09, $00, $00, $00, $26, $a3, $5f, $5d, $15, $3f, $91,
+    $3f, $1c, $00, $00, $00, $10, $00, $00, $00, $05, $00, $00, $00, $00,
+    $00, $00, $00, $00, $00, $00, $00, $a4, $81, $00, $00, $00, $00, $61,
+    $2e, $74, $78, $74, $50, $4b, $05, $06, $00, $00, $00, $00, $01, $00,
+    $01, $00, $33, $00, $00, $00, $4f, $00, $00, $00, $00, $00);
+  // 'mORMot AES-256' encrypted by 7-Zip "7z a -tzip -mem=AES256 -mx=0
+  // -mtm=off -mtc=off -mta=off -pmormot v7.zip b.txt"
+  SEVENZIP: array[0..171] of byte = (
+    $50, $4b, $03, $04, $33, $00, $01, $00, $63, $00, $00, $00, $21, $00,
+    $00, $00, $00, $00, $2a, $00, $00, $00, $0e, $00, $00, $00, $05, $00,
+    $0b, $00, $62, $2e, $74, $78, $74, $01, $99, $07, $00, $02, $00, $41,
+    $45, $03, $00, $00, $50, $2d, $ad, $63, $1a, $e4, $1d, $ef, $61, $49,
+    $c4, $bd, $84, $36, $dc, $32, $cb, $3f, $d7, $8b, $17, $b3, $ba, $81,
+    $0a, $4c, $4e, $61, $16, $4d, $d3, $42, $b6, $ab, $c2, $d3, $fb, $18,
+    $9a, $d9, $9a, $6b, $50, $4b, $01, $02, $3f, $03, $33, $00, $01, $00,
+    $63, $00, $00, $00, $21, $00, $00, $00, $00, $00, $2a, $00, $00, $00,
+    $0e, $00, $00, $00, $05, $00, $0b, $00, $00, $00, $00, $00, $00, $00,
+    $20, $80, $a4, $81, $00, $00, $00, $00, $62, $2e, $74, $78, $74, $01,
+    $99, $07, $00, $02, $00, $41, $45, $03, $00, $00, $50, $4b, $05, $06,
+    $00, $00, $00, $00, $01, $00, $01, $00, $3e, $00, $00, $00, $58, $00,
+    $00, $00, $00, $00);
+  // Independent reference vectors from Xtro-ZIP's MIT-0 AE-3 profile:
+  // generated with Python PBKDF2/HKDF/AESGCM, not by mORMot itself.
+  // Key = "correct horse battery staple", salt = 00..0f; work factor 60/32.
+  // The legacy INFOZIP and SEVENZIP vectors above remain unchanged.
+  AE3_PASSWORD = 'correct horse battery staple';
+  AE3_STORED: array[0..214] of byte = (
+    $50, $4b, $03, $04, $14, $00, $01, $00, $63, $00, $00, $00, $00, $00,
+    $00, $00, $00, $00, $49, $00, $00, $00, $1d, $00, $00, $00, $09, $00,
+    $0d, $00, $68, $65, $6c, $6c, $6f, $2e, $74, $78, $74, $01, $99, $09,
+    $00, $03, $00, $41, $45, $03, $00, $00, $3c, $00, $00, $01, $02, $03,
+    $04, $05, $06, $07, $08, $09, $0a, $0b, $0c, $0d, $0e, $0f, $97, $3a,
+    $b5, $d7, $be, $45, $cb, $26, $c3, $3a, $74, $33, $04, $88, $97, $60,
+    $e4, $a8, $17, $75, $bb, $0b, $f2, $20, $ec, $04, $ca, $36, $88, $5c,
+    $7a, $b3, $1b, $2e, $f1, $b2, $08, $e0, $5e, $3d, $11, $8d, $eb, $76,
+    $93, $60, $e2, $67, $af, $72, $e5, $8b, $91, $24, $67, $48, $53, $50,
+    $4b, $01, $02, $14, $00, $14, $00, $01, $00, $63, $00, $00, $00, $00,
+    $00, $00, $00, $00, $00, $49, $00, $00, $00, $1d, $00, $00, $00, $09,
+    $00, $0d, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00,
+    $00, $00, $00, $68, $65, $6c, $6c, $6f, $2e, $74, $78, $74, $01, $99,
+    $09, $00, $03, $00, $41, $45, $03, $00, $00, $3c, $00, $50, $4b, $05,
+    $06, $00, $00, $00, $00, $01, $00, $01, $00, $44, $00, $00, $00, $7d,
+    $00, $00, $00, $00, $00);
+
+  AE3_DEFLATED: array[0..268] of byte = (
+    $50, $4b, $03, $04, $14, $00, $01, $00, $63, $00, $00, $00, $00, $00,
+    $00, $00, $00, $00, $7f, $00, $00, $00, $7a, $16, $00, $00, $09, $00,
+    $0d, $00, $68, $65, $6c, $6c, $6f, $2e, $74, $78, $74, $01, $99, $09,
+    $00, $03, $00, $41, $45, $03, $08, $00, $3c, $00, $00, $01, $02, $03,
+    $04, $05, $06, $07, $08, $09, $0a, $0b, $0c, $0d, $0e, $0f, $97, $3a,
+    $b5, $d7, $be, $45, $cb, $26, $6f, $b5, $e8, $09, $a4, $cc, $e6, $56,
+    $41, $4c, $1e, $d8, $d4, $3c, $d0, $dc, $0e, $25, $bc, $37, $ea, $f1,
+    $11, $37, $75, $4e, $6c, $dc, $e0, $1a, $81, $17, $ad, $a4, $ae, $db,
+    $7a, $a5, $a6, $34, $01, $20, $0f, $24, $e2, $95, $cb, $98, $3e, $28,
+    $65, $8b, $9d, $34, $dd, $a3, $7c, $1d, $a6, $27, $31, $80, $16, $38,
+    $7b, $e5, $d4, $59, $59, $dc, $64, $30, $00, $8c, $fc, $b2, $8e, $e7,
+    $49, $7d, $da, $d1, $30, $82, $71, $78, $b1, $50, $e7, $5f, $92, $76,
+    $a3, $1b, $18, $c4, $87, $6f, $84, $9d, $84, $66, $9f, $50, $4b, $01,
+    $02, $14, $00, $14, $00, $01, $00, $63, $00, $00, $00, $00, $00, $00,
+    $00, $00, $00, $7f, $00, $00, $00, $7a, $16, $00, $00, $09, $00, $0d,
+    $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00,
+    $00, $68, $65, $6c, $6c, $6f, $2e, $74, $78, $74, $01, $99, $09, $00,
+    $03, $00, $41, $45, $03, $08, $00, $3c, $00, $50, $4b, $05, $06, $00,
+    $00, $00, $00, $01, $00, $01, $00, $44, $00, $00, $00, $b3, $00, $00,
+    $00, $00, $00);
+
+  AE3_EMPTY: array[0..185] of byte = (
+    $50, $4b, $03, $04, $14, $00, $01, $00, $63, $00, $00, $00, $00, $00,
+    $00, $00, $00, $00, $2c, $00, $00, $00, $00, $00, $00, $00, $09, $00,
+    $0d, $00, $68, $65, $6c, $6c, $6f, $2e, $74, $78, $74, $01, $99, $09,
+    $00, $03, $00, $41, $45, $03, $00, $00, $3c, $00, $00, $01, $02, $03,
+    $04, $05, $06, $07, $08, $09, $0a, $0b, $0c, $0d, $0e, $0f, $97, $3a,
+    $b5, $d7, $be, $45, $cb, $26, $98, $81, $c8, $fe, $1a, $8d, $57, $8c,
+    $2c, $97, $1c, $6a, $b2, $3c, $02, $d9, $69, $54, $12, $f8, $50, $4b,
+    $01, $02, $14, $00, $14, $00, $01, $00, $63, $00, $00, $00, $00, $00,
+    $00, $00, $00, $00, $2c, $00, $00, $00, $00, $00, $00, $00, $09, $00,
+    $0d, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00,
+    $00, $00, $68, $65, $6c, $6c, $6f, $2e, $74, $78, $74, $01, $99, $09,
+    $00, $03, $00, $41, $45, $03, $00, $00, $3c, $00, $50, $4b, $05, $06,
+    $00, $00, $00, $00, $01, $00, $01, $00, $44, $00, $00, $00, $60, $00,
+    $00, $00, $00, $00);
+
+  AE3_320K: array[0..215] of byte = (
+    $50, $4b, $03, $04, $14, $00, $01, $00, $63, $00, $00, $00, $00, $00,
+    $00, $00, $00, $00, $4a, $00, $00, $00, $1e, $00, $00, $00, $09, $00,
+    $0d, $00, $68, $65, $6c, $6c, $6f, $2e, $74, $78, $74, $01, $99, $09,
+    $00, $03, $00, $41, $45, $03, $00, $00, $20, $00, $00, $01, $02, $03,
+    $04, $05, $06, $07, $08, $09, $0a, $0b, $0c, $0d, $0e, $0f, $30, $a6,
+    $82, $f9, $be, $45, $cb, $26, $6d, $73, $29, $24, $dc, $92, $dc, $ea,
+    $40, $35, $c7, $fa, $36, $9d, $33, $d6, $13, $b5, $e6, $66, $af, $ac,
+    $ff, $b3, $64, $0b, $60, $ac, $9b, $ea, $2d, $65, $6f, $9d, $0b, $42,
+    $c6, $7b, $53, $04, $b2, $d2, $22, $e5, $81, $10, $69, $44, $b2, $31,
+    $50, $4b, $01, $02, $14, $00, $14, $00, $01, $00, $63, $00, $00, $00,
+    $00, $00, $00, $00, $00, $00, $4a, $00, $00, $00, $1e, $00, $00, $00,
+    $09, $00, $0d, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00,
+    $00, $00, $00, $00, $68, $65, $6c, $6c, $6f, $2e, $74, $78, $74, $01,
+    $99, $09, $00, $03, $00, $41, $45, $03, $00, $00, $20, $00, $50, $4b,
+    $05, $06, $00, $00, $00, $00, $01, $00, $01, $00, $44, $00, $00, $00,
+    $7e, $00, $00, $00, $00, $00);
+  // If the first stored-fixture GCM tag byte is toggled, this is the
+  // independently recomputed valid FIN=HMAC(AUT,'FIN'#0||tamperedTag)[0..3].
+  AE3_CHANGED_TAG_FIN: array[0..3] of byte = ($d2, $21, $0e, $8a);
+var
+  z: TZipRead;
+  w: TZipWrite;
+  mode: integer;
+  zip: RawByteString;
+  zipfn: TFileName;
+  S: TRawByteStringStream;
+  st: TStream;
+
+  function Raised(i: integer): boolean;
+  begin
+    result := false;
+    try
+      z.UnZip(i);
+    except
+      on ESynZip do
+        result := true;
+    end;
+  end;
+
+  procedure Vector(p: pointer; len: integer; const expected: RawUtf8);
+  begin
+    z := TZipRead.Create(p, len);
+    try
+      CheckEqual(z.Count, 1, 'vector count');
+      z.Password := 'mormot';
+      CheckEqual(z.UnZip(0), expected, 'vector');
+    finally
+      z.Free;
+    end;
+  end;
+
+  // Authenticate every reference vector once; run additional wrong-password,
+  // TestAll and streaming checks only on representative fixtures. Each AE-3
+  // operation costs a full 600k (or 320k) PBKDF2-HMAC-SHA256 derivation.
+  procedure CheckAe3Vector(p: pointer; len: integer;
+    const expected: RawByteString; method, iterations: word;
+    CheckPassword, CheckStream: boolean);
+  var
+    e: PZipReadEntry;
+    output: TRawByteStringStream;
+  begin
+    z := TZipRead.Create(p, len);
+    try
+      CheckEqual(z.Count, 1, 'AE-3 vector count');
+      if z.Count <> 1 then
+        exit;
+      e := @z.Entry[0];
+      Check(e^.aes <> nil, 'AE-3 vector extra');
+      if e^.aes <> nil then
+      begin
+        CheckEqual(e^.aes^.id, $9901, 'AE-3 extra ID');
+        CheckEqual(e^.aes^.size, 9, 'AE-3 extra payload size');
+        CheckEqual(e^.aes^.version, 3, 'AE-3 version');
+        CheckEqual(e^.aes^.vendor, $4541, 'AE-3 vendor');
+        CheckEqual(e^.aes^.strength, 3, 'AE-3 AES-256');
+        CheckEqual(e^.aes^.method, method, 'AE-3 inner method');
+        CheckEqual(e^.aes^.iterations, iterations, 'AE-3 PBKDF2 iterations');
+      end;
+      CheckEqual(e^.dir^.fileInfo.zzipMethod, 99, 'AE-3 outer method');
+      CheckEqual(e^.dir^.fileInfo.zcrc32, 0, 'AE-3 no CRC32');
+      Check(e^.fileinfo.zfullSize = QWord(length(expected)),
+        'AE-3 uncompressed size');
+      Check(e^.fileinfo.zzipSize >= 44, 'AE-3 entry overhead');
+      if method = 0 then
+        Check(e^.fileinfo.zzipSize = QWord(length(expected) + 44),
+          'AE-3 stored size');
+      if CheckPassword then
+      begin
+        Check(Raised(0), 'AE-3 password is required');
+        z.Password := 'wrong password';
+        Check(Raised(0), 'AE-3 wrong password');
+      end;
+      z.Password := AE3_PASSWORD;
+      if CheckPassword then
+        Check(z.TestAll, 'AE-3 reference authentication');
+      CheckEqual(z.UnZip(0), expected, 'AE-3 reference plaintext');
+      if CheckStream then
+      begin
+        output := TRawByteStringStream.Create;
+        try
+          Check(z.UnZip(0, output), 'AE-3 reference streaming');
+          CheckEqual(output.DataString, expected, 'AE-3 streamed plaintext');
+        finally
+          output.Free;
+        end;
+      end;
+    finally
+      z.Free;
+    end;
+  end;
+
+  procedure CheckRead(reader: TZipRead; enc: TZipEncryption);
+  begin
+    z := reader;
+    try
+      CheckEqual(z.Count, 5, 'crypt count');
+      Check(z.Entry[0].dir^.fileInfo.flags and 1 <> 0, 'encrypted');
+      Check((z.Entry[0].aes <> nil) = (enc <> zeZipCrypto), 'aes');
+      if (enc = zeAes256Gcm) and (z.Entry[0].aes <> nil) then
+      begin
+        CheckEqual(z.Entry[0].aes^.version, 3, 'AE-3 version');
+        CheckEqual(z.Entry[0].aes^.size, 9, 'AE-3 extra length');
+        CheckEqual(z.Entry[0].aes^.strength, 3, 'AE-3 AES-256');
+        CheckEqual(z.Entry[0].aes^.iterations, 32, 'AE-3 test work factor');
+        CheckEqual(z.Entry[0].dir^.fileInfo.zcrc32, 0, 'AE-3 CRC32');
+      end;
+      Check(z.Entry[4].dir^.fileInfo.flags and 1 = 0, 'plain');
+      Check(Raised(0), 'no password');
+      z.Password := 'mormot';
+      // The AE-3 reference vector tests wrong passwords and TestAll already.
+      // Each UnZip below independently verifies the generated entry's GCM.
+      if enc <> zeAes256Gcm then
+        Check(Raised(1), 'wrong password');
+      Check(not Raised(4), 'plain with password');
+      z.Password := 'mORMot';
+      if enc <> zeAes256Gcm then
+        Check(z.TestAll, 'crypt testall');
+      CheckEqual(z.UnZip('crypt\deflated'), Data, 'crypt1');
+      CheckEqual(z.UnZip('crypt\stored'), Data, 'crypt2');
+      CheckEqual(z.UnZip('crypt\file'), Data, 'crypt3');
+      CheckEqual(z.UnZip('crypt\filestored'), Data, 'crypt4');
+      CheckEqual(z.UnZip('plain'), Data, 'crypt5');
+    finally
+      z.Free;
+    end;
+  end;
+
+  procedure RoundTrip(enc: TZipEncryption);
+  var
+    off: PtrInt;
+    sink: TMemoryStream;
+  begin
+    S := TRawByteStringStream.Create;
+    try
+      w := TZipWrite.Create(S);
+      try
+        w.Password := 'mORMot';
+        w.Encryption := enc;
+        if enc = zeAes256Gcm then
+          w.Ae3Iterations := 320000; // exercise the valid minimum for bulk tests
+        w.AddDeflated('crypt\deflated', pointer(Data), length(Data));
+        w.AddStored('crypt\stored', pointer(Data), length(Data));
+        w.AddDeflated(DataFile, true, Z_USUAL_COMPRESSION, 'crypt\file');
+        w.AddStored(DataFile, true, 'crypt\filestored');
+        w.Password := '';
+        w.AddDeflated('plain', pointer(Data), length(Data));
+      finally
+        w.Free;
+      end;
+      zip := S.DataString;
+    finally
+      S.Free;
+    end;
+    FileFromString(zip, zipfn);
+    CheckRead(TZipRead.Create(pointer(zip), length(zip)), enc);
+    if enc = zeAes256Gcm then
+    begin
+      // All four AE-3 writer paths are checked above using the memory reader.
+      // Verify both file-backed reader paths with one authenticated entry each,
+      // rather than decrypting four entries twice and running TestAll twice.
+      z := TZipRead.Create(zipfn);
+      try
+        CheckEqual(z.Count, 5, 'AE-3 file-backed count');
+        z.Password := 'mORMot';
+        CheckEqual(z.UnZip('crypt\stored'), Data, 'AE-3 file-backed stored');
+      finally
+        z.Free;
+      end;
+      z := TZipRead.Create(zipfn, 0, 0, 1024); // force fSource
+      try
+        CheckEqual(z.Count, 5, 'AE-3 source-backed count');
+        z.Password := 'mORMot';
+        CheckEqual(z.UnZip('crypt\deflated'), Data,
+          'AE-3 source-backed deflated');
+      finally
+        z.Free;
+      end;
+    end
+    else
+    begin
+      // Keep all original AE-1/2 and ZipCrypto regression checks intact.
+      CheckRead(TZipRead.Create(zipfn), enc);
+      CheckRead(TZipRead.Create(zipfn, 0, 0, 1024), enc);
+    end;
+    // Corrupt the *first* AE-3 ciphertext, not an arbitrary ZIP offset.
+    if enc = zeAes256Gcm then
+    begin
+      z := TZipRead.Create(pointer(zip), length(zip));
+      try
+        Check(z.Entry[0].local <> nil, 'AE-3 first entry in memory');
+        if z.Entry[0].local = nil then
+          exit;
+        off := PtrInt(PtrUInt(z.Entry[0].local^.Data) -
+          PtrUInt(pointer(zip))) + 24; // AE-3 header is 24 bytes
+      finally
+        z.Free;
+      end;
+      Check((off > 0) and (off < length(zip)), 'AE-3 ciphertext offset');
+      if (off <= 0) or (off >= length(zip)) then
+        exit;
+      zip[off + 1] := AnsiChar(ord(zip[off + 1]) xor 1);
+    end
+    else
+      // Preserve the original AE-1/2 and ZipCrypto regression check.
+      zip[length(zip) shr 2] := AnsiChar(ord(zip[length(zip) shr 2]) xor 1);
+    // AE-3 corrupted vectors already exercise memory-backed TestAll.
+    // This generated archive is checked via the distinct file-backed stream.
+    if enc <> zeAes256Gcm then
+    begin
+      z := TZipRead.Create(pointer(zip), length(zip));
+      try
+        z.Password := 'mORMot';
+        Check(not z.TestAll, 'tampered');
+      finally
+        z.Free;
+      end;
+    end;
+    if enc = zeAes256Gcm then
+    begin
+      // Exercise CryptAuthenticate() against a file-backed invalid GCM tag.
+      Check(FileFromString(zip, zipfn), 'AE-3 corrupted file');
+      z := TZipRead.Create(zipfn, 0, 0, 1024);
+      try
+        z.Password := 'mORMot';
+        // Memory-backed TestAll rejected the same corrupted entry above.
+        // Here the distinct property is that streaming returns no plaintext.
+        sink := TMemoryStream.Create;
+        try
+          Check(not z.UnZip(0, sink), 'AE-3 reject before streamed output');
+          CheckEqual(sink.Size, 0, 'AE-3 no unauthenticated plaintext');
+        finally
+          sink.Free;
+        end;
+      finally
+        z.Free;
+      end;
+    end;
+  end;
+
+  procedure CheckAesWritePolicy(const Plain: RawByteString;
+    Mode: integer; enc: TZipEncryption);
+  var
+    s: TRawByteStringStream;
+    w: TZipWrite;
+    z: TZipRead;
+    st: TStream;
+    zip: RawByteString;
+    fn: TFileName;
+    expected: integer;
+    crc: cardinal;
+  begin
+    fn := WorkDir + 'zip-ae-test-input.bin';
+    s := TRawByteStringStream.Create;
+    try
+      w := TZipWrite.Create(s);
+      try
+        w.Password := 'mORMot';
+        w.Encryption := enc;
+        // Preserve one default-600k writer assertion. The other generated
+        // fixtures use the AE-3 minimum (320k), without changing defaults.
+        if (enc = zeAes256Gcm) and
+           not ((Mode = 0) and (length(Plain) = 1)) then
+          w.Ae3Iterations := 320000;
+        case Mode of
+          0:
+            w.AddStored('data', pointer(Plain), length(Plain));
+          1:
+            begin
+              Check(FileFromString(Plain, fn));
+              w.AddStored(fn, true, 'data');
+            end;
+          2:
+            begin
+              st := w.AddDeflatedStream('data', 0, 0);
+              try
+                st.WriteBuffer(pointer(Plain)^, length(Plain));
+              finally
+                st.Free;
+              end;
+            end;
+          3:
+            w.AddDeflated('data', pointer(Plain), length(Plain));
+        end;
+      finally
+        w.Free;
+      end;
+      zip := s.DataString;
+    finally
+      s.Free;
+      if Mode = 1 then
+        DeleteFile(fn);
+    end;
+    z := TZipRead.Create(pointer(zip), length(zip));
+    try
+      CheckEqual(z.Count, 1, 'AE count');
+      Check(z.Entry[0].aes <> nil, 'AE extra');
+      if enc = zeAes256Gcm then
+      begin
+        expected := 3;
+        CheckEqual(z.Entry[0].aes^.size, 9, 'AE-3 extra length');
+        if (Mode = 0) and (length(Plain) = 1) then
+          CheckEqual(z.Entry[0].aes^.iterations, 60,
+            'AE-3 default 600k work factor')
+        else
+          CheckEqual(z.Entry[0].aes^.iterations, 32,
+            'AE-3 minimum 320k test work factor');
+        Check(z.Entry[0].fileinfo.zzipSize >= 44, 'AE-3 overhead');
+      end
+      else if length(Plain) < 20 then
+        expected := 2
+      else
+        expected := 1;
+      CheckEqual(z.Entry[0].aes^.version, expected,
+        'AE version');
+      crc := 0;
+      if expected = 1 then
+        crc := mormot.lib.z.crc32(0, pointer(Plain), length(Plain));
+      CheckEqual(z.Entry[0].dir^.fileInfo.zcrc32, crc, 'AE CRC');
+      z.Password := 'mORMot';
+      CheckEqual(z.UnZip(0), Plain, 'AE roundtrip');
+      // Verify that the reader actually checks AE-1 CRC.
+      if expected = 1 then
+      begin
+        z.Entry[0].dir^.fileInfo.zcrc32 := z.Entry[0].dir^.fileInfo.zcrc32 xor 1;
+        Check(not z.TestAll, 'AE-1 CRC mismatch');
+      end;
+    finally
+      z.Free;
+    end;
+  end;
+
+  // Reject malformed AE-3 metadata and payloads, including empty plaintext.
+  // A rejection is either an ESynZip or a false result from TestAll.
+  procedure Ae3MustReject(const damaged: RawByteString;
+    const description: RawUtf8);
+  var
+    reader: TZipRead;
+    rejected: boolean;
+  begin
+    try
+      reader := TZipRead.Create(pointer(damaged), length(damaged));
+      try
+        reader.Password := AE3_PASSWORD;
+        rejected := not reader.TestAll;
+      finally
+        reader.Free;
+      end;
+    except
+      on Exception do
+        rejected := true;
+    end;
+    CheckUtf8(rejected, description);
+  end;
+
+  procedure Ae3ChangeByte(offset: PtrInt; newbyte: byte;
+    const description: RawUtf8);
+  var
+    damaged: RawByteString;
+  begin
+    SetString(damaged, PAnsiChar(@AE3_320K[0]), SizeOf(AE3_320K));
+    Check((offset >= 0) and (offset < length(damaged)),
+      'AE-3 fixture offset');
+    if (offset < 0) or (offset >= length(damaged)) then
+      exit;
+    damaged[offset + 1] := AnsiChar(newbyte); // RawByteString is 1-based
+    Ae3MustReject(damaged, description);
+  end;
+
+  procedure CheckAe3Tampering;
+  var
+    original, damaged: RawByteString;
+    reader: TZipRead;
+    dataofs, extraofs, sizeofs, packedlen, tagofs: PtrInt;
+  begin
+    SetString(original, PAnsiChar(@AE3_320K[0]), SizeOf(AE3_320K));
+    reader := TZipRead.Create(pointer(original), length(original));
+    try
+      Check(reader.Entry[0].local <> nil, 'AE-3 local header in memory');
+      Check(reader.Entry[0].aes <> nil, 'AE-3 central AES extra');
+      if (reader.Entry[0].local = nil) or
+         (reader.Entry[0].aes = nil) then
+        exit;
+      dataofs := PtrInt(PtrUInt(reader.Entry[0].local^.Data) -
+        PtrUInt(pointer(original)));
+      extraofs := PtrInt(PtrUInt(reader.Entry[0].aes) -
+        PtrUInt(pointer(original)));
+      sizeofs := PtrInt(PtrUInt(@reader.Entry[0].dir^.fileInfo.zzipSize) -
+        PtrUInt(pointer(original)));
+      packedlen := PtrInt(reader.Entry[0].fileinfo.zzipSize);
+    finally
+      reader.Free;
+    end;
+    Check((dataofs >= 0) and (dataofs + packedlen <= length(original)) and
+      (packedlen >= 44) and (extraofs > 0) and
+      (extraofs + 13 <= length(original)) and
+      (sizeofs >= 0) and (sizeofs + 4 <= length(original)),
+      'AE-3 fixture bounds');
+    if (dataofs < 0) or (packedlen < 44) or
+       (dataofs + packedlen > length(original)) or
+       (extraofs <= 0) or (extraofs + 13 > length(original)) or
+       (sizeofs < 0) or (sizeofs + 4 > length(original)) then
+      exit;
+    tagofs := dataofs + packedlen - 20;
+    // Authentication and decryption must cover *all* ciphertext bytes.
+    Ae3ChangeByte(dataofs, ord(original[dataofs + 1]) xor 1,
+      'AE-3 modified salt');
+    Ae3ChangeByte(dataofs + 16, ord(original[dataofs + 17]) xor 1,
+      'AE-3 modified password verifier');
+    Ae3ChangeByte(dataofs + 20, ord(original[dataofs + 21]) xor 1,
+      'AE-3 modified nonce counter');
+    Ae3ChangeByte(dataofs + 24, ord(original[dataofs + 25]) xor 1,
+      'AE-3 modified ciphertext');
+    Ae3ChangeByte(tagofs, ord(original[tagofs + 1]) xor 1,
+      'AE-3 modified GCM tag');
+    Ae3ChangeByte(tagofs + 19, ord(original[tagofs + 20]) xor 1,
+      'AE-3 modified FIN');
+    // Recompute FIN for a tampered tag: FIN must pass but GCM must fail.
+    SetString(damaged, PAnsiChar(@AE3_320K[0]), SizeOf(AE3_320K));
+    damaged[tagofs + 1] := AnsiChar(ord(damaged[tagofs + 1]) xor 1);
+    MoveFast(AE3_CHANGED_TAG_FIN, damaged[tagofs + 17], 4);
+    Ae3MustReject(damaged, 'AE-3 GCM check with valid FIN');
+    // Central-directory AES metadata must be strictly validated before KDF.
+    Ae3ChangeByte(extraofs + 2, 7, 'AE-3 wrong extra length');
+    Ae3ChangeByte(extraofs + 4, 4, 'AE-3 unknown AES version');
+    Ae3ChangeByte(extraofs + 6, 0, 'AE-3 wrong vendor');
+    Ae3ChangeByte(extraofs + 8, 2, 'AE-3 wrong strength');
+    Ae3ChangeByte(extraofs + 9, 99, 'AE-3 recursive ZIP method');
+    Ae3ChangeByte(extraofs + 11, 0, 'AE-3 zero PBKDF2 iterations');
+    Ae3ChangeByte(extraofs + 11, 31, 'AE-3 PBKDF2 below minimum');
+    Ae3ChangeByte(extraofs + 12, 2, 'AE-3 excessive PBKDF2 iterations');
+    // Truncated encrypted entry: underflow must not reach AES-GCM.
+    SetString(damaged, PAnsiChar(@AE3_320K[0]), SizeOf(AE3_320K));
+    PCardinal(@damaged[sizeofs + 1])^ := 43;
+    Ae3MustReject(damaged, 'AE-3 less than 44-byte overhead');
+    // An empty encrypted entry still requires its final authentication.
+    SetString(damaged, PAnsiChar(@AE3_EMPTY[0]), SizeOf(AE3_EMPTY));
+    // The vector has a 52-byte local header, then 24-byte AE-3 header,
+    // no ciphertext, then 16-byte tag and four-byte FIN.
+    Check(PCardinal(pointer(damaged))^ = $04034b50,
+      'AE-3 empty local signature');
+    damaged[52 + 44] := AnsiChar(ord(damaged[52 + 44]) xor 1);
+    Ae3MustReject(damaged, 'AE-3 empty entry FIN corruption');
+  end;
+
+  // Copy an existing encrypted entry *without* re-encryption. This guards
+  // the 11-byte AE-1/2 and 13-byte AE-3 variable-length AES extra fields.
+  procedure CheckAe3Copy(p: pointer; len: integer;
+    const expected, password: RawByteString; version, extrasize: word);
+  var
+    source, output: TZipRead;
+    writer: TZipWrite;
+    memory: TRawByteStringStream;
+    copied, pack: RawByteString;
+  begin
+    source := TZipRead.Create(p, len);
+    try
+      if (version = 3) and (source.Count = 1) and
+         (source.Entry[0].local <> nil) then
+        SetString(pack, PAnsiChar(source.Entry[0].local^.Data),
+          PtrInt(source.Entry[0].fileinfo.zzipSize));
+      memory := TRawByteStringStream.Create;
+      try
+        writer := TZipWrite.Create(memory);
+        try
+          writer.AddFromZip(source, 0);
+        finally
+          writer.Free;
+        end;
+        copied := memory.DataString;
+      finally
+        memory.Free;
+      end;
+    finally
+      source.Free;
+    end;
+    output := TZipRead.Create(pointer(copied), length(copied));
+    try
+      CheckEqual(output.Count, 1, 'AES copy entry count');
+      Check(output.Entry[0].aes <> nil, 'AES copy extra');
+      if output.Entry[0].aes <> nil then
+      begin
+        CheckEqual(output.Entry[0].aes^.version, version,
+          'AES copy version');
+        CheckEqual(output.Entry[0].aes^.size, extrasize,
+          'AES copy extra length');
+        if version = 3 then
+          CheckEqual(output.Entry[0].aes^.iterations, 60,
+            'AE-3 copy work factor');
+      end;
+      if version = 3 then
+      begin
+        // The original AE-3 vectors are authenticated separately. Byte-for-
+        // byte equality is a stronger check that AddFromZip did not modify
+        // the encrypted header, ciphertext, GCM tag or FIN while copying.
+        Check(length(pack) >= 44, 'AE-3 copy input ciphertext');
+        Check(output.Entry[0].local <> nil, 'AE-3 copy local data');
+        Check(output.Entry[0].fileinfo.zzipSize = QWord(length(pack)),
+          'AE-3 copy ciphertext length');
+        if (length(pack) >= 44) and (output.Entry[0].local <> nil) and
+           (output.Entry[0].fileinfo.zzipSize = QWord(length(pack))) then
+          Check(CompareMem(output.Entry[0].local^.Data, pointer(pack),
+            length(pack)), 'AE-3 copied encrypted payload intact');
+      end
+      else
+      begin
+        output.Password := password;
+        Check(output.TestAll, 'AES copy authentication');
+        CheckEqual(output.UnZip(0), expected, 'AES copy plaintext');
+      end;
+    finally
+      output.Free;
+    end;
+  end;
+
+  // Extract to a private .partial file and publish only after valid AE-3 tag.
+  // A corrupted tag must not damage an existing destination.
+  procedure CheckAe3PartialFile;
+  var
+    rawzip: RawByteString;
+    inname, outname, tmpname: TFileName;
+    reader: TZipRead;
+    output: TRawByteStringStream;
+  begin
+    SetString(rawzip, PAnsiChar(@AE3_320K), SizeOf(AE3_320K));
+    inname := WorkDir + 'ae3-partial-fixture.zip';
+    outname := WorkDir + 'ae3-partial-result.txt';
+    tmpname := outname + '.partial';
+    DeleteFile(outname);
+    DeleteFile(tmpname);
+    try
+      Check(FileFromString(rawzip, inname), 'AE-3 partial fixture');
+      Check(FileFromString('old content', outname),
+        'AE-3 existing destination');
+      reader := TZipRead.Create(inname, 0, 0, 128); // force fSource
+      try
+        reader.Password := AE3_PASSWORD;
+        // Force CryptAuthenticate() + DecryptReset() + actual decryption.
+        Check(reader.Entry[0].local = nil, 'AE-3 source-backed stream');
+        output := TRawByteStringStream.Create;
+        try
+          Check(reader.UnZip(0, output), 'AE-3 valid two-pass stream');
+          CheckEqual(output.DataString,
+            'AE-3 custom iterations=320000' + #10,
+            'AE-3 two-pass plaintext');
+        finally
+          output.Free;
+        end;
+        Check(reader.UnZip(0, outname, {DestDirIsFileName=}true),
+          'AE-3 one-pass file extraction');
+        CheckEqual(StringFromFile(outname),
+          'AE-3 custom iterations=320000' + #10, 'AE-3 published contents');
+        Check(not FileExists(tmpname, {FollowLink=}false),
+          'AE-3 successful partial renamed');
+      finally
+        reader.Free;
+      end;
+      // The 320k stored fixture has a 52-byte local header, 24-byte AE-3
+      // header, and 30-byte ciphertext. Corrupt the first byte of its tag.
+      rawzip[52 + 24 + 30 + 1] := AnsiChar(ord(rawzip[52 + 24 + 30 + 1]) xor 1);
+      Check(FileFromString(rawzip, inname), 'AE-3 tampered fixture');
+      Check(FileFromString('keep existing', outname),
+        'AE-3 reset existing destination');
+      reader := TZipRead.Create(inname, 0, 0, 128);
+      try
+        reader.Password := AE3_PASSWORD;
+        Check(not reader.UnZip(0, outname, {DestDirIsFileName=}true),
+          'AE-3 reject corrupted tag before rename');
+        CheckEqual(StringFromFile(outname), 'keep existing',
+          'AE-3 preserve previous destination');
+        Check(not FileExists(tmpname, {FollowLink=}false),
+          'AE-3 failed partial removed');
+      finally
+        reader.Free;
+      end;
+    finally
+      DeleteFile(tmpname);
+      DeleteFile(outname);
+      DeleteFile(inname);
+    end;
+  end;
+
+  // Remove a preceding plain entry and move the encrypted entry in-place.
+  // This covers CreateFromIgnore() compaction and AES extra field rewrites.
+  procedure CheckAe3Compact(p: pointer; len: integer;
+    const expected, password: RawByteString; version, extrasize: word);
+  var
+    source, output: TZipRead;
+    writer: TZipWrite;
+    memory: TRawByteStringStream;
+    input, plain, pack: RawByteString;
+    filename: TFileName;
+  begin
+    plain := 'entry to be removed';
+    source := TZipRead.Create(p, len);
+    try
+      if (version = 3) and (source.Count = 1) and
+         (source.Entry[0].local <> nil) then
+        SetString(pack, PAnsiChar(source.Entry[0].local^.Data),
+          PtrInt(source.Entry[0].fileinfo.zzipSize));
+      memory := TRawByteStringStream.Create;
+      try
+        writer := TZipWrite.Create(memory);
+        try
+          writer.AddStored('discard.txt', pointer(plain), length(plain));
+          writer.AddFromZip(source, 0);
+        finally
+          writer.Free;
+        end;
+        input := memory.DataString;
+      finally
+        memory.Free;
+      end;
+    finally
+      source.Free;
+    end;
+    filename := WorkDir + 'ae3-compact.zip';
+    Check(FileFromString(input, filename), 'AES compact fixture');
+    try
+      writer := TZipWrite.CreateFromIgnore(filename, ['discard.txt']);
+      try
+        CheckEqual(writer.Count, 1, 'AES compact writer count');
+      finally
+        writer.Free;
+      end;
+      output := TZipRead.Create(filename);
+      try
+        CheckEqual(output.Count, 1, 'AES compact reader count');
+        Check(output.Entry[0].aes <> nil, 'AES compact metadata');
+        if output.Entry[0].aes <> nil then
+        begin
+          CheckEqual(output.Entry[0].aes^.version, version,
+            'AES compact version');
+          CheckEqual(output.Entry[0].aes^.size, extrasize,
+            'AES compact extra size');
+        end;
+        if version = 3 then
+        begin
+          // Compaction must preserve the complete authenticated payload.
+          // AE-3 plaintext is independently verified by its reference vector.
+          Check(length(pack) >= 44, 'AE-3 compact input ciphertext');
+          Check(output.Entry[0].local <> nil, 'AE-3 compact local data');
+          Check(output.Entry[0].fileinfo.zzipSize = QWord(length(pack)),
+            'AE-3 compact ciphertext length');
+          if (length(pack) >= 44) and (output.Entry[0].local <> nil) and
+             (output.Entry[0].fileinfo.zzipSize = QWord(length(pack))) then
+            Check(CompareMem(output.Entry[0].local^.Data, pointer(pack),
+              length(pack)), 'AE-3 compacted encrypted payload intact');
+        end
+        else
+        begin
+          output.Password := password;
+          Check(output.TestAll, 'AES compact authentication');
+          CheckEqual(output.UnZip(0), expected, 'AES compact plaintext');
+        end;
+      finally
+        output.Free;
+      end;
+    finally
+      DeleteFile(filename);
+    end;
+  end;
+
+begin
+  zipfn := MakeString([WorkDir, 'zipcrypt', PtrInt(Sender), '.zip']);
+  TSynLog.Family.ExceptionIgnoreCurrentThread := true;
+  try
+    case PtrInt(Sender) of // naive-but-efficient-parallelizing-of-the-poor (TM)
+      0:
+        begin
+          CheckEqual(SizeOf(TFileInfoExtraAes), 13, 'AES extra size');
+          Vector(@INFOZIP, SizeOf(INFOZIP), 'mORMot ZipCrypto');
+          Vector(@SEVENZIP, SizeOf(SEVENZIP), 'mORMot AES-256');
+          CheckAe3Vector(@AE3_STORED, SizeOf(AE3_STORED),
+            'AE-3 test: small stored file' + #10, 0, 60, true, false);
+          CheckAe3Vector(@AE3_EMPTY, SizeOf(AE3_EMPTY), '', 0, 60,
+            false, false);
+          CheckAe3Vector(@AE3_320K, SizeOf(AE3_320K),
+            'AE-3 custom iterations=320000' + #10, 0, 32, false, false);
+          zip := '';
+          for mode := 1 to 137 do
+            Append(zip, 'AE-3 zipped data from mORMot test fixture' + #10);
+          CheckAe3Vector(@AE3_DEFLATED, SizeOf(AE3_DEFLATED), zip, 8, 60,
+            false, true);
+        end;
+      1:
+        begin
+          CheckAe3Copy(@SEVENZIP, SizeOf(SEVENZIP), 'mORMot AES-256',
+            'mormot', 2, 7);
+          CheckAe3Copy(@AE3_STORED, SizeOf(AE3_STORED),
+            'AE-3 test: small stored file' + #10, AE3_PASSWORD, 3, 9);
+          CheckAe3Copy(@AE3_DEFLATED, SizeOf(AE3_DEFLATED),
+            zip, AE3_PASSWORD, 3, 9);
+          CheckAe3Compact(@SEVENZIP, SizeOf(SEVENZIP), 'mORMot AES-256',
+            'mormot', 2, 7);
+          CheckAe3Compact(@AE3_STORED, SizeOf(AE3_STORED),
+            'AE-3 test: small stored file' + #10, AE3_PASSWORD, 3, 9);
+          CheckAe3Tampering;
+          CheckAe3PartialFile;
+        end;
+      2:
+        begin
+          S := TRawByteStringStream.Create;
+          try
+            w := TZipWrite.Create(S);
+            try
+              Check(w.Encryption = zeAes256, 'default encryption');
+              w.Password := 'mORMot';
+              // AES-CTR encrypts on the fly: AddDeflatedStream is supported
+              st := w.AddDeflatedStream('crypt\stream');
+              st.WriteBuffer(pointer(Data)^, length(Data));
+              st.Free;
+              // ZipCrypto needs the crc32 ahead of time: AddDeflatedStream fails
+              w.Encryption := zeZipCrypto; // available with mormot.crypt.zip
+              Check(w.Encryption = zeZipCrypto, 'set encryption');
+              try
+                w.AddDeflatedStream('crypt\stream2').Free;
+                Check(false, 'zipcrypto stream');
+              except
+                on ESynZip do
+                  CheckEqual(w.Count, 1, 'zipcrypto stream count');
+              end;
+            finally
+              w.Free;
+            end;
+            zip := S.DataString;
+          finally
+            S.Free;
+          end;
+          z := TZipRead.Create(pointer(zip), length(zip));
+          try
+            CheckEqual(z.Count, 1, 'stream count');
+            z.Password := 'mORMot';
+            Check(z.TestAll, 'stream testall');
+            CheckEqual(z.UnZip(0), Data, 'stream');
+          finally
+            z.Free;
+          end;
+          RoundTrip(zeAes256);
+          RoundTrip(zeZipCrypto);
+        end;
+      3:
+        RoundTrip(zeAes256Gcm);
+      4:
+        begin
+          for mode := 0 to 3 do
+          begin
+            CheckAesWritePolicy(RawUtf8OfChar('x', 19), mode, zeAes256);
+            CheckAesWritePolicy(RawUtf8OfChar('x', 20), mode, zeAes256);
+            CheckAesWritePolicy(RawUtf8OfChar('x', 300), mode, zeAes256);
+          end;
+          // RoundTrip(zeAes256Gcm) covers stored/deflated data and file writers.
+          // Retain the small-payload AE-3 version policy and the distinct streaming
+          // writer API, without repeating all four expensive encryption/decryptions.
+          CheckAesWritePolicy(RawUtf8OfChar('g', 1), 0, zeAes256Gcm);
+          CheckAesWritePolicy(RawUtf8OfChar('g', 201), 2, zeAes256Gcm);
+        end;
+    end;
+  finally
+    TSynLog.Family.ExceptionIgnoreCurrentThread := false;
+  end;
+  if FileExists(zipfn) then
+    Check(DeleteFile(zipfn));
+end;
+
 function By1(pattern: byte; n: integer): RawUtf8;
 begin
   FillCharFast(FastSetString(result, n)^, n, pattern);
@@ -11579,23 +14466,54 @@ begin
     PIntegerArray(result)[i] := pattern;
 end;
 
-procedure TTestCoreCompression._SynLZ;
+procedure TTestCoreCompression.DoSynLZ;
 
-  procedure TestOne(const v: RawByteString);
+  procedure TestOne(const a: array of RawByteString);
   var
-    s, t: RawByteString;
+    v, s, t: RawUtf8;
   begin
+    Join(a, v);
     s := AlgoSynLZ.Compress(v);
     t := AlgoSynLZ.Decompress(s);
-    Check(t = v);
+    CheckEqual(t, v, 'AlgoSynLZ');
     s := AlgoRleLZ.Compress(v);
     t := AlgoRleLZ.Decompress(s);
-    Check(t = v);
+    CheckEqual(t, v, 'AlgoRleLZ');
+    s := SynLZComp(v);
+    t := SynLZDecomp(s);
+    CheckEqual(t, v, 'SynLZComp/Decomp');
+  end;
+
+  procedure TestPartial(const hexa, suffix, expected: RawByteString;
+    maxOut: integer);
+  var
+    buffer: array[0..191] of byte;
+    count, k: integer;
+    outbuf: PAnsiChar;
+    compressed: RawByteString;
+  begin
+    compressed := Join([HumanHexToBin(hexa), suffix]);
+    Check((maxOut >= 0) and (maxOut <= SizeOf(buffer) - 16),
+      'partial test bound');
+    if (maxOut < 0) or (maxOut > SizeOf(buffer) - 16) then
+      exit;
+    outbuf := @buffer[16]; // guard 16 bytes before the output
+    FillCharFast(buffer, SizeOf(buffer), $A5);
+    count := SynLZDecompress1partial(pointer(compressed), length(compressed),
+      outbuf, maxOut);
+    CheckEqual(count, length(expected), 'partial count');
+    if expected <> '' then
+      Check(CompareMem(outbuf, pointer(expected), length(expected)),
+        'partial content');
+    for k := 0 to 15 do
+      CheckEqual(buffer[k], $A5, 'partial output underflow');
+    for k := 16 + maxOut to high(buffer) do
+      CheckEqual(buffer[k], $A5, 'partial output overflow');
   end;
 
 var
   s, t: RawByteString;
-  i, j, complen2: integer;
+  i, j, k, n, complen2: integer;
   comp2, dec1: array of byte;
   {$ifdef ASMINTEL}
   comp1, dec2: array of byte;
@@ -11603,24 +14521,22 @@ var
   {$endif ASMINTEL}
 begin
   for i := 0 to 200 do
-    TestOne(RawUtf8OfChar(AnsiChar(i), i));
-  TestOne('hello' + by1(32, 10000) +
-          'hello' + by1(32, 1000) + 'world');
-  TestOne('hello' + by1($33, 10000) +
-          'hello' + by1($33, 1000) + 'world');
+    TestOne([RawUtf8OfChar(AnsiChar(i), i)]);
+  TestOne(['hello', by1(32, 10000), 'hello', by1(32, 1000), 'world']);
+  TestOne(['hello', by1($33, 10000), 'hello', by1($33, 1000), 'world']);
   for i := 1 to 150 do
-    TestOne('hello' + by1(i, Random32(200)) +
-            'hello' + by1(i + 100, Random32(200)) + 'world');
-  TestOne('hello' + by4($3031333, 10000) +
-          'hello' + by4($3031333, 1000) + 'world');
+    TestOne(['hello', by1(i, Random32(200)),
+             'hello', by1(i, 100 + Random32(200)), 'world']);
+  TestOne(['hello', by4($3031333, 10000),
+           'hello', by4($3031333, 1000), 'world']);
   for i := 0 to 1000 do
   begin
     s := RawUtf8OfChar(' ', 20);
     t := RandomTextParagraph(i, '.', s);
     FastSetRawByteString(s, pointer(t), length(t)); // =UniqueString
-    Check(CompressSynLZ(s, true) = 'synlz');
-    Check(CompressSynLZ(s, false) = 'synlz');
-    Check(s = t);
+    CheckEqual(CompressSynLZ(s, true), 'synlz');
+    CheckEqual(CompressSynLZ(s, false), 'synlz');
+    CheckEqual(s, t, 'CompressSynLZ');
     Check(AlgoSynLZ.Decompress(AlgoSynLZ.Compress(s)) = t);
     SetLength(comp2, AlgoSynLZ.Compressdestlen(length(s)));
     complen2 := SynLZCompress1pas(Pointer(s), length(s), pointer(comp2));
@@ -11641,22 +14557,84 @@ begin
     CheckEqual(SynLZDecompress1(Pointer(comp2), complen2, pointer(dec2)), length(s));
     Check(CompareMem(pointer(dec1), pointer(s), length(s)));
     {$endif ASMINTEL}
+    CheckEqual(SynLZDecomp(SynLZComp(s)), s, 'SynLZDecomp');
   end;
   SetLength(dec1, length(t));
   for j := 0 to length(t) - 1 do
   begin
     FillCharFast(pointer(dec1)^, length(t), 0);
-    Check(SynLZDecompress1partial(pointer(comp2), complen2, Pointer(dec1), j) = j);
+    CheckEqual(SynLZDecompress1partial(pointer(comp2), complen2, Pointer(dec1), j), j);
     Check(CompareMem(pointer(dec1), pointer(t), j));
+    CheckEqual(StrLen(pointer(dec1)), j, 'underflow');
+    n := 0;
+    for k := j to length(t) - 1 do
+      if dec1[k] <> 0 then
+        inc(n);
+    CheckEqual(n, 0, 'overflow');
   end;
   s := Data;
   Check(CompressSynLZ(s, true) = 'synlz');
   Check(Length(s) < Length(Data), 'exelen');
   Check(CompressSynLZ(s, false) = 'synlz');
-  Check(s = Data);
+  CheckEqual(s, Data);
+  s := HumanHexToBin('0A000000000041');
+  CheckEqual(SynLZDecompressdestlen(pointer(s)), 10);
+  dec1[0] := 0;
+  CheckEqual(SynLZDecompress1partial(pointer(s), length(s), Pointer(dec1), length(dec1)), 1);
+  CheckEqual(dec1[0], $41, 'truncated');
+  dec1[0] := 0;
+  CheckEqual(SynLZDecompress1partial(pointer(s), length(s), Pointer(dec1), 0), 0);
+  CheckEqual(dec1[0], 0, 'partial0');
+  // in the ABC fixtures, hash('ABC') = $675, so 5167 encodes a 3-byte match
+  // and 506702 encodes an extended 20-byte match
+  TestPartial('', '', '',
+    8); // missing header
+  TestPartial('00', '', '',
+    8); // short header
+  TestPartial('0000', '', '',
+    8); // header alone
+  TestPartial('00000000', '', '',
+    8); // partial CW
+  TestPartial('008000', '', '',
+    8); // short extended header
+  TestPartial('010000000000', 'ABC', 'ABC',
+    16); // ignore advertised size
+  TestPartial('0080000000000000', 'ABC', 'ABC',
+    16); // extended header
+  TestPartial('000001000000', '', '',
+    8);  // missing match token
+  TestPartial('00000100000010', '', '',
+    8);  // one-byte token
+  TestPartial('0000010000000000', '', '',
+    8);  // unset hash entry
+  TestPartial('0000080000004142430000', '', 'ABC',
+    16); // invalid after literals
+  TestPartial('0000080000004142435067', '', 'ABC',
+    16); // missing length byte
+  TestPartial('0000080000004142435167', '', 'ABCABC',
+    6);  // final 2-byte token
+  TestPartial('0000080000004142435167', '', 'ABCABC',
+    16); // count < maxOut
+  TestPartial('0000080000004142435367', '', 'ABCABCAB',
+    16); // overlap
+  TestPartial('000008000000414243506702',  '','ABCABCABCABCABCABCABCAB',
+    23); // final 3-byte token
+  TestPartial('000008000000414243506702', '', 'ABCA',
+    4);  // clipped match
+  TestPartial('000008000000414243506702', '', 'ABCABCA',
+    7);
+  TestPartial('00001800000041424351675167', '', 'ABCABCABC',
+    16); // consecutive matches/hash
+  TestPartial('0000080000004142435167', '123456789', 'ABCABC123456789',
+   15);  // 8-byte match fast path
+  // literal runs across a 32-bit control-word boundary
+  TestPartial('000000000000' +
+    '4141414141414141414141414141414141414141414141414141414141414141' +
+    '00000000', 'Z', Join([RawUtf8OfChar('A', 32), 'Z']), 64);
+  TestPartial('000008000000414243506702', '', '', 0); // no writes
 end;
 
-procedure TTestCoreCompression._TAlgoCompress;
+procedure TTestCoreCompression._TAlgoCompress(Sender: TObject);
 
   procedure TestAlgo(algo: TAlgoCompress);
   var
@@ -11779,6 +14757,7 @@ var
   zout: I7zWriter;
   files: TFindFilesDynArray;
 begin
+  RunWait(true, 120, false); // we need the local expected .zip
   // T7zLib formats detection
   CheckEqual(ToUtf8(T7zLib.FormatGuid(fhGZip)),
              '23170F69-40C1-278A-1000-000110EF0000');
@@ -11902,9 +14881,14 @@ begin
     Check(zin.Extract('A.1mb') = Data, 'pw2');
     zin := nil;
     // a wrong password is reported as failure, not silently swallowed
-    zin := zlib.NewReader(newfile1, fhZip, 'wrongpassword');
-    Check(not zin.Extract('A.1mb', folder, {nosubfolder=}true), 'pw3');
-    CheckEqual(zin.Extract('A.1mb'), '', 'pw4');
+    TSynLog.Family.ExceptionIgnoreCurrentThread := true;
+    try
+      zin := zlib.NewReader(newfile1, fhZip, 'wrongpassword');
+      Check(not zin.Extract('A.1mb', folder, {nosubfolder=}true), 'pw3');
+      CheckEqual(zin.Extract('A.1mb'), '', 'pw4');
+    finally
+      TSynLog.Family.ExceptionIgnoreCurrentThread := false;
+    end;
     zin := nil;
     // a wrong password raises E7Zip on direct item extraction
     CheckRaised(Run7zExtract, [newfile1, 'wrongpassword'], E7Zip, 'pw5');

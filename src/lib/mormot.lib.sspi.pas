@@ -13,6 +13,7 @@ unit mormot.lib.sspi;
    - High-Level Client and Server Authentication using SSPI
    - Lan Manager Access Functions
    - Windows Application Installation and Servicing (msi)
+   - Low-Level Cryptography Next Generation (CNG) API
 
   *****************************************************************************
 
@@ -240,6 +241,7 @@ const
   SECBUFFER_EMPTY            = 0;
   SECBUFFER_DATA             = 1;
   SECBUFFER_TOKEN            = 2;
+  SECBUFFER_MISSING          = 4;
   SECBUFFER_EXTRA            = 5;
   SECBUFFER_STREAM_TRAILER   = 6;
   SECBUFFER_STREAM_HEADER    = 7;
@@ -296,6 +298,7 @@ const
                   ISC_REQ_ALLOCATE_MEMORY or
                   ISC_REQ_STREAM;
 
+  ASC_REQ_MUTUAL_AUTH     = $00000002;
   ASC_REQ_REPLAY_DETECT   = $00000004;
   ASC_REQ_SEQUENCE_DETECT = $00000008;
   ASC_REQ_CONFIDENTIALITY = $00000010;
@@ -320,6 +323,7 @@ const
 
   SEC_E_UNSUPPORTED_FUNCTION   = $80090302;
   SEC_E_INVALID_TOKEN          = $80090308;
+  SEC_E_NO_CREDENTIALS         = $8009030E;
   SEC_E_MESSAGE_ALTERED        = $8009030F;
   SEC_E_CONTEXT_EXPIRED        = $80090317;
   SEC_E_INCOMPLETE_MESSAGE     = $80090318;
@@ -335,7 +339,7 @@ const
 
   SCHANNEL_SHUTDOWN = 1;
 
-  SCHANNEL_CRED_VERSION = 4;
+  SCHANNEL_CRED_VERSION   = 4;
   SCH_CREDENTIALS_VERSION = 5;
 
   SCH_CRED_NO_SYSTEM_MAPPER                    = $00000002;
@@ -475,6 +479,105 @@ type
   end;
   PCERT_ENHKEY_USAGE = ^CTL_USAGE;
 
+  CERT_USAGE_MATCH = record
+    dwType: cardinal;
+    Usage: CTL_USAGE;
+  end;
+
+  CERT_CHAIN_PARA = record
+    cbSize: cardinal;
+    RequestedUsage: CERT_USAGE_MATCH;
+    RequestedIssuancePolicy: CERT_USAGE_MATCH;
+    dwUrlRetrievalTimeout: cardinal;
+    fCheckRevocationFreshnessTime: BOOL;
+    dwRevocationFreshnessTime: cardinal;
+    pftCacheResync: pointer;
+    pStrongSignPara: pointer;
+    dwStrongSignFlags: cardinal;
+  end;
+  PCERT_CHAIN_PARA = ^CERT_CHAIN_PARA;
+
+  CERT_TRUST_STATUS = record
+    dwErrorStatus: cardinal;
+    dwInfoStatus: cardinal;
+  end;
+
+  PCERT_CHAIN_ELEMENT = ^CERT_CHAIN_ELEMENT;
+  PPCERT_CHAIN_ELEMENT_ARRAY = ^TPCERT_CHAIN_ELEMENT_ARRAY;
+  TPCERT_CHAIN_ELEMENT_ARRAY = array[0..65535] of PCERT_CHAIN_ELEMENT;
+  CERT_CHAIN_ELEMENT = record
+    cbSize: cardinal;
+    pCertContext: PCCERT_CONTEXT;
+    TrustStatus: CERT_TRUST_STATUS;
+    pRevocationInfo: pointer;
+    pIssuanceUsage: PCERT_ENHKEY_USAGE;
+    pApplicationUsage: PCERT_ENHKEY_USAGE;
+    pwszExtendedErrorInfo: PWideChar;
+  end;
+
+  PCERT_SIMPLE_CHAIN = ^CERT_SIMPLE_CHAIN;
+  PPCERT_SIMPLE_CHAIN_ARRAY = ^TPCERT_SIMPLE_CHAIN_ARRAY;
+  TPCERT_SIMPLE_CHAIN_ARRAY = array[0..65535] of PCERT_SIMPLE_CHAIN;
+  CERT_SIMPLE_CHAIN = record
+    cbSize: cardinal;
+    TrustStatus: CERT_TRUST_STATUS;
+    cElement: cardinal;
+    rgpElement: PPCERT_CHAIN_ELEMENT_ARRAY;
+    pTrustListInfo: pointer;
+    fHasRevocationFreshnessTime: BOOL;
+    dwRevocationFreshnessTime: cardinal;
+  end;
+
+  PCERT_CHAIN_CONTEXT = ^CERT_CHAIN_CONTEXT;
+  CERT_CHAIN_CONTEXT = record
+    cbSize: cardinal;
+    TrustStatus: CERT_TRUST_STATUS;
+    cChain: cardinal;
+    rgpChain: PPCERT_SIMPLE_CHAIN_ARRAY;
+    cLowerQualityChainContext: cardinal;
+    rgpLowerQualityChainContext: pointer;
+    fHasRevocationFreshnessTime: BOOL;
+    dwRevocationFreshnessTime: cardinal;
+  end;
+
+  SSL_EXTRA_CERT_CHAIN_POLICY_PARA = record
+    cbSize: cardinal;
+    dwAuthType: cardinal;
+    fdwChecks: cardinal;
+    pwszServerName: PWideChar;
+  end;
+
+  CERT_CHAIN_POLICY_PARA = record
+    cbSize: cardinal;
+    dwFlags: cardinal;
+    pvExtraPolicyPara: pointer;
+  end;
+
+  CERT_CHAIN_POLICY_STATUS = record
+    cbSize: cardinal;
+    dwError: cardinal;
+    lChainIndex: integer;
+    lElementIndex: integer;
+    pvExtraPolicyStatus: pointer;
+  end;
+
+  HCERTCHAINENGINE = pointer;
+  CERT_CHAIN_ENGINE_CONFIG = record
+    cbSize: cardinal;
+    hRestrictedRoot: HCERTSTORE;
+    hRestrictedTrust: HCERTSTORE;
+    hRestrictedOther: HCERTSTORE;
+    cAdditionalStore: cardinal;
+    rghAdditionalStore: pointer;
+    dwFlags: cardinal;
+    dwUrlRetrievalTimeout: cardinal;
+    MaximumCachedCertificates: cardinal;
+    CycleDetectionModulus: cardinal;
+    hExclusiveRoot: HCERTSTORE;
+    hExclusiveTrustedPeople: HCERTSTORE;
+    dwExclusiveFlags: cardinal;
+  end;
+
 const
   UNISP_NAME = 'Microsoft Unified Security Protocol Provider';
 
@@ -496,8 +599,29 @@ const
   SP_PROT_TLS_UNSAFE = pred(SP_PROT_TLS1_2_SERVER);
 
   PKCS12_INCLUDE_EXTENDED_PROPERTIES = $10;
+  PKCS12_NO_PERSIST_KEY = $00008000;
 
-  CERT_FIND_ANY = 0;
+  CRYPT_USER_KEYSET = $00001000; // force PFX-imported keys into CurrentUser
+
+  CRYPT_ACQUIRE_COMPARE_KEY_FLAG     = $00000004;
+  CRYPT_ACQUIRE_SILENT_FLAG          = $00000040;
+  CRYPT_ACQUIRE_ONLY_NCRYPT_KEY_FLAG = $00040000;
+
+  CERT_STORE_PROV_MEMORY = 2;
+  CERT_STORE_ADD_USE_EXISTING = 2;
+
+  USAGE_MATCH_TYPE_AND = 0;
+  CERT_CHAIN_POLICY_SSL = 4;
+  AUTHTYPE_CLIENT = 1;
+
+  CERT_CHAIN_EXCLUSIVE_ENABLE_CA_FLAG            = $00000001;
+  CERT_CHAIN_POLICY_IGNORE_ALL_REV_UNKNOWN_FLAGS = $00000f00;
+  CERT_CHAIN_REVOCATION_CHECK_CHAIN_EXCLUDE_ROOT = $40000000;
+
+  szOID_PKIX_KP_CLIENT_AUTH: PAnsiChar = '1.3.6.1.5.5.7.3.2';
+
+  // CERT_KEY_CONTEXT Keys associated with a CNG CSP
+  CERT_NCRYPT_KEY_SPEC = $ffffffff;
 
   // no check is made to determine whether memory for contexts remains allocated
   CERT_CLOSE_STORE_DEFAULT = 0;
@@ -531,26 +655,39 @@ const
 
   CRYPT_OID_INFO_OID_KEY   = 1;
 
+  CRYPT_ACQUIRE_CACHE_FLAG            = $00000001;
+  PKCS12_ALWAYS_CNG_KSP               = $00000200;
+  CRYPT_ACQUIRE_ALLOW_NCRYPT_KEY_FLAG = $00010000;
 
 // crypt32.dll API calls
-
-function CertOpenStore(lpszStoreProvider: PAnsiChar; dwEncodingType: cardinal;
-  hCryptProv: HCRYPTPROV; dwFlags: cardinal; pvPara: pointer): HCERTSTORE; stdcall;
-
-function CertOpenSystemStoreW(hProv: HCRYPTPROV;
-  szSubsystemProtocol: PWideChar): HCERTSTORE; stdcall;
-
-function CertCloseStore(hCertStore: HCERTSTORE; dwFlags: cardinal): BOOL; stdcall;
 
 function CertFindCertificateInStore(hCertStore: HCERTSTORE;
   dwCertEncodingType, dwFindFlags, dwFindType: cardinal; pvFindPara: pointer;
   pPrevCertContext: PCCERT_CONTEXT): PCCERT_CONTEXT; stdcall;
+
+function CertAddCertificateContextToStore(hCertStore: HCERTSTORE;
+  pCertContext: PCCERT_CONTEXT; dwAddDisposition: cardinal;
+  ppStoreContext: PPCCERT_CONTEXT): BOOL; stdcall;
+
+function CertAddEncodedCertificateToStore(hCertStore: HCERTSTORE;
+  dwCertEncodingType: cardinal; pbCertEncoded: PByte; cbCertEncoded,
+  dwAddDisposition: cardinal; ppCertContext: PPCCERT_CONTEXT): BOOL; stdcall;
 
 function PFXImportCertStore(pPFX: pointer; szPassword: PWideChar;
   dwFlags: cardinal): HCERTSTORE; stdcall;
 
 function CertCreateCertificateContext(dwCertEncodingType: cardinal;
   pbCertEncoded: PByte; cbCertEncoded: cardinal): PCCERT_CONTEXT; stdcall;
+
+function CertStrToNameW(dwCertEncodingType: cardinal; pszX500: PWideChar;
+  dwStrType: cardinal; pvReserved, pbEncoded: pointer;
+  var pcbEncoded: cardinal; ppszError: pointer): BOOL; stdcall;
+
+function CertCreateSelfSignCertificate(hCryptProvOrNCryptKey: HCRYPTPROV;
+  pSubjectIssuerBlob: pointer; dwFlags: cardinal;
+  pKeyProvInfo: PCRYPT_KEY_PROV_INFO;
+  pSignatureAlgorithm: pointer; pStartTime, pEndTime: pointer;
+  pExtensions: PCERT_EXTENSIONS): PCCERT_CONTEXT; stdcall;
 
 function CertGetIntendedKeyUsage(dwCertEncodingType: cardinal; pCertInfo: PCERT_INFO;
   pbKeyUsage: PByte; cbKeyUsage: cardinal): BOOL; stdcall;
@@ -565,7 +702,24 @@ function CryptAcquireCertificatePrivateKey(pCert: PCCERT_CONTEXT; dwFlags: cardi
   pvReserved: pointer; var phCryptProv: HCRYPTPROV; var pdwKeySpec: cardinal;
   var pfCallerFreeProv: BOOL): BOOL; stdcall;
 
-function CertFreeCertificateContext(pCertContext: PCCERT_CONTEXT): BOOL; stdcall;
+function CertCreateCertificateChainEngine(
+  const pConfig: CERT_CHAIN_ENGINE_CONFIG;
+  var phChainEngine: HCERTCHAINENGINE): BOOL; stdcall;
+
+procedure CertFreeCertificateChainEngine(
+  hChainEngine: HCERTCHAINENGINE); stdcall;
+
+function CertGetCertificateChain(hChainEngine: HCERTCHAINENGINE;
+  pCertContext: PCCERT_CONTEXT; pTime: pointer; hAdditionalStore: HCERTSTORE;
+  const pChainPara: CERT_CHAIN_PARA; dwFlags: cardinal; pvReserved: pointer;
+  var ppChainContext: PCERT_CHAIN_CONTEXT): BOOL; stdcall;
+
+procedure CertFreeCertificateChain(
+  pChainContext: PCERT_CHAIN_CONTEXT); stdcall;
+
+function CertVerifyCertificateChainPolicy(pszPolicyOID: PAnsiChar;
+  pChainContext: PCERT_CHAIN_CONTEXT; const pPolicyPara: CERT_CHAIN_POLICY_PARA;
+  var pPolicyStatus: CERT_CHAIN_POLICY_STATUS): BOOL; stdcall;
 
 function CertNameToStrW(dwCertEncodingType: cardinal; var pName: CERT_NAME_BLOB;
   dwStrType: cardinal; psz: PWideChar; csz: cardinal): cardinal; stdcall;
@@ -576,12 +730,11 @@ function CryptFindOIDInfo(dwKeyType: cardinal; pvKey: pointer;
 
 { ****************** Middle-Level SSPI Wrappers }
 
-
 type
   /// exception class raised during SSPI process
   ESynSspi = class(ExceptionWithProps)
   public
-    class procedure RaiseLastOSError(const Ctx: ShortString; Res: cardinal);
+    class procedure RaiseSspiError(const Ctx: ShortString; Res: cardinal);
   end;
 
 
@@ -682,7 +835,7 @@ type
     /// the certificate algorithm name, as converted by WinCertAlgoName()
     // - typical values are 'md5RSA','sha1RSA','sha256RSA','sha384RSA','sha1ECC'
     AlgorithmName: RawUtf8;
-    /// the certificate binary SHA1 fingerprint of 20 bytes
+    /// the certificate binary SHA1 fingerprint as 40 hexadecimal chars
     Hash: RawUtf8;
     /// the certificate public key algorithm, as OID text
     // - e.g. ' 1.2.840.113549.1.1.1' for 'RSA' PublicKeyAlgorithmName
@@ -699,10 +852,40 @@ type
     KeyContainer: RawUtf8;
     /// the key container provider name
     KeyProvider: RawUtf8;
+    /// the key provider type from CRYPT_KEY_PROV_INFO.dwProvType
+    // - 0 identifies a CNG Key Storage Provider
+    // - high(cardinal) means no CERT_KEY_PROV_INFO_PROP_ID was available
+    KeyProviderType: cardinal;
+    /// the CRYPT_KEY_PROV_INFO.dwFlags value
+    // - may contain NCRYPT_MACHINE_KEY_FLAG for a CNG machine key
+    KeyProviderFlags: cardinal;
+    /// the CRYPT_KEY_PROV_INFO.dwKeySpec value
+    KeySpec: cardinal;
     /// the raw X509 extensions of this certificate
     Extension: array of TWinCertExtension;
   end;
   PWinCertInfo = ^TWinCertInfo;
+
+  /// key provider information associated with a Windows certificate
+  // - decoded from its CERT_KEY_PROV_INFO_PROP_ID property
+  TWinCertKeyProviderInfo = record
+    /// key container/key name
+    Container: RawUtf8;
+    /// CSP or CNG Key Storage Provider name
+    Provider: RawUtf8;
+    /// binary SHA1 fingerprint as 40 hexadecimal chars
+    Hash: RawUtf8;
+    /// provider type as legacy CryptoAPI CSP identifier
+    // - equals 0 for CNG Key Storage as identified by Provider/Container fields
+    // - high(cardinal) means no provider information was available
+    // - any other value (e.g. 1 or 24) identifies a legacy CryptoAPI provider
+    ProviderType: cardinal;
+    /// CRYPT_KEY_PROV_INFO.dwFlags
+    Flags: cardinal;
+    /// CRYPT_KEY_PROV_INFO.dwKeySpec
+    KeySpec: cardinal;
+  end;
+  PWinCertKeyProviderInfo = ^TWinCertKeyProviderInfo;
 
 const
   WIN_CERT_USAGE: array[wkuCrlSign .. wkuDigitalSignature] of byte = (
@@ -728,6 +911,29 @@ function WinCertDecode(const Asn1: RawByteString; out Cert: TWinCertInfo;
 /// decode a raw WinCrypto API PCCERT_CONTEXT struct
 function WinCertCtxtDecode(Ctxt: PCCERT_CONTEXT; out Cert: TWinCertInfo;
   StrType: cardinal = CERT_X500_NAME_STR): boolean;
+
+/// retrieve the key provider information associated with a certificate
+// - returns false if there is no CERT_KEY_PROV_INFO_PROP_ID property
+// - Info.ProviderType=0 identifies a CNG Key Storage Provider
+function WinCertCtxtKeyProvider(Ctxt: PCCERT_CONTEXT;
+  out Info: TWinCertKeyProviderInfo): boolean;
+
+/// import a PKCS#12/PFX buffer into a temporary Windows certificate store
+// - returns NO_ERROR on success, otherwise the GetLastError() value returned
+// by PFXImportCertStore()
+// - caller owns Store and should eventually call CertCloseStore()
+// - Password is converted to UTF-16 in a temporary wiped buffer
+function WinCertStoreImportPfx(const Pfx: RawByteString;
+  const Password: SpiUtf8; out Store: HCERTSTORE;
+  Flags: cardinal = PKCS12_INCLUDE_EXTENDED_PROPERTIES): cardinal;
+
+/// cleanup of a certificate temporary imported into the Windows certificate store
+// - PFXImportCertStore() persists private keys separately from its temporary
+// certificate store: this deletes every imported CNG key, not just the selected leaf
+// - call only for a store freshly imported by PKCS12_SCHANNEL_FLAGS: no key from
+// TCryptCertAlgoCng's system-store catalog is ever passed to this routine
+procedure WinCertStoreDeleteImportedCngKeys(Store: HCERTSTORE;
+  const Log: TSynLogProc = nil);
 
 /// could be used to extract CERT_X500_NAME_STR values
 // - for instance, in TWinCertInfo Name := ExtractX500('CN=', SubjectName);
@@ -787,6 +993,7 @@ function ServerSspiDataNtlm(const aInData: RawByteString): boolean;
 // - will raise an ESynSspi if authentication failed (e.g. invalid credentials)
 // - server must send aOutData to the client (if any), and if True was returned,
 // call this function again with any new data receive from the client
+// - consider mormot.net.client HTTP "Negotiate" KerberosServerAuthHeader() wrapper
 function ServerSspiAuth(var aSecContext: TSecContext;
   const aInData: RawByteString; out aOutData: RawByteString): boolean;
 
@@ -794,6 +1001,7 @@ function ServerSspiAuth(var aSecContext: TSecContext;
 // - aSecContext must be received from a previous successful call to
 // ServerSspiAuth()
 // - aUserName contains authenticated user name
+// - consider mormot.net.client HTTP "Negotiate" KerberosServerAuthHeader() wrapper
 procedure ServerSspiAuthUser(var aSecContext: TSecContext;
   out aUserName: RawUtf8);
 
@@ -844,9 +1052,6 @@ const
   /// HTTP header to be set for authentication
   // - GSS API only supports Negotiate/Kerberos - NTLM is unsafe and deprecated
   SECPKGNAMEHTTPWWWAUTHENTICATE = 'WWW-Authenticate: Negotiate ';
-
-  /// HTTP header pattern received for authentication
-  SECPKGNAMEHTTPAUTHORIZATION = 'AUTHORIZATION: NEGOTIATE ';
 
   /// by default, no GSSAPI is to be loaded with the Windows SSPI
   GssApi_LastLoadError = '';
@@ -899,7 +1104,7 @@ function NetUserAdd(servername: PWideChar; level: cardinal;
 function NetUserEnum(servername: PWideChar; level, filter: cardinal;
   var bufptr: pointer; prefmaxlen: cardinal;
   entriesread, totalentries: PCardinal;
-  resumehandle: PPCardinal = nil): TNetApiStatus; stdcall;
+  resumehandle: PCardinal = nil): TNetApiStatus; stdcall;
 
 function NetUserGetInfo(servername, username: PWideChar; level: cardinal;
   var bufptr: pointer): TNetApiStatus; stdcall;
@@ -932,7 +1137,7 @@ function NetUserChangePassword(domainname, username,
 
 function NetGroupEnum(servername: PWideChar; level: cardinal;
   var bufptr: pointer; prefmaxlen: cardinal; entriesread, totalentries: PCardinal;
-  resume_handle: PPCardinal = nil): TNetApiStatus; stdcall;
+  resume_handle: PPtrUInt = nil): TNetApiStatus; stdcall;
 
 
 function NetLocalGroupAdd(servername: PWideChar; level: cardinal;
@@ -943,7 +1148,7 @@ function NetLocalGroupAddMember(servername, groupname: PWideChar;
 
 function NetLocalGroupEnum(servername: PWideChar; level: cardinal;
   var bufptr: pointer; prefmaxlen: cardinal; entriesread, totalentries: PCardinal;
-  resumehandle: PPCardinal = nil): TNetApiStatus; stdcall;
+  resumehandle: PPtrUInt = nil): TNetApiStatus; stdcall;
 
 function NetLocalGroupGetInfo(servername, groupname: PWideChar;
   level: cardinal; var bufptr: pointer): TNetApiStatus; stdcall;
@@ -959,7 +1164,7 @@ function NetLocalGroupDelMember(servername: PWideChar;
 
 function NetLocalGroupGetMembers(servername, localgroupname: PWideChar;
   level: cardinal; var bufptr: pointer; prefmaxlen: cardinal;
-  entriesread, totalentries: PCardinal; resumehandle: PPCardinal): TNetApiStatus; stdcall;
+  entriesread, totalentries: PCardinal; resumehandle: PPtrUInt): TNetApiStatus; stdcall;
 
 function NetLocalGroupSetMembers(servername, groupname: PWideChar;
   level: cardinal; buf: pointer; totalentries: cardinal): TNetApiStatus; stdcall;
@@ -1038,7 +1243,7 @@ function MsiOpenProductW(szProduct: PWideChar; out hProduct: TMsiHandle): cardin
 function MsiGetProductPropertyW(hProduct: TMsiHandle; szProperty, lpValueBuf: PWideChar;
   pcchValueBuf: PCardinal): cardinal; stdcall;
 function MsiSetInternalUI(dwUILevel: cardinal; var phWnd: HWND): cardinal; stdcall;
-function MsiEnumProductA(iProductIndex: cardinal; lpProductBuf: PAnsiChar): cardinal; stdcall;
+function MsiEnumProductsA(iProductIndex: cardinal; lpProductBuf: PAnsiChar): cardinal; stdcall;
 function MsiOpenDatabaseW(DatabasePath, Persist: PWideChar;
   out hDb: TMsiHandle): cardinal; stdcall;
 function MsiDatabaseOpenViewW(hdb: TMsiHandle; query: PWideChar;
@@ -1091,6 +1296,254 @@ function MsiVerify(const MsiExeFile: TFileName;
   Certificate: PWinCertInfo = nil; HashIgnore: boolean = false): string;
 
 
+{ **************** Low-Level Cryptography Next Generation (CNG) API }
+
+type
+  // define various CNG handles as abstract pointers
+  NCRYPT_HANDLE             = pointer;
+  NCRYPT_PROV_HANDLE        = type NCRYPT_HANDLE;
+  NCRYPT_KEY_HANDLE         = type NCRYPT_HANDLE;
+  NCRYPT_DESCRIPTOR_HANDLE  = type NCRYPT_HANDLE;
+  PNCRYPT_DESCRIPTOR_HANDLE = ^NCRYPT_DESCRIPTOR_HANDLE;
+
+  /// RSA PKCS#1 padding parameters expected by NCryptSignHash()
+  TBcryptPkcs1PaddingInfo = record
+    pszAlgId: PWideChar;
+  end;
+  PBcryptPkcs1PaddingInfo = ^TBcryptPkcs1PaddingInfo;
+
+  /// RSA-PSS padding parameters expected by NCryptSignHash()
+  TBcryptPssPaddingInfo = record
+    pszAlgId: PWideChar;
+    cbSalt: cardinal;
+  end;
+  PBcryptPssPaddingInfo = ^TBcryptPssPaddingInfo;
+
+type
+  /// middle-level hash algorithm identifier supplied to CNG RSA padding
+  // - kept local to mormot.lib.sspi to avoid any mormot.crypt dependency
+  TNcryptHashAlgo = (
+    nhaSha256,
+    nhaSha384,
+    nhaSha512);
+
+  /// middle-level signature mode for TNCrypt.KeySign()
+  // - nsmEcdsa uses no CNG padding and returns the native raw r || s signature
+  // - nsmRsaPkcs1 uses PKCS#1 v1.5 signature padding
+  // - nsmRsaPss uses RSA-PSS signature padding
+  TNcryptSignMode = (
+    nsmEcdsa,
+    nsmRsaPkcs1,
+    nsmRsaPss);
+
+const
+  /// default Microsoft software Key Storage Provider
+  MS_KEY_STORAGE_PROVIDER = 'Microsoft Software Key Storage Provider';
+
+  // common NCrypt operation flags
+  NCRYPT_SILENT_FLAG      = $00000040;
+  NCRYPT_MACHINE_KEY_FLAG = $00000020;
+
+  // NCryptSignHash / NCryptDecrypt padding flags
+  NCRYPT_NO_PADDING_FLAG   = $00000001;
+  NCRYPT_PAD_PKCS1_FLAG    = $00000002;
+  NCRYPT_PAD_OAEP_FLAG     = $00000004;
+  NCRYPT_PAD_PSS_FLAG      = $00000008;
+
+  // NCRYPT_KEY_USAGE_PROPERTY flags
+  NCRYPT_ALLOW_DECRYPT_FLAG       = $00000001;
+  NCRYPT_ALLOW_SIGNING_FLAG       = $00000002;
+  NCRYPT_ALLOW_KEY_AGREEMENT_FLAG = $00000004;
+
+  // common NCrypt object properties names
+  NCRYPT_LENGTH_PROPERTY    = 'Length';
+  NCRYPT_KEY_USAGE_PROPERTY = 'Key Usage';
+
+  // BCrypt hash algorithm identifiers used by NCryptSignHash()
+  BCRYPT_ALGORITHM: array[TNcryptHashAlgo] of PWideChar = (
+    'SHA256', 'SHA384', 'SHA512');
+
+type
+  /// exception class raised during NCrypt / CNG API process
+  ENCrypt = class(ExceptionWithProps);
+
+  /// dynamically loaded CNG key storage API (unavailable on Windows XP)
+  //- don't use TNCrypt.Create but global NCrypt factory function instead
+  TNCrypt = class(TSynLibrary)
+  public
+    /// open a CNG Key Storage Provider
+    // - pszProviderName may be e.g. MS_KEY_STORAGE_PROVIDER
+    // - returns ERROR_SUCCESS on success, or a NTE_* error code
+    // - the returned provider handle should be released by FreeObject()
+    OpenStorageProvider: function(var phProvider: NCRYPT_PROV_HANDLE;
+      pszProviderName: PWideChar; dwFlags: cardinal): integer; stdcall;
+    /// open an existing CNG key from a Key Storage Provider
+    // - the returned key should be released by FreeObject()
+    OpenKey: function(hProvider: NCRYPT_PROV_HANDLE;
+      var phKey: NCRYPT_KEY_HANDLE; pszKeyName: PWideChar;
+      dwLegacyKeySpec, dwFlags: cardinal): integer; stdcall;
+    /// create a new persisted or ephemeral CNG key
+    // - pszAlgId may be e.g. NCRYPT_RSA_ALGORITHM or NCRYPT_ECDSA_P256_ALGORITHM
+    // - pszKeyName=nil creates an ephemeral key, otherwise a persisted key
+    // - dwLegacyKeySpec is usually 0, or AT_KEYEXCHANGE/AT_SIGNATURE if needed
+    // - call SetProperty() as needed, then FinalizeKey() before using the key
+    // - the returned key handle should be released by FreeObject() or DeleteKey()
+    CreatePersistedKey: function(hProvider: NCRYPT_PROV_HANDLE;
+      var phKey: NCRYPT_KEY_HANDLE; pszAlgId, pszKeyName: PWideChar;
+      dwLegacyKeySpec, dwFlags: cardinal): integer; stdcall;
+    /// retrieve a property from a CNG provider or key object
+    GetProperty: function(hObject: NCRYPT_HANDLE; pszProperty: PWideChar;
+      pbOutput: pointer; cbOutput: cardinal; var pcbResult: cardinal;
+      dwFlags: cardinal): integer; stdcall;
+    /// set a property on a CNG provider or key object
+    // - pszProperty identifies the property, e.g. NCRYPT_LENGTH_PROPERTY
+    // - pbInput/cbInput contain the property value
+    // - some key properties should be set before FinalizeKey()
+    // - returns ERROR_SUCCESS on success, or a NTE_* error code
+    SetProperty: function(hObject: NCRYPT_HANDLE; pszProperty: PWideChar;
+      pbInput: pointer; cbInput, dwFlags: cardinal): integer; stdcall;
+    /// finalize a newly created or imported CNG key
+    // - applies the configured key properties and makes the key usable
+    // - should be called once after CreatePersistedKey() and SetProperty()
+    // - returns ERROR_SUCCESS on success, or a NTE_* error code
+    FinalizeKey: function(hKey: NCRYPT_KEY_HANDLE;
+      dwFlags: cardinal): integer; stdcall;
+    /// delete a persisted CNG key and release its handle
+    // - removes the key from its Key Storage Provider
+    // - the supplied handle should not be used after a successful call
+    // - returns ERROR_SUCCESS on success, or a NTE_* error code
+    DeleteKey: function(hKey: NCRYPT_KEY_HANDLE;
+      dwFlags: cardinal): integer; stdcall;
+    /// release a CNG provider or key handle
+    // - accepts handles returned by OpenStorageProvider(), CreatePersistedKey()
+    // and other NCrypt* functions
+    // - does not delete a persisted key from its provider
+    // - returns ERROR_SUCCESS on success, or a NTE_* error code
+    FreeObject: function(hObject: NCRYPT_HANDLE): integer; stdcall;
+    /// create a RSA or ECDSA signature over an already computed hash
+    SignHash: function(hKey: NCRYPT_KEY_HANDLE; pPaddingInfo: pointer;
+      pbHashValue: PByte; cbHashValue: cardinal; pbSignature: PByte;
+      cbSignature: cardinal; var pcbResult: cardinal;
+      dwFlags: cardinal): integer; stdcall;
+    /// decrypt one asymmetric encrypted block
+    // - added here already because it belongs to the same basic NCrypt surface
+    // - used by KeyDecryptPkcs1() for high-level RSA envelope decryption
+    Decrypt: function(hKey: NCRYPT_KEY_HANDLE; pbInput: PByte;
+      cbInput: cardinal; pPaddingInfo: pointer; pbOutput: PByte;
+      cbOutput: cardinal; var pcbResult: cardinal;
+      dwFlags: cardinal): integer; stdcall;
+    /// protect an in-memory secret using a CNG protection descriptor
+    // - hDescriptor defines how the secret is protected
+    // - pbData/cbData contain the clear-text input buffer
+    // - returns an allocated protected blob in ppbProtectedBlob/pcbProtectedBlob
+    // - release the returned buffer with LocalFree()
+    // - returns ERROR_SUCCESS on success, or a NTE_* / Win32 error code
+    ProtectSecret: function(hDescriptor: NCRYPT_DESCRIPTOR_HANDLE; dwFlags: cardinal;
+      pbData: pointer; cbData: cardinal; pMemPara: pointer; hWnd: HWND;
+      var ppbProtectedBlob: pointer; var pcbProtectedBlob: cardinal): integer; stdcall;
+    /// unprotect a blob previously generated by ProtectSecret()
+    // - returns the associated protection descriptor in phDescriptor
+    // - pbProtectedBlob/cbProtectedBlob contain the encrypted input blob
+    // - returns an allocated clear-text buffer in ppbData/pcbData
+    // - release the returned buffer with LocalFree()
+    // - close phDescriptor with CloseProtectionDescriptor() when done
+    // - returns ERROR_SUCCESS on success, or a NTE_* / Win32 error code
+    UnprotectSecret: function(phDescriptor: PNCRYPT_DESCRIPTOR_HANDLE; dwFlags: cardinal;
+      pbProtectedBlob: pointer; cbProtectedBlob: cardinal; pMemPara: pointer;
+      hWnd: HWND; var ppbData: pointer; var pcbData: cardinal): integer; stdcall;
+    /// release a CNG protection descriptor handle
+    // - accepts handles returned by protection descriptor APIs or UnprotectSecret()
+    // - the supplied handle should not be used after a successful call
+    // - returns ERROR_SUCCESS on success, or a NTE_* / Win32 error code
+    CloseProtectionDescriptor: function(
+      hDescriptor: NCRYPT_DESCRIPTOR_HANDLE): integer; stdcall;
+  public
+    /// same as FreeObject() but raise ENCrypt on XP instead of GPF
+    function FreeSafe(hObject: NCRYPT_HANDLE): integer;
+    /// retrieve a cardinal property from a CNG provider or key
+    // - raise ENCrypt on any NCryptGetProperty() error
+    function GetCardinal(hObject: NCRYPT_HANDLE; PropertyName: PWideChar): cardinal;
+    /// retrieve any CNG object property into a binary buffer
+    // - returns '' for a zero-length property
+    // - raise ENCrypt on NCryptGetProperty() errors
+    function GetBuffer(hObject: NCRYPT_HANDLE; PropertyName: PWideChar): RawByteString;
+    /// return the size in bits of a CNG key
+    function KeyBits(hKey: NCRYPT_KEY_HANDLE): cardinal;
+      {$ifdef HASINLINE} inline; {$endif}
+    /// return the allowed NCRYPT_ALLOW_* usages of a CNG key
+    function KeyUsage(hKey: NCRYPT_KEY_HANDLE): cardinal;
+      {$ifdef HASINLINE} inline; {$endif}
+    /// sign an already computed hash with a CNG private key
+    // - Algo identifies the hash for RSA PKCS#1/PSS padding
+    // - Mode selects ECDSA, RSA PKCS#1 or RSA-PSS signing
+    // - PssSaltLen=0 means use HashLen, as expected by JOSE
+    // - Silent adds NCRYPT_SILENT_FLAG to forbid any KSP user interface
+    // - ECDSA result is the native fixed-width r || s returned by CNG
+    // - raise ENCrypt on API or key-property errors
+    function KeySign(hKey: NCRYPT_KEY_HANDLE; Hash: pointer; HashLen: cardinal;
+      Algo: TNcryptHashAlgo; Mode: TNcryptSignMode; PssSaltLen: cardinal = 0;
+      Silent: boolean = false): RawByteString;
+    /// decrypt one RSA PKCS#1 v1.5 block with a CNG private key
+    // - InputLen should match the RSA modulus size in bytes
+    // - preallocates InputLen bytes to avoid a preliminary NCryptDecrypt()
+    // size query, which could trigger an extra hardware-token operation
+    // - Silent adds NCRYPT_SILENT_FLAG
+    // - raises ENCrypt on CNG errors
+    function KeyDecryptPkcs1(hKey: NCRYPT_KEY_HANDLE; Input: pointer;
+      InputLen: cardinal; Silent: boolean = false): RawByteString;
+    /// wrapper around the UnprotectSecret() API
+    function Unprotect(Buf: pointer; Len: cardinal;
+      Flags: cardinal = NCRYPT_SILENT_FLAG): RawByteString;
+    /// try to decrypt a msLAPS-EncryptedPassword attribute binary value
+    // - caller should pass TLdapAttribute.GetRaw binary value not the hexa text
+    // - raise ENCrypt exception on decoding issue e.g. before Windows 8
+    function LapsDecrypt(const bin: RawByteString): RawUtf8;
+  end;
+
+  /// define how TWinCertCngKey.Init() should allocate its CNG key
+  // - wckSilent forbids any KSP user interface, e.g. PIN dialogs
+  // - wckCompareKey verifies that the private key matches the certificate
+  // - wckCache reuses the key attached to the certificate context, notably
+  // CERT_KEY_CONTEXT_PROP_ID from PKCS12_NO_PERSIST_KEY imports
+  TWinCertCngKeyOptions = set of (
+    wckSilent,
+    wckCompareKey,
+    wckCache);
+
+  /// short-lived CNG private key associated with a Windows certificate
+  // - call Init() then Done(), typically within a try..finally block
+  // - hides CryptAcquireCertificatePrivateKey() ownership semantics
+  TWinCertCngKey = object
+  private
+    fCallerFree: boolean;
+  public
+    /// CNG private key returned by CryptAcquireCertificatePrivateKey()
+    Handle: NCRYPT_KEY_HANDLE;
+    /// acquire the CNG private key associated with a certificate
+    // - returns NO_ERROR on success, or a Win32/NTE_* error code
+    // - wckSilent forbids any KSP user interface
+    // - default wckCompareKey verifies the key against the certificate
+    // - wckCache reuses/caches CERT_KEY_CONTEXT_PROP_ID and takes precedence
+    function Init(Ctxt: PCCERT_CONTEXT;
+      Options: TWinCertCngKeyOptions = [wckCompareKey]): cardinal;
+    /// release the CNG key if Windows told us that we own the handle
+    procedure Done;
+  end;
+
+
+/// factory for late binding access to the Cryptography Next Generation (CNG) API
+// - on XP may return nil for the functions so you may need to call NCrypt.Exists
+function NCrypt: TNCrypt;
+  {$ifdef HASINLINE} inline; {$endif}
+
+var
+  /// global variable used when inlining NCrypt wrapper function
+  _NCrypt: TNCrypt;
+
+/// function used when inlining NCrypt wrapper function
+function InitializeNCrypt: TNCrypt;
+
+
 implementation
 
 
@@ -1113,20 +1566,22 @@ function FreeContextBuffer;          external secur32;
 function DeleteSecurityContext;      external secur32;
 function FreeCredentialsHandle;      external secur32;
 
-const
-  crypt32 = 'crypt32.dll';
-
-function CertOpenStore;                     external crypt32;
-function CertOpenSystemStoreW;              external crypt32;
-function CertCloseStore;                    external crypt32;
 function CertFindCertificateInStore;        external crypt32;
+function CertAddCertificateContextToStore;  external crypt32;
+function CertAddEncodedCertificateToStore;  external crypt32;
 function PFXImportCertStore;                external crypt32;
 function CertCreateCertificateContext;      external crypt32;
+function CertStrToNameW;                    external crypt32;
+function CertCreateSelfSignCertificate;     external crypt32;
 function CertGetIntendedKeyUsage;           external crypt32;
 function CertGetEnhancedKeyUsage;           external crypt32;
 function CertGetCertificateContextProperty; external crypt32;
 function CryptAcquireCertificatePrivateKey; external crypt32;
-function CertFreeCertificateContext;        external crypt32;
+function CertCreateCertificateChainEngine;  external crypt32;
+procedure CertFreeCertificateChainEngine;   external crypt32;
+function CertGetCertificateChain;           external crypt32;
+procedure CertFreeCertificateChain;         external crypt32;
+function CertVerifyCertificateChainPolicy;  external crypt32;
 function CertNameToStrW;                    external crypt32;
 function CryptFindOIDInfo;                  external crypt32;
 
@@ -1242,21 +1697,19 @@ end;
 
 { ESynSspi }
 
-procedure Check(const Ctx: ShortString; Res: cardinal);
+procedure CheckOK(const Ctx: ShortString; Res: cardinal);
+  {$ifdef HASINLINE} inline; {$endif}
 begin
+  // SSPI does not use GetLastError but directly returns the error code
+  // -> we use WinCheck() below for non-SSPI API which requires GetLastError
   if Res <> SEC_E_OK then
-    ESynSspi.RaiseLastOSError(Ctx, Res);
+    ESynSspi.RaiseSspiError(Ctx, Res);
 end;
 
-class procedure ESynSspi.RaiseLastOSError(const Ctx: ShortString; Res: cardinal);
-var
-  sys: integer;
+class procedure ESynSspi.RaiseSspiError(const Ctx: ShortString; Res: cardinal);
 begin
-  sys := GetLastError;
-  raise Create(format('%s returned %s, System Error %d [%s]',
-          [Ctx, OsErrorShort(res), sys, GetErrorShort(sys)]));
+  raise CreateFmt('%s returned %s', [Ctx, OsErrorShort(Res)]);
 end;
-
 
 procedure InvalidateSecContext(var aSecContext: TSecContext);
 begin
@@ -1310,7 +1763,7 @@ var
 begin
   FastAssignNew(result);
   // sizes.cbSecurityTrailer is size of the trailer (signature + padding) block
-  Check('SecEncrypt QueryContextAttributesW',
+  CheckOK('SecEncrypt QueryContextAttributesW',
     QueryContextAttributesW(@aSecContext.CtxHandle, SECPKG_ATTR_SIZES, @sizes));
   if (sizes.cbSecurityTrailer > SizeOf(token)) or
      (sizes.cbBlockSize > SizeOf(padding)) then
@@ -1339,7 +1792,7 @@ begin
   inDesc.Add(SECBUFFER_PADDING, @padding, sizes.cbBlockSize);
   status := EncryptMessage(@aSecContext.CtxHandle, 0, @inDesc, 0);
   if status < 0 then
-    Check('EncryptMessage', status);
+    CheckOK('EncryptMessage', status);
   len := inDesc.Data[0].cbBuffer + inDesc.Data[1].cbBuffer + inDesc.Data[2].cbBuffer;
   SetLength(result, len);
   res := pointer(result);
@@ -1379,7 +1832,7 @@ begin
   inDesc.Add(SECBUFFER_DATA);
   status := DecryptMessage(@aSecContext.CtxHandle, @inDesc, 0, qop);
   if status < 0 then
-    Check('DecryptMessage', status);
+    CheckOK('DecryptMessage', status);
   FastSetRawByteString(result, inDesc.Data[1].pvBuffer, inDesc.Data[1].cbBuffer);
 end;
 
@@ -1572,9 +2025,9 @@ var
   ku: byte;
   len: cardinal;
   sub: RawUtf8;
-  h: THash160;
   e: PCERT_EXTENSION;
   c: PWinCertExtension;
+  key: TWinCertKeyProviderInfo;
   tmp: TSynTempBuffer;
 begin
   result := false;
@@ -1582,6 +2035,7 @@ begin
     exit;
   Finalize(Cert);
   FillcharFast(Cert, SizeOf(Cert), 0);
+  Cert.KeyProviderType := high(cardinal); // 0 means CNG, high() means unknown
   nfo := Ctxt^.pCertInfo;
   with nfo^.SerialNumber do
     ToHumanHex(Cert.Serial, pointer(pbData), cbData, {reverse=}true);
@@ -1634,20 +2088,18 @@ begin
   WinCertAlgoName(Cert.PublicKeyAlgorithm, Cert.PublicKeyAlgorithmName);
   with nfo^.SubjectPublicKeyInfo.PublicKey do
     FastSetRawByteString(Cert.PublicKeyContent, pbData, cbData);
-  len := tmp.Init;
-  if CertGetCertificateContextProperty(
-       Ctxt, CERT_KEY_PROV_INFO_PROP_ID, tmp.buf, len) then
-    with PCRYPT_KEY_PROV_INFO(tmp.buf)^ do
-    begin
-      Win32PWideCharToUtf8(pwszContainerName, Cert.KeyContainer);
-      Win32PWideCharToUtf8(pwszProvName, Cert.KeyProvider);
-    end;
-  len := SizeOf(h); // 20 bytes of a SHA-1 hash
-  if CertGetCertificateContextProperty(Ctxt, CERT_HASH_PROP_ID, @h, len) then
-    ToHumanHex(Cert.Hash, @h, len);
+  if WinCertCtxtKeyProvider(Ctxt, key) then
+  begin
+    Cert.KeyContainer     := key.Container;
+    Cert.KeyProvider      := key.Provider;
+    Cert.KeyProviderType  := key.ProviderType;
+    Cert.KeyProviderFlags := key.Flags;
+    Cert.KeySpec          := key.KeySpec;
+    Cert.Hash             := key.Hash;
+  end;
   SetLength(Cert.Extension, nfo^.cExtension);
   c := pointer(Cert.Extension);
-  e := @nfo^.rgExtension[0];
+  e := nfo^.rgExtension;
   for i := 1 to nfo^.cExtension do
   begin
     // store the raw extension content as hexadecimal
@@ -1713,6 +2165,136 @@ begin
   // other extensions will be properly written by mormot.crypt.secure code
 end;
 
+function WinCertCtxtKeyProvider(Ctxt: PCCERT_CONTEXT;
+  out Info: TWinCertKeyProviderInfo): boolean;
+var
+  len: cardinal;
+  p: PCRYPT_KEY_PROV_INFO;
+  tmp: TSynTempBuffer;
+  h: THash160 absolute tmp;
+begin
+  result := false;
+  Finalize(Info);
+  FillCharFast(Info, SizeOf(Info), 0);
+  Info.ProviderType := high(cardinal);
+  if Ctxt = nil then
+    exit;
+  len := 0;
+  if not CertGetCertificateContextProperty(
+      Ctxt, CERT_KEY_PROV_INFO_PROP_ID, nil, len) or
+     (len < SizeOf(CRYPT_KEY_PROV_INFO)) then
+    exit;
+  tmp.Init(len);
+  try
+    if not CertGetCertificateContextProperty(
+        Ctxt, CERT_KEY_PROV_INFO_PROP_ID, tmp.buf, len) then
+      exit;
+    p := tmp.buf;
+    Win32PWideCharToUtf8(p^.pwszContainerName, Info.Container);
+    Win32PWideCharToUtf8(p^.pwszProvName, Info.Provider);
+    Info.ProviderType := p^.dwProvType;
+    Info.Flags := p^.dwFlags;
+    Info.KeySpec := p^.dwKeySpec;
+    result := true;
+  finally
+    tmp.Done;
+  end;
+  len := SizeOf(h); // 20 bytes of a SHA-1 hash
+  if CertGetCertificateContextProperty(Ctxt, CERT_HASH_PROP_ID, @h, len) then
+    ToHumanHex(Info.Hash, @h, len);
+end;
+
+function WinCertStoreImportPfx(const Pfx: RawByteString; const Password: SpiUtf8;
+  out Store: HCERTSTORE; Flags: cardinal): cardinal;
+var
+  blob: TCryptDataBlob;
+  pwd: PWideChar;
+  tmp: TSynTempBuffer;
+begin
+  Store := nil;
+  result := ERROR_INVALID_DATA;
+  if Pfx = '' then
+    exit;
+  blob.cbData := length(Pfx);
+  blob.pbData := pointer(Pfx);
+  pwd := nil;
+  if Password <> '' then
+    pwd := Utf8ToWin32PWideChar(Password, tmp);
+  try
+    Store := PFXImportCertStore(@blob, pwd, Flags);
+    if Store <> nil then
+      result := NO_ERROR
+    else
+      result := GetLastError; // capture before wiping/freeing temporary data
+  finally
+    if pwd <> nil then
+    begin
+      FillCharFast(tmp.buf^, tmp.len * SizeOf(WideChar), 0); // wipe UTF-16
+      tmp.Done;
+    end;
+  end;
+end;
+
+procedure WinCertStoreDeleteImportedCngKeys(Store: HCERTSTORE; const Log: TSynLogProc);
+var
+  ctxt: PCCERT_CONTEXT;
+  info: TWinCertKeyProviderInfo;
+  prov: NCRYPT_PROV_HANDLE;
+  key: NCRYPT_KEY_HANDLE;
+  providerName, containerName: SynUnicode;
+  id: RawUtf8;
+  ids: TRawUtf8DynArray;
+  err: cardinal;
+begin
+  if Store = nil then
+    exit;
+  ctxt := nil;
+  try
+    repeat
+      ctxt := CertEnumCertificatesInStore(Store, ctxt);
+      if ctxt = nil then
+        break;
+      if not WinCertCtxtKeyProvider(ctxt, info) or
+         (info.ProviderType <> 0) or // LoadPKCS12() is CNG-only
+         (info.Container = '') or
+         (info.Provider = '') then
+        continue;
+      // a chain may contain several certificates referencing the same key
+      Join([info.Provider, #0, Info.Container], id);
+      if (ids <> nil) and
+         (FindNonVoidRawUtf8(pointer(ids), pointer(id), length(id), length(ids)) >= 0) then
+        continue;
+      _addutf8(ids, id);
+      prov := nil;
+      providerName := SynUnicode(info.Provider);
+      err := NCrypt.OpenStorageProvider(prov, pointer(providerName), 0);
+      if err = NO_ERROR then
+        try
+          key := nil;
+          containerName := SynUnicode(info.Container);
+          err := NCrypt.OpenKey(prov, key, pointer(containerName), 0,
+            info.Flags and NCRYPT_MACHINE_KEY_FLAG);
+          if err = NO_ERROR then
+          begin
+            err := NCrypt.DeleteKey(key, 0); // also frees the key on success
+            if err <> NO_ERROR then
+              NCrypt.FreeObject(NCRYPT_HANDLE(key));
+          end;
+        finally
+          NCrypt.FreeObject(NCRYPT_HANDLE(prov));
+        end;
+      if (err <> NO_ERROR) and
+         Assigned(Log) then
+        Log(sllWarning,
+          'LoadPkcs12: unable to delete imported CNG key % via % [%]',
+          [info.Container, info.Provider, OsErrorShort(err)], nil);
+    until false;
+  finally
+    if ctxt <> nil then
+      CertFreeCertificateContext(ctxt);
+  end;
+end;
+
 
 { ****************** High-Level Client and Server Authentication using SSPI }
 
@@ -1763,7 +2345,7 @@ begin
   if (aSecContext.CredHandle.dwLower = -1) and
      (aSecContext.CredHandle.dwUpper = -1) then
   begin
-    Check('Client AcquireCredentialsHandleW',
+    CheckOK('Client AcquireCredentialsHandleW',
       AcquireCredentialsHandleW(nil, pointer(NegotiateName), SECPKG_CRED_OUTBOUND,
       nil, pAuthData, nil, nil, @aSecContext.CredHandle, nil));
     ctx := nil;
@@ -1791,10 +2373,10 @@ begin
   begin
     status := CompleteAuthToken(@aSecContext.CtxHandle, @outDesc);
     if status < 0 then
-      Check('Client CompleteAuthToken', status);
+      CheckOK('Client CompleteAuthToken', status);
   end
   else if status < 0 then
-    Check('Client InitializeSecurityContextW', status);
+    CheckOK('Client InitializeSecurityContextW', status);
   FastSetRawByteString(aOutData, outDesc.Data[0].pvBuffer, outDesc.Data[0].cbBuffer);
   FreeContextBuffer(outDesc.Data[0].pvBuffer);
 end;
@@ -1863,7 +2445,7 @@ end;
 
 function ServerSspiDataNtlm(const aInData: RawByteString): boolean;
 begin
-  result := (aInData <> '') and
+  result := (length(aInData) >= SizeOf(cardinal)) and
             (PCardinal(aInData)^ or $20202020 = NTLM_LO);
 end;
 
@@ -1887,7 +2469,7 @@ begin
       pkg := pointer(NtlmName) // backward compatible but unsafe/legacy
     else
       pkg := pointer(NegotiateName);
-    Check('Server AcquireCredentialsHandleW',
+    CheckOK('Server AcquireCredentialsHandleW',
       AcquireCredentialsHandleW(nil, pkg, SECPKG_CRED_INBOUND,
         nil, nil, nil, nil, @aSecContext.CredHandle, nil));
     ctx := nil;
@@ -1907,10 +2489,10 @@ begin
   begin
     status := CompleteAuthToken(@aSecContext.CtxHandle, @outDesc);
     if status < 0 then
-      Check('Server CompleteAuthToken', status);
+      CheckOK('Server CompleteAuthToken', status);
   end
   else if status < 0 then
-    Check('Server AcceptSecurityContext', status);
+    CheckOK('Server AcceptSecurityContext', status);
   FastSetRawByteString(aOutData, outDesc.Data[0].pvBuffer, outDesc.Data[0].cbBuffer);
   FreeContextBuffer(outDesc.Data[0].pvBuffer);
 end;
@@ -1920,7 +2502,7 @@ procedure ServerSspiAuthUser(var aSecContext: TSecContext;
 var
   Names: SecPkgContext_NamesW;
 begin
-  Check('ServerSspiAuthUser QueryContextAttributesW',
+  CheckOK('ServerSspiAuthUser QueryContextAttributesW',
     QueryContextAttributesW(@aSecContext.CtxHandle, SECPKG_ATTR_NAMES, @Names));
   Win32PWideCharToUtf8(Names.sUserName, aUserName);
   FreeContextBuffer(Names.sUserName);
@@ -1948,7 +2530,7 @@ function SecPackageName(var aSecContext: TSecContext): RawUtf8;
 var
   NegotiationInfo: TSecPkgContext_NegotiationInfo;
 begin
-  Check('SecPackageName',
+  CheckOK('SecPackageName',
     QueryContextAttributesW(@aSecContext.CtxHandle,
       SECPKG_ATTR_NEGOTIATION_INFO, @NegotiationInfo));
   Win32PWideCharToUtf8(NegotiationInfo.PackageInfo^.Name, result);
@@ -2199,12 +2781,12 @@ end;
 { ****************** Windows Application Installation and Servicing (msi) }
 
 const
-  msidll = 'msi.dll';
+  msidll = 'msi.dll'; // introduced with Windows 2000
 
 function MsiOpenProductW;        external msidll;
 function MsiGetProductPropertyW; external msidll;
 function MsiSetInternalUI;       external msidll;
-function MsiEnumProductA;        external msidll;
+function MsiEnumProductsA;       external msidll;
 function MsiOpenDatabaseW;       external msidll;
 function MsiDatabaseOpenViewW;   external msidll;
 function MsiViewExecute;         external msidll;
@@ -2301,11 +2883,346 @@ begin
 end;
 
 
+{ **************** Low-Level Cryptography API: Next Generation (CNG) Functions }
+
+procedure EnsureExists(Api: pointer; const Name: ShortString);
+begin
+  if not Assigned(Api) then
+    raise ENCrypt.CreateFmt('NCrypt%s unavailable on %s', [Name, OSVersionShort]);
+end;
+
+procedure CheckNCrypt(const Name: ShortString; Status: integer);
+begin
+  if status <> NO_ERROR then
+    // OSErrorShort() knows most NTE_* error constants returned by CNG API
+    raise ENCrypt.CreateFmt('NCrypt%s failed %s', [Name, OsErrorShort(Status)]);
+end;
+
+
+{ TNCrypt }
+
+function TNCrypt.FreeSafe(hObject: NCRYPT_HANDLE): integer;
+begin
+  EnsureExists(@FreeObject, 'FreeObject');
+  result := FreeObject(hObject);
+end;
+
+function TNCrypt.GetCardinal(hObject: NCRYPT_HANDLE;
+  PropertyName: PWideChar): cardinal;
+var
+  len: cardinal;
+begin
+  result := 0;
+  EnsureExists(@GetProperty, 'GetProperty');
+  if (hObject = nil) or
+     (PropertyName = nil) then
+    ENCrypt.RaiseFmt(self, 'GetCardinal: invalid parameter', []);
+  len := 0;
+  CheckNCrypt('GetProperty',
+    GetProperty(hObject, PropertyName, @result, SizeOf(result), len, 0));
+  if len <> SizeOf(result) then
+    ENCrypt.RaiseFmt(self,
+      'GetCardinal: unexpected property size %d', [len]);
+end;
+
+function TNCrypt.GetBuffer(hObject: NCRYPT_HANDLE;
+  PropertyName: PWideChar): RawByteString;
+var
+  len, outlen: cardinal;
+begin
+  FastAssignNew(result);
+  EnsureExists(@GetProperty, 'GetProperty');
+  if (hObject = nil) or
+     (PropertyName = nil) then
+    ENCrypt.RaiseFmt(self, 'GetBuffer: invalid parameter', []);
+  len := 0;
+  CheckNCrypt('GetProperty Buffer Size',
+    GetProperty(hObject, PropertyName, nil, 0, len, 0));
+  if len = 0 then
+    exit;
+  pointer(result) := FastNewString(len);
+  outlen := len;
+  CheckNCrypt('GetProperty Buffer Value',
+    GetProperty(hObject, PropertyName, pointer(result), len, outlen, 0));
+  if outlen > len then
+    ENCrypt.RaiseFmt(self,
+      'GetBuffer: unexpected property size %d > %d', [outlen, len]);
+  if outlen <> len then
+    FakeLength(result, outlen);
+end;
+
+function TNCrypt.KeyBits(hKey: NCRYPT_KEY_HANDLE): cardinal;
+begin
+  result := GetCardinal(hKey, NCRYPT_LENGTH_PROPERTY);
+end;
+
+function TNCrypt.KeyUsage(hKey: NCRYPT_KEY_HANDLE): cardinal;
+begin
+  result := GetCardinal(hKey, NCRYPT_KEY_USAGE_PROPERTY);
+end;
+
+function TNCrypt.KeySign(hKey: NCRYPT_KEY_HANDLE; Hash: pointer; HashLen: cardinal;
+  Algo: TNcryptHashAlgo; Mode: TNcryptSignMode; PssSaltLen: cardinal;
+  Silent: boolean): RawByteString;
+var
+  bits, len, outlen, flags: cardinal;
+  padding: pointer;
+  pkcs1: TBcryptPkcs1PaddingInfo;
+  pss: TBcryptPssPaddingInfo;
+begin
+  FastAssignNew(result);
+  EnsureExists(@SignHash, 'SignHash');
+  if (hKey = nil) or
+     (Hash = nil) or
+     (HashLen = 0) then
+    ENCrypt.RaiseFmt(self, 'KeySign: invalid parameter', []);
+  padding := nil;
+  flags := 0;
+  case Mode of
+    nsmEcdsa:
+       pkcs1.pszAlgId := nil; // ECDSA expects raw hash and no padding information
+    nsmRsaPkcs1:
+      begin
+        pkcs1.pszAlgId := BCRYPT_ALGORITHM[Algo];
+        padding := @pkcs1;
+        flags := NCRYPT_PAD_PKCS1_FLAG;
+      end;
+    nsmRsaPss:
+      begin
+        if PssSaltLen = 0 then
+          PssSaltLen := HashLen;
+        pss.pszAlgId := BCRYPT_ALGORITHM[Algo];
+        pss.cbSalt := PssSaltLen;
+        padding := @pss;
+        flags := NCRYPT_PAD_PSS_FLAG;
+      end;
+  else // paranoid
+    ENCrypt.RaiseFmt(self, 'KeySign: invalid signature mode %d', [ord(Mode)]);
+  end;
+  if Silent then
+    flags := flags or NCRYPT_SILENT_FLAG;
+  // don't issue the conventional NCryptSignHash(nil output) size query
+  // - for a hardware KSP we want a single actual signing operation
+  bits := KeyBits(hKey);
+  case Mode of
+    nsmEcdsa:
+      // NCrypt ECDSA signature is fixed-width r || s concatenation
+      len := ((bits + 7) shr 3) shl 1;
+  else
+    // RSA signature size is the modulus size
+    len := (bits + 7) shr 3;
+  end;
+  if len = 0 then
+    ENCrypt.RaiseFmt(self, 'KeySign: invalid key size', []);
+  pointer(result) := FastNewString(len);
+  outlen := len;
+  CheckNCrypt('SignHash',
+    SignHash(hKey, padding, Hash, HashLen, pointer(result), len, outlen, flags));
+  if outlen > len then
+    ENCrypt.RaiseFmt(self,
+      'KeySign: unexpected signature size %d > %d', [outlen, len]);
+  if outlen <> len then
+    FakeLength(result, outlen);
+end;
+
+function TNCrypt.KeyDecryptPkcs1(hKey: NCRYPT_KEY_HANDLE;
+  Input: pointer; InputLen: cardinal; Silent: boolean): RawByteString;
+var
+  len, outlen, flags: cardinal;
+  status: integer;
+begin
+  FastAssignNew(result);
+  EnsureExists(@Decrypt, 'Decrypt');
+  if (hKey = nil) or
+     (Input = nil) or
+     (InputLen = 0) then
+    ENCrypt.RaiseFmt(self, 'KeyDecryptPkcs1: invalid parameter', []);
+  // RSA plaintext can never be bigger than its encrypted modulus-sized block
+  len := InputLen;
+  pointer(result) := FastNewString(len);
+  outlen := len;
+  flags := NCRYPT_PAD_PKCS1_FLAG;
+  if Silent then
+    flags := flags or NCRYPT_SILENT_FLAG;
+  // don't issue the conventional nil-output size query: for a hardware KSP
+  // we want a single actual private-key operation
+  status := Decrypt(hKey, Input, InputLen, nil, pointer(result), len, outlen, flags);
+  if status <> NO_ERROR then
+  begin
+    FillZero(result); // paranoid cleaning of any partial result
+    CheckNCrypt('Decrypt', status); // raises ENCrypt
+  end;
+  if outlen > len then
+  begin
+    FillZero(result);
+    ENCrypt.RaiseFmt(self,
+      'KeyDecryptPkcs1: unexpected plaintext size %d > %d', [outlen, len]);
+  end;
+  if outlen = 0 then
+    FillZero(result)
+  else if outlen <> len then
+    FakeLength(result, outlen);
+end;
+
+function TNCrypt.Unprotect(Buf: pointer; Len, Flags: cardinal): RawByteString;
+var
+  desc: NCRYPT_DESCRIPTOR_HANDLE;
+  plain: pointer;
+  plainlen: cardinal;
+begin
+  FastAssignNew(result);
+  EnsureExists(@UnprotectSecret, 'UnprotectSecret');
+  desc := nil;
+  plain := nil;
+  plainlen := 0;
+  CheckNCrypt('UnprotectSecret',
+    UnprotectSecret(@desc, Flags, Buf, Len, nil, 0, plain, plainlen));
+  if plain <> nil then
+  begin
+    if plainlen <> 0 then
+    begin
+      FastSetRawByteString(result, plain, plainlen);
+      FillCharFast(plain^, plainlen, 0); // anti-forensic
+    end;
+    LocalFree(plain);
+  end;
+  if (desc <> nil) and
+     Assigned(CloseProtectionDescriptor) then
+    CloseProtectionDescriptor(desc);
+end;
+
+function TNCrypt.LapsDecrypt(const bin: RawByteString): RawUtf8;
+var
+  b: PAnsiChar;
+  len, expected, reserved: cardinal;
+  utf16: RawByteString;
+begin
+  result := '';
+  len := length(bin);
+  if len < 16 then
+    ENCrypt.RaiseFmt(self, 'LapsDecrypt: invalid LAPS blob (len=%d)', [len]);
+  b := pointer(bin);
+  expected := len - 16;
+  len := PCardinal(b + 8)^;
+  if len <> expected then
+    ENCrypt.RaiseFmt(self, 'LapsDecrypt: header=%d actual=%d', [len, expected]);
+  reserved := PCardinal(b + 12)^;
+  if reserved <> 0 then
+    ENCrypt.RaiseFmt(self, 'LapsDecrypt: Reserved=0x%.8x', [reserved]);
+  utf16 := NCrypt.Unprotect(b + 16, len, NCRYPT_SILENT_FLAG);
+  Win32PWideCharToUtf8(pointer(utf16), length(utf16) shr 1, result); // UTF-16
+  FillZero(utf16);
+end;
+
+var
+  _NCryptSafe: TLightLock;
+
+function NCrypt: TNCrypt;
+begin
+  result := _NCrypt;
+  if result = nil then
+    result := InitializeNCrypt; // delayed thread-safe loading
+end;
+
+const
+  NCRYPT_NAMES: array[0 .. 13] of PAnsiChar = (
+    'OpenStorageProvider',
+    'OpenKey',
+    'CreatePersistedKey',
+    'GetProperty',
+    'SetProperty',
+    'FinalizeKey',
+    'DeleteKey',
+    'FreeObject',
+    'SignHash',
+    'Decrypt',
+    '?ProtectSecret', // Win8+ APIs
+    '?UnprotectSecret',
+    '?CloseProtectionDescriptor',
+    nil);
+
+function InitializeNCrypt: TNCrypt;
+begin
+  _NCryptSafe.Lock;
+  result := _NCrypt;
+  if result = nil then
+  begin
+    result := TNCrypt.Create;
+    if (OSVersion >= wVista) and            // not available on XP
+       not (wsWeakCng in WindowsSpecs) then // Wine only implements stubs
+       result.TryLoadResolve(['ncrypt.dll'], 'NCrypt', @NCRYPT_NAMES,
+         @@result.OpenStorageProvider, ESynSspi);
+    _NCrypt := result; // should be set last
+  end;
+  _NCryptSafe.UnLock;
+end;
+
+
+
+{ TWinCertCngKey }
+
+function TWinCertCngKey.Init(Ctxt: PCCERT_CONTEXT;
+  Options: TWinCertCngKeyOptions): cardinal;
+var
+  h: HCRYPTPROV;
+  keyspec, flags: cardinal;
+  callerfree: BOOL;
+begin
+  Handle := nil;
+  fCallerFree := false;
+  result := ERROR_INVALID_PARAMETER;
+  if Ctxt = nil then
+    exit;
+  flags := CRYPT_ACQUIRE_ONLY_NCRYPT_KEY_FLAG; // this is a CNG-only wrapper
+  if wckCache in Options then
+    flags := flags or CRYPT_ACQUIRE_CACHE_FLAG
+  else if wckCompareKey in Options then
+    flags := flags or CRYPT_ACQUIRE_COMPARE_KEY_FLAG;
+  if wckSilent in Options then
+    flags := flags or CRYPT_ACQUIRE_SILENT_FLAG;
+  h := nil;
+  keyspec := 0;
+  callerfree := false;
+  if not CryptAcquireCertificatePrivateKey(
+      Ctxt, flags, nil, h, keyspec, callerfree) then
+  begin
+    result := GetLastError;
+    exit;
+  end;
+  if keyspec <> CERT_NCRYPT_KEY_SPEC then
+  begin
+    // paranoid (impossible with CRYPT_ACQUIRE_ONLY_NCRYPT_KEY_FLAG)
+    if (h <> nil) and
+       callerfree and
+       CryptoApi.Available then
+      CryptoApi.ReleaseContext(h, 0);
+    result := ERROR_INVALID_DATA;
+    exit;
+  end;
+  result := ERROR_INVALID_HANDLE;
+  if h = nil then
+    exit;
+  Handle := NCRYPT_KEY_HANDLE(h);
+  fCallerFree := callerfree;
+  result := NO_ERROR;
+end;
+
+procedure TWinCertCngKey.Done;
+begin
+  if fCallerFree and
+     (Handle <> nil) then
+    NCrypt.FreeSafe(Handle);
+  Handle := nil;
+  fCallerFree := false;
+end;
+
+
 
 initialization
   WinCertInfoToText := @_WinCertInfoToText;
 
 finalization
+  _NCrypt.Free;
 
 {$endif OSPOSIX}
 

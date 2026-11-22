@@ -142,6 +142,7 @@ const
   DBACCESSOR_PARAMETERDATA = $00000004;
   DBACCESSOR_OPTIMIZED     = $00000008;
 
+  DB_E_BADROWHANDLE = HRESULT($80040E04);
   DB_E_CANCELED     = HRESULT($80040E4E);
   DB_E_NOTSUPPORTED = HRESULT($80040E53);
 
@@ -668,16 +669,15 @@ type
 type
   /// our custom IRowSet implementation
   TBaseAggregatingRowset = class(TObject, IUnknown, IRowset)
-  private
-   fcTotalRows: UINT;
-   // Defining as an array because in general there can be as many accessors as necessary
-   // the reading rules from the provider for such scenarios are describe in the Books online
-   fhAccessor: HACCESSORDynArray;
   protected
-   fidxRow: UINT;
-   fUnkInnerSQLNCLIRowset: IUnknown;
-   // Save the handle of the accessor that we create, the indexing is 0 based
-   procedure SetAccessorHandle(idxAccessor: ULONG; hAccessor: HACCESSOR );
+    fcTotalRows: UINT;
+    // Defining as an array because in general there can be as many accessors as necessary
+    // the reading rules from the provider for such scenarios are describe in the Books online
+    fhAccessor: HACCESSORDynArray;
+    fidxRow: UINT;
+    fUnkInnerSQLNCLIRowset: IUnknown;
+    // Save the handle of the accessor that we create, the indexing is 0 based
+    procedure SetAccessorHandle(idxAccessor: ULONG; hAccessor: HACCESSOR );
   public
     constructor Create(cTotalRows: UINT);
     function SetupAccessors(pIAccessorTVP: IAccessor): HRESULT; virtual; abstract;
@@ -723,7 +723,7 @@ type
     function GetData(HROW: HROW; HACCESSOR: HACCESSOR; pData: pointer): HRESULT; override; stdcall;
     function SetupAccessors(pIAccessorIDList: IAccessor): HRESULT; override;
 
-    procedure FillRowData(pCurrentRec:PIDListRec);
+    procedure FillRowData(HROW: HROW; pCurrentRec:PIDListRec);
     procedure FillBindingsAndSetupRowBuffer(pBindingsList: PDBBindingArray);
   end;
 
@@ -877,10 +877,9 @@ end;
 
 procedure TIDListRowset.FillBindingsAndSetupRowBuffer(pBindingsList: PDBBindingArray);
 var
-  i: PtrInt;
-  rec: TIDListRec; // pseudo record to compute offset within TIDListRec
+  rec: PIDListRec; // pseudo record to compute offset within TIDListRec
 begin
-  FillcharFast(rec, SizeOf(rec), 0); // makes Win64 compiler happy
+  rec := nil; // make Delphi compiler happy (rec is never accessed by itself)
   pBindingsList[0].pTypeInfo := nil;
   pBindingsList[0].pObject := nil;
   pBindingsList[0].pBindExt := nil;
@@ -893,32 +892,33 @@ begin
     ftInt64:
       begin
         pBindingsList[0].cbMaxLen := SizeOf(int64);
-        pBindingsList[0].obValue := PAnsiChar(@rec.IDVal) - pointer(@rec);
-        pBindingsList[0].wType := DBTYPE_I8;
+        pBindingsList[0].obValue  := PAnsiChar(@rec^.IDVal) - pointer(rec);
+        pBindingsList[0].wType    := DBTYPE_I8;
       end;
     ftUtf8:
       begin
-        pBindingsList[0].cbMaxLen := SizeOf(PWideChar); //Check bind ''
-        for i := 0 to Length(farr) - 1 do
-          if Length(farr[i]) * SizeOf(WideChar) > integer(pBindingsList[0].cbMaxLen) then
-            pBindingsList[0].cbMaxLen := Length(farr[i]) * SizeOf(WideChar);
-        pBindingsList[0].obValue := PAnsiChar(@rec.StrVal) - pointer(@rec);
-        pBindingsList[0].wType := DBTYPE_BSTR
+        pBindingsList[0].cbMaxLen := SizeOf(pointer);
+        pBindingsList[0].obValue  := PAnsiChar(@rec^.StrVal) - pointer(rec);
+        pBindingsList[0].wType    := DBTYPE_BSTR;
       end;
   end;
-  pBindingsList[0].obStatus := PAnsiChar(@rec.IDST) - pointer(@rec);
-  pBindingsList[0].obLength := PAnsiChar(@rec.IDLen) - pointer(@rec);
+  pBindingsList[0].obStatus := PAnsiChar(@rec^.IDST) - pointer(rec);
+  pBindingsList[0].obLength := PAnsiChar(@rec^.IDLen) - pointer(rec);
 end;
 
-procedure TIDListRowset.FillRowData(pCurrentRec: PIDListRec);
+procedure TIDListRowset.FillRowData(HROW: HROW; pCurrentRec: PIDListRec);
 var
-  curInd: integer;
+  p: pointer;
   tmp: RawUtf8;
+  w: WideString; // BSTR local variable allocation
 begin
-  curInd := fidxRow - 2;
-  if farr[curInd] = 'null' then
+  p := pointer(farr[HROW - 1]);
+  if (p <> nil) and
+     (PInteger(p)^ = NULL_LOW) then
   begin
     pCurrentRec.IDST := ord(stIsNull);
+    pCurrentRec.IDLen := 0;
+    pCurrentRec.StrVal := nil; // should be reset
   end
   else
   begin
@@ -926,14 +926,16 @@ begin
     case fType of
       ftInt64:
         begin
-          SetInt64(pointer(farr[curInd]), pCurrentRec.IDVal);
+          SetInt64(p, pCurrentRec.IDVal);
           pCurrentRec.IDLen := SizeOf(Int64);
         end;
       ftUtf8:
         begin
-          tmp := UnQuoteSqlString(farr[curInd]);
-          pCurrentRec.IDLen := (Length(tmp) + 1) * SizeOf(WideChar);
-          pCurrentRec.StrVal := pointer(Utf8ToWideString(tmp));
+          UnQuoteSqlStringVar(p, tmp);
+          Utf8ToWideString(tmp, w);
+          pCurrentRec.IDLen := SizeOf(pointer); // DBTYPE_BSTR
+          pCurrentRec.StrVal := pointer(w);
+          pointer(w) := nil; // binding uses DBMEMOWNER_CLIENTOWNED
         end
     else
       EOleDBException.RaiseUtf8('Unsupported array parameter type %',
@@ -944,12 +946,14 @@ end;
 
 function TIDListRowset.GetData(HROW: HROW; HACCESSOR: HACCESSOR;
   pData: pointer): HResult;
-var
-  currentRec: PIDListRec;
 begin
-  inherited GetData(HROW, HACCESSOR, pData);
-  currentRec := pData;
-  FillRowData(currentRec);
+  if (HROW = 0) or
+     (HROW > PtrUInt(Length(farr))) then
+  begin
+    result := DB_E_BADROWHANDLE;
+    exit;
+  end;
+  FillRowData(HROW, PIDListRec(pData));
   result := S_OK;
 end;
 

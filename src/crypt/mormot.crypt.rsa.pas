@@ -33,17 +33,18 @@ uses
   mormot.core.rtti,
   mormot.core.variants,
   mormot.crypt.core,
-  mormot.crypt.secure;
+  mormot.crypt.secure,
+  mormot.crypt.factory;
   
 {
   Implementation notes:
   - new pure pascal OOP design of BigInt computation optimized for RSA process
-  - garbage collection of BigInt instances, with proper anti-forensic wiping
-  - use half-registers (HalfUInt) for efficient computation on all CPUs
-  - dedicated x86_64/i386 asm for core computation routines (noticeable speedup)
-  - slower than OpenSSL, but likely the fastest FPC or Delphi native RSA library
-  - includes FIPS-level RSA keypair validation and generation
+  - RSA key-pair generation/validation guided by FIPS 186-5 (not FIPS-validated)
   - features both RSASSA-PKCS1-v1_5 and RSASSA-PSS signature schemes
+  - use half-registers (HalfUInt) for efficient computation on all CPUs
+  - dedicated x86_64/i386/aarch64 asm for the core computation routines
+  - garbage collection of BigInt instances, with proper anti-forensic wiping
+  - slower than OpenSSL, but likely the fastest FPC or Delphi native RSA library
   - started as a fcl-hash fork, but full rewrite inspired by Mbed TLS source
   - references: https://github.com/Mbed-TLS/mbedtls and the Handbook of Applied
     Cryptography (HAC) at https://cacr.uwaterloo.ca/hac/about/chap4.pdf
@@ -105,10 +106,12 @@ type
   {$endif USERECORDWITHMETHODS}
   private
     fNextFree: PBigInt; // next bigint in the Owner free instance cache
+    function Is65537: boolean; {$ifdef HASINLINE} inline; {$endif}
     function UsedBytes: integer;
     procedure Resize(n: integer; nozero: boolean = false);
-    procedure XorStrongRandom(last32: PCardinal);
-    procedure FillMillerRabinWitness(Lecuyer: PLecuyer; W: PBigInt);
+    procedure XorStrongRandom(Drbg: TAesPrngAbstract; last32: PCardinal);
+    procedure FillMillerRabinWitness(Drbg: TAesPrngAbstract; W: PBigInt);
+    function PrimeAllowedFor65537: boolean;
   public
     /// the associated Big Integer RSA context
     // - used to store modulo constants, and maintain an internal instance cache
@@ -149,6 +152,10 @@ type
     procedure Save(data: PByteArray; bytes: integer; andrelease: boolean); overload;
     /// export a Big Integer value into a binary RawByteString
     function Save(andrelease: boolean = false): RawByteString; overload;
+    /// export exactly bytes big-endian bytes, padding with leading zeros
+    // - returns '' if the value does not fit
+    // - optionally releases self, like Save()
+    function SaveFixed(bytes: integer; andrelease: boolean = false): RawByteString;
     /// delete any meaningless leading zeros and return self
     function Trim: PBigInt;
       {$ifdef HASSAFEINLINE} inline; {$endif}
@@ -204,10 +211,13 @@ type
     /// standard multiplication between two Big Integer values
     // - will eventually release both self and b instances
     function Multiply(b: PBigInt): PBigInt;
+    /// multiplication modulo RSA_RADIX^LimbCount
+    // - computes only the low LimbCount HalfUInt values (zero if LimbCount <= 0)
+    // - will eventually release both self and b instances, like Multiply()
+    function MultiplyLow(b: PBigInt; LimbCount: integer): PBigInt;
     /// standard multiplication by itself
     // - will allocate a new Big Integer value and release self
     function Square: PBigint;
-      {$ifdef HASINLINE} inline; {$endif}
     /// add an unsigned integer value
     function IntAdd(b: HalfUInt): PBigInt;
     /// substract an unsigned integer value
@@ -235,15 +245,15 @@ type
     function MatchKnownPrime(Extend: TBigIntSimplePrime): boolean;
     /// check if the number is (likely to be) a prime following HAC 4.44
     // - can set a known simple primes Extend and Miller-Rabin tests Iterations
-    // - can reuse a TLecuyer instance between calls as probing random source
+    // - can reuse a DRBG instance between calls as probing random source
     function IsPrime(Extend: TBigIntSimplePrime = bspMost;
-      Iterations: integer = 10; Lecuyer: PLecuyer = nil): boolean;
+      Iterations: integer = 10; Drbg: TAesPrngAbstract = nil): boolean;
     /// guess a random prime number of the exact current size
     // - a secret is generated from audited sources (OS, cpu RdRand), then
     // looped over TAesPrng.Fill and IsPrime method within a timeout period
     // - if Iterations is too low, FIPS 4.48 recommendation will be forced
     function FillPrime(Extend: TBigIntSimplePrime; Iterations: integer;
-      EndTix: Int64): boolean;
+      EndTix: Int64; Drbg: TAesPrngAbstract = nil): boolean;
     /// return the crc32c hash of this Big Integer value binary
     function ToHash: cardinal;
     /// return the Big Integer value as hexadecimal
@@ -284,6 +294,8 @@ type
     fMod: TRsaModulos;
     /// contains the normalized storage
     fNormMod: TRsaModulos;
+    /// contains some pre-computed values for BarretReduce()
+    fBarrettMu: TRsaModulos;
   public
     /// the size of the sliding window
     Window: integer;
@@ -317,12 +329,15 @@ type
     procedure ResetModulo(modulo: TRsaModulo);
     /// compute the reduction of a Big Integer value in a given modulo
     // - if m is nil, SetModulo() should have previously be called
+    // - optional BarrettMu = floor(RSA_RADIX^(2*m.Size) / m) is borrowed
+    // for an explicit nonzero trimmed m, without changing CurrentModulo
     // - will eventually release the b instance
-    function Reduce(b, m: PBigint): PBigInt;
+    function Reduce(b, m: PBigint; BarrettMu: PBigInt = nil): PBigInt;
     /// compute a modular exponentiation, i.e. b^exp mod m
     // - if m is nil, SetModulo() should have previously be called
+    // - optional BarrettMu is borrowed and reused for all reductions with m
     // - will eventually release the b and exp instances
-    function ModPower(b, exp, m: PBigInt): PBigInt;
+    function ModPower(b, exp, m: PBigInt; BarrettMu: PBigInt = nil): PBigInt;
   end;
 
 const
@@ -338,7 +353,7 @@ const
   // - TBigInt.FillPrime will ensure FIPS 186-5 minimum iteration is always used
   RSA_DEFAULT_GENERATION_ITERATIONS = 0;
 
-  /// generates RSA keypairs in a time-coherent fashion
+  /// generates RSA keypairs in a time-coherent fashion - for RSA-2048 size
   {$ifdef CPUARM3264}
   // - we have seen some weak Raspberry PI timeout so 30 seconds seems fair
   // - CPUARM3264 and not CPUARM, which FPC only defines on 32-bit ARM: aarch64
@@ -625,10 +640,12 @@ type
     fSafe: TOSLightLock; // for Verify() and Sign() - not reentrant lock
     fM, fE, fD, fP, fQ, fDP, fDQ, fQInv: PBigInt;
     fModulusLen, fModulusBits: integer;
+    fDrbg: TAesPrngAbstract;
     /// compute the Chinese Remainder Theorem (CRT) for RSA sign/decrypt
     function ChineseRemainderTheorem(b: PBigInt): PBigInt;
     function Pkcs1UnPad(p: PByteArray; verify: boolean): RawByteString;
     function Pkcs1Pad(p: pointer; n: integer; sign: boolean): RawByteString;
+    function GetDrbg: TAesPrngAbstract;
   public
     /// initialize the RSA key context
     constructor Create; override;
@@ -666,6 +683,7 @@ type
     // - searching for proper random primes may take a lot of time on low-end
     // CPU so a timeout period can be supplied (default 10 secs)
     // - if Iterations value is too low, the FIPS recommendation will be forced
+    // - creates a temporary background thread for parallel p/q prime computation
     // - on a slow CPU or with a huge number of Bits, you can increase TimeOutMS
     // - hint: consider using the TRsa.GenerateNew factory , which would properly
     // handle rgrWeakBitsMayRetry result
@@ -782,6 +800,12 @@ type
     /// RSA Private key CRT coefficient satisfying q * qInv == 1 (mod p)
     property QInv: PBigInt
       read fQInv;
+    /// the PRNG used by this instance for its padding/witness process
+    // - fallback to TAesPrng.Main CSPRNG by default
+    // - generation seed will always use trusted OS sources for its keys, not
+    // this TAesPrngAbstract
+    property Drbg: TAesPrngAbstract
+      read GetDrbg write fDrbg;
   published
     /// RSA modulus size in bits
     property ModulusBits: integer
@@ -815,6 +839,19 @@ type
     // - this method is thread-safe but blocking from several threads
     function Sign(Hash: PHash512; HashAlgo: THashAlgo): RawByteString; override;
   end;
+
+  /// callback used by RsaOpen() to decrypt one PKCS#1 v1.5 RSA block
+  // - Input points to ModulusLen bytes
+  // - returns the unpadded binary value, or '' on error
+  // - allows external/private-key providers to reuse the same RSA envelope
+  // decoding as TRsa.Open()
+  TRsaPkcs1Decrypt = function(Input: pointer): RawByteString of object;
+
+/// decrypt a message encoded by TRsa.Seal() using an external RSA private key
+// - shares the exact same EVP_SealInit/EVP_OpenInit compatible envelope as
+// TRsa.Open(), but delegates the PKCS#1 private operation to Decrypt
+function RsaOpen(Cipher: TAesAbstractClass; AesBits, ModulusLen: integer;
+  const Message: RawByteString; const Decrypt: TRsaPkcs1Decrypt): RawByteString;
 
 /// low-level computation of the ASN.1 sequence of a hash signature
 // - following RSASSA-PKCS1-v1_5 signature scheme RFC 8017 #9.2 steps 1 and 2
@@ -1241,6 +1278,32 @@ begin
   Save(pointer(result), length(result), andrelease);
 end;
 
+function TBigInt.SaveFixed(bytes: integer; andrelease: boolean): RawByteString;
+var
+  used: integer;
+  p: PByteArray;
+begin
+  FastAssignNew(result);
+  try
+    if (@self = nil) or
+       (bytes <= 0) then
+      exit;
+    used := 0; // number of significant bytes
+    if Size > 0 then
+      used := (BitCount + 7) shr 3;
+    if used > bytes then // I2OSP requires to fit the requested width
+      exit;
+    p := FastNewString(bytes);
+    pointer(result) := p;
+    dec(bytes, used);
+    FillCharFast(p^, bytes, 0);
+    MoveSwap(@p[bytes], pointer(Value), used); // fill the actual data
+  finally
+    if andrelease then
+      Release;
+  end;
+end;
+
 function TBigInt.Add(b: PBigInt): PBigInt;
 var
   n: integer;
@@ -1255,7 +1318,7 @@ begin
     pa := pointer(Value);
     pb := pointer(b^.Value);
     v := 0;
-    {$ifdef ASMINTEL}
+    {$ifdef ASMINTELARM64}
     while n >= _xasmaddn div HALF_BYTES do // 512/1024-bit per iteration
     begin
       v := _xasmadd(pa, pb, v);
@@ -1264,7 +1327,7 @@ begin
       dec(n, _xasmaddn div HALF_BYTES);
     end;
     if n > 0 then
-    {$endif ASMINTEL}
+    {$endif ASMINTELARM64}
       repeat
         inc(v, PtrUInt(pa^) + pb^); // 16/32-bit per iteration
         pa^ := v;
@@ -1293,7 +1356,7 @@ begin
     pa := pointer(Value);
     pb := pointer(b^.Value);
     v := 0;
-    {$ifdef ASMINTEL}
+    {$ifdef ASMINTELARM64}
     while n >= _xasmsubn div HALF_BYTES do // 512/1024-bit per iteration
     begin
       v := _xasmsub(pa, pb, v);
@@ -1302,7 +1365,7 @@ begin
       dec(n, _xasmsubn div HALF_BYTES);
     end;
     if n > 0 then
-    {$endif ASMINTEL}
+    {$endif ASMINTELARM64}
       repeat // 16/32-bit per iteration
         v := PtrUInt(pa^) - pb^ - v;
         pa^ := v;
@@ -1331,7 +1394,7 @@ begin
   r := pointer(result^.Value);
   v := 0;
   n := Size;
-  {$ifdef ASMINTEL}
+  {$ifdef ASMINTELARM64}
   while n >= _xasmmuln div HALF_BYTES do // 256/512-bit per iteration
   begin
     v := _xasmmul(a, r, b, v);
@@ -1340,7 +1403,7 @@ begin
     dec(n, _xasmmuln div HALF_BYTES);
   end;
   if n > 0 then
-  {$endif ASMINTEL}
+  {$endif ASMINTELARM64}
     repeat // 16/32-bit per iteration
       inc(v, PtrUInt(a^) * b);
       r^ := v;
@@ -1363,7 +1426,7 @@ begin
   n := Size;
   a := @Value[n];
   v := 0;
-  {$ifdef ASMINTEL}
+  {$ifdef ASMINTELARM64}
   while n >= _xasmdivn div HALF_BYTES do // 512/1024-bit per iteration
   begin
     dec(PByte(a), _xasmdivn);
@@ -1371,7 +1434,7 @@ begin
     dec(n, _xasmdivn div HALF_BYTES);
   end;
   if n > 0 then
-  {$endif ASMINTEL}
+  {$endif ASMINTELARM64}
     repeat // 16/32-bit per iteration
       dec(a);
       v := (v shl HALF_BITS) + a^; // inject carry as high bits
@@ -1395,7 +1458,7 @@ begin
   n := Size;
   v := @Value[n];
   result := 0;
-  {$ifdef ASMINTEL}
+  {$ifdef ASMINTELARM64}
   while n >= _xasmmodn div HALF_BYTES do // 512/1024-bit per iteration
   begin
     dec(PByte(v), _xasmmodn);
@@ -1403,7 +1466,7 @@ begin
     dec(n, _xasmmodn div HALF_BYTES);
   end;
   if n > 0 then
-  {$endif ASMINTEL}
+  {$endif ASMINTELARM64}
     repeat // 16/32-bit per iteration
       dec(v);
       result := ((result shl HALF_BITS) + v^) mod bb;
@@ -1413,24 +1476,27 @@ end;
 
 function TBigInt.IntDivMod10: PtrUInt;
 var
-  d: PtrUInt;
+  v, d: PtrUInt;
   i: PtrInt;
 begin
-  i := Size - 1;
-  result := Value[i];
-  d := result div 10;
-  if d = 0 then
-    dec(Size); // auto trim
-  Value[i] := d;
-  dec(result, d * 10);
-  while i <> 0 do // 16-bit or 32-bit per iteration
-  begin
+  result := 0;
+  i := Size;
+  if i = 0 then
+    exit;
+  repeat
     dec(i);
-    result := (result shl HALF_BITS) + Value[i];
-    d := result div 10;  // fast multiplication by reciprocal on FPC
-    Value[i] := d;
-    dec(result, d * 10);
-  end;
+    v := PtrUInt(Value[i]) + result * 6;
+    {$ifdef CPU32} // use constant multiplication by reciprocal on all CPUs
+    d := (v * PtrUInt($cccd)) shr 19;
+    Value[i] := HalfUInt(result * PtrUInt($1999) + d);
+    {$else}
+    d := (v * DIV10_INV) shr 35;
+    Value[i] := HalfUInt(result * PtrUInt($19999999) + d);
+    {$endif CPU32}
+    result := v - d * 10;
+  until i = 0;
+  if Value[Size - 1] = 0 then
+    dec(Size);
 end;
 
 function TBigInt.ModInverse(m: PBigInt): PBigInt;
@@ -1569,7 +1635,12 @@ var
 begin
   {$ifndef NOCOMPRESSEDTABLE}
   if BIGINT_PRIMES[high(BIGINT_PRIMES)] = 0 then // should equal 17989
-    ComputeAllPrimes; // delayed initialization - thread safe by design
+  begin
+    GlobalLock;
+    if BIGINT_PRIMES[high(BIGINT_PRIMES)] = 0 then
+      ComputeAllPrimes; // delayed thread safe initialization
+    GlobalUnLock;
+  end;
   {$endif NOCOMPRESSEDTABLE}
   if not IsZero then
   begin
@@ -1583,80 +1654,153 @@ begin
   result := false;
 end;
 
-procedure TBigInt.FillMillerRabinWitness(Lecuyer: PLecuyer; W: PBigInt);
+procedure TBigInt.FillMillerRabinWitness(Drbg: TAesPrngAbstract; W: PBigInt);
 var
-  c: cardinal;
+  c, bits, bytes, last, tail: integer;
 begin
-  for c := 1 to 16 do // safeguard against TLecuyer regression
+  // witness selection as described in FIPS 186-5 B.3.1
+  bits := W.BitCount;
+  bytes := (bits + 7) shr 3;
+  last := bits and (HALF_BITS - 1);
+  for c := 1 to 128 do // safeguard against a failing DRBG
   begin
-    if W.Size = 1 then
-      Value[0] := Lecuyer^.Next(W.Value[0]) or 1 // odd a < w
-    else
-    begin
-      Size := W.Size - 1; // ensure a < w
-      Lecuyer^.Fill(Value, Size * HALF_BYTES);
-      Value[0] := Value[0] or 1; // odd
-      Trim; // needed for Compare() to work with new size
-    end;
-    if (Compare(1) > 0) and // expects 1 < a < w
+    Resize(W.Size, {nozero=}true); // reuse existing Value[] array
+    Drbg.FillRandom(Value, bytes);
+    tail := Size * HALF_BYTES - bytes;
+    if tail <> 0 then
+      FillCharFast(PAnsiChar(Value)[bytes], tail, 0);
+    if last <> 0 then // truncate
+      Value[Size - 1] := Value[Size - 1] and (high(HalfUInt) shr (HALF_BITS - last));
+    Trim; // required by Compare()
+    if (Compare(1) > 0) and
        (Compare(W) < 0) then
-      exit;
+      exit; // uniform rejection sampling: 2 <= a <= candidate - 2
   end;
-  ERsaException.RaiseU('TBigInt.FillMillerRabinWitness failed');
+  ERsaException.RaiseUtf8('TBigInt.FillMillerRabinWitness failed with %', [Drbg]);
+end;
+
+function TBigInt.Is65537: boolean;
+begin
+  result := (Size = (32 div HALF_BITS)) and
+            (PCardinal(Value)^ = 65537); // common Exponent from FIPS 5.4 (e)
+end;
+
+function TBigInt.PrimeAllowedFor65537: boolean;
+var
+  i, v, sum: PtrInt; // could be negative
+begin
+  // for e=65537, quickly reject p mod e = 1 (safe for keys up to 8192 bits)
+  sum := 0;
+  for i := 0 to Size - 1 do
+  begin
+    // CPU32: 2^16 = -1 (mod 65537), CPU64: 2^32 = 1 (mod 65537)
+    v := Value[i];
+    {$ifdef CPU32}
+    if Odd(i) then
+      dec(sum, v)
+    else
+      inc(sum, v);
+    {$else}
+    inc(sum, v and $ffff);
+    dec(sum, v shr 16);
+    {$endif CPU32}
+  end;
+  // test divisibility of sum-1, including negative sums
+  result := ((sum - 1) mod 65537) <> 0;
 end;
 
 function TBigInt.IsPrime(Extend: TBigIntSimplePrime; Iterations: integer;
-  Lecuyer: PLecuyer): boolean;
+  Drbg: TAesPrngAbstract): boolean;
 var
-  r, a, w: PBigInt;
-  s, n, bak: integer;
+  r, a, w, mu, t: PBigInt;
+  s, bak, bit: integer;
+
+  function StrongWitness: boolean;
+  var
+    j: integer;
+  begin
+    // a already contains witness^r mod self
+    result := true;
+    if (a.Compare(1) = 0) or
+       (a.Compare(w) = 0) then
+      exit;
+    for j := 1 to s - 1 do
+    begin
+      a := Owner.Reduce(a.Square, @self, mu);
+      if a.Compare(w) = 0 then
+        exit;
+      if a.Compare(1) = 0 then
+        break;
+    end;
+    result := false;
+  end;
+
 begin
   // first check if not a factor of a well-known small prime
-  result := (Size = (32 div HALF_BITS)) and
-            (PCardinal(Value)^ = 65537); // common Exponent from FIPS 5.4 (e)
+  result := Is65537;
   if result or // result = true for common 65537 prime > BIGINT_PRIMES[]
      IsZero or
      (Iterations <= 0) or
      MatchKnownPrime(Extend) then // detect most of the composite integers
     exit;
   // validate is a prime number using Miller-Rabin iterative tests (HAC 4.24)
-  if Lecuyer = nil then      // gsl_rng_taus2 CSPRNG 88-bit uniform distribution
-    Lecuyer := ThreadRandom; // if not supplied by caller
+  if Drbg = nil then       // NIST FIPS 186-5 requires an approved DRBG
+    Drbg := TAesPrng.Main; // if not supplied by caller
   bak := RefCnt;
   RefCnt := -1; // make permanent for use as modulo below
-  w := Clone.IntSub(1); // w = value - 1
-  r := w.Clone;
-  a := Owner.Allocate(Size, []);
+  w := nil;
+  r := nil;
+  a := nil;
+  mu := nil;
+  t := nil;
   try
+    w := Clone.IntSub(1); // w = value - 1
+    r := w.Clone;
     // compute s = lsb(w) and r = w shr s
     s := r.FindMinBit;
     r.ShrBits(s);
+    // one Barrett reciprocal per candidate, shared by all witness rounds
+    // keep it local: IsPrime may run on an already initialized RSA context
+    t := Owner.AllocateFrom(1).LeftShift(2 * Size);
+    mu := t.Divide(@self);
+    // fast strong probable-prime test for base 2
+    a := Owner.AllocateFrom(2);
+    // compute 2^r mod self - highest exponent bit is represented by a = 2
+    for bit := r.BitCount - 2 downto 0 do
+    begin
+      a := Owner.Reduce(a.Square, @self, mu);
+      if r.BitIsSet(bit) then
+      begin
+        // a = 2*a mod self, since 0 <= a < self
+        a.ShlBits(1);
+        if a.Compare(@self) >= 0 then
+          a.Substract(Clone);
+      end;
+    end;
+    if not StrongWitness then
+      exit; // composite
+    // need the original randomized Miller-Rabin algorithm
+    a.Release;
+    a := Owner.Allocate(Size, []);
+    t.Release;
+    t := nil;
     while Iterations > 0 do
     begin
       dec(Iterations);
       // generate random 1 < a < value - 1
-      a.FillMillerRabinWitness(Lecuyer, w);
+      a.FillMillerRabinWitness(Drbg, w);
       // search if a is composite
-      a := Owner.ModPower(a, r.Copy, @self); // a = a^r mod value
-      if (a.Compare(1) = 0) or
-         (a.Compare(w) = 0) then
-        continue; // this random is related: try outside the family
-      for n := 1 to s - 1 do
-      begin
-        a := Owner.Reduce(a.Square, @self); // a = (a*a) mod value
-        if (a.Compare(w) = 0) or
-           (a.Compare(1) = 0) then
-          break;
-      end;
-      if (a.Compare(w) <> 0) or
-         (a.Compare(1) = 0) then
-        exit; // not a prime
+      a := Owner.ModPower(a, r.Copy, @self, mu); // a = a^r mod value
+      if not StrongWitness then
+        exit; // composite
     end;
     result := true;
   finally
     a.Release;
     r.Release;
     w.Release;
+    mu.Release;
+    t.Release;
     RefCnt := bak;
   end;
 end;
@@ -1666,9 +1810,9 @@ begin
   // ensure 2^-112 error probability - see FIPS 186-5 appendix B.3 table B.1
   if bits >= 1536  then
     result := 4   // absolute allowed minimum, even with bits=8192
-  else if bits >= 1024 shr HALF_SHR then
+  else if bits >= 1024 then
     result := 5
-  else if bits >= 512 shr HALF_SHR then
+  else if bits >= 512 then
     result := 15  // not allowed by FIPS anyway
   else
     result := 51; // never used in practice for RSA
@@ -1679,36 +1823,35 @@ const
   FIPS_MIN = $b504f334; // = ceil(sqrt(2) * 2^31) for the top 32-bit dword
   FIPS_RANGE = high(cardinal) - FIPS_MIN + 1; // allowed top-dword interval size
 
-procedure TBigInt.XorStrongRandom(last32: PCardinal);
+procedure TBigInt.XorStrongRandom(Drbg: TAesPrngAbstract; last32: PCardinal);
 var
   min: integer;
 begin
   min := 4; // paranoid
   repeat
-    TAesPrng.Main.XorRandom(Value, Size * HALF_BYTES);
+    Drbg.XorRandom(Value, Size * HALF_BYTES);
     // CSPRNG sanity check (no RSA requirement): half the bits are set on average
     if GetBitsCount(Value^, Size * HALF_BITS) > Size * (HALF_BITS div 3) then
     begin
       // should be a big enough odd number
       Value[0] := Value[0] or 1;  // set lower bit to ensure it is an odd number
       if last32^ < FIPS_MIN then  // FIPS 186 range requirement
-        last32^ := FIPS_MIN + TAesPrng.Main.Random32(FIPS_RANGE);
+        last32^ := FIPS_MIN + Drbg.Random32(FIPS_RANGE);
       if last32^ >= FIPS_MIN then // paranoid
         exit;                     // correct random number
     end;
     dec(min); // with our TAesPrng, it never occurred after 1,000,000,000 trials
     if min = 0 then // paranoid
-      ERsaException.RaiseU('TBigInt.FillPrime: weak');
+      ERsaException.RaiseU('TBigInt.FillPrime: weak XorRandom');
   until false;
 end;
 
 function TBigInt.FillPrime(Extend: TBigIntSimplePrime; Iterations: integer;
-  EndTix: Int64): boolean;
+  EndTix: Int64; Drbg: TAesPrngAbstract): boolean;
 var
   min, bytes: integer;
   last32: PCardinal;
   rnd: RawByteString;
-  lecuyer: PLecuyer;
 begin
   // ensure it is worth searching (paranoid)
   if Size <= 2 then
@@ -1721,34 +1864,32 @@ begin
   if Iterations < min then // ensure at least FIPS recommendation
     Iterations := min;
   // compute a random number following FIPS 186-4 B.3.3 steps 4.4, 5.5
+  if Drbg = nil then
+    Drbg := TAesPrng.Main; // if none supplied
   bytes := Size * HALF_BYTES;
-  pointer(rnd) := FastNewString(bytes);
   // since randomness may be a weak point, consolidate several trusted sources
   // see https://ieeexplore.ieee.org/document/9014350
   // note that RSA-2048 requires only 128-bit of true cryptographic randomness
-  FillSystemRandom(pointer(rnd), bytes, {mayblock=}true); // official OS API
-  {$ifdef ASMINTEL} // claimed to be NIST SP 800-90A and FIPS 140-2 compliant
-  RdRand32(pointer(rnd), bytes shr 2);                    // xor HW CPU prng
-  {$endif ASMINTEL}
-  // compute initial trusted random Value = TKS1-sha-256(rnd)
-  AFDiffusion(pointer(Value), pointer(rnd), bytes);
+  rnd := Drbg.FillRandomTrusted(bytes);
+  if rnd = '' then
+    ESynCrypto.RaiseU('TBigInt.FillPrime: no compliant CSPRNG available');
+  AFDiffusion(pointer(Value), pointer(rnd), bytes); // = TKS1-sha-256(rnd)
+  FillZero(rnd);                                    // anti-forensic
   // xor Value original trusted sources with our CSPRNG until we get enough bits
   last32 := @Value[Size - 1 {$ifdef CPU32} - 1 {$endif}];
-  XorStrongRandom(last32);
-  FillZero(rnd); // anti-forensic counter measure
+  XorStrongRandom(Drbg, last32);
   // brute force search for the next prime starting at this point
-  lecuyer := ThreadRandom; // retrieve once
   result := false; // timeout
   min := 0;
   repeat
-    if IsPrime(Extend, Iterations, lecuyer) then // small primes + Miller-Rabin
+    if IsPrime(Extend, Iterations, Drbg) then // small primes + Miller-Rabin
     begin
       result := true; // we got lucky
       exit;
     end;
     IntAdd(2); // incremental search of odd number - see HAC 4.51
     if last32^ < FIPS_MIN then
-      XorStrongRandom(last32); // handle IntAdd overflow - paranoid but safe
+      XorStrongRandom(Drbg, last32); // handle IntAdd overflow - paranoid
     inc(min);
   until (min and 63 = 0) and       // check only once in a while (avoid OS call)
         (GetTickCount64 > EndTix); // IsPrime() may be slow for sure
@@ -1974,7 +2115,7 @@ var
   carry: PtrUInt;
 begin
   carry := 0; // initial carry value
-  {$ifdef ASMINTEL}
+  {$ifdef ASMINTELARM64}
   while n >= _xasmmuladdn div HALF_BYTES do // 256/512-bit per loop
   begin
     carry := _xasmmuladd(src, dst, factor, carry);
@@ -1983,7 +2124,7 @@ begin
     dec(n, _xasmmuladdn div HALF_BYTES);
   end;
   if n > 0 then
-  {$endif ASMINTEL}
+  {$endif ASMINTELARM64}
     repeat // 16/32-bit per iteration
       inc(carry, PtrUInt(dst^) + PtrUInt(src^) * factor);
       dst^ := carry;
@@ -2008,9 +2149,70 @@ begin
   result := r.Trim;
 end;
 
-function TBigInt.Square: PBigint;
+function TBigInt.MultiplyLow(b: PBigInt; LimbCount: integer): PBigInt;
+var
+  r: PBigInt;
+  i, n: PtrInt;
 begin
-  result := Multiply(Copy);
+  if LimbCount <= 0 then
+    r := Owner.AllocateFrom(0)
+  else
+  begin
+    n := MinPtrInt(LimbCount, Size + b^.Size);
+    // RawMultiply writes one final carry: reserve a scratch limb even when
+    // the row ends at the truncation boundary, then discard that carry
+    r := Owner.Allocate(n + 1);
+    for i := 0 to MinPtrInt(b^.Size, n) - 1 do
+      RawMultiply(pointer(Value), @r^.Value[i],
+        MinPtrInt(Size, n - i), b^.Value[i]);
+    r^.Size := n;
+  end;
+  Release;
+  b.Release;
+  result := r.Trim;
+end;
+
+{$ifndef ASMINTELARM} // pure pascal fallback
+procedure _xasmsquarediagonal(Src, Dst: PHalfUInt; Count: PtrUInt);
+var
+  square, carry: PtrUInt;
+begin
+  carry := 0;
+  repeat
+    square := PtrUInt(Src^) * PtrUInt(Src^);
+    inc(carry, (PtrUInt(Dst^) shl 1) + HalfUInt(square));
+    Dst^ := carry;
+    inc(Dst);
+    carry := (carry shr HALF_BITS) + (PtrUInt(Dst^) shl 1) +
+             (square shr HALF_BITS);
+    Dst^ := carry;
+    carry := carry shr HALF_BITS;
+    inc(Dst);
+    inc(Src);
+    dec(Count);
+  until Count = 0;
+end;
+{$endif ASMINTELARM}
+
+function TBigInt.Square: PBigInt;
+var
+  r: PBigInt;
+  n, i: PtrInt;
+begin
+  n := Size;
+  if n <= 2 then
+  begin
+    result := Multiply(Copy); // not worth any optimization
+    exit;
+  end;
+  r := Owner.Allocate(n shl 1); // zeroed 2*n-limb result
+  // compute off-diagonal products as r = sum(a[i] * a[j] * B^(i+j)), for j < i
+  for i := 0 to n - 2 do
+    RawMultiply(@Value[i + 1], @r^.Value[2 * i + 1], n - i - 1, Value[i]);
+  // double off-diagonal products and add diagonal squares in a single pass
+  _xasmsquarediagonal(pointer(Value), pointer(r^.Value), n);
+  Release;
+  result := r.Trim;
 end;
 
 function TBigInt.IntAdd(b: HalfUInt): PBigInt;
@@ -2131,8 +2333,10 @@ var
 begin
   n := length(hex) shr 1;
   result := Allocate(n div HALF_BYTES, []);
-  if not HexDisplayToBin(pointer(hex), pointer(result^.Value), n) then
-    Release([@result]);
+  if HexDisplayToBin(pointer(hex), pointer(result^.Value), n) then
+    exit;
+  result.Release;
+  result := nil;
 end;
 
 const
@@ -2194,47 +2398,176 @@ procedure TRsaContext.SetModulo(b: PBigInt; modulo: TRsaModulo);
 var
   d: HalfUInt;
   k: integer;
+  t: PBigInt;
 begin
   k := b^.Size;
   fMod[modulo] := b;
   d := RSA_RADIX div (PtrUInt(b^.Value[k - 1]) + 1);
   fNormMod[modulo] := b.IntMultiply(d).SetPermanent;
+  // precompute Barrett reciprocal: mu = floor(B^(2*k) / modulus)
+  if (b^.Value[k - 1] <> 0) and
+     not b^.IsZero then
+  begin
+    t := AllocateFrom(1).LeftShift(2 * k);
+    try
+      fBarrettMu[modulo] := t.Divide(b.Copy).SetPermanent;
+    finally
+      t.Release;
+    end;
+  end;
 end;
 
 procedure TRsaContext.ResetModulo(modulo: TRsaModulo);
 begin
   fMod[modulo].ResetPermanentAndRelease;
   fNormMod[modulo].ResetPermanentAndRelease;
+  fBarrettMu[modulo].ResetPermanentAndRelease;
 end;
 
-function TRsaContext.Reduce(b, m: PBigint): PBigInt;
+function BarrettReduce(x, modulus, mu: PBigInt): PBigInt;
+var
+  k, qlen, n, i, first: PtrInt;
+  q, r, r2: PBigInt;
 begin
-  if m = nil then
-    result := b^.Divide(fMod[CurrentModulo], bidModNorm)
+  k := modulus^.Size;
+  // x < B^(2*k), with B = RSA_RADIX
+  if x^.Compare(modulus) < 0 then
+  begin
+    result := x^.Clone;
+    exit;
+  end;
+  // q1 = floor(x / B^(k-1))
+  qlen := x^.Size - k + 1;
+  // Compute only the upper portion of q1 * mu.
+  // Omit partial products at positions below k-1.
+  // The discarded part is < B^(k+1) for RSA limb sizes,
+  // so the resulting q3 may be at most one too small.
+  n := qlen + mu^.Size - k + 1;
+  q := x^.Owner.Allocate(n);
+  for i := 0 to mu^.Size - 1 do
+  begin
+    first := k - 1 - i;
+    if first < 0 then
+      first := 0;
+    if first < qlen then
+      RawMultiply(
+        @x^.Value[k - 1 + first],
+        @q^.Value[i + first - k + 1],
+        qlen - first, mu^.Value[i]);
+  end;
+  // q holds the partial product shifted by k-1 limbs.
+  // Two more limbs give floor(q1 * mu / B^(k+1)),
+  // possibly underestimated by one.
+  q.RightShift(2);
+  // r2 = (q3 * modulus) mod B^(k+1)
+  r2 := q.MultiplyLow(modulus.Copy, k + 1);
+  // r1 = x mod B^(k+1)
+  // Copy only the needed low limbs, not all of x.
+  r := x^.Owner.Allocate(k + 1);
+  MoveFast(x^.Value[0], r^.Value[0], MinPtrInt(x^.Size, k + 1) * HALF_BYTES);
+  // r = (r1 - r2) mod B^(k+1)
+  result := r.Substract(r2);
+  // at most three corrections needed
+  if result^.Compare(modulus) < 0 then
+    exit;
+  result := result.Substract(modulus.Copy);
+  if result^.Compare(modulus) < 0 then
+    exit;
+  result := result.Substract(modulus.Copy);
+  if result^.Compare(modulus) >= 0 then
+    result := result.Substract(modulus.Copy);
+end;
+
+function TRsaContext.Reduce(b, m: PBigInt; BarrettMu: PBigInt): PBigInt;
+var
+  modvalue, mu: PBigInt;
+begin
+  if m = nil then // use pre-computed constants
+  begin
+    modvalue := fMod[CurrentModulo];
+    mu := fBarrettMu[CurrentModulo];
+    if (mu <> nil) and
+       (b^.Size <= 2 * modvalue^.Size) then
+      result := BarrettReduce(b, modvalue, mu)
+    else
+      result := b^.Divide(modvalue, bidModNorm);
+  end
+  else if (BarrettMu <> nil) and
+          (b^.Size <= 2 * m^.Size) then
+    result := BarrettReduce(b, m, BarrettMu)
   else
-    result := b^.Divide(m, bidMod); // custom modulo has no pre-computed const
+    // full slower modulo calculation of arbitrary modulus
+    result := b^.Divide(m, bidMod);
   b^.Release;
 end;
 
-function TRsaContext.ModPower(b, exp, m: PBigInt): PBigInt;
+function TRsaContext.ModPower(b, exp, m: PBigInt; BarrettMu: PBigInt): PBigInt;
 var
-  base, exponent: PBigInt;
+  base, exponent, base2: PBigInt;
+  bits, i, j, lo, w: PtrInt;
+  powers: array[0 .. 7] of PBigInt; // base^1/3/5/7/9/11/13/15
 begin
-  result := AllocateFrom(1);
-  exponent := exp.Clone;
-  exp.Release;
-  base := Reduce(b, m);
-  while not exponent.IsZero do
+  base := Reduce(b, m, BarrettMu);
+  if exp.Is65537 then
   begin
-    if exponent.IsOdd then
-      result := Reduce(result.Multiply(base.Copy), m);
-    exponent.ShrBits;
-    if exponent.IsZero then
-      break;
-    base := Reduce(base.Square, m);
+    // fast path for most common public exponent e = 65537 = 2^16 + 1
+    result := base.Copy;
+    for j := 1 to 16 do
+      result := Reduce(result.Square, m, BarrettMu);
+    result := Reduce(result.Multiply(base.Copy), m, BarrettMu);
+    base.Release;
+    exp.Release;
+    exit;
   end;
-  base.Release;
-  exponent.Release;
+  result := AllocateFrom(1);
+  bits := exp.BitCount;
+  if bits < 256 then
+  begin
+    // simple binary exponentiation
+    exponent := exp.Clone;
+    exp.Release;
+    while not exponent.IsZero do
+    begin
+      if exponent.IsOdd then
+        result := Reduce(result.Multiply(base.Copy), m, BarrettMu);
+      exponent.ShrBits;
+      if exponent.IsZero then
+        break;
+      base := Reduce(base.Square, m, BarrettMu);
+    end;
+    base.Release;
+    exponent.Release;
+    exit;
+  end;
+  // 4-bit sliding window: precompute odd powers once
+  powers[0] := base;
+  base2 := Reduce(base.Copy.Square, m, BarrettMu);
+  for j := 1 to high(powers) do
+    powers[j] := Reduce(powers[j - 1].Copy.Multiply(base2.Copy), m, BarrettMu);
+  base2.Release;
+  i := bits - 1;
+  while i >= 0 do
+    if not exp.BitIsSet(i) then
+    begin
+      result := Reduce(result.Square, m, BarrettMu);
+      dec(i);
+    end
+    else
+    begin
+      lo := MaxPtrInt(0, i - 3);
+      while not exp.BitIsSet(lo) do
+        inc(lo); // choose an odd w of up to 4 bits
+      w := 0;
+      for j := i downto lo do
+        w := (w shl 1) or ord(exp.BitIsSet(j));
+      for j := lo to i do
+        result := Reduce(result.Square, m, BarrettMu);
+      result := Reduce(result.Multiply(powers[(w - 1) shr 1].Copy), m, BarrettMu);
+      i := lo - 1;
+    end;
+  for j := 0 to high(powers) do
+    powers[j].Release;
+  exp.Release;
 end;
 
 
@@ -2281,11 +2614,50 @@ begin
             ]);
 end;
 
+function RsaOpen(Cipher: TAesAbstractClass; AesBits, ModulusLen: integer;
+  const Message: RawByteString; const Decrypt: TRsaPkcs1Decrypt): RawByteString;
+var
+  msgpos, msglen: PtrInt;
+  a: TAesAbstract;
+  key: RawByteString;
+  head: PRsaSealHeader absolute Message;
+  input: PByteArray absolute Message;
+begin
+  FastAssignNew(result);
+  msglen := length(Message);
+  if not Assigned(Decrypt) or
+     (Cipher = nil) or
+     (ModulusLen <= 0) or
+     (msglen < SizeOf(head^)) or
+     (head^.plainlen <= 0) or
+     (head^.plainlen > 128 shl 20) or
+     (head^.encryptedkeylen <> ModulusLen) then
+    exit;
+  msgpos := SizeOf(head^) + head^.encryptedkeylen;
+  if msglen < msgpos + head^.plainlen then
+    exit;
+  key := Decrypt(@input[SizeOf(head^)]); // using the actual private key
+  if key <> '' then
+    try
+      if length(key) <> AesBits shr 3 then
+        exit;
+      a := Cipher.Create(pointer(key)^, AesBits);
+      try
+        a.IV := head^.iv;
+        a.DecryptPkcs7Var(
+          @input[msgpos], msglen - msgpos, {iv=}false, result);
+      finally
+        a.Free;
+      end;
+    finally
+      FillZero(key);
+    end;
+end;
+
 function ToText(res: TRsaGenerateResult): PShortString;
 begin
   result := GetEnumName(TypeInfo(TRsaGenerateResult), ord(res));
 end;
-
 
 
 { TRsaPublicKey }
@@ -2463,6 +2835,13 @@ begin
   inherited Destroy;
 end;
 
+function TRsa.GetDrbg: TAesPrngAbstract;
+begin
+  if fDrbg = nil then
+    fDrbg := TAesPrng.Main;
+  result := fDrbg;
+end;
+
 function TRsa.HasPublicKey: boolean;
 begin
   result := (self <> nil) and
@@ -2546,7 +2925,65 @@ end;
 
 const
   // we force exponent = 65537 - FIPS 5.4 (e)
-  BIGINT_65537_BIN: RawByteString = #$01#$00#$01; // Size=2 on CPU32
+  BIGINT_65537_BIN: RawByteString = #$01#$00#$01; // Size=2 on CPU32, 1 on CPU64
+
+type
+  TRsaPrimeWorker = class(TThread) // no need of mormot.core.threads
+  public
+    Owner: TRsa;
+    PrimeBytes, Iterations: integer;
+    EndTix: Int64;
+    Extend: TBigIntSimplePrime;
+    NewPrime: RawByteString; // saved as binary
+    constructor Create(aOwner: TRsa; aIterations: integer;
+      aExtend: TBigIntSimplePrime; aEndTix: Int64); reintroduce;
+    destructor Destroy; override;
+    procedure Execute; override;
+  end;
+
+constructor TRsaPrimeWorker.Create(aOwner: TRsa; aIterations: integer;
+  aExtend: TBigIntSimplePrime; aEndTix: Int64);
+begin
+  Owner := aOwner;
+  PrimeBytes := aOwner.ModulusLen shr 1; // p/q are half size by design
+  Iterations := aIterations;
+  Extend := aExtend;
+  EndTix := aEndTix;
+  inherited Create({suspended=}false);
+end;
+
+destructor TRsaPrimeWorker.Destroy;
+begin
+  FillZero(NewPrime);
+  inherited Destroy;
+end;
+
+procedure TRsaPrimeWorker.Execute;
+var
+  c: TRsaContext;
+  e, p: PBigInt;
+begin
+  c := TRsaContext.Create; // each thread needs its own memory context
+  try
+    e := c.LoadPermanent(BIGINT_65537_BIN); // most common exponent = 65537
+    p := c.Allocate(ValuesSize(PrimeBytes));
+    try
+      repeat
+        if not p.FillPrime(Extend, Iterations, EndTix, Owner.fDrbg) then
+          exit; // timed out
+      until p.PrimeAllowedFor65537;
+      // FIPS 186-4 B.3.1: ensure x mod e<>1 i.e. gcd(x-1,e)=1
+      NewPrime := p.SaveFixed(PrimeBytes); // transfer bytes, not the instance
+      if length(NewPrime) <> PrimeBytes then
+        FillZero(NewPrime); // paranoid
+    finally
+      p.Release;
+      e.ResetPermanentAndRelease;
+    end;
+  finally
+    c.Free;
+  end;
+end;
 
 // see https://www.di-mgt.com.au/rsa_alg.html as reference
 
@@ -2554,50 +2991,89 @@ function TRsa.Generate(Bits: integer; Extend: TBigIntSimplePrime;
   Iterations, TimeOutMS: integer): TRsaGenerateResult;
 var
   _e, _p, _q, _d, _h, _tmp: PBigInt;
-  comp: integer;
+  comp, bytes: integer;
+  wrk: TRsaPrimeWorker;
+  rnd: TAesPrngAbstract;
   endtix: Int64;
 begin
   // ensure we can actually generate such a RSA key
   result := rgrIncorrectParams;
   if HasPublicKey or
      HasPrivateKey or
-     ((Bits <> 512) and    // broken with average CPU power
-      (Bits <> 1024) and   // considered weak, and rejected by browsers and NIST
-      (Bits <> 2048) and   // 112-bit of security = RSA_DEFAULT_GENERATION_BITS
-      (Bits <> 3072) and   // 128-bit of security (as ECC256): secure until 2030
-      (Bits <> 4096) and   // not worth it
-      (Bits <> 7680) and   // REALLY slow for only 192-bit of security
+     ((Bits <> 512) and   // broken with average CPU power
+      (Bits <> 1024) and  // considered weak, and rejected by browsers and NIST
+      (Bits <> 2048) and  // 112-bit of security = RSA_DEFAULT_GENERATION_BITS
+      (Bits <> 3072) and  // 128-bit of security (as ECC256): secure until 2030
+      (Bits <> 4096) and  // not worth it
+      (Bits <> 7680) and  // REALLY slow for only 192-bit of security
       (Bits <> 8192)) then
-    exit;                  // see https://stackoverflow.com/a/589850/458259
+    exit;                 // see https://stackoverflow.com/a/589850/458259
   // setup the timeout period
-  if TimeOutMS <= 0 then
+  if {$ifdef OSWINDOWS}
+     (wsPrism in WindowsSpecs) or // relax for PRISM translation layer
+     {$endif OSWINDOWS}
+     (TimeOutMS <= 0) then
     TimeOutMS := MilliSecsPerMin; // blocking 1 minute seems fair enough
+  if TimeoutMS = RSA_DEFAULT_GENERATION_TIMEOUTMS then // calibrated for 2048
+    if Bits >= 7680 then
+      TimeoutMS := TimeoutMS * 64
+    else if Bits >= 4096 then
+      TimeoutMS := TimeoutMS * 16
+    else if Bits >= 3072 then
+      TimeoutMS := TimeoutMS * 4;
   endtix := GetTickCount64 + TimeOutMS;
   // setup local variables
   fModulusBits := Bits;
   fModulusLen := Bits shr 3;
+  bytes := fModulusLen shr 1;            // p,q size = half Bits
   _e := LoadPermanent(BIGINT_65537_BIN); // most common exponent = 65537
-  _p := Allocate(ValuesSize(ModulusLen shr 1)); // p,q size = half Bits
-  _q := Allocate(_p.Size);
+  _p := nil;                             // computed in TRsaPrimeWorker
+  _q := Allocate(ValuesSize(bytes));     // p,q size = half Bits
   _d := nil;
+  rnd := GetDrbg; // also ensure fDrbg field is set
   try
-    // compute two p and q random primes
+    if not _e.Is65537 then // paranoid
+      exit;
+    // compute two p and q random primes as p>q in parallel
     repeat
-      // FIPS 186-4 B.3.1: ensure x mod e<>1 i.e. gcd(x-1,e)=1
+      if _p <> nil then // happens on FIPS conditions retry
+      begin
+        _p.Release;
+        _p := nil;
+      end;
       result := rgrTimeout;
-      repeat
-        if not _p.FillPrime(Extend, Iterations, endtix) then
-          exit; // timed out
-      until _p.Modulo(_e).Compare(1, {andrelease=}true) <> 0;
-      repeat
-        if not _q.FillPrime(Extend, Iterations, endtix) then
-          exit;
-      until _q.Modulo(_e).Compare(1, {andrelease=}true) <> 0;
+      wrk := nil;
+      try
+        if SystemInfo.dwNumberOfProcessors < 2 then // not enough CPU cores
+        begin
+          _p := Allocate(_q.Size); // sequential work
+          repeat
+            if not _p.FillPrime(Extend, Iterations, endtix, rnd) then
+              exit; // timed out
+          until _p.PrimeAllowedFor65537
+          // FIPS 186-4 B.3.1: ensure x mod e<>1 i.e. gcd(x-1,e)=1
+        end
+        else
+          wrk := TRsaPrimeWorker.Create(self, Iterations, Extend, endtix);
+        repeat
+          if not _q.FillPrime(Extend, Iterations, endtix, rnd) then
+            exit;
+        until _q.PrimeAllowedFor65537;
+        if wrk <> nil then
+        begin
+          wrk.WaitFor; // join the threads
+          if length(wrk.NewPrime) <> bytes then
+            exit;
+          _p := Load(pointer(wrk.NewPrime), bytes);
+        end;
+      finally
+        wrk.Free;
+      end;
       result := rgrRandomGeneratorFailure;
       comp := _p.Compare(_q);
       if comp = 0 then
-        exit // random generator is clearly wrong if p=q
-      else if comp < 0 then
+        exit; // random generator is clearly wrong if p=q
+      if comp < 0 then
         ExchgPointer(@_p, @_q); // ensure p>q for ChineseRemainderTheorem
       // FIPS 186-4 B.3.3 step 5.4: ensure enough bits are set in difference
       _tmp := _p.Clone.Substract(_q.Copy);
@@ -2854,7 +3330,7 @@ end;
 
 function TRsa.Pkcs1UnPad(p: PByteArray; verify: boolean): RawByteString;
 var
-  count, padding: integer;
+  count, padding: PtrInt;
 begin
   // virtual method following RSASSA-PKCS1-v1_5 padding
   FastAssignNew(result); // error
@@ -2885,7 +3361,7 @@ begin
     end;
   end;
   if (count = fModulusLen) or
-     (padding = 8) or
+     (padding < 8) or
      (p[count] <> 0) then
     exit; // invalid padding with ending zero
   inc(count);
@@ -2894,9 +3370,8 @@ end;
 
 function TRsa.Pkcs1Pad(p: pointer; n: integer; sign: boolean): RawByteString;
 var
-  padding: integer;
-  i: PtrInt;
-  r: PByteArray absolute result;
+  padding: PtrInt;
+  r: PByteArray;
 begin
   // virtual method following RSASSA-PKCS1-v1_5 padding
   FastAssignNew(result);
@@ -2905,7 +3380,7 @@ begin
      (padding < 8) or
      not HasPublicKey then
     exit;
-  SetLength(result, fModulusLen);
+  r := FastNewRawByteString(result, fModulusLen);
   r[0] := 0; // leading zero
   if sign then
   begin
@@ -2916,11 +3391,9 @@ begin
   else
   begin
     r[1] := 2; // block type 2
-    SharedRandom.Fill(@r[2], padding); // TLecuyer is enough for public padding
+    // EME-PKCS1-v1_5 requires non zero unpredictable random padding
+    GetDrbg.FillRandomNotZero(@r[2], padding); // our CSPRNG
     inc(padding, 2);
-    for i := 2 to padding - 1 do
-      if r[i] = 0 then
-        dec(r[i]); // non zero random padding
   end;
   r[padding] := 0; // padding ends with zero
   MoveFast(p^, r[padding + 1], n);
@@ -2939,15 +3412,21 @@ begin
   fSafe.Lock;
   try
     enc := Load(Input, fModulusLen);
+    if enc.Compare(fM) >= 0 then // RFC 8017: ciphertext must be < n
+    begin
+      enc.Release;
+      exit;
+    end;
     dec := ChineseRemainderTheorem(enc);
     if dec = nil then
       exit;
-    exp := dec.Save({andrelease=}true);
+    exp := dec.SaveFixed(fModulusLen, {andrelease=}true);
   finally
     fSafe.UnLock;
   end;
   // decode the result following proper padding (PKCS#1.5 with TRsa class)
-  result := Pkcs1UnPad(pointer(exp), {verify=}false);
+  if exp <> '' then
+    result := Pkcs1UnPad(pointer(exp), {verify=}false);
 end;
 
 function TRsa.Pkcs1Verify(Input: pointer): RawByteString;
@@ -2963,16 +3442,22 @@ begin
   fSafe.Lock;
   try
     enc := Load(Input, fModulusLen);
+    if enc.Compare(fM) >= 0 then // reject noncanonical RSA signatures
+    begin
+      enc.Release;
+      exit;
+    end;
     CurrentModulo := rmM; // for ModPower()
     dec := ModPower(enc, fE, nil); // calls enc.Release
     if dec = nil then
       exit;
-    exp := dec.Save({andrelease=}true);
+    exp := dec.SaveFixed(fModulusLen, {andrelease=}true);
   finally
     fSafe.UnLock;
   end;
   // decode the result following proper padding (PKCS#1.5 with TRsa class)
-  result := Pkcs1UnPad(pointer(exp), {verify=}true);
+  if exp <> '' then
+    result := Pkcs1UnPad(pointer(exp), {verify=}true);
 end;
 
 function TRsa.Pkcs1Encrypt(Input: pointer; InputLen: integer): RawByteString;
@@ -2986,12 +3471,15 @@ begin
     exit;
   // encode input using proper padding (PKCS#1.5 with TRsa class)
   exp := Pkcs1Pad(Input, InputLen, {sign=}false);
+  if exp = '' then
+    exit;
   // encrypt with the RSA public key
   fSafe.Lock;
   try
     dec := Load(pointer(exp), fModulusLen);
     CurrentModulo := rmM; // for ModPower()
-    result := ModPower(dec, fE, nil).Save({andrelease=}true);
+    result := ModPower(dec, fE, nil).
+              SaveFixed(fModulusLen, {andrelease=}true);
   finally
     fSafe.UnLock;
   end;
@@ -3008,11 +3496,14 @@ begin
     exit;
   // encode input using proper padding (PKCS#1.5 with TRsa class)
   exp := Pkcs1Pad(Input, InputLen, {sign=}true);
+  if exp = '' then
+    exit;
   // encrypt the signature with the RSA Private Key
   fSafe.Lock;
   try
     dec := Load(pointer(exp), fModulusLen);
-    result := ChineseRemainderTheorem(dec).Save({andrelease=}true);
+    result := ChineseRemainderTheorem(dec).
+              SaveFixed(fModulusLen, {andrelease=}true);
   finally
     fSafe.UnLock;
   end;
@@ -3027,34 +3518,23 @@ end;
 function TRsa.Verify(Hash, Sig: pointer; HashAlgo: THashAlgo;
   SigLen: integer): boolean;
 var
-  verif, digest, oid: RawByteString;
-  p: integer;
+  actual: RawByteString;
+  expected: TAsnObject;
 begin
   // this virtual method implements RSASSA-PKCS1-v1_5 signature scheme
-  // 1. decode the supplied value using the stored public key
   result := false;
-  if SigLen <> fModulusLen then
-    exit; // the signature is a RSA BigInt by definition
-  verif := Pkcs1Verify(Sig);
-  if verif = '' then
-    exit; // invalid decrypted signature or no public key
-  // 2. parse the ASN.1 sequence to extract the stored hash and its algo oid
-  p := 1;
-  if (AsnNext(p, verif) <> ASN1_SEQ) or  // DigestInfo
-     (AsnNext(p, verif) <> ASN1_SEQ) or  // AlgorithmIdentifier
-     (AsnNext(p, verif, @oid) <> ASN1_OBJID) or
-     (oid <> ASN1_OID_HASH[HashAlgo]) then
+  if (Hash = nil) or
+     (Sig = nil) or
+     (SigLen <> fModulusLen) then
     exit;
-  case AsnNextRaw(p, verif, digest) of
-    ASN1_NULL: // optional Algorithm Parameters
-      if AsnNextRaw(p, verif, digest) <> ASN1_OCTSTR then
-        exit;
-    ASN1_OCTSTR:
-      ;
-  else
+  // recover DigestInfo from EMSA-PKCS1-v1_5 encoding
+  actual := Pkcs1Verify(Sig);
+  if actual = '' then
     exit;
-  end;
-  result := CompareBuf(digest, Hash, HASH_SIZE[HashAlgo]) = 0;
+  // compute the exact expected DER DigestInfo
+  expected := RsaSignHashToDer(PHash512(Hash), HashAlgo);
+  // reject malformed, truncated, or extended encodings
+  result := actual = expected;
 end;
 
 function TRsa.Sign(Hash: PHash512; HashAlgo: THashAlgo): RawByteString;
@@ -3066,6 +3546,10 @@ begin
   seq := RsaSignHashToDer(Hash, HashAlgo);
   // 2. sign it using the stored private key
   result := Pkcs1Sign(pointer(seq), length(seq));
+  // 3. verify the signature (much faster than the previous Pkcs1Sign call)
+  if (result <> '') and
+     not Verify(Hash, HashAlgo, result) then
+    ERsaException.RaiseUtf8('%.Sign self-verification failed', [self]);
 end;
 
 function TRsa.Seal(const Message: RawByteString;
@@ -3092,29 +3576,13 @@ begin
     FastAssignNew(result);
 end;
 
-type
-  // extra header for IV and plain text / key size storage
-  // - should match the very same record definition in EVP_PKEY.RsaSeal/RsaOpen
-  // from mormot.lib.openssl11.pas, which is fully compatible with this unit
-  TRsaSealHeader = packed record
-    iv: TAesBlock;
-    plainlen: integer;
-    encryptedkeylen: word; // typically 256 bytes for RSA-2048
-    // followed by the encrypted key then the encrypted message
-  end;
-  PRsaSealHeader = ^TRsaSealHeader;
-
-// this code follows OpenSSL EVP_SealInit/EVP_SealFinal from crypto/evp/p_seal.c
-// algorithm, so that RSA Message encoding would stay compatible
-// - see also the matching python code as comment in mormot.crypt.openssl
-
 function TRsa.Seal(Cipher: TAesAbstractClass; AesBits: integer;
   const Message: RawByteString): RawByteString;
 var
   msgpos: PtrInt;
   a: TAesAbstract;
   key: THash256;
-  head: TRsaSealHeader;
+  head: TRsaSealHeader; // follows RsaOpen() algorithm above
   enckey, encmsg: RawByteString;
 begin
   FastAssignNew(result);
@@ -3128,7 +3596,7 @@ begin
   // generate the ephemeral secret key and IV within the corresponding header
   Random128(@head.iv); // unpredictable
   try
-    TAesPrng.Main.FillRandom(key); // use strong CSPRNG for the private secret
+    GetDrbg.FillRandom(key); // use strong CSPRNG for the private secret
     // encrypt the ephemeral secret using the current RSA public key
     enckey := Pkcs1Encrypt(@key, AesBits shr 3);
     head.encryptedkeylen := length(enckey);
@@ -3153,42 +3621,11 @@ end;
 
 function TRsa.Open(Cipher: TAesAbstractClass; AesBits: integer;
   const Message: RawByteString): RawByteString;
-var
-  msgpos, msglen: PtrInt;
-  a: TAesAbstract;
-  key: RawByteString;
-  head: PRsaSealHeader absolute Message;
-  input: PByteArray absolute Message;
 begin
-  FastAssignNew(result);
-  // decode and validate the header
-  msglen := length(Message);
-  if not HasPrivateKey or
-     (Cipher = nil) or
-     (msglen < SizeOf(head^)) or
-     (head^.plainlen <= 0) or
-     (head^.plainlen > 128 shl 20) or
-     (head^.encryptedkeylen <> fModulusLen) then
-    exit;
-  msgpos := SizeOf(head^) + head^.encryptedkeylen;
-  if msglen < msgpos + head^.plainlen then
-    exit; // avoid buffer overflow on malformatted/forged input
-  // decrypt the ephemeral key, then the message
-  key := Pkcs1Decrypt(@input[SizeOf(head^)]);
-  if key <> '' then
-    try
-      if length(key) <> AesBits shr 3 then
-        exit;
-      a := Cipher.Create(pointer(key)^, AesBits);
-      try
-        a.IV := head^.iv;
-        a.DecryptPkcs7Var(@input[msgpos], msglen - msgpos, {iv=}false, result);
-      finally
-        a.Free;
-      end;
-    finally
-      FillZero(key); // anti-forensic
-    end;
+  if HasPrivateKey then
+    result := RsaOpen(Cipher, AesBits, fModulusLen, Message, Pkcs1Decrypt)
+  else
+    FastAssignNew(result);
 end;
 
 
@@ -3224,7 +3661,7 @@ end;
 
 function TRsaPss.Verify(Hash, Sig: pointer; HashAlgo: THashAlgo; SigLen: integer): boolean;
 var
-  hlen, bits, len, dblen, padding: integer;
+  hlen, bits, len, dblen, pslen, i: integer;
   encoded, decoded: PBigInt;
   exp: RawByteString;
   e, h: PByteArray;
@@ -3234,50 +3671,62 @@ begin
   result := false;
   hlen := HASH_SIZE[HashAlgo];
   if (Hash = nil) or
-     (fModulusLen < hlen + 6) or
-     (cardinal(fModulusLen - SigLen) > 1) or
+     (Sig = nil) or
+     (SigLen <> fModulusLen) or
      not HasPublicKey then
     exit;
-  // decrypt the signature with the RSA Public Key
   fSafe.Lock;
   try
     encoded := Load(Sig, fModulusLen);
-    CurrentModulo := rmM; // for ModPower()
-    decoded := ModPower(encoded, fE, nil); // calls encoded.Release
+    if encoded.Compare(fM) >= 0 then // RSA verification requires 0 <= s < n
+    begin
+      encoded.Release;
+      exit;
+    end;
+    CurrentModulo := rmM;
+    decoded := ModPower(encoded, fE, nil);
     if decoded = nil then
       exit;
-    exp := decoded.Save({andrelease=}true);
+    exp := decoded.SaveFixed(fModulusLen, {andrelease=}true);
   finally
     fSafe.UnLock;
   end;
   if exp = '' then
     exit;
-  // RFC 8017 9.1.2 verification operation
-  e := pointer(exp);
+  // RFC 8017, EMSA-PSS-VERIFY
   bits := fModulusBits - 1;
-  if (bits and 7) = 0 then
-    if e[0] = 0 then
-      inc(PByte(e)) // just ignore leading 0
-    else
-      exit;
   len := (bits + 7) shr 3;
-  if (len < hlen + 2) or
-     (e[len - 1] <> $bc) or
-     (e[0] and ($ff shl (bits and 7)) <> 0) then
+  // this implementation uses salt length = hash length
+  if (len < 2 * hlen + 2) or
+     ((len <> fModulusLen) and
+      (len <> fModulusLen - 1)) then
     exit;
+  e := pointer(exp);
+  // for emLen = k-1, skip the mandatory leading zero byte
+  if len = fModulusLen - 1 then
+  begin
+    if e[0] <> 0 then
+      exit;
+    inc(PByte(e));
+  end;
+  if e[len - 1] <> $bc then
+    exit;
+  // verify the unused most-significant bits
+  if (bits and 7) <> 0 then
+    if (e[0] and ($ff shl (bits and 7))) <> 0 then
+      exit;
   dblen := len - hlen - 1;
   h := @e[dblen];
+  // recover DB by XORing the MGF1 mask.
   RsaPssComputeMask(h, e, HashAlgo, hlen, dblen, bits);
-  padding := 0;
-  while e[padding] = 0 do
-  begin
-    inc(padding);
-    if padding = dblen then
+  // enforce DB = PS || $01 || salt, with salt length exactly hlen bytes
+  pslen := dblen - hlen - 1;
+  for i := 0 to pslen - 1 do
+    if e[i] <> 0 then
       exit;
-  end;
-  if e[padding] <> 1 then
+  if e[pslen] <> 1 then
     exit;
-  RsaPssComputeSaltedHash(Hash, {salt=}@e[padding + 1], HashAlgo, hlen, h2);
+  RsaPssComputeSaltedHash(Hash, @e[pslen + 1], HashAlgo, hlen, h2);
   result := CompareMem(@h2, h, hlen);
 end;
 
@@ -3297,11 +3746,11 @@ begin
      not HasPrivateKey then
     exit;
   if (ModulusBits + 7) shr 3 <> ModulusLen then
-    ERsaException.RaiseUtf8('%.DoPad: m=p*q is weak', [self]);
+    ERsaException.RaiseUtf8('%.Sign: m=p*q is weak', [self]);
   bits := ModulusBits - 1;
   len := (bits + 7) shr 3; // could be one less than ModulusLen
   // RFC 8017 9.1.1 encoding operation with saltlen = hashlen
-  TAesPrng.Main.Fill(@salt, hlen); // public salt requires unpredictable CSPRNG
+  GetDrbg.FillRandom(@salt, hlen); // public salt requires unpredictable CSPRNG
   RsaPssComputeSaltedHash(Hash, @salt, HashAlgo, hlen, h);
   pslen := len - (hlen * 2 + 2);
   if pslen < 0 then
@@ -3317,10 +3766,15 @@ begin
   fSafe.Lock;
   try
     dec := Load(pointer(encoded), len);
-    result := ChineseRemainderTheorem(dec).Save({andrelease=}true);
+    result := ChineseRemainderTheorem(dec).
+              SaveFixed(fModulusLen, {andrelease=}true);
   finally
     fSafe.UnLock;
   end;
+  // verify the signature (much faster than the previous signature encryption)
+  if (result <> '') and
+     not Verify(Hash, HashAlgo, result) then
+    ERsaException.RaiseUtf8('%.Sign self-verification failed', [self]);
 end;
 
 
@@ -3365,7 +3819,7 @@ end;
 
 constructor TCryptAsymRsa.Create(const name, hasher: RawUtf8);
 begin
-  fDefaultHasher := mormot.crypt.secure.Hasher(hasher); // set before Create()
+  fDefaultHasher := mormot.crypt.factory.Hasher(hasher); // set before Create()
   if fDefaultHasher = nil then
     ECrypt.RaiseUtf8('%.Create: unknown hasher=%', [self, hasher]);
   Create(name);

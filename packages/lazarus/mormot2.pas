@@ -16,7 +16,7 @@ uses
   mormot.core.text, mormot.core.threads, mormot.core.unicode, 
   mormot.core.variants, mormot.core.zip, mormot.crypt.core, mormot.crypt.ecc, 
   mormot.crypt.ecc256r1, mormot.crypt.jwt, mormot.crypt.openssl, 
-  mormot.crypt.secure, mormot.db.core, mormot.db.nosql.bson, 
+  mormot.crypt.secure, mormot.crypt.factory, mormot.db.core, mormot.db.nosql.bson, 
   mormot.db.nosql.mongodb, mormot.db.proxy, mormot.db.rad, mormot.db.rad.bde, 
   mormot.db.rad.firedac, mormot.db.rad.nexusdb, mormot.db.rad.unidac, 
   mormot.db.raw.odbc, mormot.db.raw.oledb, mormot.db.raw.oracle, 
@@ -27,7 +27,7 @@ uses
   mormot.lib.openssl11, mormot.lib.quickjs, mormot.lib.sspi, 
   mormot.lib.static, mormot.lib.winhttp, mormot.lib.z, mormot.net.async, 
   mormot.net.client, mormot.net.http, mormot.net.relay, mormot.net.rtsphttp, 
-  mormot.net.server, mormot.net.sock, mormot.net.tunnel, mormot.net.ws.client, 
+  mormot.net.server, mormot.net.server.win, mormot.net.peercache, mormot.net.proxy, mormot.net.sock, mormot.net.tunnel, mormot.net.ws.client, 
   mormot.net.ws.core, mormot.net.ws.server, mormot.orm.base, 
   mormot.orm.client, mormot.orm.core, mormot.orm.mongodb, mormot.orm.rest, 
   mormot.orm.server, mormot.orm.sql, mormot.orm.sqlite3, mormot.orm.storage, 
@@ -39,11 +39,13 @@ uses
   mormot.db.rad.ui.sql, mormot.net.tftp.client, mormot.net.tftp.server, 
   mormot.lib.gdiplus, mormot.net.acme, mormot.db.rad.ui.cds, 
   mormot.core.os.mac, mormot.app.agl, mormot.misc.pecoff, mormot.lib.pkcs11, 
-  mormot.net.ldap, mormot.core.fpclibcmm, mormot.net.dns, mormot.lib.win7zip,
-  mormot.crypt.rsa, mormot.crypt.x509, mormot.crypt.pkcs11, mormot.net.openapi,
-  mormot.core.os.security, mormot.tools.mget, mormot.core.mvc, mormot.crypt.other,
-  mormot.net.dhcp, mormot.core.fmt, mormot.core.os.delphi, mormot.core.i18n,
-  mormot.lib.uniscribe;
+  mormot.net.ldap, mormot.core.fpclibcmm, mormot.net.dns, mormot.lib.win7zip, 
+  mormot.crypt.rsa, mormot.crypt.x509, mormot.crypt.pkcs11, 
+  mormot.net.openapi, mormot.core.os.security, mormot.tools.mget, 
+  mormot.core.mvc, mormot.crypt.other, mormot.net.dhcp, mormot.core.fmt, 
+  mormot.core.os.delphi, mormot.core.i18n, mormot.lib.uniscribe, 
+  mormot.crypt.win, mormot.db.raw.duckdb, mormot.db.sql.duckdb, 
+  mormot.crypt.zip;
 
 implementation
 

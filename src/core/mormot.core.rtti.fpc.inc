@@ -560,8 +560,17 @@ function GetPublishedMethods(Instance: TObject;
   out Methods: TPublishedMethodInfoDynArray; aClass: TClass): integer;
 
   procedure AddParentsFirst(C: TClass);
+  const
+    // FPC <= 3.2 emits a packed table even if FPC_REQUIRES_PROPER_ALIGNMENT, but
+    // FPC 3.3+ follows TVmtMethodTable, e.g. with entries at offset 8 on aarch64
+    ENTRIES_OFFSET =
+      {$if defined(VER3_0) or defined(VER3_2) or defined(VER2)}
+      SizeOf(cardinal);
+      {$else}
+      SizeOf(TVmtMethodTable) - SizeOf(TVmtMethodEntry);
+      {$ifend}
   var
-    info: PIntegerArray; // PVmtMethodTable is wrong (GPF on aarch64-linux) :(
+    info: PCardinal; // PVmtMethodTable is wrong on FPC <= 3.2 (GPF on aarch64)
     m: PVmtMethodEntry;
     r: ^TPublishedMethodInfo;
     n: integer;
@@ -572,13 +581,13 @@ function GetPublishedMethods(Instance: TObject;
     info := PPointer(PtrUInt(C) + PtrUInt(vmtMethodTable))^;
     if info = nil then
       exit; // no published method for this class level
-    n := info[0];
+    n := info^;
     if n = 0 then
       exit; // paranoid
     SetLength(Methods, result + n);
     r := @Methods[result];
     inc(result, n);
-    m := @info[1];
+    m := pointer(PAnsiChar(info) + ENTRIES_OFFSET);
     repeat
       ShortStringToAnsi7String(m^.Name^, r^.Name);
       r^.Method.Data := Instance;

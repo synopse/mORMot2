@@ -114,8 +114,6 @@ type
     /// connection parameters as set by Create()
     fServer, fPort: RawUtf8;
     fHttps: boolean;
-    fProxyName, fProxyByPass: RawUtf8;
-    fSendTimeout, fReceiveTimeout, fConnectTimeout: cardinal;
     fExtendedOptions: THttpRequestExtendedOptions;
     procedure SetCompression(Value: TRestHttpCompressions);
     procedure SetKeepAliveMS(Value: cardinal);
@@ -132,8 +130,7 @@ type
     /// connect to TRestHttpServer on aServer:aPort
     // - optional aProxyName may contain the name of the proxy server to use,
     // and aProxyByPass an optional semicolon delimited list of host names or
-    // IP addresses, or both, that should not be routed through the proxy - note
-    // that proxy parameters are currently not available for TRestHttpClientSocket
+    // IP addresses, or both, that should not be routed through the proxy
     // - you can customize the default client timeouts by setting appropriate
     // ConnectTimeout, SendTimeout and ReceiveTimeout parameters (in ms) - if
     // you left the 0 default parameters, it would use global
@@ -298,7 +295,7 @@ type
     procedure InternalClose; override;
   published
     /// internal HTTP/1.1 compatible client
-    // - can be used e.g. to access SendTimeout and ReceiveTimeout properties
+    // - exposes ConnectTimeout, SendTimeout and ReceiveTimeout properties
     // - call first IsOpen e.g. to initialize this Socket property before any
     // REST command like ClientSetUser(), e.g. to call Socket.AuthorizeBasic()
     property Socket: THttpClientSocket
@@ -592,20 +589,12 @@ begin
   fHttps := aHttps;
   fKeepAliveMS := 20000; // 20 seconds connection keep alive by default
   fCompression := []; // may add hcSynLZ or hcDeflate for AJAX clients
-  if aConnectTimeout = 0 then
-    fConnectTimeout := HTTP_DEFAULT_CONNECTTIMEOUT
-  else
-    fConnectTimeout := aConnectTimeout;
-  if aSendTimeout = 0 then
-    fSendTimeout := HTTP_DEFAULT_SENDTIMEOUT
-  else
-    fSendTimeout := aSendTimeout;
-  if aReceiveTimeout = 0 then
-    fReceiveTimeout := HTTP_DEFAULT_RECEIVETIMEOUT
-  else
-    fReceiveTimeout := aReceiveTimeout;
-  fProxyName := aProxyName;
-  fProxyByPass := aProxyByPass;
+  fExtendedOptions.ConnectTimeoutMS := aConnectTimeout;
+  fExtendedOptions.SendTimeoutMS    := aSendTimeout;
+  fExtendedOptions.ReceiveTimeoutMS := aReceiveTimeout;
+  fExtendedOptions.ComputeTimeouts; // may use HTTP_DEFAULT_*TIMEOUT constants
+  fExtendedOptions.Proxy := aProxyName;
+  fExtendedOptions.ProxyByPass := aProxyByPass;
 end;
 
 constructor TRestHttpClientGeneric.CreateWithOwnModel(
@@ -648,41 +637,49 @@ begin
     [Definition.ServerName, fServer, fPort]);
   Definition.DatabaseName := UrlEncode([
     'IgnoreTlsCertificateErrors', ord(fExtendedOptions.TLS.IgnoreCertificateErrors),
-    'ConnectTimeout',             fConnectTimeout,
-    'SendTimeout',                fSendTimeout,
-    'ReceiveTimeout',             fReceiveTimeout,
-    'ProxyName',                  fProxyName,
-    'ProxyByPass',                fProxyByPass], [ueTrimLeadingQuestionMark]);
+    'ConnectTimeout',             fExtendedOptions.ConnectTimeoutMS,
+    'SendTimeout',                fExtendedOptions.SendTimeoutMS,
+    'ReceiveTimeout',             fExtendedOptions.ReceiveTimeoutMS,
+    'ProxyName',                  fExtendedOptions.Proxy,
+    'ProxyByPass',                fExtendedOptions.ProxyByPass],
+    [ueTrimLeadingQuestionMark]);
 end;
 
 constructor TRestHttpClientGeneric.RegisteredClassCreateFrom(aModel: TOrmModel;
   aDefinition: TSynConnectionDefinition; aServerHandleAuthentication: boolean);
 var
   URI: TUri;
-  P, next: PUtf8Char;
-  V: cardinal;
-  tmp: RawUtf8;
+  P: PUtf8Char;
+  n, v: RawUtf8;
 begin
   URI.From(aDefinition.ServerName);
   Create(URI.Server, URI.Port, aModel, URI.Https);
   P := pointer(aDefinition.DataBaseName);
   while P <> nil do
   begin
-    if UrlDecodeCardinal(P, 'CONNECTTIMEOUT=', V) then
-      fConnectTimeout := V
-    else if UrlDecodeCardinal(P, 'SENDTIMEOUT=', V) then
-      fSendTimeout := V
-    else if UrlDecodeCardinal(P, 'RECEIVETIMEOUT=', V) then
-      fReceiveTimeout := V
-    else if UrlDecodeValue(P, 'PROXYNAME=', tmp) then
-      fProxyName := CurrentAnsiConvert.Utf8ToAnsi(tmp)
-    else if UrlDecodeValue(P, 'PROXYBYPASS=', tmp) then
-      fProxyByPass := CurrentAnsiConvert.Utf8ToAnsi(tmp);
-    if UrlDecodeCardinal(P, 'IGNORETLSCERTIFICATEERRORS=', V, @next) or
-       UrlDecodeCardinal(P, 'IGNORESSLCERTIFICATEERRORS=', V, @next) then
-      fExtendedOptions.TLS.IgnoreCertificateErrors := boolean(V);
-    P := next;
+    P := UrlDecodeNextNameValue(P, n, v);
+    case FindPropName(['IgnoreTlsCertificateErrors', // 0
+                       'IgnoreSslCertificateErrors', // 1
+                       'ConnectTimeout',             // 2
+                       'SendTimeout',                // 3
+                       'ReceiveTimeout',             // 4
+                       'ProxyName',                  // 5
+                       'ProxyByPass'], n) of         // 6
+      0, 1:
+        fExtendedOptions.TLS.IgnoreCertificateErrors := GetBoolean(v);
+      2:
+        fExtendedOptions.ConnectTimeoutMS := GetCardinal(pointer(v));
+      3:
+        fExtendedOptions.SendTimeoutMS := GetCardinal(pointer(v));
+      4:
+        fExtendedOptions.ReceiveTimeoutMS := GetCardinal(pointer(v));
+      5:
+        fExtendedOptions.Proxy := v;
+      6:
+        fExtendedOptions.ProxyByPass := v;
+    end;
   end;
+  fExtendedOptions.ComputeTimeouts;
   inherited RegisteredClassCreateFrom(aModel, aDefinition, false); // call SetUser()
 end;
 
@@ -800,11 +797,23 @@ begin
 end;
 
 procedure TRestHttpClientSocket.InternalOpen;
+var
+  uri: TUri;
+  opt: THttpRequestExtendedOptions;
 begin
   if fSocketClass = nil then
     fSocketClass := THttpClientSocket;
-  fSocket := fSocketClass.Open(
-    fServer, fPort, nlTcp, fConnectTimeout, fHttps, @fExtendedOptions.TLS);
+  uri.Clear;
+  uri.Server := fServer;
+  uri.Port := fPort;
+  uri.Https := fHttps;
+  opt := fExtendedOptions;
+  if opt.Proxy = '' then
+    opt.Proxy := 'none'; // backward compatible with old REST sockets code
+  if opt.CreateTimeoutMS = 0 then
+    opt.CreateTimeoutMS := opt.ReceiveTimeoutMS; // preserve legacy TimeOut
+  fSocket := fSocketClass.OpenOptions(uri, opt);
+  fExtendedOptions.TLS := opt.TLS; // copy back Peer information
   {$ifdef VERBOSECLIENTLOG}
   if LogClass <> nil then
     fSocket.OnLog := LogClass.DoLog; // verbose log
@@ -860,13 +869,17 @@ begin
 end;
 
 procedure TRestHttpClientRequest.InternalOpen;
+var
+  t: TUri;
 begin
   InternalSetClass;
   if fRequestClass = nil then
     ERestHttpClient.RaiseUtf8('Unsupported %.InternalOpen', [self]);
-  fRequest := fRequestClass.Create(fServer, fPort, fHttps, fProxyName,
-    fProxyByPass, fConnectTimeout, fSendTimeout, fReceiveTimeout);
-  fRequest.ExtendedOptions := fExtendedOptions;
+  t.Clear;
+  t.Server := fServer;
+  t.Port := fPort;
+  t.Https := fHttps;
+  fRequest := fRequestClass.Create(t, @fExtendedOptions);
   // note that first registered algo will be the preferred one
   {$ifndef PUREMORMOT2}
   if hcSynShaAes in Compression then

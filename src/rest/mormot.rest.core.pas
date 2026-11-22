@@ -440,9 +440,9 @@ type
     fRun: TRestRunThreads;
     fLogClass: TSynLogClass;
     fLogFamily: TSynLogFamily;
-    fServerTimestampCacheSafe: TLightLock;
-    fServerTimestampCacheTix: cardinal;
+    fStatSafe: TLightLock;    // 32-bit
     fLogLevel: TSynLogLevels; // 32-bit
+    fServerTimestampCacheTix: cardinal;
     fLogResponseMaxBytes: integer;
     fAcquireExecution: TRestAcquireExecutions;
     fPrivateGarbageCollector: TSynObjectListLocked;
@@ -581,6 +581,7 @@ type
     // or, using generics:
     // ! if fServer.Services.Resolve<ICalculator>(Calc) then
     // !   ...
+    // - Services registration is not thread-safe and should be done at startup
     property Services: TServiceContainer
       read fServices;
     /// access or initialize the internal IoC resolver, used for interface-based
@@ -593,9 +594,12 @@ type
     // ! aRest.ServiceContainer.InjectResolver([TInfraRepoUserFactory.Create(aRest)], true);
     // - overriden methods will return TServiceContainerClient or
     // TServiceContainerServer instances, on TRestClient or TRestServer
+    // - Services registration is not thread-safe and should be done at startup
     function ServiceContainer: TServiceContainer; virtual; abstract;
     /// internal procedure called to implement TServiceContainer.Release
     procedure ServicesRelease(Caller: TServiceContainer);
+    /// thread-safe wrapper around Services.AsSoa
+    function ServicesInfo: variant;
     /// access to the Multi-Threading process of this instance
     property Run: TRestRunThreads
       read fRun;
@@ -2112,6 +2116,16 @@ begin
     result := fServices.Resolve(aInterface, Obj);
 end;
 
+function TRest.ServicesInfo: variant;
+begin
+  fStatSafe.Lock;
+  try
+    result := fServices.AsSoa;
+  finally
+    fStatSafe.UnLock;
+  end;
+end;
+
 procedure TRest.SetLogClass(aClass: TSynLogClass);
 begin
   fLogClass := aClass;
@@ -2185,13 +2199,13 @@ begin
      LockedExc32(fServerTimestampCacheTix, tix32, c32) then
   begin
     tmp.From(NowUtc + fServerTimestampOffset);
-    fServerTimestampCacheSafe.Lock;
+    fStatSafe.Lock;
     fServerTimestampCacheValue.Value := tmp.Value; // fast 64-bit copy
   end
   else
-    fServerTimestampCacheSafe.Lock;
+    fStatSafe.Lock;
   result := fServerTimestampCacheValue.Value;
-  fServerTimestampCacheSafe.UnLock;
+  fStatSafe.UnLock;
 end;
 
 procedure TRest.SetServerTimestamp(const Value: TTimeLog);
@@ -2477,7 +2491,7 @@ end;
 function TRest.OneFieldValue(Table: TOrmClass; const FieldName: RawUtf8;
   const WhereClauseFmt: RawUtf8; const Args, Bounds: array of const): RawUtf8;
 begin
-  result := fOrm.OneFieldValue(Table, FieldName, WhereClauseFmt);
+  result := fOrm.OneFieldValue(Table, FieldName, WhereClauseFmt, Args, Bounds);
 end;
 
 function TRest.OneFieldValue(Table: TOrmClass; const FieldName: RawUtf8;

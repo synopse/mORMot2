@@ -8,10 +8,21 @@ interface
 uses
   mormot.core.base,
   mormot.core.rtti,
-  shared_types,
-  task;
+  shared_types;
 
 type
+  /// DTO for one comment inside TTaskViewDTO (read side). Same fields as the
+  // TTaskComment embedded in the aggregate, but declared here so that the
+  // wire contract - and every client - does not depend on the domain unit.
+  TTaskCommentDTO = packed record
+    Content: RawUtf8;
+    Author: RawUtf8;
+    CreatedAt: TDateTime;
+    UpdatedAt: TDateTime;
+    IsEdited: boolean;
+  end;
+  TTaskCommentDTODynArray = array of TTaskCommentDTO;
+
   /// DTO for displaying a single task (read side — masks and detail views)
   TTaskViewDTO = packed record
     ID: TID;
@@ -26,7 +37,7 @@ type
     UpdatedAt: TDateTime;
     CommentCount: integer;
     TagIDs: TIDDynArray;
-    Comments: TTaskCommentDynArray;
+    Comments: TTaskCommentDTODynArray;
   end;
 
   /// DTO for task list items (read side — list views)
@@ -89,6 +100,11 @@ type
 implementation
 
 initialization
+  Rtti.RegisterFromText(TypeInfo(TTaskCommentDTO),
+    'Content RawUtf8 Author RawUtf8 CreatedAt TDateTime ' +
+    'UpdatedAt TDateTime IsEdited boolean');
+  // TTaskViewDTO below names the array type by its name
+  Rtti.RegisterType(TypeInfo(TTaskCommentDTODynArray));
   Rtti.RegisterFromText(TypeInfo(TTaskListItemDTO),
     'ID Int64 Title RawUtf8 Priority integer PriorityName RawUtf8 ' +
     'Status RawUtf8 IsCompleted boolean DueDate TDateTime ' +
@@ -107,11 +123,12 @@ initialization
     'ID Int64 Title RawUtf8 Description RawUtf8 Priority integer ' +
     'PriorityName RawUtf8 DueDate TDateTime Status RawUtf8 ' +
     'IsCompleted boolean CreatedAt TDateTime UpdatedAt TDateTime ' +
-    'CommentCount integer TagIDs TIDDynArray Comments TTaskCommentDynArray');
+    'CommentCount integer TagIDs TIDDynArray Comments TTaskCommentDTODynArray');
 
   // Normalize the JSON wire contract to camelCase (Recommended Patterns A.7,
   // Gotcha 3). On the DTO types only — never the TOrm — and, on FPC, after the
   // RegisterFromText calls above built the fields these calls rename.
+  Rtti[TypeInfo(TTaskCommentDTO)].Props.NameChangeCase(DtoJsonCase);
   Rtti[TypeInfo(TTaskListItemDTO)].Props.NameChangeCase(DtoJsonCase);
   Rtti[TypeInfo(TTaskSearchDTO)].Props.NameChangeCase(DtoJsonCase);
   Rtti[TypeInfo(TTaskCreateDTO)].Props.NameChangeCase(DtoJsonCase);

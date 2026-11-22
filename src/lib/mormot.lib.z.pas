@@ -179,7 +179,7 @@ type
     /// finalize the Inflate Uncompression
     function UncompressEnd: integer;
     /// low-level flush of the compressed data pending in the internal buffer
-    procedure DoFlush(Code: integer);
+    procedure DoFlush(Code: integer; MaxSize: QWord = 0);
     /// low-level check of the code returned by the ZLib library
     // - raise EZLib Exception on error
     function Check(const Code: integer; const ValidCodes: array of integer;
@@ -542,7 +542,7 @@ function CompressStream(src: pointer; srcLen: integer;
 // - ZLibFormat defines the expected layout, and should match CompressStream()
 function UncompressStream(src: pointer; srcLen: integer; tmp: TStream;
   checkCRC: PCardinal = nil; ZlibFormat: boolean = false;
-  TempBufSize: integer = 0): cardinal;
+  TempBufSize: integer = 0; MaxSize: QWord = 0): cardinal;
 
 /// ZLib compression from memory into a RawByteString variable
 // - by default, will use the deflate/.zip header-less format, but you may set
@@ -564,7 +564,7 @@ function CompressZipString(const src: RawByteString;
 // - ZLibFormat defines the expected layout, and should match CompressZipString()
 function UncompressZipString(src: pointer; srcLen: integer;
   checkCRC: PCardinal = nil; ZlibFormat: boolean = false;
-  TempBufSize: integer = 0): RawByteString; overload;
+  TempBufSize: integer = 0; MaxSize: PtrUInt = 0): RawByteString; overload;
 
 /// ZLib decompression to and from RawByteString variables
 // - ZLibFormat defines the expected layout, and should match CompressZipString()
@@ -893,17 +893,20 @@ begin
   end;
 end;
 
-procedure TZLib.DoFlush(Code: integer);
+procedure TZLib.DoFlush(Code: integer; MaxSize: QWord);
 var
   n: integer;
 begin
   n := FlushSize - integer(Stream.avail_out);
   if n <> 0 then
   begin
+    if (MaxSize <> 0) and
+       (QWord(Written) + QWord(n) > MaxSize) then
+      raise ESizeOverflow.Create('ZLib UncompressStream');
+    inc(Written, n);
     if FlushCheckCRC <> nil then
       FlushCheckCRC^ := crc32(FlushCheckCRC^, FlushBuffer, n);
     FlushStream.WriteBuffer(FlushBuffer^, n);
-    inc(Written, n);
   end
   else if Code = Z_BUF_ERROR then
     Check(Code, [], 'DoFlush with no output'); // may occur on corrupted input 
@@ -1142,7 +1145,8 @@ begin
 end;
 
 function UncompressStream(src: pointer; srcLen: integer; tmp: TStream;
-  checkCRC: PCardinal; ZlibFormat: boolean; TempBufSize: integer): cardinal;
+  checkCRC: PCardinal; ZlibFormat: boolean; TempBufSize: integer;
+  MaxSize: QWord): cardinal;
 var
   z: TZLib;
   code: integer;
@@ -1154,9 +1158,9 @@ begin
       repeat
         code := z.Check(z.Uncompress(Z_FINISH),
           [Z_OK, Z_STREAM_END, Z_BUF_ERROR], 'UncompressStream');
-        z.DoFlush(code);
+        z.DoFlush(code, MaxSize);
       until code = Z_STREAM_END;
-      z.DoFlush(code);
+      z.DoFlush(code, MaxSize);
     finally
       z.UncompressEnd;
     end;
@@ -1190,8 +1194,8 @@ begin
     ZlibFormat, TempBufSize);
 end;
 
-function UncompressZipString(src: pointer; srcLen: integer;
-  checkCRC: PCardinal; ZlibFormat: boolean; TempBufSize: integer): RawByteString;
+function UncompressZipString(src: pointer; srcLen: integer; checkCRC: PCardinal;
+  ZlibFormat: boolean; TempBufSize: integer; MaxSize: PtrUInt): RawByteString;
 var
   // we don't know the uncompressed size -> use a resizable TStream
   s: TRawByteStringStream;
@@ -1204,7 +1208,7 @@ begin
   end;
   s := TRawByteStringStream.Create;
   try
-    UncompressStream(src, srcLen, s, checkCRC, ZlibFormat, TempBufSize);
+    UncompressStream(src, srcLen, s, checkCRC, ZlibFormat, TempBufSize, MaxSize);
     result := s.DataString;
   finally
     s.Free;

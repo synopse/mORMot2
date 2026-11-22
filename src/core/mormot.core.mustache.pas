@@ -733,9 +733,7 @@ var
 begin
   if (ValueName = '') or
      (ValueName[1] in ['-', '0'..'9', '"', '{', '[']) or
-     (ValueName = 'true') or
-     (ValueName = 'false') or
-     (ValueName = 'null') then
+     IsConstantJson(pointer(ValueName), length(ValueName)) then // null/false/true
     VariantLoadJson(result, ValueName, @JSON_[mFast])
   else if fGetVarDataFromContextNeedsFree then
   begin
@@ -771,9 +769,7 @@ begin
       GetVarDataFromContext(-1, valnam, val)
     else if ((valnam <> '') and
              (valnam[1] in ['1'..'9', '"', '{', '['])) or
-            (valnam = 'true') or
-            (valnam = 'false') or
-            (valnam = 'null') then
+            IsConstantJson(pointer(valnam), length(valnam)) then // null/fast/true
     begin
       // {{helper 123}} or {{helper "constant"}} or {{helper [1,2,3]}}
       JsonToVariantInPlace(variant(val), pointer(valnam), JSON_FAST_FLOAT);

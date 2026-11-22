@@ -729,7 +729,7 @@ begin
     inc(PByte(P), 16);
   end;
   Cod := (Cod shl 11) xor tab[Cod shr 21];
-  for i := 1 to (Count and AesBlockMod) shr 2 do
+  for i := 1 to (Count and AES_MOD) shr 2 do
   begin
     // last 4 bytes blocs
     P^[0] := P^[0] xor Cod;
@@ -779,7 +779,7 @@ begin
     P^[3] := P^[3] xor Code;
     inc(PByte(P), 16);
   end;
-  for i := 0 to ((Count and AesBlockMod) shr 2) - 1 do // last 4 bytes blocs
+  for i := 0 to ((Count and AES_MOD) shr 2) - 1 do // last 4 bytes blocs
     P^[i] := P^[i] xor Code;
 end;
 
@@ -807,7 +807,7 @@ begin
      (bOut = nil) then
     exit;
   // 1. Init
-  n := Len shr AesBlockShift;
+  n := Len shr AES_SHIFT;
   if n < 0 then
     exit;
   aes.InitOnStack;
@@ -833,7 +833,7 @@ begin
   aes.DoBlocks(bIn, bOut, pi, po, n, Encrypt);
   // 3. Last block, just XORed from Key
   // assert(KeySize div 8 >= AesBlockSize);
-  n := cardinal(Len) and AesBlockMod;
+  n := cardinal(Len) and AES_MOD;
   MoveFast(pi^, po^, n); // pi=po is tested in MoveFast()
   XorOffset(pointer(po), Len - n, n);
   aes.Done;
@@ -842,7 +842,7 @@ end;
 const
   TmpSize = 65536;
   // Tmp buffer for AESFull -> Xor Crypt is TmpSize-dependent / use XorBlock()
-  TmpSizeBlock = TmpSize shr AesBlockShift;
+  TmpSizeBlock = TmpSize shr AES_SHIFT;
 
 type
   TTmp = array[0..TmpSizeBlock - 1] of TAesBlock;
@@ -879,7 +879,7 @@ begin
   end;
   GetMem(buf, TmpSize);
   try
-    last := Len and AesBlockMod;
+    last := Len and AES_MOD;
     n := Len - last;
     i := 0;
     while n > 0 do
@@ -889,7 +889,7 @@ begin
         b := TmpSize
       else
         b := n;
-      assert(b and AesBlockMod = 0);
+      assert(b and AES_MOD = 0);
       if KeySize = 4 then
       begin
         MoveFast(buffer^, buf^, b);
@@ -897,7 +897,7 @@ begin
         inc(i, b);
       end
       else
-        aes.DoBlocks(buffer, buf, b shr AesBlockShift, Encrypt);
+        aes.DoBlocks(buffer, buf, b shr AES_SHIFT, Encrypt);
       Stream.WriteBuffer(buf^, b);
       inc(PByte(buffer), b);
       dec(n, b);
@@ -1008,9 +1008,9 @@ var
   begin
     if BlockCount = 0 then
       exit;
-    read(tmp, BlockCount shl AesBlockShift);
+    read(tmp, BlockCount shl AES_SHIFT);
     aes.DoBlocks(PAesBLock(tmp), PAesBLock(tmp), BlockCount, Encrypt);
-    Write(tmp, BlockCount shl AesBlockShift);
+    Write(tmp, BlockCount shl AES_SHIFT);
   end;
 
 var
@@ -1023,7 +1023,7 @@ begin
   outStreamCreated := nil;
   aes.InitOnStack;
   Head.SourceLen := inLen;
-  blocks := Head.SourceLen shr AesBlockShift;
+  blocks := Head.SourceLen shr AES_SHIFT;
   if Encrypt and
      (OriginalLen <> 0) then
     Head.OriginalLen := OriginalLen
@@ -1089,11 +1089,11 @@ begin
           result := 0;
           exit;
         end;
-        LastLen := inLen and AesBlockMod;
+        LastLen := inLen and AES_MOD;
         if LastLen = 0 then
           SetOutLen(inLen + SizeOf(TAesBlock))
         else
-          SetOutLen((blocks + 2) shl AesBlockShift);
+          SetOutLen((blocks + 2) shl AES_SHIFT);
         Head.SomeSalt := Random32Not0;
         Head.HeaderCheck := Head.Calc(Key, KeySize);
         aes.Encrypt(TAesBlock(Head));
@@ -1113,7 +1113,7 @@ begin
             exit; // wrong key
           end;
           SetOutLen(SourceLen);
-          LastLen := SourceLen and AesBlockMod;
+          LastLen := SourceLen and AES_MOD;
         end;
         if LastLen <> 0 then
           dec(blocks); // the very last block is for the very last bytes
@@ -1227,8 +1227,8 @@ begin
         inc(DestSize, SizeOf(fBuf));
         dec(Count, len);
       end;
-      fAes.DoBlocks(@B[len], @B[len], Count shr AesBlockShift, true);
-      fBufCount := Count and AesBlockMod;
+      fAes.DoBlocks(@B[len], @B[len], Count shr AES_SHIFT, true);
+      fBufCount := Count and AES_MOD;
       if fBufCount <> 0 then
       begin
         dec(Count, fBufCount);

@@ -75,7 +75,7 @@ type
     Revision: byte;
     SubAuthorityCount: byte;
     IdentifierAuthority: TSidAuth;
-    SubAuthority: array[byte] of cardinal;
+    SubAuthority: TByteToCardinal;
   end;
   PSid = ^TSid;
   PSids = array of PSid;
@@ -2408,6 +2408,20 @@ procedure SymmetricEncrypt(key: cardinal; var data: RawByteString); overload;
 /// simple symmetric obfuscation scheme using a 32-bit key and crc32c lookup tables
 procedure SymmetricEncrypt(key: PtrUInt; data: PCardinal; len: PtrInt); overload;
 
+type
+  /// header structure definition for IV and plain text / key size storage
+  // - as used by TRsa.Seal/Open and RsaOpen() in mormot.crypt.rsa.pas, and
+  // EVP_PKEY.RsaSeal/RsaOpen in mormot.lib.openssl11.pas
+  // - follows OpenSSL EVP_SealInit/EVP_SealFinal from crypto/evp/p_seal.c
+  // algorithm, so that RSA Message encoding would stay compatible everywhere
+  TRsaSealHeader = packed record
+    iv: THash128;
+    plainlen: integer;
+    encryptedkeylen: word; // typically 256 bytes for RSA-2048
+    // followed by the encrypted key, then the encrypted message
+  end;
+  PRsaSealHeader = ^TRsaSealHeader;
+
 
 { ****************** Windows API Specific Security Types and Functions }
 
@@ -2470,8 +2484,6 @@ type
     Blob: CRYPT_OBJID_BLOB;
   end;
   PCERT_EXTENSION = ^CERT_EXTENSION;
-  CERT_EXTENSIONS = array[word] of CERT_EXTENSION;
-  PCERT_EXTENSIONS = ^CERT_EXTENSIONS;
 
   CERT_INFO = record
     dwVersion: DWord;
@@ -2485,9 +2497,15 @@ type
     IssuerUniqueId: CRYPT_BIT_BLOB;
     SubjectUniqueId: CRYPT_BIT_BLOB;
     cExtension: DWord;
-    rgExtension: PCERT_EXTENSIONS;
+    rgExtension: PCERT_EXTENSION;
   end;
   PCERT_INFO = ^CERT_INFO;
+
+  CERT_EXTENSIONS = record
+    cExtension: DWORD;
+    rgExtension: PCERT_EXTENSION;
+  end;
+  PCERT_EXTENSIONS = ^CERT_EXTENSIONS;
 
   CERT_CONTEXT = record
     dwCertEncodingType: DWord;
@@ -2580,6 +2598,7 @@ type
 {$A+}
 
   /// direct access to the Windows CryptoApi - use the global CryptoAPI variable
+  // - consider the more recent NCrypt (CNG) API as defined in mormot.lib.sspi
   {$ifdef USERECORDWITHMETHODS}
   TWinCryptoApi = record
   {$else}
@@ -2636,6 +2655,12 @@ const
   CRYPT_NEWKEYSET                 = 8;
   CRYPT_VERIFYCONTEXT             = DWord($F0000000);
   CRYPT_STRING_BASE64HEADER       = 0; // = PEM textual format
+  CERT_FIND_ANY                   = 0;
+  CERT_STORE_PROV_SYSTEM_W        = 10;
+  CERT_STORE_OPEN_EXISTING_FLAG   = $00004000;
+  CERT_STORE_READONLY_FLAG        = $00008000;
+  CERT_SYSTEM_STORE_CURRENT_USER  = $00010000;
+  CERT_SYSTEM_STORE_LOCAL_MACHINE = $00020000;
   CRYPTPROTECT_UI_FORBIDDEN       = 1;
   PLAINTEXTKEYBLOB                = 8;
   CUR_BLOB_VERSION                = 2;
@@ -2663,16 +2688,89 @@ function CertOpenSystemStoreW(hProv: HCRYPTPROV;
   szSubsystemProtocol: PWideChar): HCERTSTORE ;
     stdcall; external crypt32;
 
+function CertOpenStore(lpszStoreProvider: PAnsiChar; dwEncodingType: cardinal;
+  hCryptProv: HCRYPTPROV; dwFlags: cardinal; pvPara: pointer): HCERTSTORE;
+  stdcall; external crypt32;
+
 function CertEnumCertificatesInStore(hCertStore: HCERTSTORE;
   pPrevCertContext: PCCERT_CONTEXT): PCCERT_CONTEXT;
     stdcall; external crypt32;
+
+function CertFreeCertificateContext(pCertContext: PCCERT_CONTEXT): BOOL;
+  stdcall; external crypt32;
+
+function CertDuplicateCertificateContext(pCertContext: PCCERT_CONTEXT): PCCERT_CONTEXT;
+  stdcall; external crypt32;
 
 function CryptBinaryToStringA(pBinary: PByte; cbBinary, dwFlags: DWord;
   pszString: PAnsiChar; var pchString: DWord): BOOL;
     stdcall; external crypt32;
 
+function CryptStringToBinaryA(pszString: PAnsiChar; cchString, dwFlags: cardinal;
+  pbBinary: PByte; var pcbBinary: cardinal; pdwSkip, pdwFlags: PCardinal): BOOL;
+    stdcall; external crypt32;
+
 function CertCloseStore(hCertStore: HCERTSTORE; dwFlags: DWord): BOOL;
     stdcall; external crypt32;
+
+type
+  /// identify the location of a Windows system certificate store
+  TWinCertStoreLocation = (
+    wcslCurrentUser,
+    wcslLocalMachine);
+  /// select one or several Windows certificate store locations
+  TWinCertStoreLocations = set of TWinCertStoreLocation;
+
+  /// enumerate certificates from one Windows system certificate store
+  // - owns the HCERTSTORE and current enumeration PCCERT_CONTEXT
+  // - Context is valid until the next call to Next() or until destruction
+  // - call Duplicate() if the current context should survive this instance
+  TWinCertStore = class
+  private
+    fHandle: HCERTSTORE;
+    fContext: PCCERT_CONTEXT;
+    fCertStore: TSystemCertificateStore;
+    fLocation: TWinCertStoreLocation;
+  public
+    /// open a Windows certificate store for read-only enumeration
+    constructor Create(CertStore: TSystemCertificateStore;
+      Location: TWinCertStoreLocation = wcslCurrentUser); reintroduce;
+    /// release the current certificate context and store handle
+    destructor Destroy; override;
+    /// move to the next certificate
+    // - automatically releases the previous Context
+    // - returns false when no more certificate is available
+    function Next: boolean;
+    /// duplicate the current certificate context
+    // - caller should eventually call CertFreeCertificateContext()
+    function Duplicate: PCCERT_CONTEXT;
+    /// export the current certificate context as PEM text
+    function ToPem: RawUtf8;
+    /// underlying certificate store handle
+    property Handle: HCERTSTORE
+      read fHandle;
+    /// current enumerated certificate
+    property Context: PCCERT_CONTEXT
+      read fContext;
+    /// logical certificate store, e.g. scsMY or scsRoot
+    property CertStore: TSystemCertificateStore
+      read fCertStore;
+    /// Windows store location
+    property Location: TWinCertStoreLocation
+      read fLocation;
+  end;
+
+/// convert binary data using the Windows CryptBinaryToStringA() API
+// - default Flags are CRYPT_STRING_BASE64HEADER for PEM output
+// - leaves Text unchanged on conversion failure
+procedure WinCryptBinaryAppendAsText(Data: pointer; DataLen: cardinal;
+  var Text: RawUtf8; Flags: cardinal = CRYPT_STRING_BASE64HEADER);
+
+/// convert text data into binary using the Windows CryptStringToBinaryA() API
+// - default Flags are CRYPT_STRING_BASE64HEADER for PEM input
+// - returns returns empty Der on invalid input
+function WinCryptTextToBinary(const Pem: RawUtf8;
+  Flags: cardinal = CRYPT_STRING_BASE64HEADER): RawByteString;
 
 type
   /// TSynWindowsPrivileges enumeration synchronized with WinAPI
@@ -3029,6 +3127,9 @@ function LookupToken(tok: THandle; out name, domain: RawUtf8;
 /// retrieve the 'domain\name' combined value of a given Token
 function LookupToken(tok: THandle; const server: RawUtf8 = ''): RawUtf8; overload;
 
+/// retrieve the 'domain\name' combined value of a given Token
+procedure LookupTokenVar(tok: THandle; const server: RawUtf8; var result: RawUtf8);
+
 /// retrieve the binary SID and type of a given account by name
 // - use fully qualified account names (for example, domain_name\user_name)
 function LookupName(const system, account: RawUtf8;
@@ -3150,6 +3251,51 @@ function SetSystemSecurityDescriptor(const fn: TFileName;
 // - in HKLM:Software\Policies\Microsoft\SystemCertificates\ChainEngine\Config as documented in
 // https://learn.microsoft.com/en-us/windows-server/security/authority-information-access-retrieval
 function IsAiaDisabledInWindowsRegistry: boolean;
+
+type
+  /// the result of WinVerifyExeSignature()
+  // - wvsValid: the signature is valid and its certificates chain is trusted
+  // - wvsUnsupported: this operating system does not support wintrust.dll
+  // - wvsNotSigned: the file has no (embedded) signature
+  // - wvsBadDigest: the file content has been tampered after signing
+  // - wvsUntrustedRoot: certificate chain ends with an untrusted root
+  // - wvsExpired: a certificate of the chain has expired (and no timestamp)
+  // - wvsRevoked: a certificate of the chain has been revoked
+  // - wvsDistrust: a certificate is explicitly distrusted by the user/admin
+  // - wvsNotTrusted: the subject is not trusted for the specified action, or
+  // the local security policy forbids it
+  // - wvsNoRevocationCheck: revocation could not be checked (e.g. offline)
+  // - wvsError: the file can't be read, or any other WinVerifyTrust() error
+  TWinVerifyStatus = (
+    wvsValid,
+    wvsUnsupported,
+    wvsNotSigned,
+    wvsBadDigest,
+    wvsUntrustedRoot,
+    wvsExpired,
+    wvsRevoked,
+    wvsDistrust,
+    wvsNotTrusted,
+    wvsNoRevocationCheck,
+    wvsError);
+
+function ToText(st: TWinVerifyStatus): PShortString; overload;
+
+/// verify the Authenticode digital signature of a file using the Windows API
+// - calls WinVerifyTrust(WINTRUST_ACTION_GENERIC_VERIFY_V2) without any UI
+// - by default, no revocation check is done, so no network access occurs: set
+// CheckRevocation=true to validate the whole certificates chain (with a
+// possible slow network access to the CRL/OCSP servers)
+// - ErrorCode, if not nil, will contain the raw HRESULT of WinVerifyTrust()
+// - only the embedded signature is checked: catalog-signed files (e.g. most
+// Windows system files) will return wvsNotSigned
+function WinVerifyExeSignature(const FileName: TFileName;
+  CheckRevocation: boolean = false; ErrorCode: PCardinal = nil): TWinVerifyStatus;
+
+/// return true if WinVerifyExeSignature() returns wvsValid
+// - a convenient wrapper to check the Authenticode signature of a file
+function IsExeSignatureValid(const FileName: TFileName;
+  CheckRevocation: boolean = false): boolean;
 
 
 {$endif OSWINDOWS}
@@ -4029,7 +4175,7 @@ var
   OsSecSafe: TLightLock; // global lock shared by this unit
   SDDL_WKS_INDEX: array[TWellKnownSid] of byte; // into 1..48
   SDDL_WKR_INDEX: array[TWellKnownRid] of byte; // into 49..66
-  SID_SDDLW: packed array[byte] of word absolute SID_SDDL;
+  SID_SDDLW: TByteToWord absolute SID_SDDL;
 
 procedure SddlInitialize;
 var
@@ -7570,37 +7716,18 @@ end;
 
 {$ifdef OSWINDOWS}
 
-const
-  WINDOWS_CERTSTORE: array[TSystemCertificateStore] of PWideChar = (
-    'CA', 'MY', 'ROOT', 'SPC');
-
 function _GetSystemStoreAsPem(CertStore: TSystemCertificateStore): RawUtf8;
 var
-  certlen: DWord;
-  store: HCERTSTORE;
-  ctx: PCCERT_CONTEXT;
-  tmp: TSynTempBuffer;
+  store: TWinCertStore; // use our thing Windows API wrapper
 begin
-  // call the Windows API to retrieve the System certificates
   FastAssignNew(result);
-  store := CertOpenSystemStoreW(nil, WINDOWS_CERTSTORE[CertStore]);
+  store := TWinCertStore.Create(CertStore);
   try
-    ctx := CertEnumCertificatesInStore(store, nil);
-    while ctx <> nil do
-    begin
-      certlen := 0;
-      if not CryptBinaryToStringA(ctx^.pbCertEncoded, ctx^.cbCertEncoded,
-          CRYPT_STRING_BASE64HEADER, nil, certlen) then
-        break;
-      tmp.Init(certlen); // a PEM is very likely to be < 8KB so will be on stack
-      if CryptBinaryToStringA(ctx^.pbCertEncoded, ctx^.cbCertEncoded,
-          CRYPT_STRING_BASE64HEADER, tmp.buf, certlen) then
-         AppendBufferToUtf8(tmp.buf, certlen, result);
-      tmp.Done;
-      ctx := CertEnumCertificatesInStore(store, ctx); // next certificate
-    end;
+    while store.Next do
+      with store.Context^ do
+        WinCryptBinaryAppendAsText(pbCertEncoded, cbCertEncoded, result);
   finally
-    CertCloseStore(store, 0);
+    store.Free;
   end;
 end;
 
@@ -7813,7 +7940,7 @@ begin
        sd, SDDL_REVISION_1, ALL_INFO, txt, nil) then
     exit;
   FastSetString(text, txt, StrLen(txt));
-  LocalFree(HLOCAL(txt));
+  LocalFree(txt);
   result := true;
 end;
 
@@ -7875,11 +8002,117 @@ begin
   if ok then
   begin
     FastSetRawByteString(result, dst.pbData, dst.cbData);
-    LocalFree(HLOCAL(dst.pbData));
+    LocalFree(dst.pbData);
   end
   else
     FastAssignNew(result);
 end;
+
+procedure WinCryptBinaryAppendAsText(Data: pointer; DataLen: cardinal;
+  var Text: RawUtf8; Flags: cardinal);
+var
+  len: cardinal;
+  tmp: TSynTempBuffer;
+begin
+  if (Data = nil) or
+     (DataLen = 0) then
+    exit;
+  len := tmp.Init; // try once with our 4KB stack buffer
+  if not CryptBinaryToStringA(Data, DataLen, Flags, tmp.buf, len) then
+  begin
+    if GetLastError <> ERROR_MORE_DATA then
+      exit;
+    tmp.Init(len); // allocate a big enough buffer
+    if not CryptBinaryToStringA(Data, DataLen, Flags, tmp.buf, len) then
+      len := 0;    // append nothing on error, but eventual tmp.Done
+  end;
+  AppendBufferToUtf8(tmp.buf, len, Text);
+  tmp.Done;
+end;
+
+function WinCryptTextToBinary(const Pem: RawUtf8; Flags: cardinal): RawByteString;
+var
+  l, len: cardinal;
+  tmp: TSynTempBuffer;
+begin
+  FastAssignNew(result);
+  l := length(Pem);
+  if l = 0 then
+    exit;
+  len := tmp.Init; // try once with our 4KB stack buffer
+  if not CryptStringToBinaryA(pointer(Pem), l, Flags, tmp.buf, len, nil, nil) then
+  begin
+    if GetLastError <> ERROR_MORE_DATA then
+      exit;
+    tmp.Init(len); // allocate a big enough buffer
+    if not CryptStringToBinaryA(pointer(Pem), l, Flags, tmp.buf, len, nil, nil) then
+      len := 0;    // return nothing on error, but eventual tmp.Done
+  end;
+  FastSetRawByteString(result, tmp.buf, len);
+  tmp.Done;
+end;
+
+
+{ TWinCertStore }
+
+const
+  WINDOWS_CERTSTORE: array[TSystemCertificateStore] of PWideChar = (
+    'CA', 'MY', 'ROOT', 'SPC');
+
+  WINDOWS_CERTSTORE_LOCATION: array[TWinCertStoreLocation] of cardinal = (
+    CERT_SYSTEM_STORE_CURRENT_USER,
+    CERT_SYSTEM_STORE_LOCAL_MACHINE);
+
+constructor TWinCertStore.Create(CertStore: TSystemCertificateStore;
+  Location: TWinCertStoreLocation);
+begin
+  inherited Create;
+  fCertStore := CertStore;
+  fLocation := Location;
+  fHandle := CertOpenStore(
+    PAnsiChar(PtrUInt(CERT_STORE_PROV_SYSTEM_W)),
+    0,
+    nil,
+    WINDOWS_CERTSTORE_LOCATION[Location] or
+      CERT_STORE_OPEN_EXISTING_FLAG or
+      CERT_STORE_READONLY_FLAG,
+    WINDOWS_CERTSTORE[CertStore]);
+end;
+
+destructor TWinCertStore.Destroy;
+begin
+  if fContext <> nil then
+    CertFreeCertificateContext(fContext);
+  if fHandle <> nil then
+    CertCloseStore(fHandle, 0);
+  inherited Destroy;
+end;
+
+function TWinCertStore.Next: boolean;
+begin
+  result := false;
+  if fHandle = nil then
+    exit;
+  // CertEnumCertificatesInStore() releases the previous fContext
+  fContext := CertEnumCertificatesInStore(fHandle, fContext);
+  result := fContext <> nil;
+end;
+
+function TWinCertStore.Duplicate: PCCERT_CONTEXT;
+begin
+  if fContext = nil then
+    result := nil
+  else
+    result := CertDuplicateCertificateContext(fContext);
+end;
+
+function TWinCertStore.ToPem: RawUtf8;
+begin
+  FastAssignNew(result);
+  if fContext <> nil then
+    WinCryptBinaryAppendAsText(fContext.pbCertEncoded, fContext.cbCertEncoded, result);
+end;
+
 
 function SetSystemTime(const utctime: TSystemTime): boolean;
 var
@@ -7911,8 +8144,8 @@ var
   ok: BOOL;
   err: integer;
 begin
-  SetDynamicTimeZoneInformation := LibraryResolve(
-    GetModuleHandle(kernel32), 'SetDynamicTimeZoneInformation');
+  SetDynamicTimeZoneInformation :=
+    LibraryResolve(kernelHandle, 'SetDynamicTimeZoneInformation');
   privileges.Init(wttProcess);
   try
     privileges.Enable(wspTimeZone); // ensure has SE_TIME_ZONE_NAME
@@ -8358,6 +8591,7 @@ var
   NtQueryInformationProcess: function(ProcessHandle: THandle;
     ProcessInformationClass: PROCESSINFOCLASS; ProcessInformation: pointer;
     ProcessInformationLength: ULONG; ReturnLength: PULONG): integer; stdcall;
+  // late-binding is safer for anti-virus heuristics
   ReadProcessMemory: function (hProcess: THandle; lpBaseAddress, lpBuffer: pointer;
     nSize: PtrUInt; var lpNumberOfBytesRead: PtrUInt): BOOL; stdcall;
   NtQueryInformationProcessChecked: boolean;
@@ -8369,16 +8603,14 @@ var
   pbi: MS_PROCESS_BASIC_INFORMATION;
   peb: MS_PEB;
   peb_upp: MS_RTL_USER_PROCESS_PARAMETERS;
-  prochandle, nt: THandle;
+  prochandle: THandle;
 begin
   if not NtQueryInformationProcessChecked then
   begin
     NtQueryInformationProcessChecked := true;
-    nt := GetModuleHandle(ntdll);
-    if nt > 0 then
-      NtQueryInformationProcess := LibraryResolve(nt, 'NtQueryInformationProcess');
-    ReadProcessMemory := // late-binding is safer for anti-virus heuristics
-      LibraryResolve(GetModuleHandle(kernel32), 'ReadProcessMemory');
+    if ntHandle > 0 then
+      NtQueryInformationProcess := LibraryResolve(ntHandle, 'NtQueryInformationProcess');
+    ReadProcessMemory := LibraryResolve(kernelHandle, 'ReadProcessMemory');
   end;
   result := false;
   Finalize(aInfo);
@@ -8814,6 +9046,11 @@ begin
 end;
 
 function LookupToken(tok: THandle; const server: RawUtf8): RawUtf8;
+begin
+  LookupTokenVar(tok, server, result);
+end;
+
+procedure LookupTokenVar(tok: THandle; const server: RawUtf8; var result: RawUtf8);
 var
   name, domain: RawUtf8;
 begin
@@ -8914,7 +9151,7 @@ begin
   if result then
     result := dest.FromBinary(pointer(sd)); // assume OS input is safe
   if sd <> nil then
-    LocalFree(HLOCAL(sd));
+    LocalFree(sd);
   if not result then
     SetLastError(bak); // so that WinLastError / RaiseLastError would work
 end;
@@ -8964,6 +9201,156 @@ function IsAiaDisabledInWindowsRegistry: boolean;
 begin
   result := ReadRegDWord(wrLocalMachine,
     'Software\Policies\Microsoft\SystemCertificates\ChainEngine', 'Config') = 2;
+end;
+
+function ToText(st: TWinVerifyStatus): PShortString;
+begin
+  result := GetEnumNameRtti(TypeInfo(TWinVerifyStatus), ord(st));
+end;
+
+{$ifdef CPU64}
+{$A8}
+{$else}
+{$A4}
+{$endif CPU64}
+type
+  // see https://learn.microsoft.com/en-us/windows/win32/api/wintrust
+  TWinTrustFileInfo = record
+    cbStruct: cardinal;
+    pcwszFilePath: PWideChar;
+    hFile: THandle;
+    pgKnownSubject: PGuid;
+  end;
+
+  TWinTrustData = record
+    cbStruct: cardinal;
+    pPolicyCallbackData: pointer;
+    pSIPClientData: pointer;
+    dwUIChoice: cardinal;
+    fdwRevocationChecks: cardinal;
+    dwUnionChoice: cardinal;
+    pFile: ^TWinTrustFileInfo;
+    dwStateAction: cardinal;
+    hWVTStateData: THandle;
+    pwszURLReference: PWideChar;
+    dwProvFlags: cardinal;
+    dwUIContext: cardinal;
+    pSignatureSettings: pointer;
+  end;
+{$A+}
+
+const
+  wintrust = 'wintrust.dll';
+  WINTRUST_ACTION_GENERIC_VERIFY_V2: TGuid =
+    '{00AAC56B-CD44-11D0-8CC2-00C04FC295EE}';
+
+  WTD_UI_NONE            = 2;
+  WTD_REVOKE_NONE        = 0;
+  WTD_REVOKE_WHOLECHAIN  = 1;
+  WTD_CHOICE_FILE        = 1;
+  WTD_STATEACTION_VERIFY = 1;
+  WTD_STATEACTION_CLOSE  = 2;
+  WTD_REVOCATION_CHECK_NONE    = $00000010;
+  WTD_REVOCATION_CHECK_CHAIN   = $00000040;
+  WTD_CACHE_ONLY_URL_RETRIEVAL = $00001000;
+
+  TRUST_E_PROVIDER_UNKNOWN     = $800b0001;
+  TRUST_E_SUBJECT_FORM_UNKNOWN = $800b0003;
+  TRUST_E_SUBJECT_NOT_TRUSTED  = $800b0004;
+  TRUST_E_NOSIGNATURE          = $800b0100;
+  CERT_E_EXPIRED               = $800b0101;
+  CERT_E_UNTRUSTEDROOT         = $800b0109;
+  CERT_E_CHAINING              = $800b010a;
+  CERT_E_REVOKED               = $800b010c;
+  CERT_E_UNTRUSTEDTESTROOT     = $800b010d;
+  TRUST_E_EXPLICIT_DISTRUST    = $800b0111;
+  CRYPT_E_REVOKED              = $80092010;
+  CRYPT_E_NO_REVOCATION_CHECK  = $80092012;
+  CRYPT_E_REVOCATION_OFFLINE   = $80092013;
+  CRYPT_E_SECURITY_SETTINGS    = $80092026;
+  TRUST_E_BAD_DIGEST           = $80096010;
+
+var
+  WinTrustDll: THandle;
+  WinVerifyTrust: function(hwnd: THandle; pgActionID: PGuid;
+    pWVTData: pointer): integer; stdcall;
+
+function WinVerifyExeSignature(const FileName: TFileName;
+  CheckRevocation: boolean; ErrorCode: PCardinal): TWinVerifyStatus;
+var
+  fi: TWinTrustFileInfo;
+  wd: TWinTrustData;
+  tmp: TW32Temp;
+  res: cardinal;
+begin
+  if ErrorCode <> nil then
+    ErrorCode^ := 0;
+  result := wvsError;
+  if FileName = '' then
+    exit;
+  result := wvsUnsupported;
+  if not DelayedProc(WinVerifyTrust, WinTrustDll, wintrust, 'WinVerifyTrust') then
+    exit;
+  FillCharFast(fi, SizeOf(fi), 0);
+  fi.cbStruct := SizeOf(fi);
+  fi.pcwszFilePath := W32(FileName, tmp);
+  FillCharFast(wd, SizeOf(wd), 0);
+  wd.cbStruct := SizeOf(wd);
+  wd.dwUIChoice := WTD_UI_NONE;
+  wd.dwUnionChoice := WTD_CHOICE_FILE;
+  wd.pFile := @fi;
+  wd.dwStateAction := WTD_STATEACTION_VERIFY;
+  if CheckRevocation then
+  begin
+    wd.fdwRevocationChecks := WTD_REVOKE_WHOLECHAIN;
+    wd.dwProvFlags := WTD_REVOCATION_CHECK_CHAIN;
+  end
+  else
+  begin
+    wd.fdwRevocationChecks := WTD_REVOKE_NONE;
+    wd.dwProvFlags := WTD_REVOCATION_CHECK_NONE or WTD_CACHE_ONLY_URL_RETRIEVAL;
+  end;
+  res := cardinal(WinVerifyTrust(0, @WINTRUST_ACTION_GENERIC_VERIFY_V2, @wd));
+  // always release the state data allocated by WTD_STATEACTION_VERIFY
+  wd.dwStateAction := WTD_STATEACTION_CLOSE;
+  WinVerifyTrust(0, @WINTRUST_ACTION_GENERIC_VERIFY_V2, @wd);
+  if ErrorCode <> nil then
+    ErrorCode^ := res;
+  case res of
+    NO_ERROR:
+      result := wvsValid;
+    TRUST_E_NOSIGNATURE,
+    TRUST_E_SUBJECT_FORM_UNKNOWN,
+    TRUST_E_PROVIDER_UNKNOWN:
+      result := wvsNotSigned;
+    TRUST_E_BAD_DIGEST:
+      result := wvsBadDigest;
+    CERT_E_UNTRUSTEDROOT,
+    CERT_E_UNTRUSTEDTESTROOT,
+    CERT_E_CHAINING:
+      result := wvsUntrustedRoot;
+    CERT_E_EXPIRED:
+      result := wvsExpired;
+    CERT_E_REVOKED,
+    CRYPT_E_REVOKED:
+      result := wvsRevoked;
+    TRUST_E_EXPLICIT_DISTRUST:
+      result := wvsDistrust;
+    TRUST_E_SUBJECT_NOT_TRUSTED,
+    CRYPT_E_SECURITY_SETTINGS:
+      result := wvsNotTrusted;
+    CRYPT_E_NO_REVOCATION_CHECK,
+    CRYPT_E_REVOCATION_OFFLINE:
+      result := wvsNoRevocationCheck;
+  else
+    result := wvsError; // e.g. CRYPT_E_FILE_ERROR
+  end;
+end;
+
+function IsExeSignatureValid(const FileName: TFileName;
+  CheckRevocation: boolean): boolean;
+begin
+  result := WinVerifyExeSignature(FileName, CheckRevocation) = wvsValid;
 end;
 
 

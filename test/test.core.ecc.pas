@@ -23,6 +23,7 @@ uses
   mormot.core.search,
   mormot.core.test,
   mormot.crypt.secure,
+  mormot.crypt.factory,
   mormot.crypt.jwt,
   mormot.crypt.ecc256r1,
   mormot.crypt.ecc,
@@ -147,6 +148,8 @@ var
   p, e: RawUtf8;
   sec1, sec2: TEccSecretKey;
   c1, c2: TEccPublicKey;
+  pr: TEccPrivateKey;
+  unc: TEccPublicKeyUncompressed;
 begin
   if pub = nil then
     ReferenceVectors; // need to compute some keys to work on
@@ -159,7 +162,7 @@ begin
   ecc_uncompress_key_pas(pub[0], pubunc[0]); // also validate our pascal code
   timer.Start;
   for i := 1 to ECC_COUNT - 1 do
-    Ecc256r1Uncompress(pub[i], pubunc[i]); // may be OpenSSL
+    Ecc256r1Uncompress(pub[i], pubunc[i]);   // only pascal
   NotifyTestSpeed('Ecc256r1Uncompress', ECC_COUNT - 1, 0, @timer);
   for i := 1 to ECC_COUNT - 1 do
   begin
@@ -204,6 +207,35 @@ begin
     checkEqual(EciesOpen('aes-128-ctr', priv[i], e), p, 'EciesOpen');
   end;
   NotifyTestSpeed('EciesSeal+EciesOpen', ECC_COUNT * 2, 0, @timer);
+  // Validate invalid ecc public keys (out of the curve)
+  c1 := pub[0];
+  pr := priv[0];
+  // Control: valid P-256 public key
+  Check(ecdh_shared_secret_pas(c1, pr, sec1));
+  // Invalid compressed prefix
+  c2 := c1;
+  c2[0] := $04;
+  Check(not ecdh_shared_secret_pas(c2, pr, sec1));
+  c2[0] := $00;
+  Check(not ecdh_shared_secret_pas(c2, pr, sec1));
+  // Non-canonical X: 2^256-1 >= curve prime
+  FillCharFast(c2, SizeOf(c2), $FF);
+  c2[0] := $02;
+  Check(not ecdh_shared_secret_pas(c2, pr, sec1));
+  // X=1: x^3-3x+b is a quadratic non-residue
+  FillCharFast(c2, SizeOf(c2), 0);
+  c2[0] := $02;
+  c2[32] := $01;
+  Check(not ecdh_shared_secret_pas(c2, pr, sec1));
+  // Try the opposite parity too
+  c2[0] := $03;
+  Check(not ecdh_shared_secret_pas(c2, pr, sec1));
+  // Invalid uncompressed point (0,0)
+  FillCharFast(unc, SizeOf(unc), 0);
+  Check(not ecdh_shared_secret_uncompressed_pas(unc, pr, sec1));
+  // Invalid private scalar
+  FillCharFast(pr, SizeOf(pr), 0);
+  Check(not ecdh_shared_secret_pas(c1, pr, sec1));
 end;
 
 procedure TTestCoreEcc.CertificatesAndSignatures;

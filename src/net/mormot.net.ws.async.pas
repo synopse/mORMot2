@@ -102,6 +102,7 @@ type
     // called every 10 seconds to check against HeartbeatDelay and send ping
     function OnLastOperationIdle(nowsec: TAsyncConnectionSec): boolean; override;
     // used e.g. by TWebSocketAsyncServer.WebSocketBroadcast
+    // - never called within ConnectionLock: Write() may call ConnectionDelete()
     function SendDirect(const tmp: TSynTempBuffer;
       opcode: TWebSocketFrameOpCode; timeout: integer): boolean;
   public
@@ -127,6 +128,8 @@ type
       aConnectionClass: TAsyncConnectionClass; const ProcessName: RawUtf8;
       aLog: TSynLogClass; aOptions: TAsyncConnectionsOptions;
       aThreadPoolCount: integer); override;
+    /// trigger TWebSocketAsyncConnection.OnLastOperationIdle every HeartbeatDelay
+    function GetLastOperationIdleSeconds: cardinal; override;
   end;
 
   /// callback signature to notify TWebSocketAsyncServer connections
@@ -376,7 +379,6 @@ begin
     result := false
   else
   begin
-    // use timeout=0 since WebSocketBroadcast() has a connection lock
     result := fOwner.Write(self, tmp.buf, tmp.len, timeout);
     if result and
        (opcode = focConnectionClose) then
@@ -392,10 +394,16 @@ constructor TWebSocketAsyncConnections.Create(const aPort: RawUtf8;
   const ProcessName: RawUtf8; aLog: TSynLogClass; aOptions: TAsyncConnectionsOptions;
   aThreadPoolCount: integer);
 begin
+  fKeepConnectionInstanceMS := 500; // more conservative for blocking callbacks
   inherited Create(aPort, OnStart, OnStop, aConnectionClass, ProcessName,
     aLog, aOptions, aThreadPoolCount);
-  fLastOperationIdleSeconds := 5;   // 5 secs is good enough for ping/pong
-  fKeepConnectionInstanceMS := 500; // more conservative for blocking callbacks
+end;
+
+function TWebSocketAsyncConnections.GetLastOperationIdleSeconds: cardinal;
+begin
+  result := TWebSocketAsyncServer(fAsyncServer).fSettings.HeartbeatDelay;
+  if result <> 0 then // HeartbeatDelay=0 means ping/pong disabled
+    result := MaxPtrUInt(1, result div MilliSecsPerSec);
 end;
 
 procedure TWebSocketAsyncConnections.NotifyOutgoing(
@@ -691,31 +699,56 @@ function TWebSocketAsyncServer.WebSocketBroadcast(const aFrame: TWebSocketFrame;
   const aClientsConnectionID: THttpServerConnectionIDDynArray;
   aTimeOut: integer): integer;
 var
-  i: PtrInt;
-  tmp: TSynTempBuffer;
+  i, n: PtrInt;
+  ids: TConnectionAsyncHandleDynArray;
+  conns: TAsyncConnectionDynArray;
+  conn: TWebSocketAsyncConnection;
+  tmp: TSynTempBuffer; // local fame content computed once
 begin
   result := 0;
   if Terminated or
      (fAsync = nil) or
      not (aFrame.opcode in [focText, focBinary, focConnectionClose]) then
     exit;
+  // send outside the lock: a failing Write() calls ConnectionDelete() -> WriteLock
   FrameSendEncode(aFrame, {mask=}0, tmp);
-  fAsync.ConnectionLock.ReadOnlyLock;
   try
-    // use TWebSocketAsyncConnection.SendDirect for non-blocking socket sending
-    if aClientsConnectionID = nil then
+    // compute the destination TConnectionAsyncHandle
+    n := length(aClientsConnectionID);
+    if n = 0 then
+    begin
       // broadcast to all connected clients
-      for i := 0 to fAsync.ConnectionCount - 1 do
-        inc(result, ord(TWebSocketAsyncConnection(fAsync.Connection[i]).
-           SendDirect(tmp, aFrame.opcode, aTimeOut)))
+      if aTimeOut = 0 then
+      begin
+        // most common case of non-blocking notifications could use instances
+        conns := fAsync.GetConnectionInstances;
+        for i := 0 to length(conns) - 1 do
+          if TWebSocketAsyncConnection(conns[i]).SendDirect(tmp, aFrame.opcode, 0) then
+            inc(result);
+        exit;
+      end;
+      // get live handles for late access within aTimeOut
+      ids := fAsync.GetConnectionHandles;
+    end
     else
-      // broadcast to some specified connected clients, using O(log(n)) search
-      for i := 0 to length(aClientsConnectionID) - 1 do
-        inc(result, ord(TWebSocketAsyncConnection(
-          fAsync.LockedConnectionSearch(aClientsConnectionID[i])).
-            SendDirect(tmp, aFrame.opcode, aTimeOut)));
+    begin
+      // convert 64-bit THttpServerConnectionID into 32-bit TConnectionAsyncHandle
+      SetLength(ids, n);
+      for i := 0 to n - 1 do
+        ids[i] := aClientsConnectionID[i];
+    end;
+    if ids = nil then
+      exit; // no connection
+    // use TWebSocketAsyncConnection.SendDirect for non-blocking socket sending
+    for i := 0 to length(ids) - 1 do
+    begin
+      // O(log(n)) search is safer against GC with aTimeOut > 0
+      conn := TWebSocketAsyncConnection(fAsync.ConnectionFind(ids[i]));
+      if Assigned(conn) and
+         conn.SendDirect(tmp, aFrame.opcode, aTimeOut) then
+        inc(result);
+    end;
   finally
-    fAsync.ConnectionLock.ReadOnlyUnLock;
     tmp.Done;
   end;
 end;

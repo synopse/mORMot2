@@ -102,7 +102,7 @@ Contains embedded comments:
 TTaskViewDTO = packed record
   // ... task fields
   CommentCount: integer;
-  Comments: TTaskCommentDynArray;  // Full comment data
+  Comments: TTaskCommentDTODynArray;  // Full comment data, copied from TTaskComment by task_mappers
 end;
 ```
 

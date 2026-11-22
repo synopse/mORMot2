@@ -1293,6 +1293,12 @@ type
   // as plain password value
   // - this class is not available on some targets (e.g. Android)
   TRestServerAuthenticationSspi = class(TRestServerAuthenticationSignedUri)
+  protected
+    {$ifdef OSPOSIX} // keytab files is a POSIX/GSSAPI specific feature
+    fSspiKeyTab: TServerSspiKeyTab;
+    procedure SetKeyTab(const aKeyTab: TFileName);
+    function GetKeyTab: TFileName;
+    {$endif OSPOSIX}
   public
     /// initialize this SSPI/GSSAPI authentication scheme
     constructor Create(aServer: TRestServer); override;
@@ -1301,6 +1307,11 @@ type
     // to a Windows SSPI API secure challenge
     function Auth(Ctxt: TRestServerUriContext;
       const aUserName: RawUtf8): boolean; override;
+    {$ifdef OSPOSIX}
+    /// the keytab file name propagated to all server threads (POSIX only)
+    property KeyTab: TFileName
+      read GetKeyTab write SetKeyTab;
+    {$endif OSPOSIX}
   end;
 
   {$endif DOMAINRESTAUTH}
@@ -2188,6 +2199,7 @@ type
     /// access or initialize the internal IoC resolver
     // - overriden to create and initialize the internal TServiceContainerServer
     // if no service interface has been registered yet
+    // - Services registration is not thread-safe and should be done at startup
     function ServiceContainer: TServiceContainer; override;
     /// register a Service class on the server side
     // - this methods expects a class to be supplied, and the exact list of
@@ -2206,6 +2218,7 @@ type
     // on success (i.e. corresponding to aInterfaces[0] - not to the others),
     // or nil if registration failed (e.g. if any of the supplied interfaces
     // is not implemented by the given class)
+    // - Services registration is not thread-safe and should be done at startup
     function ServiceRegister(aImplementationClass: TInterfacedClass;
       const aInterfaces: array of PRttiInfo;
       aInstanceCreation: TServiceInstanceImplementation = sicSingle;
@@ -2225,6 +2238,7 @@ type
     // on success (i.e. corresponding to aInterfaces[0] - not to the others),
     // or nil if registration failed (e.g. if any of the supplied interfaces
     // is not implemented by the given class)
+    // - Services registration is not thread-safe and should be done at startup
     function ServiceRegister(aSharedImplementation: TInterfacedObject;
       const aInterfaces: array of PRttiInfo;
       const aContractExpected: RawUtf8 = ''): TServiceFactoryServerAbstract; overload; virtual;
@@ -2242,6 +2256,7 @@ type
     // - that is, server side will be called to check for the availability of
     // each interface
     // - you can specify an optional custom contract for the first interface
+    // - Services registration is not thread-safe and should be done at startup
     function ServiceRegister(aClient: TRest; const aInterfaces: array of PRttiInfo;
       aInstanceCreation: TServiceInstanceImplementation = sicSingle;
       const aContractExpected: RawUtf8 = ''): boolean; overload; virtual;
@@ -2252,6 +2267,7 @@ type
     // on success (i.e. corresponding to aInterfaces[0] - not to the others),
     // or nil if registration failed (e.g. if any of the supplied interfaces
     // is not implemented by the given class)
+    // - Services registration is not thread-safe and should be done at startup
     function ServiceDefine(aImplementationClass: TInterfacedClass;
       const aInterfaces: array of TGuid;
       aInstanceCreation: TServiceInstanceImplementation = sicSingle;
@@ -2264,12 +2280,14 @@ type
     // on success (i.e. corresponding to aInterfaces[0] - not to the others),
     // or nil if registration failed (e.g. if any of the supplied interfaces
     // is not implemented by the given class)
+    // - Services registration is not thread-safe and should be done at startup
     function ServiceDefine(aSharedImplementation: TInterfacedObject;
       const aInterfaces: array of TGuid;
       const aContractExpected: RawUtf8 = ''): TServiceFactoryServerAbstract; overload;
     /// register a remote Service via its interface
     // - this method expects the interface(s) to have been registered previously:
     // ! TInterfaceFactory.RegisterInterfaces([TypeInfo(IMyInterface),...]);
+    // - Services registration is not thread-safe and should be done at startup
     function ServiceDefine(aClient: TRest; const aInterfaces: array of TGuid;
       aInstanceCreation: TServiceInstanceImplementation = sicSingle;
       const aContractExpected: RawUtf8 = ''): boolean; overload;
@@ -4933,7 +4951,7 @@ end;
 procedure TAuthSession.ComputeProtectedValues(tix: Int64);
 begin
   // here User.GroupRights and fPrivateKey should have been set
-  fTimeOutShr10 := User.GroupRights.SessionTimeout * (MilliSecsPerMin shr 10);
+  fTimeOutShr10 := (QWord(User.GroupRights.SessionTimeout) * MilliSecsPerMin) shr 10;
   fTimeOutTix := tix shr 10 + fTimeOutShr10;
   fAccessRights := User.GroupRights.OrmAccessRights;
   Make([fID, '+', fPrivateKey], fPrivateSalt); // 'SessionID+PrivateKey'
@@ -5288,7 +5306,7 @@ begin
   end;
   if Assigned(fServer.Services) and
      not (soaNoSoaContract in fOptions) then
-    body.AddValue('soa', fServer.Services.AsSoa);
+    body.AddValue('soa', fServer.ServicesInfo);
   include(Ctxt.fServiceExecutionOptions, optNoLogOutput); // hide sensitive info
   Ctxt.ReturnsJson(variant(body), HTTP_SUCCESS, false, twJsonEscape, false, header);
 end;
@@ -5339,7 +5357,8 @@ end;
 function TRestServerAuthenticationSignedUri.RetrieveSession(
   Ctxt: TRestServerUriContext): TAuthSession;
 var
-  ts, sign, minticks, expectedsign: cardinal;
+  ts, sign, last, expectedsign: cardinal;
+  delta: integer;
   P: PAnsiChar;
   reslen: PtrInt;
 begin
@@ -5360,33 +5379,38 @@ begin
   if result = nil then
     exit; // unknown Session
   P := @P[reslen + (19 + 8)]; // points to Hexa8(Timestamp)
-  minticks := result.fLastClientTimestamp - fTimestampCoherencyTicks;
-  if HexDisplayToCardinal(P, ts) and
-     (fNoTimestampCoherencyCheck or
-      (integer(minticks) < 0) or // <0 just after computer startup
-      ({%H-}ts >= minticks)) then
+  last := result.fLastClientTimestamp;
+  if HexDisplayToCardinal(P, ts) then
   begin
-    expectedsign := fComputeSignature(result.fPrivateSaltHash,
-      P, pointer(Ctxt.Call^.Url), reslen);
-    if HexDisplayToCardinal(P + 8, sign) and // Hexa8(Signature)
-       ({%H-}sign = expectedsign) then
+    // signed modular distance between two 32-bit timestamps:
+    // > 0 = newer, < 0 = older, also across cardinal rollover
+    delta := integer(ts - last);
+    if fNoTimestampCoherencyCheck or
+       (last = 0) or
+       (delta >= -integer(fTimestampCoherencyTicks)) then
     begin
-      if not fNoTimestampCoherencyCheck then
-        if ts > result.fLastClientTimestamp then
-          result.fLastClientTimestamp := ts;
-      Ctxt.SessionAssign(result); // set TimeOutTix and fill Ctxt.Session*
-      exit; // success
+      expectedsign := fComputeSignature(result.fPrivateSaltHash,
+        P, pointer(Ctxt.Call^.Url), reslen);
+      if HexDisplayToCardinal(P + 8, sign) and // Hexa8(Signature)
+         ({%H-}sign = expectedsign) then
+      begin
+        if not fNoTimestampCoherencyCheck then
+          if (last = 0) or
+             (delta > 0) then
+            result.fLastClientTimestamp := ts;
+        Ctxt.SessionAssign(result); // set TimeOutTix and fill Ctxt.Session*
+        exit;                       // success
+      end
+      else if Assigned(Ctxt.fLog) and
+              (sllUserAuth in fServer.fLogLevel) then
+        Ctxt.fLog.Log(sllUserAuth, 'Invalid Signature: expected %, got %',
+          [CardinalToHexShort(expectedsign), CardinalToHexShort(sign)], self);
     end
     else if Assigned(Ctxt.fLog) and
             (sllUserAuth in fServer.fLogLevel) then
-      Ctxt.fLog.Log(sllUserAuth, 'Invalid Signature: expected %, got %',
-        [CardinalToHexShort(expectedsign),
-         CardinalToHexShort(sign)], self);
-  end
-  else if Assigned(Ctxt.fLog) and
-          (sllUserAuth in fServer.fLogLevel) then
-    Ctxt.fLog.Log(sllUserAuth, 'Invalid Timestamp: expected >=%, got %',
-      [Int64(minticks), Int64(ts)], self);
+      Ctxt.fLog.Log(sllUserAuth, 'Invalid Timestamp: delta=% tolerance=%',
+        [delta, fTimestampCoherencyTicks], self);
+  end;
   result := nil; // indicates invalid signature
 end;
 
@@ -5731,6 +5755,18 @@ begin
   inherited Create(aServer);
 end;
 
+{$ifdef OSPOSIX}
+procedure TRestServerAuthenticationSspi.SetKeyTab(const aKeyTab: TFileName);
+begin
+  TServerSspiKeyTab.FileSetter(fSspiKeyTab, aKeyTab, fServer.LogClass.DoLog, self);
+end;
+
+function TRestServerAuthenticationSspi.GetKeyTab: TFileName;
+begin
+  result := fSspiKeyTab.KeyTab;
+end;
+{$endif OSPOSIX}
+
 // about Browser support and SPNEGO handshake via HTTP headers, see e.g.
 // https://learn.microsoft.com/en-us/previous-versions/ms995330(v=msdn.10)
 
@@ -5797,6 +5833,11 @@ begin
   InvalidateSecContext(sec);
   try
     try
+      // optional TRestServerAuthenticationSspi.KeyTab support with GSSAPI
+      {$ifdef OSPOSIX}
+      if Assigned(fSspiKeyTab) then
+        fSspiKeyTab.PrepareKeyTab; // do nothing if no KeyTab changed or set
+      {$endif OSPOSIX}
       // code below raise ESynSspi/EGssApi on authentication error
       if ServerSspiAuth(sec, data, outdata) then
       begin
@@ -8102,7 +8143,7 @@ begin
   begin
     case Ctxt.Method of
       mGET:
-        Ctxt.ReturnsJson(fServices.AsSoa);  // GET /stat/soa from ParseSoa()
+        Ctxt.ReturnsJson(ServicesInfo);     // GET /stat/soa from ParseSoa()
       mPOST:
         if (Ctxt.Call^.InBody <> '') and
            (Ctxt.Call^.InBody <> '[]') then // POST /stat/soa from SetUser()

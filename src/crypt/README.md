@@ -10,7 +10,7 @@ Those units implement hashing, message digests, encryption, and asymmetric crypt
 
 They are written in a cross-platform way in mind, with a very efficient stand-alone version (using optimized pascal code and assembly), or via an external OpenSSL library.
 
-Hint: If you are not familiar with the algorithms themselves and their details, consider using [mormot.crypt.secure](./mormot.crypt.secure.pas) and its `Rnd`/`Hash`/`Sign`/`Cipher`/`Asym`/`Cert`/`Store` high-level factories.
+Hint: If you are not familiar with the algorithms themselves and their details, consider using [mormot.crypt.factory](./mormot.crypt.factory.pas) and its `Rnd`/`Hash`/`Sign`/`Cipher`/`Asym`/`Cert`/`Store` high-level factories.
 
 Legal Notice: as stated by [our licensing terms](../../LICENCE.md), make sure that you comply to any restriction about the use of cryptographic software in your country.
 
@@ -46,9 +46,17 @@ Authentication and Security types shared by all framework units.
 - 64-bit `TSynUniqueIdentifier` and its efficient Generator
 - `IProtocol` Safe Communication with Unilateral or Mutual Authentication
 - `TBinaryCookieGenerator` Simple Cookie Generator
-- `Rnd`/`Hash`/`Sign`/`Cipher`/`Asym`/`Cert`/`Store` High-Level Algorithms Factories
 - Minimal `PEM`/`DER` Encoding/Decoding
 - `TSynMustache` Cryptographic Expression Helpers
+
+### mormot.crypt.factory
+
+High-Level Cryptographic Algorithms Factories shared by all framework units.
+- `ICryptHash`/`ICryptCipher`/`ICryptCert`/`ICryptStore` interfaces and their `TCrypt*` abstract classes
+- `Rnd`/`Hash`/`Sign`/`Cipher`/`Asym`/`Cert`/`Store` High-Level Algorithms Factories
+- Algorithm registration, as used by the `mormot.crypt.ecc`/`rsa`/`x509`/`openssl`/`pkcs11`/`win` providers
+- `TCryptCertCache`/`TCryptCertList` certificates collections and `TCryptCertPerUsage` lookup
+- Key and Certificate aware PEM/DER helpers, e.g. `X509PubKeyToDer`, `PrivateKeyToPkcs8`, `TX509Parsed` and the `X509Parse` hook
 
 ### mormot.crypt.ecc256r1
 
@@ -106,6 +114,13 @@ High-Performance Cryptographic Features using *OpenSSL* 1.1 / 3.x / 4.x
 TL;DR: On x86_64, our `mormot.crypt.pas` asm is stand-alone and faster than *OpenSSL* for most algorithms, and only 20% slower for `AES-GCM` (but faster for *OpenSSL* 3.0).
 For `ECC` or `RSA`, our `mormot.crypt.ecc256r1` or `mormot.crypt.rsa` units are noticeably slower than *OpenSSL*, but fully stand-alone.
 
+### mormot.crypt.win
+
+Direct Cryptography using Windows API
+- AES cypher/uncypher using PROV_RSA_AES CryptoApi
+- High-Level Windows Certificate Store Integration
+- Middle-Level Windows CNG Private Key Integration
+
 ### mormot.crypt.pkcs11
 
 Access Hardware Security Modules (HSM) via PKCS#11
@@ -122,3 +137,9 @@ Deprecated or Seldom Used Cryptographic Features
 - BCrypt Password-Hashing Function
 - SCrypt Password-Hashing Function
 
+### mormot.crypt.zip
+
+Password Encryption for `mormot.core.zip` `TZipWrite`/`TZipRead`
+- `TZipCryptPkware` Class Implementing the Traditional PKWARE ZipCrypto
+- `TZipCryptAes` Class Implementing the WinZip AE-1/AE-2 Format
+- `TZipCryptGcm` Class Implementing AES-GCM-256 WinZip AE-3 Format

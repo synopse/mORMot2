@@ -248,9 +248,10 @@ initialization
   Rtti.RegisterFromText(TypeInfo(TTaskComment),
     'Content RawUtf8 Author RawUtf8 CreatedAt TDateTime ' +
     'UpdatedAt TDateTime IsEdited boolean');
-  // TTaskComment is an embedded record DTO (serialized inside TTaskViewDTO),
-  // so it follows the same camelCase wire contract as the other DTOs
-  // (Recommended Patterns A.7, Gotcha 3). The TTask TOrm is left untouched.
+  // TTaskComment is stored as JSON in the Comments column, with camelCase
+  // field names like the rows already in the database, so the column keeps one
+  // naming convention (loading matches names case-insensitively). Clients get
+  // TTaskCommentDTO from task_dtos instead. The TTask TOrm is left untouched.
   Rtti[TypeInfo(TTaskComment)].Props.NameChangeCase(DtoJsonCase);
   Rtti.RegisterObjArray(TypeInfo(TTaskObjArray), TTask);
 

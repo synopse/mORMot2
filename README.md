@@ -35,7 +35,7 @@ If you find it worth using, please consider [sponsoring mORMot 2 dev](https://gi
 
 ### mORMot What?
 
-Synopse *mORMot 2* is the ultimate Open Source ToolBox for modern Object Pascal. It is a fully featured optimized RTL, with Client-Server ORM SOA MVC framework for Delphi 7 up to Delphi 12.3 Florence and FPC 3.2/trunk, targeting Windows/Linux/BSD/MacOS for servers, and any platform for clients (including mobile or AJAX).
+Synopse *mORMot 2* is the ultimate Open Source ToolBox for modern Object Pascal. It is a fully featured optimized RTL, with Client-Server ORM SOA MVC framework for Delphi 7 up to the latest revision and FPC 3.2/trunk, targeting Windows/Linux/BSD/MacOS for servers, and any platform for clients (including mobile or AJAX).
 
 ![mORMot map](doc/IamLost.png)
 
@@ -90,12 +90,12 @@ See [the full licensing terms](LICENCE.md).
 
 The framework source code:
 - Tries to stay compatible with FPC stable and Delphi 7 and up;
-- Is currently validated against FPC 3.2.3 (fixes-3_2) and Lazarus 2.2.5 (fixes_2_2), Delphi 7, 2007, 2009, 2010, XE4, XE7, XE8, 10.4, 11.1, 12.2, 12.3 and 13.1;
+- Is currently validated against FPC 3.2.3 (fixes-3_2), Delphi 7, 2007, 2009, 2010, XE4, XE7, XE8, 10.4, 11.1, 12.2, 12.3, 13.1 and 13.2;
 - Regression tests are built and run nightly from FPC fixes-3_2 to most versions of Windows 7-11, and several Linux and MacOS distributions on i386/x86_64/arm32/aarch64.
 
-Note that [FPC 3.2.2 has a regression with variant late binding](https://gitlab.com/freepascal.org/fpc/source/-/issues/39438) - ensure you use FPC fixes-3_2 branch.
+Note that [FPC 3.2.2 has a regression with variant late binding](https://gitlab.com/freepascal.org/fpc/source/-/issues/39438) - **ensure you use the FPC *fixes-3_2* branch**.
 
-On Delphi, only the Windows target is available for *mORMot* general units, but you can use the cross-platform clients units on all Delphi targets. Since *mORMot* 2.5, there is preliminary support of Delphi x86_64 for Linux and Mac. FPC is a much better and consistent cross-platform compiler, we gladly support.
+On Delphi, Windows is the primary target, but since *mORMot* 2.5, there is preliminary support of latest Delphi LLVM compilers: feedback is welcome.
 
 Please submit pull requests for non-validated versions.
 

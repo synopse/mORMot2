@@ -1,0 +1,313 @@
+[
+  {
+    "args": [
+      "--help"
+    ],
+    "exit": 0
+  },
+  {
+    "args": [],
+    "exit": 0
+  },
+  {
+    "args": [
+      "generate",
+      "--help"
+    ],
+    "exit": 0
+  },
+  {
+    "args": [
+      "generate",
+      "/workspace/scratch/2b6514a32b99/validation-v4/cli-agent/cases/depth0.json",
+      "--depth",
+      "0",
+      "--items",
+      "3",
+      "--seed",
+      "42"
+    ],
+    "exit": 0
+  },
+  {
+    "args": [
+      "generate",
+      "/workspace/scratch/2b6514a32b99/validation-v4/cli-agent/cases/depth1.json",
+      "--depth",
+      "1",
+      "--items",
+      "3",
+      "--seed",
+      "42"
+    ],
+    "exit": 0
+  },
+  {
+    "args": [
+      "generate",
+      "/workspace/scratch/2b6514a32b99/validation-v4/cli-agent/cases/depth3.json",
+      "--depth",
+      "3",
+      "--items",
+      "3",
+      "--seed",
+      "42"
+    ],
+    "exit": 0
+  },
+  {
+    "args": [
+      "generate",
+      "/workspace/scratch/2b6514a32b99/validation-v4/cli-agent/cases/depth64.json",
+      "--depth",
+      "64",
+      "--items",
+      "3",
+      "--seed",
+      "42"
+    ],
+    "exit": 0
+  },
+  {
+    "args": [
+      "generate",
+      "repeat.json",
+      "--depth",
+      "3",
+      "--items",
+      "3",
+      "--seed",
+      "42"
+    ],
+    "exit": 0
+  },
+  {
+    "args": [
+      "generate",
+      "different.json",
+      "--depth",
+      "3",
+      "--items",
+      "3",
+      "--seed",
+      "43"
+    ],
+    "exit": 0
+  },
+  {
+    "args": [
+      "generate",
+      "empty-array.json",
+      "--items",
+      "0",
+      "--seed",
+      "4294967295"
+    ],
+    "exit": 0
+  },
+  {
+    "args": [
+      "generate",
+      "keep.json",
+      "--depth",
+      "65"
+    ],
+    "exit": 2
+  },
+  {
+    "args": [
+      "generate",
+      "keep.json",
+      "--depth=-1"
+    ],
+    "exit": 2
+  },
+  {
+    "args": [
+      "generate",
+      "keep.json",
+      "--items",
+      "bad"
+    ],
+    "exit": 2
+  },
+  {
+    "args": [
+      "generate",
+      "keep.json",
+      "--seed",
+      "4294967296"
+    ],
+    "exit": 2
+  },
+  {
+    "args": [
+      "generate",
+      "keep.json",
+      "--seed="
+    ],
+    "exit": 2
+  },
+  {
+    "args": [
+      "generate",
+      "keep.json",
+      "--unknown"
+    ],
+    "exit": 2
+  },
+  {
+    "args": [
+      "generate",
+      "keep.json",
+      "extra"
+    ],
+    "exit": 2
+  },
+  {
+    "args": [
+      "generate"
+    ],
+    "exit": 2
+  },
+  {
+    "args": [
+      "compare",
+      "a.json",
+      "b.json5"
+    ],
+    "exit": 0
+  },
+  {
+    "args": [
+      "compare",
+      "a.json",
+      "different-order.json"
+    ],
+    "exit": 1
+  },
+  {
+    "args": [
+      "compare",
+      "repeat.json",
+      "different.json"
+    ],
+    "exit": 1
+  },
+  {
+    "args": [
+      "compare",
+      "a.json",
+      "missing.json"
+    ],
+    "exit": 2
+  },
+  {
+    "args": [
+      "compare",
+      "a.json",
+      "blank.json"
+    ],
+    "exit": 2
+  },
+  {
+    "args": [
+      "convert",
+      "a.json",
+      "a.yaml",
+      "--no-expand"
+    ],
+    "exit": 0
+  },
+  {
+    "args": [
+      "convert",
+      "a.yaml",
+      "roundtrip.json",
+      "--compact"
+    ],
+    "exit": 0
+  },
+  {
+    "args": [
+      "compare",
+      "a.json",
+      "roundtrip.json"
+    ],
+    "exit": 0
+  },
+  {
+    "args": [
+      "a.json",
+      "implicit.json",
+      "--compact",
+      "--stats"
+    ],
+    "exit": 0
+  },
+  {
+    "args": [
+      "compare",
+      "a.json",
+      "implicit.json"
+    ],
+    "exit": 0
+  },
+  {
+    "args": [
+      "convert",
+      "table.json",
+      "table.md"
+    ],
+    "exit": 0
+  },
+  {
+    "args": [
+      "convert",
+      "table.json",
+      "pipe.md",
+      "--to",
+      "md-pipe"
+    ],
+    "exit": 0
+  },
+  {
+    "args": [
+      "convert",
+      "table.json",
+      "alias.md",
+      "--to",
+      "md-csv"
+    ],
+    "exit": 0
+  },
+  {
+    "args": [
+      "convert",
+      "table.json",
+      "table.csv"
+    ],
+    "exit": 0
+  },
+  {
+    "args": [
+      "generate",
+      "buffered.json",
+      "--items",
+      "2000",
+      "--depth",
+      "6",
+      "--seed",
+      "1234"
+    ],
+    "exit": 0
+  },
+  {
+    "args": [
+      "compare",
+      "buffered.json",
+      "buffered.json"
+    ],
+    "exit": 0
+  }
+]

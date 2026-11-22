@@ -1,0 +1,26 @@
+$$
+include common.def
+$$
+{
+  "file-name": "dhcp.leases",
+  "scope": [{
+    "subnet-mask": "192.168.50.1/24",
+    "default-gateway": $(gateway),
+    "dns-servers": $(dns),
+    "lease-time-seconds": $(lease),
+    "main": {
+      "min": "192.168.50.20",
+      "max": "192.168.50.220",
+      "static": ["02:11:22:33:44:55=192.168.50.30"]
+    }
+  },{
+    "subnet-mask": "192.168.60.1/24",
+    "default-gateway": "192.168.60.1",
+    "dns-servers": $(dns),
+    "lease-time-seconds": $(lease),
+    "main": {
+      "min": "192.168.60.20",
+      "max": "192.168.60.220"
+    }
+  }]
+}

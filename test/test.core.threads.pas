@@ -12,6 +12,9 @@ uses
   classes,
   mormot.core.base,
   mormot.core.os,
+  mormot.core.text,
+  mormot.core.rtti,
+  mormot.core.log,
   mormot.core.threads,
   mormot.core.test;
 
@@ -106,9 +109,6 @@ type
     function TransitionIterations: integer;
     function WaitMS: cardinal;
     procedure ResetProbe;
-    procedure RunWorker(const Worker: TNotifyEvent; const Name: RawUtf8);
-    procedure RunWorkers(const Worker: TNotifyEvent; Count: integer;
-      const Name: RawUtf8);
     // exclusive-lock dispatch
     procedure ExclusiveInit;
     procedure ExclusiveDone;
@@ -146,9 +146,14 @@ type
     procedure StressTryRW;
     // TSynEvent worker
     procedure EventWorker(Sender: TObject);
+    // TSynQueue workers
+    procedure TSynQueueSlow1(Sender: TObject);
+    procedure TSynQueueSlow2(Sender: TObject);
+    // single-thread TSynEvent state transitions - should run in the main thread
+    procedure CoreClassesMainThread;
   published
-    /// validate TSynEvent state transitions and a real cross-thread handshake
-    procedure _TSynEvent;
+    /// validate TSynEvent/TSynQueue state transitions and cross-thread coverage
+    procedure CoreClasses;
     /// validate TLightLock/TMultiLightLock/TOSLightLock/TOSLock
     procedure ExclusiveLocks;
     /// validate TRWLightLock/TRWLock without embedding a fairness assumption
@@ -167,11 +172,7 @@ const
   EXCLUSIVE_LOCK_REENTRANT: array[TExclusiveLockKind] of boolean = (
     false,  // TLightLock
     true,   // TMultiLightLock
-    {$ifdef OSANDROID}
-    true,   // Delphi/Android fallback uses recursive TRTLCriticalSection
-    {$else}
     false,  // TOSLightLock
-    {$endif OSANDROID}
     true);  // TOSLock
 
   /// IsLocked is part of TLightLock/TMultiLightLock but not TOS*Lock API
@@ -277,6 +278,7 @@ end;
 
 procedure TTestCoreThreads.CleanUp;
 begin
+  // tasks reference this test case and its events, so release the pool first
   FreeAndNil(fDone);
   FreeAndNil(fGate);
   FreeAndNil(fAcquired);
@@ -286,13 +288,12 @@ end;
 
 function TTestCoreThreads.WorkerCount: integer;
 begin
-  // TLoggedWorker itself limits simultaneous execution to CpuThreads and queues
-  // forced jobs, so asking for more than CpuThreads also validates queue reuse.
   result := CpuThreads * 2;
   if result < 2 then
     result := 2;
   if result > PROFILE_WORKER_CAP[fProfile] then
     result := PROFILE_WORKER_CAP[fProfile];
+  ThreadCountAdjust(result); // e.g. WinARM PRISM
 end;
 
 function TTestCoreThreads.StressIterations: integer;
@@ -318,24 +319,6 @@ begin
   fDone.ResetEvent;
   fProbeResult := 0;
   fMainOwns := 0;
-end;
-
-procedure TTestCoreThreads.RunWorker(
-  const Worker: TNotifyEvent; const Name: RawUtf8);
-begin
-  Run(Worker, self, Name,
-    {Threaded=}true, {NotifyTask=}false, {ForcedThreaded=}true);
-end;
-
-
-procedure TTestCoreThreads.RunWorkers(const Worker: TNotifyEvent;
-  Count: integer; const Name: RawUtf8);
-begin
-  while Count > 0 do
-  begin
-    RunWorker(Worker, Name);
-    dec(Count);
-  end;
 end;
 
 
@@ -438,7 +421,6 @@ begin
   end
   else
     fProbeResult := 0;
-  fDone.SetEvent;
 end;
 
 procedure TTestCoreThreads.ExclusiveBlockingProbe(Sender: TObject);
@@ -456,7 +438,6 @@ begin
     TestLockedDec(fExclusiveStats.Active);
     ExclusiveUnLock;
   end;
-  fDone.SetEvent;
 end;
 
 procedure TTestCoreThreads.ExclusiveBlockingWorker(Sender: TObject);
@@ -546,21 +527,20 @@ begin
     ResetProbe;
     ExclusiveLock;
     try
-      RunWorker(ExclusiveTryProbe, EXCLUSIVE_LOCK_NAME[Kind]);
+      RunTask(ExclusiveTryProbe, EXCLUSIVE_LOCK_NAME[Kind]);
       Check(fEntered.WaitFor(WaitMS), 'TryLock probe entered');
-      Check(fDone.WaitFor(WaitMS), 'TryLock probe done');
+      WaitTasks('TryLock probe done', WaitMS);
       CheckEqual(fProbeResult, 0, EXCLUSIVE_LOCK_NAME[Kind]);
     finally
       ExclusiveUnLock;
     end;
-    RunWait(false, 5, false);
     // real blocking hand-off without Sleep()/polling
     ResetProbe;
     FillCharFast(fExclusiveStats, SizeOf(fExclusiveStats), 0);
     ExclusiveLock;
     try
       fMainOwns := 1;
-      RunWorker(ExclusiveBlockingProbe, EXCLUSIVE_LOCK_NAME[Kind]);
+      RunTask(ExclusiveBlockingProbe, EXCLUSIVE_LOCK_NAME[Kind]);
       Check(fEntered.WaitFor(WaitMS), 'blocking probe entered');
       Check(not fAcquired.Notified, 'must not acquire while main owns lock');
     finally
@@ -568,8 +548,7 @@ begin
       ExclusiveUnLock;
     end;
     Check(fAcquired.WaitFor(WaitMS), 'blocking probe acquired');
-    Check(fDone.WaitFor(WaitMS), 'blocking probe done');
-    RunWait(false, 5, false);
+    WaitTasks('blocking probe done', WaitMS);
     CheckEqual(fExclusiveStats.Errors, 0, EXCLUSIVE_LOCK_NAME[Kind]);
     // rapid uncontended state transitions
     for i := 1 to TransitionIterations do
@@ -579,17 +558,16 @@ begin
       ExclusiveLock;
       ExclusiveUnLock;
     end;
-    // mixed blocking/TryLock contention; ForcedThreaded=true lets TLoggedWorker
-    // queue surplus jobs and reuse worker threads within this batch
+    // mixed blocking/TryLock contention on the persistent task pool
     FillCharFast(fExclusiveStats, SizeOf(fExclusiveStats), 0);
     fIterations := StressIterations;
     workers := WorkerCount;
     blocking := workers div 2;
     if blocking < 1 then
       blocking := 1;
-    RunWorkers(ExclusiveBlockingWorker, blocking, EXCLUSIVE_LOCK_NAME[Kind]);
-    RunWorkers(ExclusiveTryWorker, workers - blocking, EXCLUSIVE_LOCK_NAME[Kind]);
-    RunWait(false, 120, false);
+    RunTasks(ExclusiveBlockingWorker, blocking, EXCLUSIVE_LOCK_NAME[Kind]);
+    RunTasks(ExclusiveTryWorker, workers - blocking, EXCLUSIVE_LOCK_NAME[Kind]);
+    WaitTasks(EXCLUSIVE_LOCK_NAME[Kind], 120 * 1000);
     if false then
       AddConsole('% block=%/% try=%/% acquired=% failed=% active=% errors=%',
         [EXCLUSIVE_LOCK_NAME[Kind],
@@ -640,11 +618,10 @@ begin
     Check(fMultiLight.IsLocked, 'TMultiLightLock.ForceLock');
     // the forced owner is still exclusive to this thread
     ResetProbe;
-    RunWorker(ExclusiveTryProbe, 'TMultiLightLock.ForceLock');
+    RunTask(ExclusiveTryProbe, 'TMultiLightLock.ForceLock');
     Check(fEntered.WaitFor(WaitMS), 'ForceLock probe entered');
-    Check(fDone.WaitFor(WaitMS), 'ForceLock probe done');
+    WaitTasks('ForceLock probe done', WaitMS);
     CheckEqual(fProbeResult, 0, 'TMultiLightLock.ForceLock ownership');
-    RunWait(false, 5, false);
   finally
     // don't balance ForceLock with a single UnLock: ForceLock uses a sentinel
     fMultiLight.Done;
@@ -764,7 +741,6 @@ begin
   end;
 end;
 
-
 function TTestCoreThreads.RWIsLocked: boolean;
 begin
   case fRWKind of
@@ -791,7 +767,6 @@ begin
   finally
     RWReadUnLock;
   end;
-  fDone.SetEvent;
 end;
 
 procedure TTestCoreThreads.RWWriterProbe(Sender: TObject);
@@ -803,7 +778,6 @@ begin
   finally
     RWWriteUnLock;
   end;
-  fDone.SetEvent;
 end;
 
 procedure TTestCoreThreads.RWReaderWorker(Sender: TObject);
@@ -900,7 +874,6 @@ begin
           TestLockedInc(fRWStats.Errors);
         if fRWStats.Readers <> 0 then
           TestLockedInc(fRWStats.Errors);
-
         inc(fRWStats.Version);
         fRWStats.Value1 := fRWStats.Version;
         if i and 127 = 0 then
@@ -931,9 +904,9 @@ begin
   writers := WorkerCount - readers;
   if writers < 1 then
     writers := 1;
-  RunWorkers(RWReaderWorker, readers, RW_LOCK_NAME[fRWKind]);
-  RunWorkers(RWWriterWorker, writers, RW_LOCK_NAME[fRWKind]);
-  RunWait(false, 120, false);
+  RunTasks(RWReaderWorker, readers, RW_LOCK_NAME[fRWKind]);
+  RunTasks(RWWriterWorker, writers, RW_LOCK_NAME[fRWKind]);
+  WaitTasks(RW_LOCK_NAME[fRWKind], 120 * 1000);
   CheckEqual(fRWStats.Readers, 0, RW_LOCK_NAME[fRWKind]);
   CheckEqual(fRWStats.Writers, 0, RW_LOCK_NAME[fRWKind]);
   CheckEqual(fRWStats.Errors, 0, RW_LOCK_NAME[fRWKind]);
@@ -941,9 +914,9 @@ begin
     RW_LOCK_NAME[fRWKind]);
   CheckEqual(fRWStats.Value1, fRWStats.Version, RW_LOCK_NAME[fRWKind]);
   CheckEqual(fRWStats.Value2, fRWStats.Version * 2, RW_LOCK_NAME[fRWKind]);
-  // MaxReaders > 1 is not asserted here: TLoggedWorker may have a one-thread
-  // runtime on a single-core target. Concurrent readers are proven separately
-  // with a deterministic main-thread + background-worker handshake.
+  // MaxReaders > 1 is not asserted here: a single-core or serialized scheduler
+  // may still run one worker at a time. The deterministic probe below proves
+  // that concurrent readers are accepted by the lock itself.
 end;
 
 procedure TTestCoreThreads.StressTryRW;
@@ -960,9 +933,9 @@ begin
   writers := WorkerCount - readers;
   if writers < 1 then
     writers := 1;
-  RunWorkers(RWTryReaderWorker, readers, RW_LOCK_NAME[fRWKind]);
-  RunWorkers(RWTryWriterWorker, writers, RW_LOCK_NAME[fRWKind]);
-  RunWait(false, 120, false);
+  RunTasks(RWTryReaderWorker, readers, RW_LOCK_NAME[fRWKind]);
+  RunTasks(RWTryWriterWorker, writers, RW_LOCK_NAME[fRWKind]);
+  WaitTasks(RW_LOCK_NAME[fRWKind], 120 * 1000);
   CheckEqual(fRWStats.Readers, 0, RW_LOCK_NAME[fRWKind]);
   CheckEqual(fRWStats.Writers, 0, RW_LOCK_NAME[fRWKind]);
   CheckEqual(fRWStats.Errors, 0, RW_LOCK_NAME[fRWKind]);
@@ -1005,14 +978,13 @@ begin
     ResetProbe;
     RWReadLock;
     try
-      RunWorker(RWReaderProbe, RW_LOCK_NAME[Kind]);
+      RunTask(RWReaderProbe, RW_LOCK_NAME[Kind]);
       Check(fEntered.WaitFor(WaitMS), 'reader probe entered');
       Check(fAcquired.WaitFor(WaitMS), 'concurrent reader acquired');
-      Check(fDone.WaitFor(WaitMS), 'concurrent reader done');
+      WaitTasks('concurrent reader done', WaitMS);
     finally
       RWReadUnLock;
     end;
-    RunWait(false, 5, false);
     // basic write semantics
     RWWriteLock;
     try
@@ -1043,7 +1015,7 @@ begin
     ResetProbe;
     RWReadLock;
     try
-      RunWorker(RWWriterProbe, RW_LOCK_NAME[Kind]);
+      RunTask(RWWriterProbe, RW_LOCK_NAME[Kind]);
       CheckUtf8(fEntered.WaitFor(WaitMS),
         'writer probe entered %', [RW_LOCK_NAME[Kind]]);
       CheckUtf8(not fAcquired.Notified,
@@ -1052,21 +1024,19 @@ begin
       RWReadUnLock;
     end;
     Check(fAcquired.WaitFor(WaitMS), 'writer acquired after reader drain');
-    Check(fDone.WaitFor(WaitMS), 'writer probe done');
-    RunWait(false, 5, false);
+    WaitTasks('writer probe done', WaitMS);
     // reader waits until an existing writer releases
     ResetProbe;
     RWWriteLock;
     try
-      RunWorker(RWReaderProbe, RW_LOCK_NAME[Kind]);
+      RunTask(RWReaderProbe, RW_LOCK_NAME[Kind]);
       Check(fEntered.WaitFor(WaitMS), 'reader probe entered behind writer');
       Check(not fAcquired.Notified, 'reader must wait for writer');
     finally
       RWWriteUnLock;
     end;
     Check(fAcquired.WaitFor(WaitMS), 'reader acquired after writer release');
-    Check(fDone.WaitFor(WaitMS), 'reader probe done behind writer');
-    RunWait(false, 5, false);
+    WaitTasks('reader probe done behind writer', WaitMS);
     // TRWLock-only reentrant/upgradable path
     if RW_LOCK_UPGRADABLE[Kind] then
     begin
@@ -1115,12 +1085,12 @@ begin
     fDone.SetEvent;
 end;
 
-procedure TTestCoreThreads._TSynEvent;
+procedure TTestCoreThreads.CoreClassesMainThread;
 var
   i: integer;
 begin
-  // preserve the existing single-thread state-transition coverage from
-  // TTestCoreBase._TSynQueue, but keep TSynEvent in its own test.
+  // simple single-thread state-transition coverage
+  CheckEqual(PtrUInt(GetCurrentThreadID), PtrUInt(MainThreadID), 'mainthread');
   for i := 1 to 10 do
   begin
     fEntered.ResetEvent;
@@ -1138,14 +1108,510 @@ begin
     fEntered.SetEvent;
     Check(fEntered.WaitForSafe(INFINITE), 'WaitForSafe(INFINITE) signal');
   end;
+end;
+
+procedure TTestCoreThreads.CoreClasses;
+begin
+  // the Android FMX runner executes tests from a worker thread
+  {$ifdef OSANDROID}
+  if GetCurrentThreadID <> MainThreadID then
+    TThread.Synchronize(nil, CoreClassesMainThread)
+  else
+  {$endif OSANDROID}
+    CoreClassesMainThread;
+  // validate TSynQueue with all kind of values in a background thread
+  Run(TSynQueueSlow1, self, 'TSynQueue1');
+  Run(TSynQueueSlow2, self, 'TSynQueue2');
   // real cross-thread handshake: one waiter per TSynEvent instance
   ResetProbe;
-  RunWorker(EventWorker, 'TSynEvent');
+  RunTask(EventWorker, 'TSynEvent');
   Check(fEntered.WaitFor(WaitMS), 'event worker entered');
   Check(not fDone.Notified, 'event worker should wait on gate');
   fGate.SetEvent;
   Check(fDone.WaitFor(WaitMS), 'event worker released');
+  WaitTasks('TSynEvent task done', WaitMS);
+  // TSynQueueSlow1/2 above still use the test framework background worker
   RunWait(false, 5, false);
+end;
+
+type
+  TNotifyTask = record // a typical event for TSynQueue record validation
+    Name: string;
+    Payload: RawJson;
+    Active: boolean;
+  end;
+  TNotifyTaskDynArray = array of TNotifyTask;
+
+procedure TTestCoreThreads.TSynQueueSlow1(Sender: TObject);
+var
+  o, i, j, k, n: integer; // not PtrInt
+  f: TSynQueue;
+  u, v: RawUtf8;
+  r1, r2: TNotifyTask;
+  savedint: TIntegerDynArray;
+  savedu: TRawUtf8DynArray;
+begin
+  // validate TSynQueue with integer values
+  f := TSynQueue.Create(TypeInfo(TIntegerDynArray));
+  try
+    for o := 1 to 1000 do
+    begin
+      checkEqual(f.Count, 0);
+      check(not f.Pending);
+      for i := 1 to o do
+        f.Push(i);
+      check(f.Pending);
+      checkEqual(f.Count, o);
+      check(f.Capacity >= o);
+      f.Save(savedint);
+      check(Length(savedint) = o);
+      check(f.Contains(@o), 'cont0'); // O(n) since queue is a FIFO
+      for i := 1 to o do
+      begin
+        j := -1;
+        check(f.Peek(j), 'peek');
+        checkEqual(j, i);
+        check(f.Contains(@i), 'cont1'); // O(1) since find immediately
+        checkEqual(f.PeekCompare(nil), 1);
+        checkEqual(f.PeekCompare(@j), 0);
+        j := -1;
+        checkEqual(f.PeekCompare(@j), 1);
+        check(not f.PopEquals(@j, j), 'popeq');
+        check(f.Pop(j), 'pop');
+        checkEqual(j, i);
+        if i < 10 then // is O(n) after Pop()
+          check(not f.Contains(@i), 'cont2');
+      end;
+      check(not f.Pending);
+      checkEqual(f.Count, 0);
+      checkEqual(f.PeekCompare(@j), -1);
+      check(f.Capacity > 0);
+      f.Clear; // ensure f.Pop(j) will use leading storage
+      check(not f.Pending);
+      checkEqual(f.Count, 0);
+      checkEqual(f.Capacity, 0);
+      checkEqual(Length(savedint), o);
+      for i := 1 to o do
+        checkEqual(savedint[i - 1], i);
+      n := 0;
+      for i := 1 to o do
+        if i and 7 = 0 then
+        begin
+          j := -1;
+          check(f.Pop(j));
+          check(j and 7 <> 0);
+          dec(n);
+        end
+        else
+        begin
+          f.Push(i);
+          inc(n);
+        end;
+      checkEqual(f.Count, n);
+      check(f.Pending);
+      check(f.Contains(@o) = (o and 7 <> 0), 'cont3');
+      f.Save(savedint);
+      checkEqual(Length(savedint), n);
+      for i := 1 to n do
+        check(savedint[i - 1] and 7 <> 0);
+      for i := 1 to n do
+      begin
+        j := -1;
+        check(f.Peek(j));
+        k := -1;
+        check(f.Pop(k));
+        checkEqual(j, k);
+        check(j and 7 <> 0);
+      end;
+      checkEqual(f.Count, 0);
+      check(f.Capacity > 0);
+    end;
+  finally
+    f.Free;
+  end;
+  // validate TSynQueue with string values
+  f := TSynQueue.Create(TypeInfo(TRawUtf8DynArray));
+  try
+    for o := 1 to 1000 do
+    begin
+      check(not f.Pending);
+      check(f.Count = 0);
+      f.Clear; // ensure f.Pop(j) will use leading storage
+      check(f.Count = 0);
+      check(f.Capacity = 0);
+      n := 0;
+      for i := 1 to o do
+        if i and 7 = 0 then
+        begin
+          u := '7';
+          check(f.Pop(u));
+          check(GetInteger(pointer(u)) and 7 <> 0);
+          dec(n);
+        end
+        else
+        begin
+          u := UInt32ToUtf8(i);
+          f.Push(u);
+          inc(n);
+        end;
+      check(f.Pending);
+      check(f.Count = n);
+      f.Save(savedu);
+      check(Length(savedu) = n);
+      for i := 1 to n do
+        check(GetInteger(pointer(savedu[i - 1])) and 7 <> 0);
+      for i := 1 to n do
+      begin
+        u := '';
+        check(f.Peek(u));
+        check(f.Contains(@u), 'cont4'); // O(1) since find immediately
+        checkEqual(f.PeekCompare(@u), 0);
+        v := '';
+        checkEqual(f.PeekCompare(@v), 1);
+        check(f.Pop(v));
+        check(u = v);
+        check(GetInteger(pointer(u)) and 7 <> 0);
+      end;
+      check(not f.Pending);
+      check(f.Count = 0);
+      check(f.Capacity > 0);
+    end;
+    check(Length(savedu) = length(savedint));
+  finally
+    f.Free;
+  end;
+  // validate TSynQueue with complex record type
+  f := TSynQueue.Create(TypeInfo(TNotifyTaskDynArray));
+  try
+    checkEqual(f.Count, 0);
+    check(not f.Pending);
+    for i := 1 to 100 do
+    begin
+      r1.Name := IntToStr(i);
+      r1.Active := i and 3 = 0;
+      r1.Payload := Make(['{"int":', i, '}']);
+      checkNotEqual(f.Count, i);
+      f.Push(r1);
+      checkEqual(f.Count, i);
+      check(f.Pending);
+    end;
+    for i := 1 to 100 do
+    begin
+      check(f.Pending);
+      RecordZero(@r2, TypeInfo(TNotifyTask));
+      Check(r2.Name = '');
+      Check(not r2.Active);
+      Check(r2.Payload = '');
+      Check(f.Pop(r2));
+      Check(r2.Name = IntToStr(i));
+      Check(r2.Active = (i and 3 = 0));
+    end;
+    checkEqual(f.Count, 0);
+    Check(not f.Pop(r2));
+    checkEqual(f.Count, 0);
+  finally
+    f.Free;
+  end;
+end;
+
+type
+  TSynQueuePushTask = class(TSynThreadTask)
+  public
+    Queue: TSynQueue;
+    Value: integer;
+    DelayMS: cardinal;
+    procedure DoExecute(aCaller: TSynThreadPoolWorkThread); override;
+  end;
+
+  TSynQueueWaitTask = class(TSynThreadTask)
+  public
+    Queue: TSynQueue;
+    TimeoutMS: integer;
+    Success: PBoolean;
+    Value: PInteger;
+    procedure DoExecute(aCaller: TSynThreadPoolWorkThread); override;
+  end;
+
+
+{ TSynQueuePushTask }
+
+procedure TSynQueuePushTask.DoExecute(aCaller: TSynThreadPoolWorkThread);
+begin
+  TSynLog.Add.Log(sllTrace, 'Queue.Push(%)', [Value], self);
+  if DelayMS <> 0 then
+    SleepHiRes(DelayMS);
+  Queue.Push(Value);
+end;
+
+
+{ TSynQueueWaitTask }
+
+procedure TSynQueueWaitTask.DoExecute(aCaller: TSynThreadPoolWorkThread);
+var
+  v: integer;
+begin
+  TSynLog.Add.Log(sllTrace, 'Queue.WaitPop(%)', [TimeoutMS], self);
+  v := 0;
+  Success^ := Queue.WaitPop(TimeoutMS, nil, v);
+  Value^ := v;
+  TSynLog.Add.Log(sllTrace, 'Queue.WaitPop=%', [Success^], self);
+end;
+
+
+procedure TTestCoreThreads.TSynQueueSlow2(Sender: TObject);
+var
+  i: PtrInt;
+  j, v, expected, mask, waiters: integer;
+  p: pointer;
+  q: TSynQueue;
+  success: array[0 .. 7] of boolean;
+  value: array[0 .. 7] of integer;
+
+  procedure WaitForRegisteredWaiters(ExpectedCount: integer);
+  var
+    timeout: Int64;
+  begin
+    timeout := mormot.core.os.GetTickCount64 + 2000;
+    repeat
+      if q.Waiters = ExpectedCount then
+        exit;
+      SleepHiRes(1);
+    until mormot.core.os.GetTickCount64 > timeout;
+    CheckEqual(q.Waiters, ExpectedCount,
+      'TSynQueue WaitPop registration');
+    TSynLog.Add.Log(sllTrace, 'TSynQueueSlow2: WaitForRegisteredWaiters %=%',
+      [q.Waiters, ExpectedCount], self);
+  end;
+
+  procedure PushAsync(aValue: integer; aDelayMS: cardinal);
+  var
+    task: TSynQueuePushTask;
+  begin
+    task := TSynQueuePushTask.Create;
+    task.Queue := q;
+    task.Value := aValue;
+    task.DelayMS := aDelayMS;
+    Check(Owner.Tasks.Add(task), 'TSynQueue push task');
+    TSynLog.Add.Log(sllTrace, 'TSynQueueSlow2: added Push(%,%)',
+      [aValue, aDelayMS], self);
+  end;
+
+  procedure StartWaiters(aTimeoutMS: integer);
+  var
+    n: PtrInt;
+    task: TSynQueueWaitTask;
+  begin
+    for n := 0 to waiters - 1 do
+    begin
+      success[n] := false;
+      value[n] := 0;
+      task := TSynQueueWaitTask.Create;
+      task.Queue := q;
+      task.TimeoutMS := aTimeoutMS;
+      task.Success := @success[n];
+      task.Value := @value[n];
+      Check(Owner.Tasks.Add(task), 'TSynQueue WaitPop task');
+      TSynLog.Add.Log(sllTrace, 'TSynQueueSlow2: added Wait(%)',
+        [aTimeoutMS], self);
+    end;
+    WaitForRegisteredWaiters(waiters);
+  end;
+
+  procedure CleanupQueue;
+  begin
+    q.WaitPopFinalize(1000);
+    WaitTasks('TSynQueue task cleanup');
+  end;
+
+begin
+  waiters := Owner.Tasks.WorkThreadCount; // may equal 4 on PRISM
+  if waiters > length(success) then
+    waiters := length(success);
+  TSynLog.Add.Log(sllTrace, 'TSynQueueSlow2: waiters=%', [waiters], self);
+  // WaitPop notification
+  q := TSynQueue.Create(TypeInfo(TIntegerDynArray));
+  try
+    // Push deliberately happens after WaitPop() has had enough time to
+    // enter OsWaitOnValue() on supported platforms.
+    PushAsync(123456, 50);
+    v := 0;
+    Check(q.WaitPop(2000, nil, v), 'WaitPop notification');
+    CheckEqual(v, 123456, 'WaitPop notification value');
+    WaitTasks('WaitPop notification worker');
+    CheckEqual(q.Count, 0);
+    // WaitPeekLocked notification
+    PushAsync(654321, 50);
+    p := q.WaitPeekLocked(2000, nil);
+    Check(p <> nil, 'WaitPeekLocked notification');
+    if p <> nil then
+    begin
+      CheckEqual(PInteger(p)^, 654321,
+        'WaitPeekLocked notification value');
+      q.Safe.ReadWriteUnLock;
+    end;
+    WaitTasks('WaitPeekLocked notification worker');
+    v := 0;
+    Check(q.Pop(v));
+    CheckEqual(v, 654321);
+    CheckEqual(q.Count, 0);
+    // compared WaitPop keeps its polling semantics
+    v := 11;
+    q.Push(v);
+    expected := 12;
+    v := 0;
+    Check(not q.WaitPop(20, nil, v, @expected),
+      'WaitPop compared mismatch');
+    CheckEqual(q.Count, 1);
+    expected := 11;
+    Check(q.WaitPop(20, nil, v, @expected),
+      'WaitPop compared match');
+    CheckEqual(v, 11);
+    CheckEqual(q.Count, 0);
+    // several concurrent waiters / WakeOne
+    StartWaiters(5000);
+    // Give registered consumers a chance to actually enter the OS wait.
+    // Correctness must not depend on this delay - the sequence protects
+    // that race - but it makes the WakeOne path well exercised.
+    SleepHiRes(20);
+    for i := 1 to waiters do
+    begin
+      j := i;
+      q.Push(j);
+    end;
+    WaitTasks('multiple WaitPop workers');
+    mask := 0;
+    for i := 0 to waiters - 1 do
+    begin
+      Check(success[i], 'multiple WaitPop notification');
+      Check((value[i] >= 1) and
+            (value[i] <= waiters),
+        'multiple WaitPop value range');
+      if (value[i] >= 1) and
+         (value[i] <= waiters) then
+      begin
+        j := 1 shl (value[i] - 1);
+        Check(mask and j = 0, 'duplicate WaitPop value');
+        mask := mask or j;
+      end;
+    end;
+    CheckEqual(mask, (1 shl waiters) - 1,
+      'all WaitPop values consumed');
+    CheckEqual(q.Count, 0);
+    CheckEqual(q.Waiters, 0);
+  finally
+    CleanupQueue;
+    q.Free;
+  end;
+  // WaitPopFinalize must wake all sleepers
+  q := TSynQueue.Create(TypeInfo(TIntegerDynArray));
+  try
+    // Long timeout: these threads should terminate because of
+    // WaitPopFinalize(), not because WaitPop naturally timed out.
+    StartWaiters(5000);
+    SleepHiRes(20);
+    q.WaitPopFinalize(1000);
+    // On futex/WaitOnAddress platforms WakeAll should make this reach
+    // zero immediately. On fallback platforms the existing SleepStep
+    // polling should still make it reach zero well inside 1 second.
+    CheckEqual(q.Waiters, 0,
+      'WaitPopFinalize should release all waiters');
+    WaitTasks('WaitPopFinalize workers');
+    for i := 0 to waiters - 1 do
+      Check(not success[i],
+        'WaitPopFinalize WaitPop result');
+    // Future WaitPop calls should return immediately and, importantly,
+    // should not increase fWaitPopCounter.
+    v := 0;
+    Check(not q.WaitPop(10, nil, v),
+      'WaitPop after WaitPopFinalize');
+    CheckEqual(q.Waiters, 0,
+      'WaitPop after finalize should not register a waiter');
+    // Should therefore also be harmless/immediate if called again.
+    q.WaitPopFinalize(10);
+    CheckEqual(q.Waiters, 0);
+  finally
+    CleanupQueue;
+    q.Free;
+  end;
+  // WaitPopFinalize / WaitPopReset with several concurrent sleepers
+  q := TSynQueue.Create(TypeInfo(TIntegerDynArray));
+  try
+    // 1. first generation: all waiters are aborted by Finalize()
+    StartWaiters(5000);
+    SleepHiRes(20);
+    q.WaitPopFinalize(1000);
+    // WakeAll should release all futex waiters immediately.
+    // The polling fallback should also finish well within 1 second.
+    CheckEqual(q.Waiters, 0,
+      'WaitPopFinalize should release all waiters');
+    WaitTasks('WaitPopFinalize workers');
+    for i := 0 to waiters - 1 do
+      Check(not success[i],
+        'WaitPopFinalize WaitPop result');
+    // While finalized, new WaitPop() calls should not even register.
+    v := 0;
+    Check(not q.WaitPop(10, nil, v),
+      'WaitPop after WaitPopFinalize');
+    CheckEqual(q.Waiters, 0,
+      'WaitPop after finalize should not register a waiter');
+    // 2. reset then start a completely fresh generation of waiters
+    Check(q.WaitPopReset,
+      'WaitPopReset after all waiters terminated');
+    StartWaiters(5000);
+    SleepHiRes(20);
+    // One Push() per waiter: validates that normal WakeOne behavior
+    // is working again after WaitPopReset().
+    for i := 1 to waiters do
+    begin
+      v := 100 + i;
+      q.Push(v);
+    end;
+    WaitTasks('WaitPopReset workers');
+    mask := 0;
+    for i := 0 to waiters - 1 do
+    begin
+      Check(success[i],
+        'WaitPop after WaitPopReset');
+      Check((value[i] > 100) and
+            (value[i] <= 100 + waiters),
+        'WaitPopReset value range');
+      if (value[i] > 100) and
+         (value[i] <= 100 + waiters) then
+      begin
+        j := 1 shl (value[i] - 101);
+        Check(mask and j = 0,
+          'WaitPopReset duplicate value');
+        mask := mask or j;
+      end;
+    end;
+    CheckEqual(mask, (1 shl waiters) - 1,
+      'all WaitPopReset values consumed');
+    CheckEqual(q.Count, 0);
+    CheckEqual(q.Waiters, 0);
+    // 3. make sure Finalize() still works after Reset()
+    StartWaiters(5000);
+    SleepHiRes(20);
+    q.WaitPopFinalize(1000);
+    CheckEqual(q.Waiters, 0,
+      'second WaitPopFinalize should release all waiters');
+    WaitTasks('second WaitPopFinalize workers');
+    for i := 0 to waiters - 1 do
+      Check(not success[i],
+        'second WaitPopFinalize WaitPop result');
+    // A second reset cycle should work as well.
+    Check(q.WaitPopReset,
+      'second WaitPopReset');
+    // The queue is operational again.
+    v := 123456;
+    q.Push(v);
+    v := 0;
+    Check(q.WaitPop(1000, nil, v),
+      'WaitPop after second WaitPopReset');
+    CheckEqual(v, 123456);
+  finally
+    CleanupQueue;
+    q.Free;
+  end;
 end;
 
 procedure TTestCoreThreads.ExclusiveLocks;

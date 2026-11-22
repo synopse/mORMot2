@@ -16,9 +16,9 @@
 
 {$ifdef ASMX64NOTPIC} // some asm with global variables access
 
-procedure AesEncryptAsm(const ctxt: TAesContext; bi, bo: PBlock128);
+procedure AesEncryptAsm(const ctxt: TAes; bi, bo: PBlock128);
 {$ifdef FPC} nostackframe; assembler; asm {$else}
-asm     // input: rcx/rdi=TAesContext, rdx/rsi=source, r8/rdx=dest
+asm     // input: rcx/rdi=TAes, rdx/rsi=source, r8/rdx=dest
         .noframe
 {$endif}
         // rolled optimized encryption asm version by A. Bouchez
@@ -38,7 +38,7 @@ asm     // input: rcx/rdi=TAesContext, rdx/rsi=source, r8/rdx=dest
         mov     rdx,  rsi
         mov     r12,  rdi
         {$endif ABIWINX64}
-        movzx   r13,  byte ptr [r12].TAesContext.Rounds
+        movzx   r13,  byte ptr [r12].TAes.Rounds
         mov     eax,  dword ptr [rdx]
         mov     ebx,  dword ptr [rdx + 4H]
         mov     ecx,  dword ptr [rdx + 8H]
@@ -2387,6 +2387,24 @@ procedure _rshift1(var V: THash256Rec);
         mov     qword ptr [V + 0 * 8], r10
 end;
 
+function _cmp256(const Left, Right: THash256Rec): integer;
+{$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
+        mov   rax, qword ptr [Left + 18H]
+        cmp   rax, qword ptr [Right + 18H]
+        jne   @done
+        mov   rax, qword ptr [Left + 10H]
+        cmp   rax, qword ptr [Right + 10H]
+        jne   @done
+        mov   rax, qword ptr [Left + 8H]
+        cmp   rax, qword ptr [Right + 8H]
+        jne   @done
+        mov   rax, qword ptr [Left]
+        cmp   rax, qword ptr [Right]
+@done:  mov   eax, 0
+        seta  al
+        sbb   eax, 0
+end;
+
 {$ifdef FPC} // constref to force passing by reference (as Win64/Delphi does)
 procedure _mult128(constref l, r: THash128Rec; out product: THash256Rec);
   nostackframe; assembler; asm
@@ -2569,6 +2587,131 @@ procedure _mult256(out Output: THash512Rec; const Left, Right: THash256Rec);
         {$endif ABIWINX64}
 end;
 
+procedure _square256(out Output: THash512Rec; const Left: THash256Rec);
+{$ifdef FPC}nostackframe; assembler; asm {$else} asm .noframe {$endif}
+        {$ifdef ABIWINX64}
+        push    rdi
+        push    rsi
+        mov     rdi, Output
+        mov     rsi, Left
+        {$endif ABIWINX64}
+        push    r12
+        push    r13
+        push    r14
+        push    r15
+        mov     r12, qword ptr [rsi]
+        mov     r13, qword ptr [rsi + 8]
+        mov     r14, qword ptr [rsi + 16]
+        mov     r15, qword ptr [rsi + 24]
+        // The 192-bit accumulator is R10:R9:R8.
+        // Column zero is just a0*a0.
+        mov     rax, r12
+        mul     r12
+        mov     qword ptr [rdi], rax
+        mov     r8, rdx
+        xor     r9d, r9d
+        xor     r10d, r10d
+        // Column 1: a0*a1 doubled
+        mov     rax, r12
+        mul     r13
+        add     r8, rax
+        adc     r9, rdx
+        adc     r10, 0
+        add     r8, rax
+        adc     r9, rdx
+        adc     r10, 0
+        mov     qword ptr [rdi + 8], r8
+        mov     r8, r9
+        mov     r9, r10
+        xor     r10d, r10d
+        // Column 2: a0*a2 doubled, a1*a1
+        mov     rax, r12
+        mul     r14
+        add     r8, rax
+        adc     r9, rdx
+        adc     r10, 0
+        add     r8, rax
+        adc     r9, rdx
+        adc     r10, 0
+        mov     rax, r13
+        mul     r13
+        add     r8, rax
+        adc     r9, rdx
+        adc     r10, 0
+        mov     qword ptr [rdi + 16], r8
+        mov     r8, r9
+        mov     r9, r10
+        xor     r10d, r10d
+        // Column 3: a0*a3 doubled, a1*a2 doubled
+        mov     rax, r12
+        mul     r15
+        add     r8, rax
+        adc     r9, rdx
+        adc     r10, 0
+        add     r8, rax
+        adc     r9, rdx
+        adc     r10, 0
+        mov     rax, r13
+        mul     r14
+        add     r8, rax
+        adc     r9, rdx
+        adc     r10, 0
+        add     r8, rax
+        adc     r9, rdx
+        adc     r10, 0
+        mov     qword ptr [rdi + 24], r8
+        mov     r8, r9
+        mov     r9, r10
+        xor     r10d, r10d
+        // Column 4: a1*a3 doubled, a2*a2
+        mov     rax, r13
+        mul     r15
+        add     r8, rax
+        adc     r9, rdx
+        adc     r10, 0
+        add     r8, rax
+        adc     r9, rdx
+        adc     r10, 0
+        mov     rax, r14
+        mul     r14
+        add     r8, rax
+        adc     r9, rdx
+        adc     r10, 0
+        mov     qword ptr [rdi + 32], r8
+        mov     r8, r9
+        mov     r9, r10
+        xor     r10d, r10d
+        // Column 5: a2*a3 doubled
+        mov     rax, r14
+        mul     r15
+        add     r8, rax
+        adc     r9, rdx
+        adc     r10, 0
+        add     r8, rax
+        adc     r9, rdx
+        adc     r10, 0
+        mov     qword ptr [rdi + 40], r8
+        mov     r8, r9
+        mov     r9, r10
+        xor     r10d, r10d
+        // Column 6: a3*a3
+        mov     rax, r15
+        mul     r15
+        add     r8, rax
+        adc     r9, rdx
+        adc     r10, 0
+        mov     qword ptr [rdi + 48], r8
+        mov     qword ptr [rdi + 56], r9
+        pop     r15
+        pop     r14
+        pop     r13
+        pop     r12
+        {$ifdef ABIWINX64}
+        pop     rsi
+        pop     rdi
+        {$endif ABIWINX64}
+end;
+
 procedure _inc64(var Value: THash128Rec; var Added: QWord);
 {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
         // rcx/rdi=Value rdx/rsi=Added
@@ -2596,11 +2739,11 @@ function _xasmadd(Value, Adds: pointer; Carry: PtrUInt): PtrUInt;
         // rcx/rdi=Value rdx/rsi=Adds r8/rdx=Carry
         xor    eax, eax
         mov    r9, qword ptr [Adds]
-        add    r9, Carry
+        bt     Carry, 0 // inject incoming carry without overflowing r9
         mov    r8 , qword ptr [Adds + 8]
         mov    r10, qword ptr [Adds + 8 * 2]
         mov    r11, qword ptr [Adds + 8 * 3]
-        add    qword ptr [Value], r9
+        adc    qword ptr [Value], r9
         adc    qword ptr [Value + 8], r8
         adc    qword ptr [Value + 8 * 2], r10
         adc    qword ptr [Value + 8 * 3], r11
@@ -2637,11 +2780,11 @@ function _xasmsub(Value, Subs: pointer; Carry: PtrUInt): PtrUInt;
         // rcx/rdi=Value rdx/rsi=Subs r8/rdx=Carry
         xor    eax, eax
         mov    r9,  qword ptr [Subs]
-        add    r9, Carry
+        bt     Carry, 0 // inject incoming carry without overflowing r9
         mov    r8 , qword ptr [Subs + 8]
         mov    r10, qword ptr [Subs + 8 * 2]
         mov    r11, qword ptr [Subs + 8 * 3]
-        sub    qword ptr [Value], r9
+        sbb    qword ptr [Value], r9
         sbb    qword ptr [Value + 8], r8
         sbb    qword ptr [Value + 8 * 2], r10
         sbb    qword ptr [Value + 8 * 3], r11
@@ -2931,6 +3074,25 @@ function _xasmmuladd(Src, Dst: pointer; Factor, Carry: PtrUInt): PtrUInt;
         {$endif ABIWINX64}
 end;
 
+procedure _xasmsquarediagonal(Src, Dst: pointer; Count: PtrUInt);
+{$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
+        xor     r10d, r10d       // carry
+@s:     mov     eax, dword ptr [Src]
+        imul    rax, rax
+        lea     rax, [rax + r10] // square + carry cannot overflow
+        mov     r9, qword ptr [Dst]
+        xor     r10d, r10d
+        add     r9, r9
+        adc     r10, 0
+        add     r9, rax
+        adc     r10, 0
+        mov     qword ptr [Dst], r9
+        add     Src, 4
+        add     Dst, 8
+        dec     Count
+        jnz     @s
+end;
+
 procedure Xor512(dst, src: PPtrIntArray);
 {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif FPC}
         movups  xmm0, dqword ptr [dst]
@@ -2971,6 +3133,218 @@ procedure Move512(dst, src: PPtrIntArray);
         movups  dqword ptr [dst + 32], xmm2
         movups  dqword ptr [dst + 48], xmm3
 end;
+
+
+// specific mormot.crypt.ecc256r1 computation in pure asm
+procedure _mmodP(out Output: THash256Rec; var Product: THash512Rec);
+{$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
+        // SYSV: RDI=@Output, RSI=@Product; WIN64: RCX=@Output, RDX=@Product
+        {$ifdef ABIWINX64}
+        push    rdi
+        push    rsi
+        mov     rdi, Output
+        mov     rsi, Product
+        {$endif ABIWINX64}
+        push    rbx
+        push    rbp
+        push    r12
+        push    r13
+        push    r14
+        push    r15
+        mov     r12, [rsi]
+        mov     r13, [rsi+8]
+        mov     r14, [rsi+16]
+        mov     r15, [rsi+24]
+        mov     r8, [rsi+32]
+        mov     r9, [rsi+40]
+        mov     r10, [rsi+48]
+        mov     r11, [rsi+56]
+        xor     ebp, ebp
+        // s1
+        xor     eax, eax
+        mov     rcx, r9
+        shr     rcx, 32
+        shl     rcx, 33
+        mov     rdx, r10
+        shld    rdx, r9, 1
+        mov     rbx, r11
+        shld    rbx, r10, 1
+        mov     rbp, r11
+        shr     rbp, 63
+        add     r12, rax
+        adc     r13, rcx
+        adc     r14, rdx
+        adc     r15, rbx
+        adc     rbp, 0
+        // s2
+        xor     eax, eax
+        mov     rcx, r10
+        shl     rcx, 32
+        mov     rdx, r10
+        shrd    rdx, r11, 32
+        mov     rbx, r11
+        shr     rbx, 32
+        shld    rbx, rdx, 1
+        shld    rdx, rcx, 1
+        shl     rcx, 1
+        add     r12, rax
+        adc     r13, rcx
+        adc     r14, rdx
+        adc     r15, rbx
+        adc     rbp, 0
+        // s3
+        mov     rax, r8
+        mov     ecx, r9d
+        xor     edx, edx
+        mov     rbx, r11
+        add     r12, rax
+        adc     r13, rcx
+        adc     r14, rdx
+        adc     r15, rbx
+        adc     rbp, 0
+        // s4
+        mov     rax, r8
+        shrd    rax, r9, 32
+        mov     rcx, r9
+        shr     rcx, 32
+        mov     rdx, r10
+        shr     rdx, 32
+        shl     rdx, 32
+        or      rcx, rdx
+        mov     rdx, r11
+        mov     rbx, r10
+        shrd    rbx, r8, 32
+        add     r12, rax
+        adc     r13, rcx
+        adc     r14, rdx
+        adc     r15, rbx
+        adc     rbp, 0
+        // d1
+        mov     rax, r9
+        shrd    rax, r10, 32
+        mov     rcx, r10
+        shr     rcx, 32
+        mov     rbx, r8
+        mov     ebx, ebx
+        mov     rdx, r9
+        shl     rdx, 32
+        or      rbx, rdx
+        xor     edx, edx
+        sub     r12, rax
+        sbb     r13, rcx
+        sbb     r14, rdx
+        sbb     r15, rbx
+        sbb     rbp, 0
+        // d2
+        mov     rax, r10
+        mov     rcx, r11
+        mov     rbx, r9
+        shr     rbx, 32
+        shl     rbx, 32
+        mov     rdx, r8
+        shr     rdx, 32
+        or      rbx, rdx
+        xor     edx, edx
+        sub     r12, rax
+        sbb     r13, rcx
+        sbb     r14, rdx
+        sbb     r15, rbx
+        sbb     rbp, 0
+        // d3
+        mov     rax, r10
+        shrd    rax, r11, 32
+        mov     rcx, r11
+        shrd    rcx, r8, 32
+        mov     rdx, r8
+        shrd    rdx, r9, 32
+        mov     rbx, r10
+        shl     rbx, 32
+        sub     r12, rax
+        sbb     r13, rcx
+        sbb     r14, rdx
+        sbb     r15, rbx
+        sbb     rbp, 0
+        // d4
+        mov     rax, r11
+        mov     rcx, r8
+        shr     rcx, 32
+        shl     rcx, 32
+        mov     rdx, r9
+        mov     rbx, r10
+        shr     rbx, 32
+        shl     rbx, 32
+        sub     r12, rax
+        sbb     r13, rcx
+        sbb     r14, rdx
+        sbb     r15, rbx
+        sbb     rbp, 0
+        // normalize via signed carry * D, D=2^224-2^192-2^96+1
+        mov     rax, rbp
+        sar     rax, 63
+        mov     rcx, rbp
+        neg     rcx
+        shl     rcx, 32
+        mov     rdx, rcx
+        sar     rdx, 63
+        mov     rbx, rbp
+        shl     rbx, 32
+        sub     rbx, rbp
+        mov     r11, rbx
+        sar     r11, 63
+        xor     r10d, r10d
+        add     r12, rbp
+        adc     r13, rax
+        adc     r14, rax
+        adc     r15, rax
+        adc     r10, rax
+        add     r13, rcx
+        adc     r14, rdx
+        adc     r15, rdx
+        adc     r10, rdx
+        add     r15, rbx
+        adc     r10, r11
+        // P limbs: -1, 0xffffffff, 0, 0xffffffff00000001
+        mov     r8, -1
+        mov     r9, $ffffffff
+        mov     r11, $ffffffff00000001
+        test    r10, r10
+        js      @add_p
+        jnz     @sub_p
+        cmp     r15, r11
+        ja      @sub_p
+        jb      @done
+        test    r14, r14
+        jnz     @sub_p
+        cmp     r13, r9
+        ja      @sub_p
+        jb      @done
+        cmp     r12, r8
+        jne     @done
+@sub_p: sub     r12, r8
+        sbb     r13, r9
+        sbb     r14, 0
+        sbb     r15, r11
+        jmp     @done
+@add_p: add     r12, r8
+        adc     r13, r9
+        adc     r14, 0
+        adc     r15, r11
+@done:  mov     qword ptr [rdi], r12
+        mov     qword ptr [rdi+8], r13
+        mov     qword ptr [rdi+16], r14
+        mov     qword ptr [rdi+24], r15
+        pop     r15
+        pop     r14
+        pop     r13
+        pop     r12
+        pop     rbp
+        pop     rbx
+        {$ifdef ABIWINX64}
+        pop     rsi
+        pop     rdi
+        {$endif ABIWINX64}
+end;
+
 
 procedure MD5Transform(var buf: TMd5Buf; const in_: TMd5In);
 // see https://synopse.info/forum/viewtopic.php?id=4369 for asm numbers
@@ -3736,7 +4110,7 @@ end;
 
 {$ifdef USEAESNI}
 
-procedure AesNiEncryptXmm0; // rax=TAesContext+$70 xmm0=input/output
+procedure AesNiEncryptXmm0; // rax=TAes+$70 xmm0=input/output
 {$ifdef FPC} nostackframe; assembler; asm {$else} asm .noframe {$endif}
       movups  xmm1,  dqword ptr [rax + $00 - $70]
       movups  xmm2,  dqword ptr [rax + $10 - $70]
@@ -3759,7 +4133,7 @@ procedure AesNiEncryptXmm0; // rax=TAesContext+$70 xmm0=input/output
       aesenc  xmm0,  xmm2
       aesenc  xmm0,  xmm3
       aesenc  xmm0,  xmm4
-      cmp     byte ptr [rax - $70].TAesContext.Rounds, 12
+      cmp     byte ptr [rax - $70].TAes.Rounds, 12
       je      @192
       ja      @256
       aesenclast xmm0, xmm5
@@ -4444,6 +4818,260 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         {$endif ABIWINX64}
 end;
 
+{
+  Four-way interleaved AES-NI ECB block transforms for TAes.DoBlocks.
+  The caller passes groups of four 16-byte blocks; remaining 0..3 blocks
+  are handled by the existing DoBlock path.
+  Only XMM0..XMM4 are used, so Win64 nonvolatile XMM6..XMM15 are intact.
+  No TAes field is written; the routine is reentrant/thread-safe.
+}
+
+procedure AesNiEncryptBlocks4(var p: TAesNiBlocks4Params);
+{$ifdef FPC}nostackframe; assembler; asm{$else}asm .noframe{$endif}
+        {$ifdef ABIWINX64}
+        mov     rax, rcx                     // Win64: p=rcx
+        {$else}
+        mov     rax, rdi                     // SysV: p=rdi
+        {$endif ABIWINX64}
+        mov     r8,  qword ptr [rax].TAesNiBlocks4Params.groups
+        mov     r10, qword ptr [rax].TAesNiBlocks4Params.src
+        mov     r11, qword ptr [rax].TAesNiBlocks4Params.dst
+        mov     rax, qword ptr [rax].TAesNiBlocks4Params.ctxt
+        test    r8, r8
+        jz      @done
+        {$ifdef FPC} align 16 {$endif}
+@by4:   // four independent AES-NI streams, 64 input bytes
+        movups  xmm0, dqword ptr [r10]
+        movups  xmm1, dqword ptr [r10 + $10]
+        movups  xmm2, dqword ptr [r10 + $20]
+        movups  xmm3, dqword ptr [r10 + $30]
+        movups  xmm4, dqword ptr [rax]  // RK[0]
+        pxor    xmm0, xmm4
+        pxor    xmm1, xmm4
+        pxor    xmm2, xmm4
+        pxor    xmm3, xmm4
+        movups  xmm4, dqword ptr [rax + $10]
+        aesenc  xmm0, xmm4
+        aesenc  xmm1, xmm4
+        aesenc  xmm2, xmm4
+        aesenc  xmm3, xmm4
+        movups  xmm4, dqword ptr [rax + $20]
+        aesenc  xmm0, xmm4
+        aesenc  xmm1, xmm4
+        aesenc  xmm2, xmm4
+        aesenc  xmm3, xmm4
+        movups  xmm4, dqword ptr [rax + $30]
+        aesenc  xmm0, xmm4
+        aesenc  xmm1, xmm4
+        aesenc  xmm2, xmm4
+        aesenc  xmm3, xmm4
+        movups  xmm4, dqword ptr [rax + $40]
+        aesenc  xmm0, xmm4
+        aesenc  xmm1, xmm4
+        aesenc  xmm2, xmm4
+        aesenc  xmm3, xmm4
+        movups  xmm4, dqword ptr [rax + $50]
+        aesenc  xmm0, xmm4
+        aesenc  xmm1, xmm4
+        aesenc  xmm2, xmm4
+        aesenc  xmm3, xmm4
+        movups  xmm4, dqword ptr [rax + $60]
+        aesenc  xmm0, xmm4
+        aesenc  xmm1, xmm4
+        aesenc  xmm2, xmm4
+        aesenc  xmm3, xmm4
+        movups  xmm4, dqword ptr [rax + $70]
+        aesenc  xmm0, xmm4
+        aesenc  xmm1, xmm4
+        aesenc  xmm2, xmm4
+        aesenc  xmm3, xmm4
+        movups  xmm4, dqword ptr [rax + $80]
+        aesenc  xmm0, xmm4
+        aesenc  xmm1, xmm4
+        aesenc  xmm2, xmm4
+        aesenc  xmm3, xmm4
+        movups  xmm4, dqword ptr [rax + $90]
+        aesenc  xmm0, xmm4
+        aesenc  xmm1, xmm4
+        aesenc  xmm2, xmm4
+        aesenc  xmm3, xmm4
+        cmp     byte ptr [rax].TAes.Rounds, 10
+        ja      @x192
+        movups  xmm4, dqword ptr [rax + $a0]
+        aesenclast xmm0, xmm4
+        aesenclast xmm1, xmm4
+        aesenclast xmm2, xmm4
+        aesenclast xmm3, xmm4
+        jmp     @wr
+@x192:  movups  xmm4, dqword ptr [rax + $a0]
+        aesenc  xmm0, xmm4
+        aesenc  xmm1, xmm4
+        aesenc  xmm2, xmm4
+        aesenc  xmm3, xmm4
+        movups  xmm4, dqword ptr [rax + $b0]
+        aesenc  xmm0, xmm4
+        aesenc  xmm1, xmm4
+        aesenc  xmm2, xmm4
+        aesenc  xmm3, xmm4
+        cmp     byte ptr [rax].TAes.Rounds, 12
+        ja      @x256
+        movups  xmm4, dqword ptr [rax + $c0]
+        aesenclast xmm0, xmm4
+        aesenclast xmm1, xmm4
+        aesenclast xmm2, xmm4
+        aesenclast xmm3, xmm4
+        jmp     @wr
+@x256:  movups  xmm4, dqword ptr [rax + $c0]
+        aesenc  xmm0, xmm4
+        aesenc  xmm1, xmm4
+        aesenc  xmm2, xmm4
+        aesenc  xmm3, xmm4
+        movups  xmm4, dqword ptr [rax + $d0]
+        aesenc  xmm0, xmm4
+        aesenc  xmm1, xmm4
+        aesenc  xmm2, xmm4
+        aesenc  xmm3, xmm4
+        movups  xmm4, dqword ptr [rax + $e0]
+        aesenclast xmm0, xmm4
+        aesenclast xmm1, xmm4
+        aesenclast xmm2, xmm4
+        aesenclast xmm3, xmm4
+ @wr:   // safe when src=dst, all four blocks were loaded first
+        movups  dqword ptr [r11], xmm0
+        movups  dqword ptr [r11 + $10], xmm1
+        movups  dqword ptr [r11 + $20], xmm2
+        movups  dqword ptr [r11 + $30], xmm3
+        add     r10, $40
+        add     r11, $40
+        dec     r8
+        jnz     @by4
+ @done: // no round-key material left in XMM0..XMM4
+        pxor    xmm0, xmm0
+        pxor    xmm1, xmm1
+        pxor    xmm2, xmm2
+        pxor    xmm3, xmm3
+        pxor    xmm4, xmm4
+end;
+
+procedure AesNiDecryptBlocks4(var p: TAesNiBlocks4Params);
+{$ifdef FPC}nostackframe; assembler; asm{$else}asm .noframe{$endif}
+        {$ifdef ABIWINX64}
+        mov     rax, rcx                     // Win64: p=rcx
+        {$else}
+        mov     rax, rdi                     // SysV: p=rdi
+        {$endif ABIWINX64}
+        mov     r8,  qword ptr [rax].TAesNiBlocks4Params.groups
+        mov     r10, qword ptr [rax].TAesNiBlocks4Params.src
+        mov     r11, qword ptr [rax].TAesNiBlocks4Params.dst
+        mov     rax, qword ptr [rax].TAesNiBlocks4Params.ctxt
+        test    r8, r8
+        jz      @done
+        movzx   ecx, byte ptr [rax].TAes.Rounds
+        shl     ecx, 4
+        lea     r9, [rax + rcx] // RK[Rounds]
+        {$ifdef FPC} align 16 {$endif}
+@by4:   // four independent AES-NI streams, 64 input bytes
+        movups  xmm0, dqword ptr [r10]
+        movups  xmm1, dqword ptr [r10 + $10]
+        movups  xmm2, dqword ptr [r10 + $20]
+        movups  xmm3, dqword ptr [r10 + $30]
+        movups  xmm4, dqword ptr [r9]  // RK[Rounds]
+        pxor    xmm0, xmm4
+        pxor    xmm1, xmm4
+        pxor    xmm2, xmm4
+        pxor    xmm3, xmm4
+        movups  xmm4, dqword ptr [r9 - $10]
+        aesdec  xmm0, xmm4
+        aesdec  xmm1, xmm4
+        aesdec  xmm2, xmm4
+        aesdec  xmm3, xmm4
+        movups  xmm4, dqword ptr [r9 - $20]
+        aesdec  xmm0, xmm4
+        aesdec  xmm1, xmm4
+        aesdec  xmm2, xmm4
+        aesdec  xmm3, xmm4
+        movups  xmm4, dqword ptr [r9 - $30]
+        aesdec  xmm0, xmm4
+        aesdec  xmm1, xmm4
+        aesdec  xmm2, xmm4
+        aesdec  xmm3, xmm4
+        movups  xmm4, dqword ptr [r9 - $40]
+        aesdec  xmm0, xmm4
+        aesdec  xmm1, xmm4
+        aesdec  xmm2, xmm4
+        aesdec  xmm3, xmm4
+        movups  xmm4, dqword ptr [r9 - $50]
+        aesdec  xmm0, xmm4
+        aesdec  xmm1, xmm4
+        aesdec  xmm2, xmm4
+        aesdec  xmm3, xmm4
+        movups  xmm4, dqword ptr [r9 - $60]
+        aesdec  xmm0, xmm4
+        aesdec  xmm1, xmm4
+        aesdec  xmm2, xmm4
+        aesdec  xmm3, xmm4
+        movups  xmm4, dqword ptr [r9 - $70]
+        aesdec  xmm0, xmm4
+        aesdec  xmm1, xmm4
+        aesdec  xmm2, xmm4
+        aesdec  xmm3, xmm4
+        movups  xmm4, dqword ptr [r9 - $80]
+        aesdec  xmm0, xmm4
+        aesdec  xmm1, xmm4
+        aesdec  xmm2, xmm4
+        aesdec  xmm3, xmm4
+        movups  xmm4, dqword ptr [r9 - $90]
+        aesdec  xmm0, xmm4
+        aesdec  xmm1, xmm4
+        aesdec  xmm2, xmm4
+        aesdec  xmm3, xmm4
+        cmp     byte ptr [rax].TAes.Rounds, 10
+        ja      @x192
+@last:  movups  xmm4, dqword ptr [rax] // RK[0], unchanged by AESIMC
+        aesdeclast xmm0, xmm4
+        aesdeclast xmm1, xmm4
+        aesdeclast xmm2, xmm4
+        aesdeclast xmm3, xmm4
+        jmp     @wr
+@x192:  movups  xmm4, dqword ptr [r9 - $a0]
+        aesdec  xmm0, xmm4
+        aesdec  xmm1, xmm4
+        aesdec  xmm2, xmm4
+        aesdec  xmm3, xmm4
+        movups  xmm4, dqword ptr [r9 - $b0]
+        aesdec  xmm0, xmm4
+        aesdec  xmm1, xmm4
+        aesdec  xmm2, xmm4
+        aesdec  xmm3, xmm4
+        cmp     byte ptr [rax].TAes.Rounds, 12
+        jbe     @last
+        movups  xmm4, dqword ptr [r9 - $c0]
+        aesdec  xmm0, xmm4
+        aesdec  xmm1, xmm4
+        aesdec  xmm2, xmm4
+        aesdec  xmm3, xmm4
+        movups  xmm4, dqword ptr [r9 - $d0]
+        aesdec  xmm0, xmm4
+        aesdec  xmm1, xmm4
+        aesdec  xmm2, xmm4
+        aesdec  xmm3, xmm4
+        jmp     @last
+@wr:    // safe when src=dst, all four blocks were loaded first
+        movups  dqword ptr [r11], xmm0
+        movups  dqword ptr [r11 + $10], xmm1
+        movups  dqword ptr [r11 + $20], xmm2
+        movups  dqword ptr [r11 + $30], xmm3
+        add     r10, $40
+        add     r11, $40
+        dec     r8
+        jnz     @by4
+@done:  // no round-key material left in XMM0..XMM4
+        pxor    xmm0, xmm0
+        pxor    xmm1, xmm1
+        pxor    xmm2, xmm2
+        pxor    xmm3, xmm3
+        pxor    xmm4, xmm4
+end;
 
 { AES-CTR alternative code }
 
@@ -4562,7 +5190,7 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
       	cmp    rdx, $1
       	jne    @big
         // handle single block without allocating any stack frame
-        mov   al, byte ptr [rcx].TAesContext.Rounds
+        mov   al, byte ptr [rcx].TAes.Rounds
       	movups xmm2, dqword ptr [r8]
       	movups xmm0, dqword ptr [rcx]
       	movups xmm3, dqword ptr [rcx + $10]
@@ -4643,7 +5271,7 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         xor    eax, ebp
         bswap  r10d
         pinsrd xmm5, eax, $3
-        movzx  eax, byte ptr [rcx].TAesContext.Rounds
+        movzx  eax, byte ptr [rcx].TAes.Rounds
         xor    r10d, ebp
         movaps dqword ptr [rsp + $30], xmm5
         lea    r9, [r8 + $5]
@@ -5074,7 +5702,7 @@ procedure AesNiEncryptCtrNist32Small;
         aesenc  xmm0,  xmm2
         aesenc  xmm0,  xmm3
         aesenc  xmm0,  xmm4
-        cmp     byte ptr [rax - $70].TAesContext.Rounds, 12
+        cmp     byte ptr [rax - $70].TAes.Rounds, 12
         je      @192
         ja      @256
         aesenclast xmm0, xmm5
@@ -5172,7 +5800,7 @@ procedure AesNiEncryptCtrNist32Fast(var ctx: TAesNiCtr);
         bswap   ecx
         lea     rcx, [rcx + 4]
         // 4x interleaved AES process
-        mov     dl, byte ptr [rax - $70].TAesContext.Rounds
+        mov     dl, byte ptr [rax - $70].TAes.Rounds
         movups  xmm4, [rax + $00 - $70]
         movups  xmm5, [rax + $10 - $70]
         movups  xmm6, [rax + $20 - $70]
@@ -5360,7 +5988,7 @@ procedure AesNiEncryptCtrNist32Fast(var ctx: TAesNiCtr);
         bswap   ecx
         lea     rcx, [rcx + 4]
         // 8x interleaved AES process
-        mov     dl, byte ptr [rax - $70].TAesContext.Rounds
+        mov     dl, byte ptr [rax - $70].TAes.Rounds
         movups  xmm8,  [rax + $00 - $70]
         movups  xmm9,  [rax + $10 - $70]
         movups  xmm10, [rax + $20 - $70]
@@ -5559,7 +6187,7 @@ end;
 {$endif USEAESNICTRBY4}
 
 procedure AesNiEncryptCtrNist32(src, dst: pointer; blocks: PtrUInt;
-  ctxt: PAesContext; iv: PHash128Rec); inline;
+  ctxt: PAes; iv: PHash128Rec); inline;
 var
   params: TAesNiCtr;
 begin
@@ -5605,7 +6233,7 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         lea    rcx, [rcx].TAesCtc.fAes
         mov    r10d, 16
         call   @crc // MAC plain block
-      	mov    al, byte ptr [rcx].TAesContext.Rounds
+      	mov    al, byte ptr [rcx].TAes.Rounds
       	movups xmm0, dqword ptr [rcx]
       	movups xmm3, dqword ptr [rcx + $10]
       	movups xmm4, dqword ptr [rcx + $20]
@@ -5706,7 +6334,7 @@ asm     // Windows x64 calling convention expects to preserve XMM6-XMM15
         xor    eax, ebp
         bswap  r10d
         pinsrd xmm5, eax, $3
-        movzx  eax, byte ptr [rcx].TAesContext.Rounds
+        movzx  eax, byte ptr [rcx].TAes.Rounds
         xor    r10d, ebp
         movaps dqword ptr [rsp + $30], xmm5
         lea    r9, [r8 + $5]
@@ -6204,7 +6832,7 @@ var
 begin
   ctr := bswap32(PCardinal(@ctxt.fIV[12])^);
   repeat
-    blocks := len shr AesBlockShift;
+    blocks := len shr AES_SHIFT;
     inc(ctr, blocks);
     if ctr < blocks then
     begin
@@ -6216,7 +6844,7 @@ begin
     PCardinal(@ctxt.fIV[12])^ := bswap32(ctr);
     if ctr = 0 then
       CtrNistCarry12(@ctxt.fIV); // propagate carry
-    blocks := blocks shl AesBlockShift;
+    blocks := blocks shl AES_SHIFT;
     inc(src, blocks);
     inc(dest, blocks);
     dec(len, blocks);

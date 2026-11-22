@@ -128,9 +128,12 @@ function FromVarUInt64(var Source: PByte; SourceMax: PByte;
   out Value: Qword): boolean; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// store a 64-bit integer with zigzag encoing 0=0,1=1,2=-1,3=2,4=-2,...
+/// store a 64-bit signed integer with zigzag encoding 0=0,1=1,2=-1,3=2,4=-2,...
 function ToVarInt64(Value: Int64; Dest: PByte): PByte;
   {$ifdef HASINLINE}inline;{$endif}
+
+/// store a 64-bit signed integer with signed LEB128 standard encoding
+function ToVarLeb64(Value: Int64; Dest: PByte): PByte;
 
 /// get a 64-bit integer from zigzag encoded buffer 0=0,1=1,2=-1,3=2,4=-2,...
 function FromVarInt64(var Source: PByte): Int64;
@@ -745,6 +748,10 @@ type
       {$ifdef FPC}inline;{$endif}
     /// read the next 64-bit unsigned value from the buffer
     function VarUInt64: QWord;
+    /// read the next signed LEB-128 value from the buffer as a 64-bit integer
+    // - not the same zigzag encoding as VarInt64, but the one used e.g. for
+    // DWARF debugging information or DuckDB / WebAssembly numbers
+    function VarLeb64: Int64;
     /// read the next RawUtf8 value from the buffer
     function VarUtf8: RawUtf8; overload;
       {$ifdef HASINLINE}inline;{$endif}
@@ -799,6 +806,15 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// read the next 8 bytes from the buffer as a 64-bit unsigned value
     function Next8: Qword;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// read in-place the next 2 bytes from the buffer as a 16-bit unsigned value
+    function Peek2: cardinal;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// read in-place the next 4 bytes from the buffer as a 32-bit unsigned value
+    function Peek4: cardinal;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// read in-place the next 8 bytes from the buffer as a 64-bit unsigned value
+    function Peek8: QWord;
       {$ifdef HASINLINE}inline;{$endif}
     /// consumes the next byte from the buffer, if matches a given value
     function NextByteEquals(Value: byte): boolean;
@@ -989,6 +1005,9 @@ type
     /// append an unsigned integer value using 64-bit variable-length encoding
     procedure WriteVarUInt64(Value: QWord);
       {$ifdef HASSAFEINLINE}inline;{$endif}
+    /// append a 64-bit value with signed LEB128 encoding (as in DWARF or DuckDB)
+    // - not zigzag: the matching reader is TFastReader.VarLeb64
+    procedure WriteVarLeb64(Value: Int64);
     /// append cardinal values (NONE must be negative!) using 32-bit
     // variable-length integer encoding or other specialized algorithm,
     // depending on the data layout
@@ -1775,6 +1794,9 @@ function UrlDecodeNextValue(U: PUtf8Char; out Value: RawUtf8): PUtf8Char;
 // - returns a pointer just after the decoded name, after the '='
 // - returns nil if there was no name=... pattern in U
 function UrlDecodeNextName(U: PUtf8Char; out Name: RawUtf8): PUtf8Char;
+
+/// internal low-level conversion of most UrlDecode*() functions
+function DoUrlDecode(P, U: PByte; replace: AnsiChar): PUtf8Char;
 
 /// checks if the supplied UTF-8 text don't need URI encoding
 // - returns TRUE if all its chars are non-void plain ASCII-7 RFC compatible
@@ -2826,7 +2848,10 @@ function ZagZigInt64(r: Int64): QWord;
 begin
   {$ifdef CPU32}
   if r <= 0 then
-    result := (-r) shl 1 // 0->0, -1->2, -2->4..
+    if r = Low(Int64) then
+      result := QWord(-1)
+    else
+      result := (-r) shl 1 // 0->0, -1->2, -2->4..
   else
     result := (r shl 1) - 1; // 1->1, 2->3..
   {$else}
@@ -3107,6 +3132,32 @@ end;
 function ToVarInt64(Value: Int64; Dest: PByte): PByte;
 begin
   result := ToVarUInt64(ZagZigInt64(Value), Dest);
+end;
+
+function ToVarLeb64(Value: Int64; Dest: PByte): PByte;
+begin
+  if Value >= 0 then
+  begin
+    if Value > $3f then
+      repeat
+        Dest^ := byte(Value and $7f) or $80;
+        inc(Dest);
+        Value := Value shr 7;
+      until Value <= $3f;
+  end
+  else
+  begin
+    Value := not Value;  // now nonnegative, even for Low(Int64)
+    if Value > $3f then  // $40 is the sign bit for SLEB128
+      repeat
+        Dest^ := not byte(Value and $7f);
+        inc(Dest);
+        Value := Value shr 7;
+      until Value <= $3f;
+    Value := Value xor $7f;
+  end;
+  Dest^ := byte(Value);
+  result := @PByteArray(Dest)^[1];
 end;
 
 function ToVarUInt64(Value: QWord; Dest: PByte): PByte;
@@ -3497,6 +3548,27 @@ begin
   inc(P, 8);
 end;
 
+function TFastReader.Peek2: cardinal;
+begin
+  if P + 1 >= Last then
+    ErrorOverflow;
+  result := PWord(P)^;
+end;
+
+function TFastReader.Peek4: cardinal;
+begin
+  if P + 3 >= Last then
+    ErrorOverflow;
+  result := PCardinal(P)^;
+end;
+
+function TFastReader.Peek8: Qword;
+begin
+  if P + 7 >= Last then
+    ErrorOverflow;
+  result := PQWord(P)^;
+end;
+
 function TFastReader.NextByteEquals(Value: byte): boolean;
 begin
   if P >= Last then
@@ -3568,6 +3640,43 @@ end;
 function TFastReader.VarInt64: Int64;
 begin
   result := ZigZagInt64(VarUInt64);
+end;
+
+function TFastReader.VarLeb64: Int64;
+var
+  b: PtrUInt;
+  shift: integer;
+label
+  e;
+begin
+  if P >= Last then
+e:  ErrorOverflow;
+  b := ord(P^);
+  inc(P);
+  if b < $80 then
+  begin
+    result := Int64(PtrInt(b) xor $40) - $40; // single-byte SLEB128: -64..63
+    exit;
+  end;
+  result := b and $7f;
+  shift := 7;
+  repeat
+    if P >= Last then
+      goto e;
+    b := ord(P^);
+    inc(P);
+    if shift = 63 then // the tenth byte can only be $00 or $7f
+    begin
+      if (b <> 0) and (b <> $7f) then
+        ErrorData('Invalid signed LEB128');
+      result := result or (Int64(b and 1) shl 63);
+      exit;
+    end;
+    result := result or (Int64(b and $7f) shl shift);
+    inc(shift, 7);
+  until b <= $7f;
+  if b and $40 <> 0 then // extend sign from current shifted bits
+    result := result or (Int64(-1) shl shift);
 end;
 
 {$ifdef CPUX86} // not enough CPU registers
@@ -3799,10 +3908,10 @@ begin
 end;
 
 function TFastReader.VarUInt64: QWord;
-label
-  e;
 var
   c, n: PtrUInt;
+label
+  e;
 begin
   if P >= Last then
 e:  ErrorOverflow;
@@ -4712,9 +4821,16 @@ end;
 
 procedure TBufferWriter.WriteVarUInt64(Value: QWord);
 begin
-  if fPos > fBufLen16 then
+  if fPos > fBufLen16 then // write up to 10 bytes
     InternalFlush;
   fPos := PtrUInt(ToVarUInt64(Value, @fBuffer^[fPos])) - PtrUInt(fBuffer);
+end;
+
+procedure TBufferWriter.WriteVarLeb64(Value: Int64);
+begin
+  if fPos > fBufLen16 then // write up to 10 bytes
+    InternalFlush;
+  fPos := PtrUInt(ToVarLeb64(Value, @fBuffer^[fPos])) - PtrUInt(fBuffer);
 end;
 
 function CleverStoreInteger(p: PInteger; V, VEnd: PAnsiChar; pCount: integer;
@@ -7793,10 +7909,12 @@ end;
 { --------- Baudot encoding/decoding }
 
 const
-  Baudot2Char: TChar64 = // see https://en.wikipedia.org/wiki/Baudot_code
-   #0'e'#10'a siu'#13'drjnfcktzlwhypqobg'#254'mxv'#255+
-   #0'3'#10'- ''87'#13#0'4'#0',!:(5+)2$6019?@'#254'./;'#255;
+  // the Baudot table as hexadecimal, since Delphi decodes #nnn escapes of
+  // concatenated literals in the host code page, which fails on DBCS hosts
+  BAUDOT2CHAR_HEX = '00650a61207369750d64726a6e66636b747a6c77687970716f6267fe6d7876ff' +
+                    '00330a2d202738370d0034002c213a28352b293224363031393f40fe2e2f3bff';
 var
+  Baudot2Char: TChar64; // see https://en.wikipedia.org/wiki/Baudot_code
   Char2Baudot: array[AnsiChar] of byte;
 
 procedure FillBaudotDecode(s, d: PByteArray);
@@ -11161,6 +11279,8 @@ begin
   end;
   {$endif ASMX64AVX1}
   RawToBase64 := _RawToBase64; // for mormot.net.sock and mormot.crypt.core
+  // initialize the Baudot encoding table
+  HexToBin(BAUDOT2CHAR_HEX, @Baudot2Char, SizeOf(Baudot2Char));
   // setup internal compression algorithms
   AlgoSynLZ := TAlgoSynLZ.Create;
   AlgoRleLZ := TAlgoRleLZ.Create;

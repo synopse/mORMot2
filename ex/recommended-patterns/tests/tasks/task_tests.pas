@@ -9,6 +9,7 @@ uses
   SysUtils,
   mormot.core.base,
   mormot.core.data,
+  mormot.core.rtti,
   mormot.core.datetime,
   mormot.core.os,
   mormot.core.test,
@@ -351,6 +352,8 @@ var
   Comments: TTaskCommentDynArray;
   Tags: TIDDynArray;
   Created, Updated, Due: TDateTime;
+  AggregateProps, DtoProps: TRttiCustomProps;
+  i: PtrInt;
 begin
   // Build an ORM aggregate with known field values, including two comments
   // and two tag references, then assert the hand-written projections copy
@@ -362,8 +365,14 @@ begin
   SetLength(Comments, 2);
   Comments[0].Content := 'First';
   Comments[0].Author := 'Alice';
+  Comments[0].CreatedAt := Created;
+  Comments[0].UpdatedAt := Created;
+  Comments[0].IsEdited := false;
   Comments[1].Content := 'Second';
   Comments[1].Author := 'Bob';
+  Comments[1].CreatedAt := Created + 1;
+  Comments[1].UpdatedAt := Updated;
+  Comments[1].IsEdited := true;
 
   SetLength(Tags, 2);
   Tags[0] := 11;
@@ -396,8 +405,25 @@ begin
     CheckSame(View.UpdatedAt, Updated, 1E-6, 'view UpdatedAt copied');
     CheckEqual(View.CommentCount, 2, 'view CommentCount = Length(Comments)');
     CheckEqual(Length(View.Comments), 2, 'view Comments copied through');
-    CheckEqual(View.Comments[0].Content, 'First', 'view Comments[0] content');
-    CheckEqual(View.Comments[1].Author, 'Bob', 'view Comments[1] author');
+    // every TTaskComment field must reach TTaskCommentDTO
+    for i := 0 to 1 do
+    begin
+      CheckEqual(View.Comments[i].Content, Comments[i].Content, 'view comment content');
+      CheckEqual(View.Comments[i].Author, Comments[i].Author, 'view comment author');
+      CheckSame(View.Comments[i].CreatedAt, Comments[i].CreatedAt, 1E-6,
+        'view comment CreatedAt');
+      CheckSame(View.Comments[i].UpdatedAt, Comments[i].UpdatedAt, 1E-6,
+        'view comment UpdatedAt');
+      Check(View.Comments[i].IsEdited = Comments[i].IsEdited, 'view comment IsEdited');
+    end;
+    // the mapping pairs fields by name: a field added on one side only would
+    // silently stop copying, so both records must keep the same field names
+    AggregateProps := Rtti[TypeInfo(TTaskComment)].Props;
+    DtoProps := Rtti[TypeInfo(TTaskCommentDTO)].Props;
+    CheckEqual(DtoProps.Count, AggregateProps.Count, 'comment DTO field count');
+    for i := 0 to AggregateProps.Count - 1 do
+      CheckUtf8(DtoProps.Find(AggregateProps.List[i].Name) <> nil,
+        'comment DTO has field %', [AggregateProps.List[i].Name]);
     CheckEqual(Length(View.TagIDs), 2, 'view TagIDs copied through');
     CheckEqual(View.TagIDs[0], 11, 'view TagIDs[0]');
     CheckEqual(View.TagIDs[1], 22, 'view TagIDs[1]');

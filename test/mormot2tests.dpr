@@ -60,10 +60,12 @@ uses
   mormot.crypt.x509,
   mormot.crypt.openssl,
   mormot.tools.ecc         in '..\src\tools\ecc\mormot.tools.ecc.pas',
+  mormot.tools.jop         in '..\src\tools\jop\mormot.tools.jop.pas',
   test.core.base           in '.\test.core.base.pas',
   test.core.threads        in '.\test.core.threads.pas',
   test.core.data           in '.\test.core.data.pas',
   test.core.crypt          in '.\test.core.crypt.pas',
+  test.core.fmt            in '.\test.core.fmt.pas',
   test.core.ecc            in '.\test.core.ecc.pas',
   test.core.collections    in '.\test.core.collections.pas',
   {$ifdef LIBQUICKJSSTATIC}
@@ -79,6 +81,7 @@ uses
   test.orm.core            in '.\test.orm.core.pas',
   test.orm.sqlite3         in '.\test.orm.sqlite3.pas',
   test.orm.extdb           in '.\test.orm.extdb.pas',
+  test.db.duckdb           in '.\test.db.duckdb.pas',
   test.orm.threads         in '.\test.orm.threads.pas',
   test.orm.network         in '.\test.orm.network.pas',
   test.soa.core            in '.\test.soa.core.pas',
@@ -161,6 +164,7 @@ begin
     TTestCoreBase,
     TTestCoreThreads,
     TTestCoreProcess,
+    TTestCoreJop,
     {$ifdef HASGENERICS} // do-nothing on oldest compilers (e.g. <= Delphi XE7)
     TTestCoreCollections,
     {$endif HASGENERICS}
@@ -180,6 +184,8 @@ begin
     TTestSqliteFileMemoryMap,
     TTestSqliteMemory,
     TTestExternalDatabase,
+    TTestDuckDB,
+    TTestQuack,
     TTestClientServerAccess,
     TTestMultiThreadProcess
   ]);

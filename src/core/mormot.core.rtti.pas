@@ -2900,7 +2900,7 @@ type
     fHashInfo: array of TRttiCustomListPairs;
     // store PRttiInfo/TRttiCustom pairs by Name - protected by RegisterSafe
     fHashName: array of TPointerDynArray;
-    fLastHashName: TRttiCustom; // speedup search by name e.g. from a loop
+    fLastHashName: TRttiCustom;       // speedup search by name e.g. from a loop
     fInstances: array of TRttiCustom; // of Count length - released in Destroy
     fGlobalClass: TRttiCustomClass;
     fOwnedRtti: array of TRttiCustom; // for SetPropsFromText(NoRegister=true)
@@ -2917,7 +2917,7 @@ type
     /// a global lock shared for high-level RTTI registration process
     // - is used e.g. to protect DoRegister() or TRttiCustom.PrivateSlot
     // - should be a reentrant lock, even if seldom called
-    RegisterSafe: TOSLock;
+    RegisterSafe: TMultiLightLock;
     /// how many TRttiCustom instances have been registered for a given type
     // - we include rkUnknown for safety
     Counts: array[TRttiKind] of integer;
@@ -2934,13 +2934,8 @@ type
     // - returns nil if Info is not known
     // - will use the ObjectClass vmtAutoTable slot for very fast O(1) lookup,
     // or use our "hash table of the poor" (tm) if NOPATCHVMT conditional is set
-    {$ifdef NOPATCHVMT}
     function FindClass(ObjectClass: TClass): TRttiCustom;
       {$ifdef HASINLINE}inline;{$endif}
-    {$else}
-    class function FindClass(ObjectClass: TClass): TRttiCustom;
-      {$ifdef HASINLINE}static; inline;{$endif}
-    {$endif NOPATCHVMT}
     /// efficient search of TRttiCustom from a given type name
     function FindName(Name: PUtf8Char; NameLen: PtrInt): TRttiCustom; overload;
     /// efficient search of TRttiCustom from a given type name and kind
@@ -5503,10 +5498,12 @@ function TRttiCustomList.RegisterClass(ObjectClass: TClass): TRttiCustom;
 begin
   {$ifdef NOPATCHVMT}
   result := FindType(PPointer(PAnsiChar(ObjectClass) + vmtTypeInfo)^);
+  if result = nil then
   {$else}
   result := PPointer(PAnsiChar(ObjectClass) + vmtAutoTable)^;
+  if (result = nil) or
+     RegisterSafe.IsLocked then
   {$endif NOPATCHVMT}
-  if result = nil then
     result := DoRegisterClass(ObjectClass);
 end;
 
@@ -5514,10 +5511,12 @@ function TRttiCustomList.RegisterClass(aObject: TObject): TRttiCustom;
 begin
   {$ifdef NOPATCHVMT}
   result := FindType(PPointer(PPAnsiChar(aObject)^ + vmtTypeInfo)^);
+  if result = nil then
   {$else}
   result := PPointer(PPAnsiChar(aObject)^ + vmtAutoTable)^;
+  if (result = nil) or
+     RegisterSafe.IsLocked then
   {$endif NOPATCHVMT}
-  if result = nil then
     result := DoRegisterClass(PClass(aObject)^);
 end;
 
@@ -10033,7 +10032,6 @@ begin
   SetLength(fHashInfo, RK_TOSLOT_MAX + 1); // per-kind hash table for PRttiInfo
   SetLength(fHashName, HASHNAME_MAX + 1);  // a single hash table for names
   fGlobalClass := TRttiCustom;             // eventually set by mormot.core.json
-  RegisterSafe.Init;
 end;
 
 destructor TRttiCustomList.Destroy;
@@ -10044,7 +10042,6 @@ begin
     fInstances[i].Free;
   ObjArrayClear(fOwnedRtti);
   inherited Destroy;
-  RegisterSafe.Done;
 end;
 
 function LockedFind(Pairs, PEnd: PPointerArray; Info: PRttiInfo): TRttiCustom;
@@ -10090,29 +10087,30 @@ begin // vmtAuto: 8894966/31321/1265 NOPATCHVMT: 10137568/312233/14624
     k := @fHashInfo[RK_TOSLOT[Info^.Kind]];
     // try latest found RTTI for this slot of type definition (very effective)
     result := k^.LastInfo;
-    if (result <> nil) and
-       (result.Info = Info) then // happens 99.6% (96% NOPATCH) during tests
-      exit;
-    // O(1) hash of the PRttiInfo pointer using RTTI-specific hashing
-    h := RttiPointerMix(PtrUInt(Info));
-    // try latest found RTTI for this hash slot
-    result := k^.LastHash[h];
-    if (result <> nil) and
-       (result.Info = Info) then // happens e.g. 0.35% (3% NOPATCH) during tests
+    if (result = nil) or
+       (result.Info <> Info) then // match 99.6% (96% NOPATCH) during tests
     begin
-      k^.LastInfo := result; // for faster lookup next time
-      exit; // avoid most ReadLock/ReadUnLock and LockedFind() search
-    end;
-    // thread-safe O(n) search in CPU L1 cache - seldom needed
-    k^.Safe.Lock;
-    p := pointer(k^.HashInfo[h]); // read TPointerDynArray within the lock
-    if p <> nil then
-      result := LockedFind(p, @p[PDALen(PAnsiChar(p) - _DALEN)^ + _DAOFF], Info);
-    k^.Safe.UnLock;
-    if result <> nil then // happens e.g. 0.01% 82us (0.14% 494us NOPATCH)
-    begin
-      k^.LastInfo := result;   // aligned pointers are atomically accessed
-      k^.LastHash[h] := result;
+      // O(1) hash of the PRttiInfo pointer using RTTI-specific algorithm
+      h := RttiPointerMix(PtrUInt(Info));
+      // try latest found RTTI for this hash slot
+      result := k^.LastHash[h];
+      if (result <> nil) and
+         (result.Info = Info) then // happens 0.35% (3% NOPATCH) during tests
+        k^.LastInfo := result      // for faster lookup next time
+      else
+      begin
+        // thread-safe O(n) search in CPU L1 cache - seldom needed
+        k^.Safe.Lock;
+        p := pointer(k^.HashInfo[h]); // read TPointerDynArray within the lock
+        if p <> nil then
+          result := LockedFind(p, @p[PDALen(PAnsiChar(p) - _DALEN)^ + _DAOFF], Info);
+        k^.Safe.UnLock;
+        if result <> nil then // happens e.g. 0.01% 82us (0.14% 494us NOPATCH)
+        begin
+          k^.LastInfo := result;   // aligned pointers are atomically accessed
+          k^.LastHash[h] := result;
+        end;
+      end;
     end;
   {$ifndef NOPATCHVMT}
   end
@@ -10120,19 +10118,22 @@ begin // vmtAuto: 8894966/31321/1265 NOPATCHVMT: 10137568/312233/14624
     // direct O(1) lookup of the vmtAutoTable slot for classes
     result := PPointer(PAnsiChar(Info.RttiNonVoidClass.RttiClass) + vmtAutoTable)^;
   {$endif NOPATCHVMT}
+  if (result <> nil) and
+     RegisterSafe.IsLocked then
+    RegisterSafe.WaitUnlocked;
 end;
 
-{$ifdef NOPATCHVMT}
 function TRttiCustomList.FindClass(ObjectClass: TClass): TRttiCustom;
 begin
+  {$ifdef NOPATCHVMT}
   result := FindType(PPointer(PAnsiChar(ObjectClass) + vmtTypeInfo)^);
-end;
-{$else}
-class function TRttiCustomList.FindClass(ObjectClass: TClass): TRttiCustom;
-begin
+  {$else}
   result := PPointer(PAnsiChar(ObjectClass) + vmtAutoTable)^;
+  if (result <> nil) and
+     RegisterSafe.IsLocked then
+    RegisterSafe.WaitUnlocked;
+  {$endif NOPATCHVMT}
 end;
-{$endif NOPATCHVMT}
 
 function LockedFindNameInPairs(p: PPointerArray; n: PUtf8Char; l: PtrInt): TRttiCustom;
 var
@@ -10200,6 +10201,7 @@ begin // seldom called: from RegisterFromText() or ORM model initialization
   // try latest found name e.g. calling from JsonRetrieveObjectRttiCustom()
   result := fLastHashName; // accessing aligned pointer is expected to be atomic
   if (result <> nil) and
+     (not RegisterSafe.IsLocked) and
      (PStrLen(PAnsiChar(pointer(result.Name)) - _STRLEN)^ = NameLen) and
      IdemPropNameUSameLenNotNull(pointer(result.Name), Name, NameLen) then
     exit;
@@ -10239,30 +10241,34 @@ begin
   if ElemInfo = nil then
     exit;
   k := @fHashInfo[RK_TOSLOT[rkDynArray]]; // only rkDynArray in this slot
-  k^.Safe.Lock;
-  hash := @k^.HashInfo;
-  for i := 0 to high(k^.HashInfo) do // search whole slot
-  begin
-    pp := pointer(hash^);
-    if pp <> nil then
+  RegisterSafe.Lock; // pp^.ArrayRtti may still be uninitialized
+  try
+    k^.Safe.Lock;
+    hash := @k^.HashInfo;
+    for i := 0 to high(k^.HashInfo) do // search whole slot
     begin
-      n := (PDALen(PAnsiChar(pp) - _DALEN)^ + _DAOFF) shr 1;
-      inc(pp); // PRttiInfo/TRttiCustom pairs so pp^ = TRttiCustom
-      repeat
-        if (pp^.ArrayRtti <> nil) and
-           (pp^.ArrayRtti.Info = ElemInfo) then
-        begin
-          result := pp^; // found matching dynamic array type
-          k^.Safe.UnLock;
-          exit;
-        end;
-        inc(pp, 2); // next pair
-        dec(n);
-      until n = 0;
+      pp := pointer(hash^);
+      if pp <> nil then
+      begin
+        n := (PDALen(PAnsiChar(pp) - _DALEN)^ + _DAOFF) shr 1;
+        inc(pp); // PRttiInfo/TRttiCustom pairs so pp^ = TRttiCustom
+        repeat
+          if (pp^.ArrayRtti <> nil) and
+             (pp^.ArrayRtti.Info = ElemInfo) then
+          begin
+            result := pp^; // found matching dynamic array type
+            exit;
+          end;
+          inc(pp, 2); // next pair
+          dec(n);
+        until n = 0;
+      end;
+      inc(hash);
     end;
-    inc(hash);
+  finally
+    k^.Safe.UnLock;
+    RegisterSafe.UnLock
   end;
-  k^.Safe.UnLock;
 end;
 
 function TRttiCustomList.DoRegisterInfo(Info: PRttiInfo): TRttiCustom;
@@ -10374,12 +10380,12 @@ begin
   k^.Safe.Lock; // needed when resizing k^.HashInfo[]
   try
     AddPair(k^.HashInfo[RttiPointerMix(PtrUInt(Info))], Instance, Info);
-    ObjArrayAdd(fInstances, Instance); // to be released in Destroy
-    inc(Count);
-    inc(Counts[Info^.Kind]); // Instance.Kind is not available from DoRegister
   finally
     k^.Safe.UnLock;
   end;
+  ObjArrayAdd(fInstances, Instance); // to be released in Destroy
+  inc(Count);
+  inc(Counts[Info^.Kind]); // Instance.Kind is not available from DoRegister
   if (Info^.RawName[0] <> #0) and // e.g. FPC extended RTTI of nested records
      (PosExChar('$', Instance.Name) = 0) then // e.g. 'TArray$1$crcA5831B1D'
     AddPair(fHashName[RttiHashName(@Info.RawName[1], ord(Info.RawName[0]))], Instance, Info);
@@ -10887,8 +10893,8 @@ begin
   // inlined Rtti.Find(ClassType): we know it is the first slot
   {$ifdef NOPATCHVMT}
   result := Rtti.FindType(PPointer(PAnsiChar(self) + vmtTypeInfo)^);
-  {$else}
-  result := PPointer(PAnsiChar(self) + vmtAutoTable)^;
+  {$else} // no Rtti.RegisterSafe.IsLocked needed since Create was done
+  result := PPointer(PAnsiChar(self) + vmtAutoTable)^; 
   {$endif NOPATCHVMT}
   // assert(result.InheritsFrom(TRttiCustom));
 end;

@@ -77,12 +77,15 @@ type
   // your own (like 'synlz')
   // - the data is compressed (if Compress=TRUE) or uncompressed (if
   // Compress=FALSE) in the Data variable (i.e. it is modified in-place)
+  // - raise exception on decompression error e.g. ESizeOverflow over MaxSize<>0
   // - as used e.g. by THttpClientSocket/THttpServerGeneric.RegisterCompress
-  THttpSocketCompress = function(var Data: RawByteString; Compress: boolean): RawUtf8;
+  THttpSocketCompress = function(var Data: RawByteString; Compress: boolean;
+    MaxSize: PtrUInt = 0): RawUtf8;
 
   /// used to identify one known compression algorithm
   THttpSocketCompressRec = record
     /// the compression name, as in ACCEPT-ENCODING: header (gzip,deflate,synlz)
+    // - computed from Func(dummy='', true) result
     Name: RawUtf8;
     /// the function handling compression and decompression
     Func: THttpSocketCompress;
@@ -123,6 +126,7 @@ type
     function CompressContent(const Accepted: THttpSocketCompressSet;
       const OutContentType: RawUtf8; var OutContent: RawByteString): PHttpSocketCompressRec;
     /// adjust HTTP body decompression according to the supplied 'CONTENT-ENCODING'
+    // - won't raise an exception but return nil on decompression error
     function UncompressContent(const ContentEncoding: RawUtf8;
       var Data: RawByteString): PHttpSocketCompressRec;
     /// search for a given compression function by name
@@ -180,22 +184,20 @@ procedure GetHeaderInfo(const Headers: RawUtf8; out ContentLength: Int64;
 /// remove an HTTP header entry as specified by its name (e.g. 'Authorization')
 function DeleteHeader(const Headers, Name: RawUtf8): RawUtf8;
 
-/// 'HEAD' and 'OPTIONS' methods would be detected and return true
-// - will check only the first four chars for efficiency  - requires method <> ''
-function HttpMethodWithNoBody(const method: RawUtf8): boolean;
-  {$ifdef HASINLINE} inline; {$endif}
+// deprecated ambiguous helper - DO NOT USE any more!
+// - use IsHead() when deciding whether an HTTP response can have content
+// - request content presence must be determined from message framing
+function HttpMethodWithNoBody(const method: RawUtf8): boolean; deprecated;
 
 /// encode some text into a mime header compatible value
 // - see https://tools.ietf.org/html/rfc2047
 function MimeHeaderEncode(const header: RawUtf8): RawUtf8;
 
 /// quick check for case-sensitive 'GET' HTTP method name - requires method <> ''
-// - see also HttpMethodWithNoBody()
 function IsGet(const method: RawUtf8): boolean;
   {$ifdef HASINLINE} inline; {$endif}
 
 /// quick check for case-sensitive 'HEAD' HTTP method name - requires method <> ''
-// - see also HttpMethodWithNoBody()
 function IsHead(const method: RawUtf8): boolean;
   {$ifdef HASINLINE} inline; {$endif}
 
@@ -514,8 +516,11 @@ type
     ProgressiveID: THttpPartialID;
     /// internal GetTickSec set by THttpServerSocketGeneric.DoProgressive
     ProgressiveTix: cardinal;
-    /// reset this request context to be used prior to any ProcessInit/Read/Write
+    /// reset this request context to be used prior to any ProcessRead/Write
     procedure Reset;
+    /// reset this context when all fields are known to be 0 e.g. after Create
+    procedure ResetZero;
+      {$ifdef HASINLINE} inline; {$endif}
     /// parse CommandUri into CommandMethod/CommandUri fields on server side
     // - e.g. from CommandUri = 'GET /uri HTTP/1.1'
     function ParseCommand: boolean;
@@ -566,13 +571,20 @@ type
     function ContentFromStream(aStream: TStream; aStart, aLength: Int64;
       aOptions: THttpOutStreamOptions): integer;
     /// uncompress Content according to CompressContentEncoding header
+    // - may raise an exception on decompression error - e.g. ESizeOverflow
     procedure UncompressData;
     /// check RangeOffset/RangeLength against ContentLength
     // - and update ResponseFlags and ContentLength properties
     function ValidateRange: boolean;
-    /// (re)initialize the HTTP Server state machine for ProcessRead/ProcessWrite
-    procedure ProcessInit;
-      {$ifdef HASINLINE} inline; {$endif}
+    /// add a 'Content-Range: bytes */aSize' header to the ResponseHeaders
+    // - as RFC 9110 #15.5.17 states for a 416 response to a byte-range request:
+    // "the sender SHOULD generate a Content-Range header field specifying the
+    // current length of the selected representation"
+    // - also clears rfRange/rfWantRange, so that CompressContentAndFinalizeHead
+    // won't validate the range again against the error page sent instead, and
+    // add a second (wrong) Content-Range header
+    // - returns HTTP_RANGENOTSATISFIABLE, so can be used as a result
+    function RangeNotSatisfiable(aSize: Int64): integer;
     /// receiving socket entry point of our asynchronous HTTP Server
     // - to be called with the incoming bytes from the socket receive buffer
     // - caller should have checked that current State is in HTTP_REQUEST_READ
@@ -658,10 +670,6 @@ type
   /// exception class raised during HTTP process
   EHttpSocket = class(ESynException);
 
-  /// exception raised when an incoming request body overflows a size limit
-  // - so that the server could return 413 "Payload Too Large" before closing
-  EHttpSocketOverflow = class(EHttpSocket);
-
   /// parent of THttpClientSocket and THttpServerSocket classes
   // - contain properties for implementing HTTP/1.1 using the Socket API
   // - handle chunking of body content
@@ -671,7 +679,7 @@ type
   protected
     fCompressList: THttpSocketCompressList; // two pointers
     procedure HttpStateReset; // Http.Clear + exclude fBodyRetrieved
-      {$ifdef FPC_OR_DELPHIXE} inline; {$endif}
+      {$ifdef HASSAFEINLINE} inline; {$endif}
     procedure CompressDataAndWriteHeaders(const OutContentType: RawUtf8;
       var OutContent: RawByteString; OutStream: TStream);
   public
@@ -927,7 +935,7 @@ type
     fConnectionID: THttpServerConnectionID;                  // 64-bit
     fConnectionFlags: THttpServerRequestFlags;               // 8-bit
     fAuthenticationStatus: THttpServerRequestAuthentication; // 8-bit
-    fInternalFlags: set of (ifUrlParamPosSet);               // 8-bit
+    fInternalFlags: set of (ifUrlParamPosSet, ifRespSent);   // 8-bit
     fOutContentStreamOpt: THttpOutStreamOptions;             // 8-bit
     fRespStatus: integer;
     fConnectionThread: TThread;
@@ -1298,523 +1306,6 @@ type
     property Count: integer
       read fCount;
   end;
-
-type
-  /// most used tuning options for a modern and safe HTTP/HTTPS Server
-  // - over the years, a lot of expectations where added to the basic behavior
-  // of a HTTP server, e.g. for better security or interoperability: we define
-  // a set of well-known behaviors
-  // - flags used e.g. by TWebServerLocal, or mORMot 2 Boilerplate project
-  TWebServerBehavior = (
-
-    /// Allow cross-origin requests.
-    // - see https://enable-cors.org https://www.w3.org/TR/cors
-    // https://developer.mozilla.org/en-US/docs/Web/HTTP/Access_control_CORS
-    // - Warning: Do not use this without understanding the consequences.
-    // This will permit access from any other website.
-    // Instead of using this file, consider using a specific rule such as
-    // allowing access based on (sub)domain: "subdomain.example.com"
-    wsbAllowCrossOrigin,
-
-    /// Send the CORS header for images when browsers request it
-    // - see
-    // https://developer.mozilla.org/en-US/docs/Web/HTML/CORS_enabled_image
-    // https://blog.chromium.org/2011/07/using-cross-domain-images-in-webgl-and.html
-    // - use TWebServerLocal.FileTypesImage to specify the actual file types
-    wsbAllowCrossOriginImages,
-
-    /// Allow cross-origin access to web fonts
-    // - see https://developers.google.com/fonts/docs/troubleshooting
-    // - use TWebServerLocal.FileTypesFont to specify file types
-    wsbAllowCrossOriginFonts,
-
-    /// Allow cross-origin access to the timing information for all resources
-    // - If a resource isn't served with a 'Timing-Allow-Origin' header that would
-    // allow its timing information to be shared with the document, some of the
-    // attributes of the 'PerformanceResourceTiming' object will be set to zero.
-    // - see https://www.w3.org/TR/resource-timing/
-    // https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Timing-Allow-Origin
-    // https://www.stevesouders.com/blog/2014/08/21/resource-timing-practical-tips/
-    wsbAllowCrossOriginTiming,
-
-    /// Set content for HTTP 400 "Bad Request" response code equals to '/404'
-    wsbDelegateBadRequestTo404,
-
-    /// Set content for HTTP 401 "Unauthorized" response code equals to '/404'
-    wsbDelegateUnauthorizedTo404,
-
-    /// Set content for HTTP 403 "Forbidden" response code equals to '/404'
-    wsbDelegateForbiddenTo404,
-
-    /// Set content for HTTP 404 "Not Found" response code equals to '/404'
-    wsbDelegateNotFoundTo404,
-
-    /// Set content for HTTP 405 "Not Allowed" response code equals to '/404'
-    wsbDelegateNotAllowedTo404,
-
-    /// Set content for HTTP 406 "Not Acceptable" response code equals to '/404'
-    wsbDelegateNotAcceptableTo404,
-
-    /// Set Internet Explorer XUA Document mode
-    // - Force Internet Explorer 8/9/10 to render pages in the highest mode
-    // available in various cases when it may not.
-    // - Warning: since Internet Explorer 11, document modes are deprecated.
-    // If your business still relies on older web apps and services that were
-    // designed for older versions of Internet Explorer, you might want to
-    // consider enabling 'Enterprise Mode' throughout your company.
-    // - see https://hsivonen.fi/doctype/#ie8
-    // https://msdn.microsoft.com/en-us/library/ie/bg182625.aspx#docmode
-    // https://blogs.msdn.microsoft.com/ie/2014/04/02/stay-up-to-date-with-enterprise-mode-for-internet-explorer-11/
-    // https://msdn.microsoft.com/en-us/library/ff955275.aspx
-    wsbSetXuaCompatible,
-
-    // Serve resources with the proper media types (f.k.a. MIME types)
-    // - use TWebServerGlobal.ForceMimeTypes/ForceMimeTypesExt to set the MIME types
-    // - see http://www.iana.org/assignments/media-types
-    // https://svn.apache.org/repos/asf/httpd/httpd/trunk/docs/conf/mime.types
-    // https://developer.mozilla.org/en-US/docs/Web/HTTP/Basics_of_HTTP/MIME_types
-    wsbForceMimeType,
-
-    // Serve all resources labeled as 'text/html' or 'text/plain'
-    // with the media type 'charset' parameter set to 'UTF-8'
-    wsbForceTextUtf8Charset,
-
-    /// Serve the specified file types with the media type 'charset' parameter
-    // set to 'UTF-8'
-    // - use TWebServerLocal.FileTypesRequiredCharSet to setup file types
-    wsbForceUtf8Charset,
-
-    /// Redirect from 'http://' to the 'https://' version of the URL
-    wsbForceHttps,
-
-    /// Forcing 'https://' in the context of Let's Encrypt (ACME)
-    // - If you're using cPanel AutoSSL or the Let's Encrypt webroot method it
-    // will fail to validate the certificate if validation requests are
-    // redirected to HTTPS. Turn on the condition(s) you need.
-    // - see https://www.iana.org/assignments/well-known-uris/well-known-uris.xhtml
-    //  https://tools.ietf.org/html/draft-ietf-acme-acme-12
-    // $ /.well-known/acme-challenge/
-    // $ /.well-known/cpanel-dcv/[\w-]+$
-    // $ /.well-known/pki-validation/[A-F0-9]{32}\.txt(?:\ Comodo\ DCV)?$
-    // - The next simplified patterns are used:
-    // $ /.well-known/acme-challenge/*
-    // $ /.well-known/cpanel-dcv/*
-    // $ /.well-known/pki-validation/*
-    wsbForceHttpsExceptLetsEncrypt,
-
-    /// Protect website against clickjacking
-    // - The example below sends the 'X-Frame-Options' response header with the
-    // value 'DENY', informing browsers not to display the content of the web
-    // page in any frame.
-    // - This might not be the best setting for everyone. You should read about
-    // the other two possible values the 'X-Frame-Options' header field can
-    // have: 'SAMEORIGIN' and 'ALLOW-FROM'.
-    // https://tools.ietf.org/html/rfc7034#section-2.1.
-    // - Keep in mind that while you could send the 'X-Frame-Options' header for
-    // all of your website's pages, this has the potential downside that it
-    // forbids even non-malicious framing of your content (e.g.: when users
-    // visit your website using a Google Image Search results page).
-    // - Nonetheless, you should ensure that you send the 'X-Frame-Options' header
-    // for all pages that allow a user to make a state-changing operation
-    // (e.g: pages that contain one-click purchase links, checkout or
-    // bank-transfer confirmation pages, pages that make permanent configuration
-    // changes, etc.).
-    // - Sending the 'X-Frame-Options' header can also protect your website
-    // against more than just clickjacking attacks.
-    // - see https://cure53.de/xfo-clickjacking.pdf.
-    // https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-Frame-Options
-    // https://tools.ietf.org/html/rfc7034
-    // https://blogs.msdn.microsoft.com/ieinternals/2010/03/30/combating-clickjacking-with-x-frame-options/
-    // https://www.owasp.org/index.php/Clickjacking
-    wsbSetXFrameOptions,
-
-    /// Block access to all hidden files and directories except for the
-    // visible content from within the '/.well-known/' hidden directory
-    // - These types of files usually contain user preferences or the preserved
-    // state of a utility, and can include rather private places like, for
-    // example, the '.git' or '.svn' directories.
-    // - The '/.well-known/' directory represents the standard (RFC 5785) path
-    // prefix for "well-known locations" (e.g.: '/.well-known/manifest.json',
-    // '/.well-known/keybase.txt'), and therefore, access to its visible content
-    // should not be blocked.
-    // - see https://www.mnot.net/blog/2010/04/07/well-known
-    // https://tools.ietf.org/html/rfc5785
-    wsbDelegateHidden,
-
-    /// Block access to files that can expose sensitive information
-    // - By default, block access to backup and source files that may be left by
-    // some text editors and can pose a security risk when anyone has access to
-    // them. see https://feross.org/cmsploit/
-    //  - Use TWebServerLocal.FileTypesBlocked to specify file types
-    // that might end up on your production server and can expose sensitive
-    // information about your website. These files may include:
-    // configuration files, files that contain metadata about the project
-    // (e.g.: project dependencies, build scripts, etc.).
-    // - use TWebServerLocal.FileTypesBlocked to specify file types
-    // - this option also blocks any URL paths ended with '~' or '#'
-    wsbDelegateBlocked,
-
-    /// Prevent some browsers from MIME-sniffing the response
-    // - This reduces exposure to drive-by download attacks and cross-origin data
-    // leaks, and should be left uncommented, especially if the server is
-    // serving user-uploaded content or content that could potentially be
-    // treated as executable by the browser.
-    // - see https://mimesniff.spec.whatwg.org/
-    // https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-Content-Type-Options
-    // https://blogs.msdn.microsoft.com/ie/2008/07/02/ie8-security-part-v-comprehensive-protection/
-    wsbPreventMimeSniffing,
-
-    /// Protect website reflected Cross-Site Scripting (XSS) attacks
-    // - Try to re-enable the cross-site scripting (XSS) filter built into
-    // most web browsers.
-    // - The filter is usually enabled by default, but in some cases, it may
-    // be disabled by the user. However, in Internet Explorer, for example,
-    // it can be re-enabled just by sending the  'X-XSS-Protection' header
-    // with the value of '1'.
-    // - Prevent web browsers from rendering the web page if a potential
-    // reflected (a.k.a non-persistent) XSS attack is detected by the filter.
-    // - By default, if the filter is enabled and browsers detect a reflected
-    // XSS attack, they will attempt to block the attack by making the
-    // smallest possible modifications to the returned web page.
-    // - Unfortunately, in some browsers (e.g.: Internet Explorer), this
-    // default behavior may allow the XSS filter to be exploited. Therefore,
-    // it's better to inform browsers to prevent the rendering of the page
-    // altogether, instead of attempting to modify it.
-    // - warning: Do not rely on the XSS filter to prevent XSS attacks! Ensure that you
-    // are taking all possible measures to prevent XSS attacks, the most
-    // obvious being: validating and sanitizing your website's inputs.
-    // - see https://hackademix.net/2009/11/21/ies-xss-filter-creates-xss-vulnerabilities
-    // https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-XSS-Protection
-    // https://blogs.msdn.microsoft.com/ie/2008/07/02/ie8-security-part-iv-the-xss-filter/
-    // https://blogs.msdn.microsoft.com/ieinternals/2011/01/31/controlling-the-xss-filter/
-    // https://www.owasp.org/index.php/Cross-site_Scripting_%28XSS%29
-    // - use TWebServerLocal.FileTypesAsset to exclude some file types
-    wsbEnableXssFilter,
-
-    /// Set a strict Referrer Policy to mitigate information leakage.
-    // - The 'Referrer-Policy' header is included in responses for resources
-    // that are able to request (or navigate to) other resources.
-    // - This includes the commonly used resource types:
-    // HTML, CSS, XML/SVG, PDF documents, scripts and workers.
-    // - To prevent referrer leakage entirely, specify the 'no-referrer' value
-    // instead. Note that the effect could impact analytics metrics negatively.
-    // - // To check your Referrer Policy, you can use an online service, such as:
-    // https://securityheaders.com/
-    // https://observatory.mozilla.org/
-    // https://scotthelme.co.uk/a-new-security-header-referrer-policy/
-    // https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Referrer-Policy
-    // - use TWebServerLocal.ReferrerPolicy and
-    // TWebServerLocal.ReferrerPolicyContentTypes properties
-    wsbEnableReferrerPolicy,
-
-    /// Prevent the HTTP Server from responding to 'TRACE' HTTP requests
-    // - The TRACE method, while seemingly harmless, can be successfully leveraged
-    // in some scenarios to steal legitimate users' credentials.
-    // - Modern browsers now prevent TRACE requests being made via JavaScript,
-    // however, other ways of sending TRACE requests with browsers have been
-    // discovered, such as using Java.
-    // - see https://tools.ietf.org/html/rfc7231#section-4.3.8
-    // https://www.owasp.org/index.php/Cross_Site_Tracing
-    // https://www.owasp.org/index.php/Test_HTTP_Methods_(OTG-CONFIG-006)
-    // https://httpd.apache.org/docs/current/mod/core.html#traceenable
-    wsbDisableTraceMethod,
-
-    /// Remove the 'X-Powered-By' response header that:
-    // - is set by some frameworks and server-side languages (e.g.: ASP.NET, PHP),
-    // and its value contains information about them (e.g.: their name, version
-    // number)
-    // - doesn't provide any value to users, contributes to header bloat, and in
-    // some cases, the information it provides can expose vulnerabilities
-    // - If you can, you should disable the 'X-Powered-By' header from the
-    //     language/framework level (e.g.: for PHP, you can do that by setting
-    //     'expose_php = off' in 'php.ini').
-    // - see https://php.net/manual/en/ini.core.php#ini.expose-php
-    wsbDeleteXPoweredBy,
-
-    /// Force compression for mangled 'Accept-Encoding' request headers
-    // - see https://calendar.perfplanet.com/2010/pushing-beyond-gzipping
-    // https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Accept-Encoding
-    // - use TWebServerLocal.MangledEncodingHeaders and
-    // TWebServerLocal.MangledEncodingHeaderValues properties
-    wsbFixMangledAcceptEncoding,
-
-    /// Map the specified filename extensions to the GZip encoding type
-    // - to let the HTTP Server serve the file types with the appropriate
-    // 'Content-Encoding' response header (do note that this will NOT make
-    // HTTP Server compress them!).
-    // - If these files types would be served without an appropriate
-    // 'Content-Encoding' response header, client applications (e.g.: browsers)
-    // wouldn't know that they first need to uncompress the response, and thus,
-    // wouldn't be able to understand the content.
-    // - see https://httpd.apache.org/docs/current/mod/mod_mime.html#addencoding
-    // https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Content-Encoding
-    // - use TWebServerLocal.FileTypesForceGZipHeader to setup file types
-    wsbForceGZipHeader,
-
-    /// Allow static assets to be cached by proxy servers
-    wsbSetCachePublic,
-
-    /// Allow static assets to be cached only by browser,
-    // but not by intermediate proxy servers
-    wsbSetCachePrivate,
-
-    /// disable Content transformation
-    // - Prevent intermediate caches or proxies (such as those used by mobile
-    // network providers) and browsers data-saving features from modifying
-    // the website's content using the 'cache-control: no-transform' directive.
-    // - see https://tools.ietf.org/html/rfc7234#section-5.2.2.4
-    // https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Cache-Control
-    // - warning: Carefully consider the impact on your visitors before disabling
-    // content transformation. These transformations are performed to
-    // improve the experience for data- and cost-constrained users
-    // (e.g. users on a 2G connection).
-    // - You can test the effects of content transformation applied by
-    // Google's Lite Mode by visiting:
-    // https://googleweblight.com/i?u=https://www.example.com
-    // https://support.google.com/webmasters/answer/6211428
-    // https://developers.google.com/speed/pagespeed/module/configuration#notransform
-    wsbSetCacheNoTransform,
-
-    /// Allow static assets to be validated with server before return cached copy
-    wsbSetCacheNoCache,
-
-    /// Allow static assets not to be cached
-    wsbSetCacheNoStore,
-
-    /// Allow static assets to be cached strictly following the server rules
-    wsbSetCacheMustRevalidate,
-
-    /// Add 'max-age' value based on content-type/expires mapping
-    // - i.e. serve resources with a far-future expiration date.
-    // - warning: If you don't control versioning with filename-based cache
-    // busting, you should consider lowering the cache times to something like
-    // one week.
-    // - see https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Expires
-    // https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Cache-Control
-    // - use TWebServerLocal.Expires options to control expirations
-    wsbSetCacheMaxAge,
-
-    /// Use ETag / If-None-Match caching
-    // - see https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/ETag
-    // https://developer.yahoo.com/performance/rules.html#etags
-    // https://tools.ietf.org/html/rfc7232#section-2.3
-    wsbEnableCacheByETag,
-
-    /// Use Last-Modified/If-Modified-Since caching
-    // - see https://developer.yahoo.com/performance/rules.html#etags
-    // https://tools.ietf.org/html/rfc7232#section-2.3
-    wsbEnableCacheByLastModified,
-
-    /// Serve resources with a far-future expiration date
-    // - If you don't control versioning with filename-based cache busting, you
-    // should consider lowering the cache times to something like one week.
-    // - see https://httpd.apache.org/docs/current/mod/mod_expires.html
-    // https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Cache-Control
-    // https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Expires
-    // - use TWebServerLocal.Expires property
-    wsbSetExpires,
-
-    /// Enables filename-based cache busting
-    // - i.e. removes all query path of the URL '/style.css?v231' to '/style.css'
-    wsbEnableCacheBusting,
-
-    /// Filename-based cache busting
-    // - i.e. removes infix query path of the URL '/style.123456.css' to '/style.css'
-    // - if you're not using a build process to manage your filename version
-    // revving, you might want to consider enabling the following directives.
-    // - to understand why this is important and even a better solution than
-    // using something like '*.css?v231', please see:
-    // https://www.stevesouders.com/blog/2008/08/23/revving-filenames-dont-use-querystring/
-    wsbEnableCacheBustingBeforeExt,
-
-    /// Remove 'Server-InternalState' HTTP header
-    wsbDeleteServerInternalState,
-
-    // Delete content generation for '' and '/' URLs to '/index.html'
-    wsbDelegateRootToIndex,
-
-    /// Instead of index.html rendering the inherited "/Default" URL will be called
-    // - allows to inject custom IMVCApplication.Default() interface method
-    wsbDelegateIndexToInheritedDefault,
-
-    /// Instead of 404.html rendering the inherited "/404" URL will be called
-    // - allows to inject custom IMVCApplication._404() interface method
-    wsbDelegate404ToInherited_404,
-
-    /// Add 'Vary: Accept-Encoding' header for assets with GZip/Brotli encoding
-    wsbVaryAcceptEncoding
-  );
-
-  /// set of tuning options for a modern and safe HTTP/HTTPS Web Server
-  // - flags used e.g. by TWebServerLocal, or the mORMot 2 Boilerplate project
-  TWebServerBehaviors = set of TWebServerBehavior;
-
-  /// Suppressing or forcing the 'www.' host prefix at the beginning of URLs
-  // - The same content should never be available under two different URLs,
-  // especially not with and without 'www.' at the beginning.
-  // This can cause SEO problems (duplicate content), and therefore, you should
-  // choose one of the alternatives and redirect the other one.
-  // - The rule assumes by default that both HTTP and HTTPS environments are
-  // available for redirection. If your SSL certificate could not handle one
-  // of the domains used during redirection, you should turn the condition on.
-  // - wsrOff: won't suppress or force 'www.' at the beginning of URLs
-  // - wsrSuppress: suppress the 'www.' at the beginning of URLs,
-  // redirecting e.g. www.example.com into example.com
-  // - wsrForce: forces the 'www.' at the beginning of URLs,
-  // redirecting e.g. example.com into www.example.com
-  // - Be aware that wsrForce might not be a good idea if you use "real"
-  // subdomains for certain parts of your website
-  TWebServerRewrite = (
-    wsrOff,
-    wsrSuppress,
-    wsrForce);
-
-  /// how to implement HTTP Strict Transport Security (HSTS) redirection
-  // - If a user types 'example.com' in their browser, even if the server redirects
-  // them to the secure version of the website, that still leaves a window of
-  // opportunity (the initial HTTP connection) for an attacker to downgrade or
-  // redirect the request.
-  // - The HSTS header ensures that a browser only connects to your server
-  // via HTTPS, regardless of what the users type in the browser's address bar.
-  // - Be aware that Strict Transport Security is not revokable and you must
-  // ensure being able to serve the site over HTTPS for the duration you've
-  // specified in the 'max-age' directive. When you don't have a valid TLS
-  // connection anymore (e.g. due to an expired TLS certificate) your visitors
-  // will see a nasty error message even when attempting to connect over HTTP.
-  // - wshOff: do not provide any HSTS header
-  // - wshOn: add regular 'max-age=31536000' HSTS header value
-  // - wshIncludeSubDomains: add 'max-age=31536000; includeSubDomains' HSTS header
-  // - wshIncludeSubDomainsPreload: add
-  // 'max-age=31536000; includeSubDomains; preload' HSTS header
-  // - see https://tools.ietf.org/html/rfc6797#section-6.1
-  // https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Strict-Transport-Security
-  // https://www.html5rocks.com/en/tutorials/security/transport-layer-security/
-  // https://blogs.msdn.microsoft.com/ieinternals/2014/08/18/strict-transport-security/
-  // https://hstspreload.org/
-  TWebServerHsts = (
-    wshOff,
-    wshOn,
-    wshIncludeSubDomains,
-    wshIncludeSubDomainsPreload);
-
-  /// how to implement DNS Prefetch Control
-  // - DNS prefetching is a feature by which browsers proactively perform
-  // domain name resolution on both links that the user may choose to follow
-  // as well as URLs for items referenced by the document, including images,
-  // CSS, JavaScript, and so forth.
-  // - This prefetching is performed in the background, so that the DNS is
-  // likely to have been resolved by the time the referenced items are needed.
-  // This reduces latency when the user clicks a link.
-  // - wsdPrefetchNone: do not add 'X-DNS-Prefetch-Control' header
-  // - wsdPrefetchOff: turn off DNS Prefetch
-  // - wsdPrefetchOn: turn on DNS Prefetch (default)
-  // - see https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-DNS-Prefetch-Control
-  TWebServerDpc = (
-    wsdPrefetchNone,
-    wsdPrefetchOff,
-    wsdPrefetchOn);
-
-  /// the known encoding/compression schemes for a Web Server
-  // - THttpServerGeneric.RegisterCompress can support any kind of compression
-  // using a callback function; but we define here the most used encodings in
-  // current browsers, e.g. to be able to cache content or hashes at runtime
-  // - wseIdentity means no compression
-  // - wseGZip will use the well-known GZip encoding (via libdeflate if available)
-  // - wseBrotli is reserved for future use (e.g. mORMot 2 Boilerplate project)
-  TWebServerEncoding = (
-    wseIdentity,
-    wseGZip,
-    wseBrotli);
-  /// the known encoding/compression schemes for a Web Server
-  TWebServerEncodings = set of TWebServerEncoding;
-
-  /// define the security parameters for a Web Server for a given route
-  // - is defined as a record so that it could be assigned and processed per URI
-  // - values will be assigned by reference, so with minimal memory consumption
-  // - FileTypes*[] are ordered TWordDynArray indexes to TWebServerGlobal.MimeType[]
-  TWebServerLocal = record
-    /// most used tuning options for a modern and safe HTTP/HTTPS Server
-    Behaviors: TWebServerBehaviors;
-    /// how to handle the 'www.' host prefix at the beginning of URLs
-    Rewrite: TWebServerRewrite;
-    /// how to implement HTTP Strict Transport Security (HSTS) redirection
-    Hsts: TWebServerHsts;
-    /// how to implement DNS Prefetch Control
-    Dpc: TWebServerDpc;
-    /// file extension ordered indexes for wsbAllowCrossOriginImages behavior
-    FileTypesImage: TWordDynArray;
-    /// file extension ordered indexes for wsbAllowCrossOriginFonts behavior
-    FileTypesFont: TWordDynArray;
-    /// file extension ordered indexes for wsbForceUtf8Charset behavior
-    FileTypesRequiredCharSet: TWordDynArray;
-    /// file extension ordered indexes for wsbDelegateBlocked behavior
-    FileTypesBlocked: TWordDynArray;
-    /// file extension ordered indexes for wsbForceGZipHeader behavior
-    FileTypesForceGZipHeader: TWordDynArray;
-    /// supported Referrer Policy for wsbEnableReferrerPolicy behavior
-    ReferrerPolicy: RawUtf8;
-    /// content types for wsbEnableReferrerPolicy behavior
-    ReferrerPolicyContentTypes: TWordDynArray;
-    /// headers for wsbFixMangledAcceptEncoding behavior
-    MangledEncodingHeaders: TRawUtf8DynArray;
-    /// values for wsbFixMangledAcceptEncoding behavior
-    MangledEncodingHeaderValues: TRawUtf8DynArray;
-    /// expiration for wsbSetCacheMaxAge and wsbSetExpires behaviors
-    ExpiresDefault: integer;
-    /// content-types for wsbSetCacheMaxAge and wsbSetExpires behaviors
-    ExpiresContentTypes: TRawUtf8DynArray;
-    /// values for wsbSetCacheMaxAge and wsbSetExpires behaviors
-    ExpiresValues: TCardinalDynArray;
-  end;
-
-  /// information about a given file extension of a supported mime type
-  // - as stored in TWebServerGlobal.MimeType[]
-  TWebServerMimeType = record
-    /// file extensions of supported mime types, excluding initial '.' character
-    Extension: RawUtf8;
-    /// specific mime type for wsbForceMimeType behavior
-    ForceMimeType: RawUtf8;
-  end;
-  /// information about all known file extensions of supported mime types
-  // - as stored in TWebServerGlobal.MimeType[]
-  TWebServerMimeTypeDynArray = array of TWebServerMimeType;
-
-  /// define the security parameters common to all Web Servers
-  TWebServerGlobal = class(TSynPersistent)
-  protected
-    fMimeType: TWebServerMimeTypeDynArray;
-    fMimeTypeCount: integer;
-    fMimeTypes: TDynArrayHashed;
-  public
-    /// initialize this instance
-    constructor Create; override;
-    /// quickly returns the index of a MimeType[] entry from this file extension
-    function FindMimeType(Extension: PUtf8Char): PtrInt;
-      {$ifdef HASINLINE} inline; {$endif}
-    /// search then add if not existing of a file extension
-    // - returns the index of the matching MimeType[] entry
-    function AddIfNeeded(const Extension: RawUtf8): PtrInt;
-    /// search (or add) a file extension, then insert its index in a
-    // TWordDynArray sorted array
-    // - used e.g. to fill TWebServerLocal behavior-enabled properties
-    function AddToIndexes(var Indexes: TSortedWordArray;
-      const Extension: RawUtf8): PtrInt;
-    /// process a request using the specified local parameters
-    // - should return 0 to continue processing, or a result code to stop any
-    // further response computation, and return the current output state
-    function Request(Context: THttpServerRequestAbstract;
-      const Local: TWebServerLocal): cardinal;
-    /// file extensions of supported mime types for wsbForceMimeType behavior
-    // - see also https://github.com/jshttp/mime-db/blob/master/db.json
-    // - TWebServerLocal.FileTypes*[] TWordDynArray contains indexes to this
-    // - warning: length(MimeType) is the capacity - use MimeTypeCount
-    property MimeType: TWebServerMimeTypeDynArray
-      read fMimeType;
-    /// how many file extensions are currently known
-    property MimeTypeCount: integer
-      read fMimeTypeCount;
-  end;
-
 
 
 { ******************** HTTP Server Logging/Monitoring Processors }
@@ -2932,7 +2423,7 @@ const
 
 function PurgeHeaders(const headers: RawUtf8; trim: boolean; upIgnore: PUtf8Char): RawUtf8;
 var
-  pos, len: array[byte] of word; // delete up to 255 entries
+  pos, len: TByteToWord; // delete up to 255 entries within 0..65335 max size
   n, purged, i, l, tot: PtrInt;
   P, next, last: PUtf8Char;
   h: PUtf8Char absolute headers;
@@ -2947,7 +2438,7 @@ begin
     last := nil;
     if upIgnore = nil then
       upIgnore := TOBEPURGED;
-    if PStrLen(h - _STRLEN)^ <= high(pos[0]) then // void pos[]/len[] overflow
+    if PStrLen(P - _STRLEN)^ <= high(pos[0]) then // void pos[]/len[] overflow
       while P^ <> #0 do
       begin
         next := GotoNextLineSmall(P);
@@ -3522,12 +3013,13 @@ function THttpSocketCompressList.UncompressContent(const ContentEncoding: RawUtf
   var Data: RawByteString): PHttpSocketCompressRec;
 begin
   result := FoundCompress(pointer(Algo),
-    pointer(ContentEncoding), length(ContentEncoding));
-  if result = nil then
-    exit;
-  result^.Func(Data, {compress=}false);
-  if Data = '' then
-      result := nil; // error during decompression
+              pointer(ContentEncoding), length(ContentEncoding));
+  if result <> nil then
+    try
+      result^.Func(Data, {compress=}false);
+    except
+      result := nil;   // any exception means decompression error
+    end;
 end;
 
 procedure THttpSocketCompressList.DecodeAcceptEncoding(P: PUtf8Char;
@@ -3558,7 +3050,8 @@ function THttpSocketCompressList.CompressIndex(const Name: RawUtf8): integer;
 begin
   if (@self = nil) or
      (Algo = nil) or
-     (FoundCompress(pointer(Algo), pointer(Name), length(Name), @result) = nil) then
+     (FoundCompress(pointer(Algo),
+        pointer(Name), length(Name), @result) = nil) then
     result := -1;
 end;
 
@@ -3656,8 +3149,14 @@ begin
   ProgressiveTix := 0;
   fProgressivePosition := 0;
   fContentLeft := 0; // a body rejected in the middle may have left it <> 0
-  fContentPos := nil; // ProcessInit expects those fields to be 0/nil
+  fContentPos := nil; // ResetZero expects those fields to be 0/nil
 end;
+
+procedure THttpRequestContext.ResetZero;
+begin
+  RangeLength := -1;
+  ContentLength := -1; // -1 = no Content-Length: header
+end; // caller should set State := hrsGetCommand / hrsConnect depending
 
 procedure THttpRequestContext.GetTrimmed(P, P2: PUtf8Char; L: PtrInt;
   var result: RawUtf8; nointern: boolean);
@@ -3694,6 +3193,15 @@ begin
     include(ResponseFlags, rfRange);
     result := true;
   end;
+end;
+
+function THttpRequestContext.RangeNotSatisfiable(aSize: Int64): integer;
+begin
+  AppendLine(ResponseHeaders, ['Content-Range: bytes */', aSize]);
+  // clear both flags, otherwise CompressContentAndFinalizeHead would
+  // validate the range once again, against the generated error page
+  ResponseFlags := ResponseFlags - [rfRange, rfWantRange];
+  result := HTTP_RANGENOTSATISFIABLE;
 end;
 
 procedure THttpRequestContext.ParseHeader(P: PUtf8Char; PLen: PtrInt;
@@ -3859,33 +3367,36 @@ begin
       begin
         // 'RANGE: BYTES='
         P1 := GotoNextNotSpace(P + 13); // use pointer on stack
-        RangeOffset := GetNextRange(P1);
-        if P1^ = '-' then
+        if P1^ in ['0' ..'9'] then      // only positive offset, as http.sys
         begin
-          inc(P1);
-          if P1^ in ['0'..'9'] then
+          RangeOffset := GetNextRange(P1);
+          if P1^ = '-' then // accepts bytes=100-200 or bytes=100-
           begin
-            // "Range: bytes=0-499" -> start=0, len=500
-            RangeLength := Int64(GetNextRange(P1));
-            if RangeLength >= MAX_INT64 - RangeOffset then
-              // last-byte-pos above any possible size: up to end of file, as
-              // RFC 9110 does expect - and no RangeLength + 1 overflow
-              RangeLength := -1
-            else
+            inc(P1);
+            if P1^ in ['0'..'9'] then
             begin
-              RangeLength := RangeLength - RangeOffset + 1;
-              if RangeLength < 0 then
-                RangeLength := 0;
+              // "Range: bytes=0-499" -> start=0, len=500
+              RangeLength := Int64(GetNextRange(P1));
+              if RangeLength >= MAX_INT64 - RangeOffset then
+                // last-byte-pos above any possible size: up to end of file, as
+                // RFC 9110 does expect - and no RangeLength + 1 overflow
+                RangeLength := -1
+              else
+              begin
+                RangeLength := RangeLength - RangeOffset + 1;
+                if RangeLength < 0 then
+                  RangeLength := 0;
+              end;
             end;
-          end;
-          // "bytes=1000-" -> start=1000, keep RangeLength=-1 to eof
-          if P1^ = ',' then
-            State := hrsErrorUnsupportedRange // no multipart range
+            // "bytes=1000-" -> start=1000, keep RangeLength=-1 to eof
+            if P1^ = ',' then
+              State := hrsErrorUnsupportedRange    // no multipart range
+            else
+              include(ResponseFlags, rfWantRange); // trigger range response
+          end
           else
-            include(ResponseFlags, rfWantRange);
-         end
-        else
-          State := hrsErrorUnsupportedRange;
+            State := hrsErrorUnsupportedRange;
+        end; // range: bytes=-10 fallback to 200 and the whole content as http.sys
         if not HeadersUnFiltered then
           exit;
       end;
@@ -4109,19 +3620,20 @@ begin // caller ensured P <> nil
 end;
 
 procedure THttpRequestContext.UncompressData;
+var
+  max: PtrUInt;
 begin // caller checked that ContentEncoding <> nil
-  if ContentEncoding^.Func(Content, false) = '' then
-    // invalid content
-    EHttpSocket.RaiseUtf8('% UncompressData failed', [ContentEncoding^.Name]);
+  if (ContentMaxSize <= 0) or // THttpServerGeneric.MaximumAllowedContentLength
+     (ContentMaxSize > MaxHttpInMemSize) then
+    max := MaxHttpInMemSize  // 1GB by default and typically smaller
+  else
+    max := ContentMaxSize;
+  ContentEncoding^.Func(Content, {compress=}false, max); // may raise exception
   ContentLength := length(Content); // uncompressed Content-Length
-  ContentEncoding := nil; // field will be used for output encoding now
-end;
-
-procedure THttpRequestContext.ProcessInit;
-begin // all other fields are expected to be filled with 0/nil/''
-  RangeLength := -1;
-  ContentLength := -1; // not yet parsed
-  State := hrsGetCommand;
+  if (max <> 0) and
+     (ContentLength > Int64(max)) then // should have been done in Func()
+    ESizeOverflow.RaiseFmt(nil, 'UncompressData %', [ContentEncoding^.Name]);
+  ContentEncoding := nil;    // field will be used for output encoding now
 end;
 
 procedure THttpRequestContext.SetRawUtf8(var res: RawUtf8;
@@ -4171,8 +3683,17 @@ var
   Len: PtrInt;
 begin
   Len := ByteScanIndex(pointer(st.P), st.Len, 13); // fast SSE2 or FPC IndexByte
-  result := (PtrUInt(Len) < PtrUInt(st.Len)) and // detect st.Len=0 and/or Len=-1
-            DoProcessParseLine(st, Len);         // enough input: sub-function
+  if PtrUInt(Len) < PtrUInt(st.Len) then  // detect st.Len=0 and/or Len=-1
+    result := DoProcessParseLine(st, Len) // enough input: sub-function
+  else
+  begin
+    // no #13 yet: this line can only grow, so reject it as soon as it is too
+    // long, as DoProcessParseLine() would do - instead of buffering it until
+    // its #13 arrives, i.e. maybe never
+    if st.Len > MaxHttpHeaderLineSize then
+      State := hrsErrorRejected;
+    result := false;
+  end;
 end;
 
 function THttpRequestContext.DoProcessReadBody(var st: TProcessParseLine): boolean;
@@ -4232,8 +3753,10 @@ begin
             FastSetString(CommandUri, st.Line, st.LineLen); // never interned
             State := hrsGetHeaders;
           end
+          else if State = hrsErrorRejected then
+            break // notify the rejection now, not on the next input
           else
-            exit // not enough input or hrsErrorRejected
+            exit // not enough input
         else
           State := hrsErrorRejected; // reject e.g. TLS handshake = #22
       hrsGetHeaders:
@@ -4257,8 +3780,10 @@ begin
             else
               // ContentLength<=0 and not chunked = no body
               State := hrsWaitProcessing
+        else if State = hrsErrorRejected then
+          break // notify the rejection now, not on the next input
         else
-          exit; // not enough input or hrsErrorRejected
+          exit; // not enough input
       hrsGetBodyChunkedHexFirst,
       hrsGetBodyChunkedHexNext:
         if ProcessParseLine(st) then
@@ -4294,8 +3819,10 @@ begin
           else
             State := hrsGetBodyChunkedDataLastLine; // ends with last void chunk
         end
+        else if State = hrsErrorRejected then
+          break // notify the rejection now, not on the next input
         else
-          exit; // not enough input or hrsErrorRejected
+          exit; // not enough input
       hrsGetBodyChunkedData:
         begin
           if not DoProcessReadBody(st) then
@@ -4308,11 +3835,15 @@ begin
       hrsGetBodyChunkedDataVoidLine:
         if ProcessParseLine(st) then // chunks end with a void line
           State := hrsGetBodyChunkedHexNext
+        else if State = hrsErrorRejected then
+          break // notify the rejection now, not on the next input
         else
           exit; // not enough input
       hrsGetBodyChunkedDataLastLine:
         if ProcessParseLine(st) then // last chunk void line
           State := hrsWaitProcessing // notice: st.Len<>0 if pipelining
+        else if State = hrsErrorRejected then
+          break // notify the rejection now, not on the next input
         else
           exit; // not enough input
       hrsGetBodyContentLengthFirst,
@@ -4622,10 +4153,8 @@ begin
       result := HTTP_RANGENOTSATISFIABLE;
   if result <> HTTP_SUCCESS then
   begin
+    RangeNotSatisfiable(aLength); // also clears rfRange/rfWantRange
     ContentLength := 0;
-    // clear both flags, otherwise CompressContentAndFinalizeHead would
-    // validate the range once again, against the generated error page
-    ResponseFlags := ResponseFlags - [rfRange, rfWantRange];
     exit;
   end;
   if not (hosNoRange in aOptions) then
@@ -4670,7 +4199,7 @@ begin
   if rfWantRange in ResponseFlags then
     if not ValidateRange then
     begin
-      result := HTTP_RANGENOTSATISFIABLE;
+      result := RangeNotSatisfiable(ContentLength); // ContentLength = file size
       exit;
     end;
   include(ResponseFlags, rfAcceptRange);
@@ -4852,10 +4381,10 @@ begin
         break;      // reached the end of input stream
       end;
       if len > MaxHttpChunkSize then // allow up to 256 MB chunk
-        EHttpSocketOverflow.RaiseUtf8('%.GetBody: chunk size=% overflow', [self, len]);
+        ESizeOverflow.RaiseFmt(self, 'GetBody: chunk len=%d', [len]);
       if (Http.ContentMaxSize > 0) and
          (Http.ContentLength + len > Http.ContentMaxSize) then
-        EHttpSocketOverflow.RaiseUtf8('%.GetBody: chunked size overflow', [self]);
+        ESizeOverflow.RaiseFmt(self, 'GetBody: chunked', []);
       if DestStream <> nil then
       begin
         if length({%H-}chunk) < len then
@@ -4867,7 +4396,7 @@ begin
       begin
         bytes := Http.ContentLength + len;
         if bytes > MaxHttpInMemSize then // 1GB in memory max
-          EHttpSocket.RaiseUtf8('%.GetBody: chunked Content mem overflow', [self]);
+          ESizeOverflow.RaiseFmt(self, 'GetBody: chunked mem=%d', [bytes]);
         SetLength(Http.Content, bytes); // space for this chunk
         SockInRead(@PByteArray(Http.Content)[Http.ContentLength], len); // append
       end;
@@ -4924,7 +4453,7 @@ begin
   end;
   // optionaly uncompress content
   if Http.ContentEncoding <> nil then // DestStream=nil was ensured above
-    Http.UncompressData;
+    Http.UncompressData;              // may raise an exception
   if Assigned(OnLog) then
     OnLog(sllTrace, 'GetBody len=%', [Http.ContentLength], self);
 end;
@@ -5609,51 +5138,6 @@ begin
 end;
 
 
-{ TWebServerGlobal }
-
-constructor TWebServerGlobal.Create;
-begin
-  inherited Create;
-  fMimeTypes.InitSpecific(TypeInfo(TWebServerMimeTypeDynArray), fMimeType,
-    ptPUtf8Char, @fMimeTypeCount, {caseinsensitive=}true);
-  // index TWebServerMimeType.Extension as ptPUtf8Char for FindMimeType()
-end;
-
-function TWebServerGlobal.FindMimeType(Extension: PUtf8Char): PtrInt;
-begin
-  result := fMimeTypes.FindHashed(Extension); // search as PUtf8Char
-end;
-
-function TWebServerGlobal.AddIfNeeded(const Extension: RawUtf8): PtrInt;
-var
-  added: boolean;
-begin
-  result := -1;
-  if Extension = '' then
-    exit;
-  result := fMimeTypes.FindHashedForAdding(Extension, added);
-  if added then
-    fMimeType[result].Extension := Extension;
-end;
-
-function TWebServerGlobal.AddToIndexes(var Indexes: TSortedWordArray;
-  const Extension: RawUtf8): PtrInt;
-begin
-  result := AddIfNeeded(Extension);
-  if (result >= 0) and
-     (result <= high(word)) then
-    Indexes.Add(result);
-end;
-
-function TWebServerGlobal.Request(Context: THttpServerRequestAbstract;
-  const Local: TWebServerLocal): cardinal;
-begin
-  result := 0; // should continue the process
-
-end;
-
-
-
 { ******************** HTTP Server Logging/Monitoring Processors }
 
 { THttpRotater }
@@ -5690,7 +5174,7 @@ begin
     hrtWeekly:
       begin
         needrotate := Size >= 100 shl 20; // always rotate above 100MB
-        if NextTix32 >= Tix32 then
+        if Tix32 >= NextTix32 then
         begin
           NextTix32 := Tix32 + 60 * 60; // check TriggerDate every hour
           dt := NowUtc;
@@ -5776,6 +5260,7 @@ begin
   try
     Trigger := aTrigger;
     Files := aFiles;
+    NextTix32 := 0; // force date check on next TryRotate()
     PrepareNextRotateDate(0);
   finally
     Rotating.UnLock;

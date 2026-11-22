@@ -139,6 +139,7 @@ var
   /// decompress a secp256r1 curve public key
   // - could be used before calling Ecc256r1VerifyUncomp()
   // - direct low-level access to the our pascal version - no OpenSSL yet
+  // - returns Uncompressed buffer filled with 0 on failure
   Ecc256r1Uncompress: procedure(const Compressed: TEccPublicKey;
     out Uncompressed: TEccPublicKeyUncompressed);
 
@@ -234,6 +235,7 @@ function ecdsa_verify_uncompressed_pas(const PublicKey: TEccPublicKeyUncompresse
 /// uncompress a public key for ECC secp256r1 cryptography
 // - convert from its compressed form with its standard byte header
 // (33 bytes of memory) into uncompressed/flat form (64 bytes of memory)
+// - on failure - e.g. if the point is not in the curve - returns zeros
 procedure ecc_uncompress_key_pas(const Compressed: TEccPublicKey;
   out Uncompressed: TEccPublicKeyUncompressed);
 
@@ -748,6 +750,13 @@ const
         QWord($FFFFFFFFFFFFFFFF),
         QWord($FFFFFFFF00000000)));
 
+  // floor(2^512 / Curve_N_32) - the fifth QWord is implicitly 1
+  BARRETT_N_MU_LOW: THash256Rec = (
+    q: (QWord($012FFD85EEDF9BFE),
+        QWord($43190552DF1A6C21),
+        QWord($FFFFFFFEFFFFFFFF),
+        QWord($00000000FFFFFFFF)));
+
   P_1: THash256Rec = (q: (QWord(1), QWord(0), QWord(0), QWord(0)));
   P_3: THash256Rec = (q: (QWord(3), QWord(0), QWord(0), QWord(0)));
   P_11: THash256Rec = (q: (QWord($0101010101010101),
@@ -830,8 +839,9 @@ begin
     _inc256(Output, Curve_P_32);
 end;
 
-// computes result = Product mod Curve_P_32
-// from NIST https://tinyurl.com/3p5mt8kr
+{$ifndef ASMARM64}
+{$ifndef ASMINTEL}
+// computes result = Product mod Curve_P_32 from NIST https://tinyurl.com/3p5mt8kr
 procedure _mmodP(out Output: THash256Rec; var Product: THash512Rec);
 var
   carry: PtrInt;
@@ -922,6 +932,8 @@ begin
           (_cmp256(Curve_P_32, Output) <= 0) do
       dec(carry, _dec256(Output, Curve_P_32));
 end;
+{$endif ASMINTEL}
+{$endif ASMARM64}
 
 // computes result = (Left * Right) mod Curve
 procedure _modMultP(out Output: THash256Rec; const Left, Right: THash256Rec);
@@ -962,53 +974,58 @@ begin
   _set1(Output);
   FillZero(v.b);
   repeat
-    cmp := _cmp256(a, b);
-    if cmp = 0 then
-      break;
     carry := 0;
     if (a.C[0] and 1) = 0 then
     begin
       _rshift1(a);
-      if (Output.C[0] and 1) = 1 then
+      if (Output.C[0] and 1) <> 0 then
         carry := _inc256(Output, Modulo);
       _rshift1(Output);
       if carry <> 0 then
-        Output.B[ECC_BYTES - 1] := Output.B[ECC_BYTES - 1] or $80;
+        Output.B[ECC_BYTES - 1] :=
+          Output.B[ECC_BYTES - 1] or $80;
     end
     else if (b.C[0] and 1) = 0 then
     begin
       _rshift1(b);
-      if (v.C[0] and 1) = 1 then
-        carry := _add256(v, v, Modulo);
+      if (v.C[0] and 1) <> 0 then
+        carry := _inc256(v, Modulo);
       _rshift1(v);
       if carry <> 0 then
-        v.B[ECC_BYTES - 1] := v.B[ECC_BYTES - 1] or $80;
-    end
-    else if cmp > 0 then
-    begin
-      _dec256(a, b);
-      _rshift1(a);
-      if _cmp256(Output, v) < 0 then
-        _inc256(Output, Modulo);
-      _dec256(Output, v);
-      if (Output.C[0] and 1) = 1 then
-        carry := _inc256(Output, Modulo);
-      _rshift1(Output);
-      if carry <> 0 then
-        Output.B[ECC_BYTES - 1] := Output.B[ECC_BYTES - 1] or $80;
+        v.B[ECC_BYTES - 1] :=
+          v.B[ECC_BYTES - 1] or $80;
     end
     else
     begin
-      _dec256(b, a);
-      _rshift1(b);
-      if _cmp256(v, Output) < 0 then
-        _inc256(v, Modulo);
-      _dec256(v, Output);
-      if (v.C[0] and 1) = 1 then
-        carry := _inc256(v, Modulo);
-      _rshift1(v);
-      if carry > 0 then
-        v.B[ECC_BYTES - 1] := v.B[ECC_BYTES - 1] or $80;
+      cmp := _cmp256(a, b); // compare only when both operands are odd
+      if cmp = 0 then
+        break;
+      if cmp > 0 then
+      begin
+        _dec256(a, b);
+        _rshift1(a);
+        if _sub256(Output, Output, v) <> 0 then
+          _inc256(Output, Modulo);
+        if (Output.C[0] and 1) <> 0 then
+          carry := _inc256(Output, Modulo);
+        _rshift1(Output);
+        if carry <> 0 then
+          Output.B[ECC_BYTES - 1] :=
+            Output.B[ECC_BYTES - 1] or $80;
+      end
+      else
+      begin
+        _dec256(b, a);
+        _rshift1(b);
+        if _sub256(v, v, Output) <> 0 then
+          _inc256(v, Modulo);
+        if (v.C[0] and 1) <> 0 then
+          carry := _inc256(v, Modulo);
+        _rshift1(v);
+        if carry <> 0 then
+          v.B[ECC_BYTES - 1] :=
+            v.B[ECC_BYTES - 1] or $80;
+      end;
     end;
   until false;
 end;
@@ -1190,16 +1207,67 @@ begin
   _mv(a, result);
 end;
 
-procedure EccPointDecompress(out Point: TEccPoint; const Compressed: TEccPublicKey);
+
+// Validate an affine P-256 point before using it for ECC operations
+// P-256 has cofactor 1, so curve membership is sufficient here
+function EccPointIsValid(const Point: TEccPoint): boolean;
+var
+  rhs, y2: THash256Rec;
 begin
-  _bswap256(@Point.x, @Compressed[1]);
-  _modSquareP(Point.y, Point.x);           // y = x^2
-  _modSubP(Point.y, Point.y, P_3);          // y = x^2 - 3
-  _modMultP(Point.y, Point.y, Point.x);    // y = x^3 - 3x
-  _modAddP(Point.y, Point.y, Curve_B_32);  // y = x^3 - 3x + b
-  ModSqrt(Point.y);
-  if (Point.y.C[0] and 1) <> (cardinal(Compressed[0]) and 1) then
-    _sub256(Point.y, Curve_P_32, Point.y);
+  result := false;
+  // both coordinates must be canonical field elements
+  if (_cmp256(Point.x, Curve_P_32) >= 0) or
+     (_cmp256(Point.y, Curve_P_32) >= 0) then
+    exit;
+  // Verify y^2 = x^3 - 3*x + b (mod p)
+  _modSquareP(y2, Point.y);
+  _modSquareP(rhs, Point.x);
+  _modSubP(rhs, rhs, P_3);
+  _modMultP(rhs, rhs, Point.x);
+  _modAddP(rhs, rhs, Curve_B_32);
+  result := _equals(y2, rhs);
+end;
+
+// Decode and validate a compressed P-256 public key
+// Return false and set Point=0 for malformed encodings or off-curve points
+function EccPointDecompress(out Point: TEccPoint;
+  const Compressed: TEccPublicKey): boolean;
+var
+  p: TEccPoint;
+  rhs, y2: THash256Rec;
+begin
+  result := false;
+  FillCharFast(Point, SizeOf(Point), 0);
+  // Only standard compressed point encodings are supported
+  if not (Compressed[0] in [$02, $03]) then
+    exit;
+  _bswap256(@p.x, @Compressed[1]);
+  // Reject non-canonical X coordinates
+  if _cmp256(p.x, Curve_P_32) >= 0 then
+    exit;
+  // rhs = x^3 - 3*x + b (mod p)
+  _modSquareP(p.y, p.x);
+  _modSubP(p.y, p.y, P_3);
+  _modMultP(p.y, p.y, p.x);
+  _modAddP(p.y, p.y, Curve_B_32);
+  _mv(rhs, p.y);
+  // Compute a candidate square root
+  ModSqrt(p.y);
+  // Non-residue has no square root in Fp - ModSqrt alone doesn't detect this
+  _modSquareP(y2, p.y);
+  if not _equals(y2, rhs) then
+    exit;
+  // Select the root matching the compressed prefix
+  if (p.y.C[0] and 1) <>
+     (cardinal(Compressed[0]) and 1) then
+  begin
+    // Negating zero would produce non-canonical y = p
+    if _isZero(p.y) then
+      exit;
+    _sub256(p.y, Curve_P_32, p.y);
+  end;
+  Point := p;
+  result := true;
 end;
 
 var
@@ -1320,11 +1388,15 @@ begin
   FastAssignNew(result);
   if IsZero(Compressed) then
     exit;
-  SetLength(result, SizeOf({%H-}p^) + 1);
-  p := pointer(result);
+  p := FastNewRawByteString(result, SizeOf({%H-}p^) + 1);
   p.b[0] := $04; // ASN-1 uncompressed public key marker
   inc(PByte(p));
   Ecc256r1Uncompress(Compressed, PEccPublicKeyUncompressed(@u)^);
+  if IsZero(u.b) then
+  begin
+    FillZero(result); // invalid input
+    exit;
+  end;
   _bswap256(@p.l, @u.l);
   _bswap256(@p.h, @u.h);
 end;
@@ -1346,22 +1418,39 @@ begin
   result := true;
 end;
 
-function ecdh_shared_secret_uncompressed_pas(
-  const PublicPoint: TEccPublicKeyUncompressed;
+
+function ecdh_shared_secret_uncompressed_pas(const PublicPoint: TEccPublicKeyUncompressed;
   const PrivateKey: TEccPrivateKey; out Secret: TEccSecretKey): boolean;
 var
   priv: THash256Rec;
   product: TEccPoint;
-  rnd: THash256Rec; // random lambda element in projective form to protect priv
+  rnd: THash256Rec;
 begin
-  result := _RandomPoint(rnd);
-  if not result then
+  FillZero(Secret);
+  result := false;
+  // Validate the peer point BEFORE scalar multiplication
+  if not EccPointIsValid(TEccPoint(PublicPoint)) then
     exit;
   _bswap256(@priv, @PrivateKey);
+  // Private scalar must be in [1, n-1]
+  if _isZero(priv) or
+     (_cmp256(priv, Curve_N_32) >= 0) then
+  begin
+    FillZero(priv.b);
+    exit;
+  end;
+  // Random projective coordinate
+  if not _RandomPoint(rnd) then
+  begin
+    FillZero(priv.b);
+    exit;
+  end;
   EccPointMult(product, TEccPoint(PublicPoint), priv, @rnd);
-  _bswap256(@Secret, @product.x);
-  result := not (_isZero(product.x) and _isZero(product.y));
-  FillZero(priv.b); // erase sensitive information from stack
+  result := not (_isZero(product.x) and
+                 _isZero(product.y));
+  if result then
+    _bswap256(@Secret, @product.x);
+  FillZero(priv.b);
   FillZero(rnd.b);
   FillZero(THash512(product));
 end;
@@ -1369,7 +1458,8 @@ end;
 procedure ecc_uncompress_key_pas(const Compressed: TEccPublicKey;
   out Uncompressed: TEccPublicKeyUncompressed);
 begin
-  EccPointDecompress(TEccPoint(Uncompressed), Compressed);
+  if not EccPointDecompress(TEccPoint(Uncompressed), Compressed) then
+    FillCharFast(Uncompressed, SizeOf(Uncompressed), 0);
 end;
 
 function ecdh_shared_secret_pas(const PublicKey: TEccPublicKey;
@@ -1377,11 +1467,89 @@ function ecdh_shared_secret_pas(const PublicKey: TEccPublicKey;
 var
   pub: TEccPublicKeyUncompressed;
 begin
-  EccPointDecompress(TEccPoint(pub), PublicKey);
-  result := ecdh_shared_secret_uncompressed_pas(pub, PrivateKey, Secret);
+  FillZero(Secret);
+  result := EccPointDecompress(TEccPoint(pub), PublicKey);
+  if result then
+    result := ecdh_shared_secret_uncompressed_pas(
+      pub, PrivateKey, Secret);
 end;
 
-// computes result = (Left * Right) mod Curve_N_32
+{$ifdef HASQWORD} // circumvent Delphi 7/2007 compiler restriction
+
+procedure _modMultN(out Output: THash256Rec; const Left, Right: THash256Rec);
+var
+  product: THash512Rec;
+  q1, q3, cross, acc, rem, trial: THash256Rec;
+  tmp, tmp2: THash512Rec;
+  part: THash128Rec;
+  a4, mulCarry, w, old, q3Hi, r2Hi, remHi, mask, take: QWord;
+  c1, c2, borrow, i, j: PtrUInt;
+begin
+  // Perform the Barret Reduction of (Left * Right) mod Curve_N_32
+  _mult256(product, Left, Right);
+  // q1 = Product shr 192 = q1lo + a4 * 2^256
+  q1.Q[0] := Product.Q[3];
+  q1.Q[1] := Product.Q[4];
+  q1.Q[2] := Product.Q[5];
+  q1.Q[3] := Product.Q[6];
+  a4 := Product.Q[7];
+  // mu = 2^256 + BARRETT_N_MU_LOW
+  // q1 * mu = q1lo * muLow + (q1lo + a4 * muLow) shl 256 + a4 shl 512
+  _mult256(tmp, q1, BARRETT_N_MU_LOW); // we only need bits 320 and above
+  // accumulate high 256 bits of the first product with the high limb of mu
+  c1 := _add256(acc, tmp.H, q1);
+  // compute a4 * muLow as a 320-bit integer
+  // cross receives the low 256 bits; mulCarry receives the upper 64 bits
+  mulCarry := 0;
+  for i := 0 to 3 do
+  begin
+    mul64x64(a4, BARRETT_N_MU_LOW.Q[i], part);
+    w := part.L + mulCarry;
+    cross.Q[i] := w;
+    mulCarry := part.H + QWord(ord(w < part.L));
+  end;
+  // Combine both 256-bit terms
+  c2 := _add256(acc, acc, cross);
+  // top 64 bits, including carries from both add and the implicit a4 * 2^512 term
+  w := a4 + mulCarry;
+  q3Hi := QWord(ord(w < a4));
+  old := w;
+  inc(w, c1);
+  inc(q3Hi, ord(w < old));
+  old := w;
+  inc(w, c2);
+  inc(q3Hi, ord(w < old));
+  // q3 = floor(q1 * mu / 2^320) as a 320-bit integer.
+  q3.Q[0] := acc.Q[1];
+  q3.Q[1] := acc.Q[2];
+  q3.Q[2] := acc.Q[3];
+  q3.Q[3] := w;  // q3Hi is its fifth limb
+  // r2 = (q3 * Curve_N_32) mod 2^320 - Only five output limbs are required
+  _mult256(tmp2, q3, Curve_N_32);
+  r2Hi := tmp2.Q[4] + q3Hi * Curve_N_32.Q[0];
+  // r = (Product - q3 * n) mod 2^320
+  borrow := _sub256(rem, Product.L, tmp2.L);
+  remHi := Product.Q[4] - r2Hi - borrow;
+  // Standard Barrett reduction requires at most two final subtractions of n
+  for j := 1 to 2 do
+  begin
+    // Calculate each candidate, then select it using a mask instead of a
+    // data-dependent branch (safer for anti-forensic)
+    borrow := _sub256(trial, rem, Curve_N_32);
+    // Subtract when rem >= n: either the fifth limb is nonzero, or
+    // the low 256-bit subtraction did not borrow
+    take := QWord(ord(remHi <> 0)) or (QWord(1) - QWord(borrow));
+    mask := QWord(0) - take;
+    for i := 0 to 3 do
+      rem.Q[i] := (rem.Q[i] and not mask) or (trial.Q[i] and mask);
+    dec(remHi, QWord(borrow) and mask);
+  end;
+  // The normalized remainder is now < Curve_N_32
+  _mv(Output, rem);
+end;
+
+{$else} // old algorithm which compiles for Delphi 7/2007 with UInt64 = Int64
+
 procedure _modMultN(out Output: THash256Rec; const Left, Right: THash256Rec);
 var
   carry: QWord;
@@ -1437,6 +1605,8 @@ begin
   _mv(Output, product.L);
 end;
 
+{$endif HASQWORD}
+
 function ecdsa_sign_pas(const PrivateKey: TEccPrivateKey; const Hash: TEccHash;
   out Signature: TEccSignature): boolean;
 var
@@ -1481,6 +1651,9 @@ var
   rx, ry, tx, ty, tz, l_r, l_s, u1, u2, z: THash256Rec;
 begin
   result := false;
+  // never perform ECDSA verification using an off-curve key
+  if not EccPointIsValid(pub) then
+    exit;
   _bswap256(@l_r, @Signature);
   _bswap256(@l_s, @Signature[ECC_BYTES]);
   if _isZero(l_r) or
@@ -1489,18 +1662,18 @@ begin
      (_cmp256(Curve_N_32, l_s) <= 0) then
     exit; // r, s must be <> 0 and < n
   // calculate u1 and u2
-  _modInv(z, l_s, Curve_N_32);      // Z = s^-1
+  _modInv(z, l_s, Curve_N_32);         // Z = s^-1
   _bswap256(@u1, @Hash);
-  _modMultN(u1, u1, z);             // u1 = e/s
-  _modMultN(u2, l_r, z);            // u2 = r/s
+  _modMultN(u1, u1, z);                // u1 = e/s
+  _modMultN(u2, l_r, z);               // u2 = r/s
   // calculate l_sum = G + Q
   _mv(sumpt.x, pub.x);
   _mv(sumpt.y, pub.y);
   _mv(tx, Curve_G_32.x);
   _mv(ty, Curve_G_32.y);
-  _modSubP(z, sumpt.x, tx);               // Z = x2 - x1
+  _modSubP(z, sumpt.x, tx);            // Z = x2 - x1
   _XYcZ_add(tx, ty, sumpt.x, sumpt.y);
-  _modInv(z, z, Curve_P_32);              // Z = 1/Z
+  _modInv(z, z, Curve_P_32);           // Z = 1/Z
   _apply_z(sumpt.x, sumpt.y, z);
   // use Shamir's trick to calculate u1*G + u2*Q
   pts[0] := nil;
@@ -1528,7 +1701,7 @@ begin
       _mv(tx, pt^.x);
       _mv(ty, pt^.y);
       _apply_z(tx, ty, z);
-      _modSubP(tz, rx, tx); // Z = x2 - x1
+      _modSubP(tz, rx, tx);  // Z = x2 - x1
       _XYcZ_add(tx, ty, rx, ry);
       _modMultP(z, z, tz);
     end;
@@ -1546,8 +1719,8 @@ function ecdsa_verify_pas(const PublicKey: TEccPublicKey; const Hash: TEccHash;
 var
   pub: TEccPublicKeyUncompressed;
 begin
-  EccPointDecompress(TEccPoint(pub), PublicKey);
-  result := ecdsa_verify_uncompressed_pas(pub, Hash, Signature);
+  result := EccPointDecompress(TEccPoint(pub), PublicKey) and
+            ecdsa_verify_uncompressed_pas(pub, Hash, Signature);
 end;
 
 
@@ -1564,7 +1737,8 @@ end;
 constructor TEcc256r1VerifyPas.Create(const pub: TEccPublicKey);
 begin
   inherited Create(pub);
-  EccPointDecompress(TEccPoint(fPub), pub);
+  if not EccPointDecompress(TEccPoint(fPub), pub) then
+    FillCharFast(fPub, SizeOf(fPub), 0);
 end;
 
 destructor TEcc256r1VerifyPas.Destroy;

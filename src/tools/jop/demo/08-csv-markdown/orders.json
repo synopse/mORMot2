@@ -1,0 +1,6 @@
+{
+  "orders": [
+    {"id":"A001", "customer":"Alice", "items":[{"sku":"P1","qty":2},{"sku":"P2","qty":1}]},
+    {"id":"A002", "customer":"Bob", "items":[{"sku":"P3","qty":4}]}
+  ]
+}

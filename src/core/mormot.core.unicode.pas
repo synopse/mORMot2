@@ -1021,6 +1021,12 @@ procedure AnsiCharToUtf8(P: PAnsiChar; L: integer; var result: RawUtf8;
 function AnsiToString(const Ansi: RawByteString; CodePage: integer): string;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// convert an AnsiString (of a given code page) into a RTL string
+// - the destination code page should be supplied
+// - wrapper around TSynAnsiConvert.Engine(CodePage) and string conversion
+procedure AnsiToStringVar(Ansi: pointer; AnsiLen: PtrInt; CodePage: integer;
+  var Value: string);
+
 /// direct conversion of a WinAnsi (CodePage 1252) string into a UTF-8 encoded String
 // - faster than SysUtils: don't use Utf8Encode(WideString) -> no Windows.Global(),
 // and use a fixed pre-calculated array for individual chars conversion
@@ -2548,6 +2554,20 @@ type
   /// a dynamic array of UTF-8 text-buffer name/value pairs
   TTextBufferPairDynArray = array of TTextBufferPair;
 
+  /// store a name/value pair as UTF-8 strings
+  // - not used directly in this unit, but e.g. in VariantToCsv() and other
+  // places where TSynNameValue from mormot.core.search is overkill
+  TTextPair = record
+    /// a name identifier
+    Name: RawUtf8;
+    /// the associated UTF-8 value
+    Value: RawUtf8;
+  end;
+  /// a pointer to name/value pair as UTF-8 strings
+  PTextPair = ^TTextPair;
+  /// a dynamic array of name/value pairs as UTF-8 strings
+  TTextPairs = array of TTextPair;
+
   /// all parsed filled from ParseTextExpression()
   TTextExpression = record
     /// start of the name identifier - not #0 ended, but of NameLen length
@@ -3560,7 +3580,7 @@ var
 label
   done;
 begin
-  inc(PtrUInt(len), PtrUInt(source) - 4);
+  inc(PtrUInt(len), PtrUInt(source) - 4); // prepare fast by-four loop
   if source = nil then
     goto done;
   utf8 := @UTF8_TABLE.Lookup;
@@ -3588,19 +3608,33 @@ begin
     inc(source);
     if c = UTF8_ASCII then
       continue // last 1..3 chars
-    else if c > UTF8_MAX then // RFC 3629 requirements as IsValidUtf8Avx2()
-      if c = UTF8_ZERO then
-        break // end of input - may be unexpected if not at source[len]
-      else
-      begin
-        source := nil; // force result = false if does not follows RFC 3629
+    else if (c > UTF8_MAX) or // over RFC 3629 / Unicode range
+            (source + c > PUtf8Char(len) + 4) then
+    begin // early UTF8_ZERO or does not follows RFC 3629 or truncated
+      source := nil; // force result = false
+      break;
+    end;
+    case byte(source[-1]) of // match RFC 3629 restrictions enforced by AVX2
+      $c0, $c1, $f5 .. $f7:
         break;
-      end;
+      $e0:
+        if byte(source^) < $a0 then
+          break;
+      $ed:
+        if byte(source^) >= $a0 then
+          break;
+      $f0:
+        if byte(source^) < $90 then
+          break;
+      $f4:
+        if byte(source^) >= $90 then
+          break;
+    end;
     repeat
       if byte(source^) and $c0 <> $80 then
         goto done; // stop at invalid input content
-      inc(source); // length check is done below - may read after source[len]
-      dec(c);
+      inc(source);
+      dec(c); // c = 1..3
     until c = 0;
   until false;
 done:
@@ -3980,6 +4014,7 @@ function IsFixedWidthCodePage(aCodePage: cardinal): boolean;
 begin
   result := ((aCodePage >= 1250) and
              (aCodePage <= 1258)) or
+            (aCodePage = CP_437) or
             (aCodePage = CP_LATIN1) or
             (aCodePage >= CP_RAWBLOB);
 end;
@@ -4230,7 +4265,7 @@ type
   // maintain the thread-safe internal list of TSynAnsiConvert instances
   TSynAnsiConvertList = record
     Last: TSynAnsiConvert;
-    Lock: TRWLightLock;
+    Safe: TRWLightLock;
     Count: integer;
     CodePage: TWordDynArray; // for (SSE2) fast lookup in CPU L1 cache
     Engine: array of TSynAnsiConvert;
@@ -4248,14 +4283,14 @@ begin
       exit // very common case
     else
       result := nil;
-  List.Lock.ReadLock; // concurrent read lock
+  List.Safe.ReadLock; // concurrent read lock
   i := WordScanIndex(pointer(List.CodePage), List.Count, CodePage);
   if i >= 0 then
     result := List.Engine[i];
-  List.Lock.ReadUnLock;
+  List.Safe.ReadUnLock;
   if result = nil then // thread-safe register a new TSynAnsiConvert instance
   begin
-    List.Lock.WriteLock;
+    List.Safe.WriteLock;
     try
       i := WordScanIndex(pointer(List.CodePage), List.Count, CodePage);
       if i < 0 then // really need to create
@@ -4265,14 +4300,14 @@ begin
         else if IsFixedWidthCodePage(CodePage) then
           result := TSynAnsiFixedWidth.Create(CodePage) // use lookup table
         else
-          result := TSynAnsiConvert.Create(CodePage); // use system API
+          result := TSynAnsiConvert.Create(CodePage);   // use system API
         PtrArrayAdd(List.Engine, result);
         AddWord(List.CodePage, List.Count, CodePage);
       end
       else
         result := List.Engine[i];
     finally
-      List.Lock.WriteUnLock;
+      List.Safe.WriteUnLock;
     end;
   end;
   List.Last := result;
@@ -4457,7 +4492,8 @@ end;
 function TSynAnsiConvert.AnsiToAnsi(From: TSynAnsiConvert;
   const Source: RawByteString): RawByteString;
 begin
-  if From = self then
+  if (From = self) or
+     (Source = '') then
     result := Source
   else
     result := AnsiToAnsi(From, pointer(Source), length(Source));
@@ -4469,11 +4505,11 @@ var
   u: PWideChar;
   tmp: TSynTempBuffer;
 begin
-  if From.fCodePage = fCodePage then
-    FastSetStringCP(result, Source, SourceChars, fCodePage)
-  else if (Source = nil) or
-          (SourceChars = 0) then
+  if (Source = nil) or
+     (SourceChars = 0) then
     FastAssignNew(result)
+  else if From.fCodePage = fCodePage then
+    FastSetStringCP(result, Source, SourceChars, fCodePage)
   else
   begin
     u := tmp.Init(SourceChars * 2);
@@ -4638,6 +4674,20 @@ const
     8364, 129, 8218, 402, 8222, 8230, 8224, 8225, 710, 8240, 352, 8249, 338,
     141, 381, 143, 144, 8216, 8217, 8220, 8221, 8226, 8211, 8212, 732, 8482,
     353, 8250, 339, 157, 382, 376);
+  /// direct conversion from code page 437 to UTF-16, as PKware appnote requires
+  CP437W: array[128..255] of word = (
+    $00c7, $00fc, $00e9, $00e2, $00e4, $00e0, $00e5, $00e7, $00ea, $00eb, $00e8,
+    $00ef, $00ee, $00ec, $00c4, $00c5, $00c9, $00e6, $00c6, $00f4, $00f6, $00f2,
+    $00fb, $00f9, $00ff, $00d6, $00dc, $00a2, $00a3, $00a5, $20a7, $0192, $00e1,
+    $00ed, $00f3, $00fa, $00f1, $00d1, $00aa, $00ba, $00bf, $2310, $00ac, $00bd,
+    $00bc, $00a1, $00ab, $00bb, $2591, $2592, $2593, $2502, $2524, $2561, $2562,
+    $2556, $2555, $2563, $2551, $2557, $255d, $255c, $255b, $2510, $2514, $2534,
+    $252c, $251c, $2500, $253c, $255e, $255f, $255a, $2554, $2569, $2566, $2560,
+    $2550, $256c, $2567, $2568, $2564, $2565, $2559, $2558, $2552, $2553, $256b,
+    $256a, $2518, $250c, $2588, $2584, $258c, $2590, $2580, $03b1, $00df, $0393,
+    $03c0, $03a3, $03c3, $03bc, $03c4, $03a6, $0398, $03a9, $03b4, $221e, $03c6,
+    $03b5, $2229, $2261, $00b1, $2265, $2264, $2320, $2321, $00f7, $2248, $00b0,
+    $2219, $00b7, $221a, $207f, $00b2, $25a0, $00a0);
 
 procedure MakeLookupTable(w: PByteToWord; a: PWordToByte; min, max: PtrInt);
 var
@@ -4671,6 +4721,12 @@ begin
     if aCodePage = CP_WINANSI then
       // do not trust the Windows API for the 1252 code page :(
       MoveFast(CP1252W, fAnsiToWide[low(CP1252W)], SizeOf(CP1252W));
+  end
+  else if aCodePage = CP_437 then
+  begin
+    // no inconv/ICU needed just for TZipRead compatibility
+    FillIncreasingW(pointer(fAnsiToWide), 0, 128);
+    MoveFast(CP437W, fAnsiToWide[low(CP437W)], SizeOf(CP437W));
   end
   else
   begin
@@ -5594,15 +5650,32 @@ end;
 
 function AnsiToString(const Ansi: RawByteString; CodePage: integer): string;
 begin
-  if Ansi = '' then
-    result := ''
+  {$ifndef UNICODE}
+  if (Ansi = '') or
+     (CodePage = Unicode_CodePage) then
+    result := Ansi
   else
-    {$ifdef UNICODE}
-    TSynAnsiConvert.Engine(CodePage).AnsiToUnicodeStringVar(
-      pointer(Ansi), length(Ansi), result);
-    {$else}
-    result := CurrentAnsiConvert.AnsiToAnsi(TSynAnsiConvert.Engine(CodePage), Ansi);
-    {$endif UNICODE}
+  {$endif UNICODE}
+    AnsiToStringVar(pointer(Ansi), length(Ansi), CodePage, result);
+end;
+
+procedure AnsiToStringVar(Ansi: pointer; AnsiLen: PtrInt; CodePage: integer;
+  var Value: string);
+var
+  eng: TSynAnsiConvert;
+begin
+  if (Ansi = nil) or
+     (AnsiLen <= 0 ) then
+  begin
+    Value := '';
+    exit;
+  end;
+  eng := TSynAnsiConvert.Engine(CodePage);
+  {$ifdef UNICODE}
+  eng.AnsiToUnicodeStringVar(Ansi, AnsiLen, Value);
+  {$else}
+  Value := CurrentAnsiConvert.AnsiToAnsi(eng, Ansi, AnsiLen);
+  {$endif UNICODE}
 end;
 
 function AnsiBufferToTempUtf8(var Temp: TSynTempBuffer; Buf: PAnsiChar; BufLen,
@@ -11588,7 +11661,7 @@ var
 
 const
   // 1KB compressed buffer which renders into our 20,016 bytes UU[] array
-  UU_: array[byte] of cardinal = (
+  UU_: TByteToCardinal = (
     $040019fd, $ff5a6024, $00855a00, $ffffffe0, $5a5201f0, $02e700e8, $ffe0aa5a,
     $e0045a4b, $5a790bff, $045a0007, $a045a1ff, $db1878ba, $01a82b01, $0145a000,
     $1da45008, $041e5a80, $401da450, $5a8f185a, $fffffed4, $590b5ac3, $0c5a84a4,

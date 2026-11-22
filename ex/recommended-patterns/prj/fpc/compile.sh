@@ -31,8 +31,10 @@ fpc src/task_manager.pas \
     -Fusrc/dom/tags \
     -Fusrc/infra/tasks \
     -Fusrc/infra/tags \
-    -Fusrc/app/tasks \
-    -Fusrc/app/tags \
+    -Fusrc/app/tasks/interface \
+    -Fusrc/app/tasks/implementation \
+    -Fusrc/app/tags/interface \
+    -Fusrc/app/tags/implementation \
     -Fusrc/serv/app \
     -Futests/tasks \
     -Futests/tags \

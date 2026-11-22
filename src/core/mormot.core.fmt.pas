@@ -10,6 +10,8 @@ unit mormot.core.fmt;
     - HTML Text Conversions
     - XML Processing with Escape/Unescape and TXmlParser
     - YAML 1.2 core-schema to JSON or TDocVariant Support
+    - CSV Input to JSON
+    - Relational Markdown and CSV Tables from JSON or TDocVariant
     - Markup (e.g. Markdown or Emoji) Process
     - INI Files In-memory Access
     - TSynJsonFileSettings parent class
@@ -80,6 +82,10 @@ function HtmlEscapeString(const text: string;
 // replacing < > & " chars depending on the HTML layer
 function HtmlEscapeShort(const text: RawUtf8;
   fmt: TTextWriterHtmlFormat = hfAnyWhere): ShortString;
+
+/// escape some UTF-8 text into a HTML ShortString
+procedure HtmlEscapeShortVar(const text: RawUtf8; var short: ShortString;
+  fmt: TTextWriterHtmlFormat = hfAnyWhere);
 
 /// escape some RTL string text into UTF-8 HTML
 // - just a wrapper around TTextWriter.AddHtmlEscapeString() process,
@@ -510,9 +516,9 @@ type
     fTab: PAnsiCharToByte; // = XML_KIND[] lookup table (inlined on FPC only)
     {$endif FPCX86NOTPIC}
     fBegin, fCur, fToken, fAfter: PUtf8Char;
-    fStackLen: array[byte] of byte;     // 255-byte names
-    fStackPos: array[byte] of cardinal; // 32-bit offsets from fBegin
-    fSave: array[0..31] of TQwordRec;   // for Save/Restore (len=fStackLen[255])
+    fStackLen: TByteToByte;           // 255-byte names
+    fStackPos: TByteToCardinal;       // 32-bit offsets from fBegin
+    fSave: array[0..31] of TQwordRec; // for Save/Restore (len=fStackLen[255])
   end;
 
 const
@@ -669,6 +675,9 @@ var
 // - return false on signed 64-bit overflow so caller falls back to string
 function TryYamlInt(p: PUtf8Char; out V: Int64): boolean;
 
+/// YAML 1.2 core-schema decimal/hexa/octal number detection
+function IsYamlNumber(P: PUtf8Char): boolean;
+
 /// strip an unquoted trailing "# ..." YAML comment from a scalar fragment
 // - accounts for single/double quoted spans where # is literal
 procedure YamlStripLineComment(var S: RawUtf8);
@@ -678,6 +687,222 @@ procedure WriteYamlString(W: TJsonWriter; P: PUtf8Char; L: PtrInt);
 
 /// emit some variant as YAML string, with JSON-escaped double-quotes if needed
 procedure WriteYamlVariant(W: TJsonWriter; const V: variant);
+
+
+{ ************* CSV Input to JSON }
+
+type
+  /// result of parsing a CSV document with a header row
+  TCsvError = (
+    ceNone,
+    ceNoInput,
+    ceInvalidDelimiter,
+    ceInvalidHeader,
+    ceInvalidQuote,
+    ceColumnCount,
+    ceEmbeddedNul);
+
+const
+  /// static descriptions of CSV parsing results
+  CSV_ERROR: array[TCsvError] of RawUtf8 = (
+    '',
+    'CSV requires a header row',
+    'Invalid CSV delimiter',
+    'CSV headers must be nonempty and unique',
+    'Invalid CSV quoting',
+    'CSV row does not match its header width',
+    'Embedded NUL in CSV input');
+
+/// append a CSV document as a compact JSON array of objects
+// - Csv is read-only zero-terminated 8-bit text, with no UTF-8 validation
+// - the first row defines nonempty, case-sensitive unique property names
+// - all cells remain strings, preserving leading zeros, spaces and empty cells
+// - quoted cells support doubled quotes and embedded CR/LF; row endings may
+// be CR, LF or CRLF, and every data row must match the header column count
+// - Separator must be a printable ASCII character or tab, except double quote
+// - W must be a valid writer; it is not flushed or freed by this function
+// - returns ceNone on success; failure may have appended partial JSON to W
+// - pointer input cannot detect embedded NUL: use the RawUtf8 overload to do so
+// - writer and allocation exceptions are propagated to the caller
+function CsvToJson(Csv: PUtf8Char; W: TJsonWriter;
+  Separator: AnsiChar = ','): TCsvError; overload;
+
+/// convert CSV into compact JSON, clearing Json on any parsing error
+// - rejects physical embedded NUL before calling the pointer overload
+// - Csv and Json must be distinct variables; no encoding conversion is done
+function CsvToJson(const Csv: RawUtf8; out Json: RawUtf8;
+  Separator: AnsiChar = ','): TCsvError; overload;
+
+
+{ ************* Relational Markdown and CSV Tables from JSON or TDocVariant }
+
+type
+  /// tune JSON/Variant conversion into relational tables
+  // - by default, collect all fields in first appearance order, write missing
+  // values as empty cells, and report non-uniform fields as remarks
+  // - tboFirstRowFields ignores fields not present in the first object at each
+  // path; tboStrictFields takes precedence and rejects missing or new fields
+  // - tboStrictTypes rejects different non-null scalar types; all numeric
+  // variants share one type, and null does not constrain a field type
+  // - tboMixedAsJson writes mixed object/scalar arrays and arrays of arrays as
+  // one 'value' column, serializing container items as compact JSON; scalar
+  // items retain their usual text; tboStrictTypes takes precedence
+  // - tboNullAsText writes explicit scalar null as 'null'; missing fields
+  // always remain empty, including fields below a null object
+  // - tboKeepArrayIndex adds a zero-based '__index' data column for array rows;
+  // the index restarts for each parent array, unlike the per-table row ID
+  TTableOption = (
+    tboFirstRowFields,
+    tboStrictFields,
+    tboStrictTypes,
+    tboMixedAsJson,
+    tboNullAsText,
+    tboKeepArrayIndex);
+  TTableOptions = set of TTableOption;
+
+  /// overall result of a relational table conversion
+  // - the first two values indicate complete output; Info is empty on plain
+  // success, otherwise contains bounded LF-separated remarks or an error
+  // - normal data errors do not raise an exception; memory allocation errors
+  // are not intercepted
+  TTableResult = (
+    tbrSuccess,
+    tbrSuccessWithRemarks,
+    tbrInvalidJson,
+    tbrInvalidData,
+    tbrTooDeep,
+    tbrOutputError);
+
+  /// schema shared by every row of one table
+  // - Name is RootName followed by dotted property paths for child arrays
+  // - Path is the source path, starting with '$', with '[]' for array items
+  // - ParentName is empty at the root, otherwise the exact parent table Name
+  // - Columns contains data fields only, without '__rowid' or '__parentid'
+  // - names are case-sensitive; literal dots, brackets and backslashes are
+  // backslash-escaped, control characters use \u00XX, and reserved field names
+  // '__rowid', '__parentid' and '__index' receive a leading backslash
+  TTableInfo = record
+    Name: RawUtf8;
+    Path: RawUtf8;
+    ParentName: RawUtf8;
+    Columns: TRawUtf8DynArray;
+  end;
+
+  /// one row passed to a relational table writer
+  // - ID starts at 1 and increases within its table; ParentID identifies the
+  // owning row in Table.ParentName, or is 0 for the root table
+  // - Values is aligned with Table.Columns and contains unescaped UTF-8 text
+  // - the callback must copy any data it wants to retain after returning
+  TTableRow = record
+    ID: TID;
+    ParentID: TID;
+    Values: TRawUtf8DynArray;
+  end;
+  PTableRow = ^TTableRow;
+
+  /// events sent once per table, in parent-before-child depth-first order
+  TTableWriteEvent = (
+    tweBegin,
+    tweRow,
+    tweEnd);
+
+  /// callback receiving a complete schema, its rows, then its end event
+  // - Row is nil for tweBegin/tweEnd, and is only valid during tweRow
+  // - called after schema discovery; scalar conversion occurs during output
+  // - must not modify Doc or its referenced data; an exception stops further
+  // events and returns tbrOutputError, but earlier callback effects remain
+  TOnTableWrite = procedure(Event: TTableWriteEvent;
+    const Table: TTableInfo; Row: PTableRow) of object;
+
+  /// the supported output text formats for our relational table writer
+  TTableTextFormat = (
+    ttfCsv,
+    ttfMarkdownCsv,
+    ttfMarkdownPipe);
+
+const
+  /// union of fields, with native scalar conversion and no type checking
+  TABLE_DEFAULT = [];
+  /// require the same fields and compatible scalar types in every row
+  TABLE_STRICT = [tboStrictFields, tboStrictTypes];
+  /// maximum exported object/table nesting, including the root container
+  TableMaxDepth = 32;
+
+  /// TDocVariant options to be used by TableLoadJson() wrapper
+  JSON_TABLE: TDocVariantOptions = JSON_FAST_FLOAT + [dvoNameCaseSensitive,
+    dvoJsonParseDoNotGuessCount, dvoJsonParseDoNotTryCustomVariants];
+
+/// normalize a TDocVariant or scalar into relational tables
+// - apply its reconstructed data schema to a TOnTableWrite callback in a SAX way
+// - an object becomes one row, an array becomes consecutive rows, and a scalar
+// becomes one row with a 'value' column; an empty array has headers but no rows
+// - nested objects flatten into dotted columns, and each array becomes a
+// child table linked by '__parentid', without any Cartesian product
+// - sibling arrays and repeated arrays under different parents share schemas
+// at the same path, with independent per-table row ID sequences
+// - field order follows first appearance at each object level; empty nested
+// objects have no leaf columns; null containers produce no child rows
+// - object/array/scalar changes at one field path are rejected; the mixed
+// array option only applies to array items, not to conflicting field shapes
+// - scalar values use VariantToUtf8, with textual booleans and optional null
+// text; dates, native variant arrays and custom variants follow core conversion
+// - caller-supplied variants are trusted, with no scalar-content or UTF-8
+// validation; scalar types are compared only when tboStrictTypes is specified
+// - duplicate object names follow native lookup and keep the first occurrence
+// - skipped fields are not traversed; JSON fallback uses the native serializer
+// without another validation pass; TableMaxDepth bounds exported table nesting
+// - retains source row references, so Doc and its aliases must remain unchanged;
+// conversion errors during output return tbrOutputError
+function VariantToTables(const Doc: variant; const OnWrite: TOnTableWrite;
+  out Info: RawUtf8; Options: TTableOptions = TABLE_DEFAULT;
+  const RootName: RawUtf8 = 'root'): TTableResult;
+
+/// decode JSON then normalize its value into relational tables
+// - accepts an optional UTF-8 BOM, but no comments or extended JSON syntax
+// - uses IsValidJson and JsonToAnyVariant, with case-sensitive names and
+// JSON_FAST_FLOAT numeric precision/formatting
+// - syntax and string escapes follow native mORMot rules; this is not a full
+// RFC 8259 validator
+// - as with TDocVariant, empty JSON property names are ignored and \u0000 is
+// decoded as '?'; raw embedded NUL and invalid UTF-8 input are rejected
+// - checks UTF-8 once at the JSON boundary, then trusts the decoded variants
+// - input is never modified; invalid JSON produces a nonempty Info diagnostic
+function JsonToTables(const Json: RawUtf8; const OnWrite: TOnTableWrite;
+  out Info: RawUtf8; Options: TTableOptions = TABLE_DEFAULT;
+  const RootName: RawUtf8 = 'root'): TTableResult;
+
+/// convert a document into relational Markdown
+// - ttfMarkdownCsv (default) emits one '### table.csv' fenced CSV section per table
+// - ttfMarkdownPipe emits regular pipe tables with escaped cell content
+// - emits UTF-8 with LF record endings and a final blank line; fenced CSV
+// preserves the original cell content, including embedded CR/LF
+// - '__rowid' is always first, followed by '__parentid' for child tables
+// - Md is cleared on failure, including a failure after partial generation
+function VariantToMd(const Doc: variant; out Md, Info: RawUtf8;
+  Options: TTableOptions = TABLE_DEFAULT; const RootName: RawUtf8 = 'root';
+  Format: TTableTextFormat = ttfMarkdownCsv): TTableResult;
+
+/// decode JSON as JsonToTables then convert its value into relational Markdown
+function JsonToMd(const Json: RawUtf8; out Md, Info: RawUtf8;
+  Options: TTableOptions = TABLE_DEFAULT; const RootName: RawUtf8 = 'root';
+  Format: TTableTextFormat = ttfMarkdownCsv): TTableResult;
+
+/// convert a document into one CSV text per relational table
+// - this format is very convenient to feed a LLM with some CSV instead of JSON
+// - emits UTF-8 without BOM, comma separators and LF record endings
+// - fields containing comma, quote, CR or LF are quoted, doubling inner quotes
+// - field contents, including embedded CR/LF, are preserved without trimming
+// - '__rowid' is always first, followed by '__parentid' for child tables
+// - Csv is nil on failure; this function does not create any physical file
+function VariantToCsv(const Doc: variant; out Csv: TTextPairs;
+  out Info: RawUtf8; Options: TTableOptions = TABLE_DEFAULT;
+  const RootName: RawUtf8 = 'root'): TTableResult;
+
+/// decode JSON as JsonToTables then convert its value into relational CSV texts
+function JsonToCsv(const Json: RawUtf8; out Csv: TTextPairs;
+  out Info: RawUtf8; Options: TTableOptions = TABLE_DEFAULT;
+  const RootName: RawUtf8 = 'root'): TTableResult;
+
 
 
 { ************* Markup (e.g. Markdown or Emoji) process }
@@ -1124,12 +1349,73 @@ type
 { ********** JSON and Text Preprocessor }
 
 type
-  /// tune JsonPreprocess() pre-processor features
-  // - jppIncludeAbsolute enables unsafe "include <file>" outside the root folder
-  // - jppDebugComment will emit verbose debugging comments during pre-processing
+  /// tune JsonPreprocess() and TextPreprocess() features
+  // - jppIncludeAbsolute enables "include <file>" outside the root folder
+  // - jppDebugComment emits debugging comments into the generated content
+  // - jppNoNamespaces disables the GlobalInfoFind() fallback for unknown names
+  // - jppStrictInclude raises EPreprocException for rejected or failed includes
+  // - jppAllowMissingInclude skips files not found by FileExists(); empty or
+  // unreadable files, forbidden paths and excessive nesting still fail
+  // - jppValidateUtf8 explicitly checks input, definitions and included content
+  // - jppJsonImplicitObject enables Hjson root objects without braces in the
+  // new JsonPreprocessToWriter() API; other entry points retain their defaults
+  // - jppNoExpand makes the writer APIs bypass definitions/includes/expansion
+  // - jppNoComments strips comments in JsonPreprocessToWriter() output
   TPreprocFlags = set of (
     jppIncludeAbsolute,
-    jppDebugComment);
+    jppDebugComment,
+    jppNoNamespaces,
+    jppStrictInclude,
+    jppAllowMissingInclude,
+    jppValidateUtf8,
+    jppJsonImplicitObject,
+    jppNoExpand,
+    jppNoComments);
+
+  /// failure reported by the configurable pre-processor entry points
+  EPreprocException = class(ESynException);
+
+  /// optional counters accumulated by one or several pre-processor calls
+  // - nonempty reads are counted, including repeated includes
+  // - IncludeBytes counts included/inserted bytes after BOM decoding
+  TPreprocStatistics = record
+    IncludeFiles: Int64;
+    InsertFiles: Int64;
+    IncludeBytes: Int64;
+  end;
+  PPreprocStatistics = ^TPreprocStatistics;
+
+  /// optional settings for JsonPreprocessToWriter/TextPreprocessToWriter
+  // - initialize with Default(TPreprocSettings), or a zeroed local record
+  // - Defines contains literal name=value pairs, evaluated before the source
+  // - names are case-sensitive [A-Za-z_][A-Za-z0-9_.-]* identifiers
+  // - values are not expanded or parsed as DSL; JSON constants/numbers keep
+  // their type, and all other values are registered as plain strings
+  // - repeated definitions use the last value; source definitions may override
+  // - IncludeRoot is shared by all nested includes, as with the older APIs
+  // - includes use RawUtf8FromFile(): BOM decoding, or unchanged 8-bit bytes
+  // - Statistics may be nil, otherwise counters are accumulated, never reset
+  TPreprocSettings = record
+    Flags: TPreprocFlags;
+    IncludeRoot: TFileName;
+    Defines: TRawUtf8DynArray;
+    Statistics: PPreprocStatistics;
+  end;
+
+/// pre-process a zero-terminated JSON buffer directly into a caller-owned writer
+// - leaves P unchanged and does not flush or release W
+// - caller must reject embedded #0 bytes using its known input length
+// - supports scalar roots; use jppJsonImplicitObject for implicit Hjson objects
+// - returns false on parser failure, but does not perform full JSON validation
+// - may raise EPreprocException for bad settings or strict include failures
+// - already written output is not rolled back
+function JsonPreprocessToWriter(P: PUtf8Char; W: TJsonWriter;
+  Format: TTextWriterJsonFormat; const Settings: TPreprocSettings): boolean;
+
+/// pre-process zero-terminated text directly into a caller-owned writer
+// - same settings, ownership and partial-output contract as JsonPreprocessToWriter
+function TextPreprocessToWriter(P: PUtf8Char; W: TTextWriter;
+  const Settings: TPreprocSettings): boolean;
 
 /// pre-process and format JSON with $".." and $(ident) expansion
 function JsonPreprocess(const Json: RawUtf8;
@@ -1395,16 +1681,22 @@ begin
 end;
 
 function HtmlEscapeShort(const text: RawUtf8; fmt: TTextWriterHtmlFormat): ShortString;
+begin
+  HtmlEscapeShortVar(text, result, fmt);
+end;
+
+procedure HtmlEscapeShortVar(const text: RawUtf8; var short: ShortString;
+  fmt: TTextWriterHtmlFormat);
 var
   temp: TLocalWriter;
 begin
   if NeedsHtmlEscape(pointer(text), fmt) then
   begin
-    __AddHtmlEscape(temp.Init(result), pointer(text), {TextLen=}0, fmt);
+    __AddHtmlEscape(temp.Init(short), pointer(text), {TextLen=}0, fmt);
     temp.Done;
   end
   else
-    Ansi7StringToShortString(text, result);
+    Ansi7StringToShortString(text, short);
 end;
 
 function HtmlEscapeString(const text: string; fmt: TTextWriterHtmlFormat): RawUtf8;
@@ -3153,7 +3445,7 @@ begin
   if cut < 0 then
     exit;
   while (cut > 0) and
-        (p[cut - 1] <= ' ') do
+        (S[cut] <= ' ') do
     dec(cut);
   SetLength(S, cut);
 end;
@@ -3166,6 +3458,44 @@ begin
   result := (PWord(p)^ = ord('~')) or
             ((PInteger(p)^ and $DFDFDFDF = NULL_HI) and
              (p[4] = #0));
+end;
+
+function IsYamlNumber(P: PUtf8Char): boolean;
+var
+  tab: PAnsiCharToByte;
+begin
+  result := false;
+  if P = nil then
+    exit;
+  if P^ in ['+', '-'] then
+    inc(P);
+  if P^ = '0' then
+    if P[1] in ['x', 'X', 'o'] then // octal/hexadecimal format
+    begin
+      if P[1] = 'o' then
+      begin
+        inc(P, 2);
+        if not (P^ in ['0' .. '7']) then
+          exit;
+        repeat
+          inc(P);
+        until not (P^ in ['0' .. '7']);
+      end
+      else
+      begin
+        inc(P, 2);
+        tab := @ConvertHexToBin;
+        if tab^[P^] = 255 then
+          exit;
+        repeat
+          inc(P);
+        until tab^[P^] = 255;
+      end;
+      result := P^ = #0;
+      exit;
+    end;
+  if P^ in ['0' .. '9'] then
+    result := GotoEndRawNumber(P)^ = #0; //
 end;
 
 function TryYamlInt(p: PUtf8Char; out V: Int64): boolean;
@@ -3387,7 +3717,7 @@ type
       LineIdx: integer; var Text: RawUtf8): PUtf8Char;
     procedure EmitFlowScalar(const Frag: RawUtf8; LineIdx: integer);
     procedure EmitScalarFragment(const Frag: RawUtf8; LineIdx: integer);
-    procedure EmitKey(const K: RawUtf8);
+    procedure EmitKey(const K: RawUtf8; LineIdx: integer);
     procedure EmitCollectBlockScalar(MinIndent, ExplicitIndent: integer;
       Folded, Chomp: AnsiChar);
     procedure EmitBlockScalar(const rest: RawUtf8; BaseIndent: integer);
@@ -3481,14 +3811,21 @@ begin
     Error(LineIdx, 'multi-document streams are not supported');
 end;
 
-procedure TYamlToJson.EmitKey(const K: RawUtf8);
+procedure TYamlToJson.EmitKey(const K: RawUtf8; LineIdx: integer);
 begin
   if K <> '' then
     case K[1] of
-      '"':
-        fOut.AddString(K);              // already JSON-escaped
+      '"',
       '''':
-        fOut.AddQuotedStringAsJson(K);  // unquote and JSON-escape
+        begin
+          // A quoted YAML scalar must be entirely consumed before JSON output.
+          if SkipQuoted(LineIdx, pointer(K)) - PUtf8Char(pointer(K)) <> length(K) then
+            ErrorFmt(LineIdx, 'unexpected text after quoted scalar %', [K]);
+          if K[1] = '"' then
+            fOut.AddString(K)             // already JSON-escaped
+          else
+            fOut.AddQuotedStringAsJson(K);
+        end;
     else
       fOut.AddJsonString(K);            // JSON-escape
     end
@@ -3513,7 +3850,7 @@ begin
   end;
   if s[1] in ['"', ''''] then
   begin
-    EmitKey(s);
+    EmitKey(s, LineIdx);
     exit;
   end;
   CheckUnsupportedScalar(LineIdx, pointer(s));
@@ -3833,7 +4170,7 @@ begin
       TrimLeftCopy(c^.Content, keyEnd + 2, MaxInt, rest);
     if not first then
       fOut.AddDirect(',');
-    EmitKey(keyText);
+    EmitKey(keyText, fIdx);
     fOut.AddDirect(':');
     lineIdx := fIdx;
     if (rest = '') or
@@ -3925,7 +4262,12 @@ begin
       // the current line to look like it starts at that indent and recurse
       c^.Content := afterDash;
       c^.Indent := implicitIndent;
+      if fDepth >= fMaxDepth then
+        ErrorFmt(lineIdx, 'YAML nesting depth exceeds YamlMaxDepth (%)',
+          [fMaxDepth]);
+      inc(fDepth);
       ParseBlockSeq(implicitIndent);
+      dec(fDepth);
     end
     else if afterDash[1] in ['{', '['] then
     begin
@@ -3941,8 +4283,14 @@ begin
       ParseValue(implicitIndent);
     end
     else if YamlLineKeyEnd(afterDash) >= 0 then
+    begin
       // implicit mapping item: "- key: value" [, "   key2: v2"]
-      ParseImplicitMapFromDash(implicitIndent, afterDash, lineIdx)
+      if fDepth >= fMaxDepth then
+        ErrorFmt(lineIdx, 'YAML nesting depth exceeds YamlMaxDepth (%)', [fMaxDepth]);
+      inc(fDepth);
+      ParseImplicitMapFromDash(implicitIndent, afterDash, lineIdx);
+      dec(fDepth);
+    end
     else
     begin
       if afterDash[1] in ['"', ''''] then
@@ -3974,7 +4322,7 @@ begin
   rest := '';
   if keyEnd + 1 < length(firstEntry) then
     TrimLeftCopy(firstEntry, keyEnd + 2, MaxInt, rest);
-  EmitKey(keyText);
+  EmitKey(keyText, firstLineIdx);
   fOut.AddDirect(':');
   if (rest = '') or
      (rest[1] = '#') then
@@ -4030,7 +4378,7 @@ begin
     if keyEnd + 1 < length(lineContent) then
       TrimLeftCopy(lineContent, keyEnd + 2, MaxInt, rest);
     fOut.AddDirect(',');
-    EmitKey(keyText);
+    EmitKey(keyText, fIdx);
     fOut.AddDirect(':');
     curIdx := fIdx;
     if (rest = '') or
@@ -4104,7 +4452,8 @@ begin
         break;
       '''',
       '"':
-        result := SkipQuoted(LineIdx, result);
+        if result = p then
+          result := SkipQuoted(LineIdx, result) - 1;
       '{',
       '[':
         inc(depth);
@@ -4189,7 +4538,7 @@ begin
     CheckUnsupportedScalar(LineIdx, pointer(keyText));
     if not first then
       fOut.Add(',');
-    EmitKey(keyText);
+    EmitKey(keyText, LineIdx);
     fOut.AddDirect(':');
     first := false;
     // skip whitespace before value
@@ -4328,6 +4677,8 @@ begin
   repeat
     // detect line ending (using SSE2 asm if available)
     len := BufferLineLength(lineStart, lineEnd); // both CRLF or LF
+    if PosChar(lineStart, len, #0) <> nil then
+       Error(fCount, '#0 not allowed inside input buffer');
     lineNext := lineStart + len;
     // prepare a new entry in fLines[]
     if fCount >= length(fLines) then
@@ -4370,7 +4721,7 @@ begin
       inc(lineStart);
     if lineStart^ = #10 then
       inc(lineStart);
-  until lineStart^ = #0;
+  until lineStart >= lineEnd;
   if length(fLines) <> fCount then
     DynArrayFakeLength(fLines, fCount);
 end;
@@ -4660,7 +5011,7 @@ begin
       // to preserve string type on round-trip
       IsYamlNull(P) or
       IsBooleanJson(P) or
-      IsNumberJson(P) or
+      IsYamlNumber(P) or
       // quick scan for chars that require escape
       YamlSpecialChars(P) then
     // emit as JSON-escaped double-quoted string - valid YAML 1.2 §5.7
@@ -4683,6 +5034,1218 @@ begin
     W.AddNoJsonEscape(tmp.Text, tmp.Len);
   TempUtf8Done(tmp);
 end;
+
+
+{ ************* CSV Input to JSON }
+
+type
+  TCsvFieldEnd = (
+    cfeColumn,
+    cfeRow,
+    cfeEnd,
+    cfeInvalid);
+
+function CsvReadField(var P: PUtf8Char; Separator: AnsiChar;
+  var Field: TSynTempAdder): TCsvFieldEnd;
+var
+  first: PUtf8Char;
+begin
+  result := cfeInvalid;
+  Field.Size := 0;
+  if P^ = '"' then
+  begin
+    inc(P);
+    repeat
+      first := P;
+      while not (P^ in [#0, '"']) do
+        inc(P);
+      Field.Add(first, P - first);
+      if P^ = #0 then
+        exit;
+      inc(P);
+      if P^ <> '"' then
+        break;
+      Field.Add('"');
+      inc(P);
+    until false;
+    if (P^ <> Separator) and
+       not (P^ in [#0, #10, #13]) then
+      exit;
+  end
+  else
+  begin
+    first := P;
+    while (P^ <> Separator) and
+          not (P^ in [#0, #10, #13]) do
+    begin
+      if P^ = '"' then
+        exit;
+      inc(P);
+    end;
+    Field.Add(first, P - first);
+  end;
+  if P^ = Separator then
+  begin
+    inc(P);
+    result := cfeColumn;
+  end
+  else if P^ = #0 then
+    result := cfeEnd
+  else
+  begin
+    if P^ = #13 then
+    begin
+      inc(P);
+      if P^ = #10 then
+        inc(P);
+    end
+    else
+      inc(P);
+    result := cfeRow;
+  end;
+end;
+
+function CsvToJson(Csv: PUtf8Char; W: TJsonWriter;
+  Separator: AnsiChar): TCsvError;
+var
+  names: TRawUtf8DynArray;
+  field: TSynTempAdder;
+  ending: TCsvFieldEnd;
+  n, i, j: PtrInt;
+  first: boolean;
+begin
+  result := ceInvalidDelimiter;
+  if (Separator <> #9) and
+     ((Separator < ' ') or
+      (Separator >= #127) or
+      (Separator = '"')) then
+    exit;
+  result := ceNoInput;
+  if (Csv = nil) or
+     (Csv^ = #0) then
+    exit;
+  n := 0;
+  names := nil;
+  field.Init;
+  try
+    // Retain the header only; every data cell reuses the temporary buffer.
+    repeat
+      result := ceInvalidQuote;
+      ending := CsvReadField(Csv, Separator, field);
+      if ending = cfeInvalid then
+        exit;
+      result := ceInvalidHeader;
+      if field.Size = 0 then
+        exit;
+      for i := 0 to n - 1 do
+        if (length(names[i]) = field.Size) and
+           CompareMem(pointer(names[i]), field.Buffer, field.Size) then
+          exit;
+      if n = length(names) then
+        SetLength(names, NextGrow(n));
+      FastSetString(names[n], field.Buffer, field.Size);
+      inc(n);
+    until ending <> cfeColumn;
+    W.AddDirect('[');
+    first := true;
+    while Csv^ <> #0 do
+    begin
+      if not first then
+        W.AddDirect(',');
+      first := false;
+      W.AddDirect('{');
+      j := 0;
+      repeat
+        result := ceInvalidQuote;
+        ending := CsvReadField(Csv, Separator, field);
+        if ending = cfeInvalid then
+          exit;
+        result := ceColumnCount;
+        if j >= n then
+          exit;
+        if j <> 0 then
+          W.AddDirect(',');
+        W.AddJsonString(names[j]);
+        W.AddDirect(':', '"');
+        if field.Size <> 0 then
+          W.AddJsonEscape(field.Buffer, field.Size);
+        W.AddDirect('"');
+        inc(j);
+      until ending <> cfeColumn;
+      if j <> n then
+        exit;
+      W.AddDirect('}');
+    end;
+    W.AddDirect(']');
+    result := ceNone;
+  finally
+    field.Store.Done;
+  end;
+end;
+
+function CsvToJson(const Csv: RawUtf8; out Json: RawUtf8;
+  Separator: AnsiChar): TCsvError;
+var
+  W: TJsonWriter;
+  temp: TTextWriterStackBuffer;
+begin
+  Json := '';
+  result := ceEmbeddedNul;
+  if ByteScanIndex(pointer(Csv), length(Csv), 0) >= 0 then
+    exit;
+  W := TJsonWriter.CreateOwnedStream(temp);
+  try
+    result := CsvToJson(pointer(Csv), W, Separator);
+    if result = ceNone then
+      W.SetText(Json);
+  finally
+    W.Free;
+  end;
+end;
+
+
+{ ************* Relational Markdown and CSV Tables from JSON or TDocVariant }
+
+type
+  TTableRowKind = (
+    trkScalar,
+    trkObject,
+    trkJson);
+
+  TTableSchema = class;
+  TTableData = class;
+
+  TTableField = record
+    ColumnName: RawUtf8;
+    Kind: TDocVariantKind;
+    ValueType: TVarType;
+    Column: integer;
+    Seen: integer;
+    Objects: TTableSchema;
+    Child: TTableData;
+  end;
+  PTableField = ^TTableField;
+
+  // scalar field metadata shares arrays; only nested objects need a schema
+  TTableSchema = class
+  public
+    Names: TRawUtf8DynArray;
+    Fields: array of TTableField;
+    Count: integer;
+    Samples: integer;
+    destructor Destroy; override;
+    function Find(const Name: RawUtf8): PTableField;
+    function Add(const Name, Prefix: RawUtf8): PTableField;
+  end;
+
+  TTableSourceRow = record
+    Value: PVarData; // borrowed until VariantToTables returns
+    ParentID: TID;
+    ArrayIndex: integer;
+  end;
+  PTableSourceRow = ^TTableSourceRow;
+
+  TTableData = class
+  public
+    Info: TTableInfo;
+    Next: TTableData; // non-owning, parent-before-child emission order
+    Field: TTableField;
+    Rows: array of TTableSourceRow;
+    Count: integer;
+    ColumnCount: integer;
+    Depth: integer;
+    Kind: TTableRowKind;
+    ArrayRows: boolean;
+    constructor Create(aParent: TTableData; const Name: RawUtf8;
+      aDepth: integer; aArrayRows: boolean);
+    destructor Destroy; override;
+    procedure AddRow(Value: PVarData; ParentID: TID; ArrayIndex: integer);
+    procedure AddArray(Value: PDocVariantData; ParentID: TID);
+  end;
+
+  TTableExport = class
+  protected
+    fRoot: TTableData;
+    fLast: TTableData;
+    fOptions: TTableOptions;
+    fResult: TTableResult;
+    fHasJson: boolean;
+    fRemarks: integer;
+    fInfo: RawUtf8;
+    fOnWrite: TOnTableWrite;
+    fJson: TJsonWriter;
+    fTable: TTableData;
+    function Message(const Text, Field: RawUtf8): RawUtf8;
+    function Fail(Code: TTableResult; const Text: RawUtf8;
+      const Field: RawUtf8 = ''): boolean;
+    procedure FailTable(Code: TTableResult; const Text, TablePrefix, TableName: RawUtf8);
+    procedure Remark(const Text: RawUtf8; const Field: RawUtf8 = '');
+    function MergeField(var Field: TTableField; Value: PVarData;
+      Kind: TDocVariantKind = dvUndefined): boolean;
+    function DiscoverObject(Table: TTableData; var Field: TTableField;
+      Value: PDocVariantData; ID: TID; Depth: integer): boolean;
+    procedure Columns(Table: TTableData; var Field: TTableField);
+    function DiscoverChildren(var Field: TTableField): boolean;
+    function Discover(Table: TTableData): boolean;
+    procedure FillRow(var Field: TTableField; Value: PVarData;
+      var Values: TRawUtf8DynArray);
+    procedure WriteTable(Table: TTableData);
+  public
+    destructor Destroy; override;
+    function Run(const Doc: variant; const OnWrite: TOnTableWrite;
+      Options: TTableOptions; const RootName: RawUtf8;
+      out Info: RawUtf8): TTableResult;
+  end;
+
+const
+  TABLE_MAX_REMARKS = 16;
+
+function TableEscapeName(const Name: RawUtf8): RawUtf8;
+var
+  tmp: TSynTempAdder;
+  p, first, last: PUtf8Char;
+begin
+  tmp.Init;
+  try
+    p := pointer(Name);
+    last := p + length(Name);
+    while p < last do
+    begin
+      first := p;
+      while (p < last) and
+            not (p^ in [#0..#31, #127, '.', '\', '[', ']']) do
+        inc(p);
+      tmp.Add(first, p - first);
+      if p = last then
+        break;
+      if p^ in [#0..#31, #127] then
+      begin
+        tmp.AddShort('\u00');
+        tmp.AddByteHex(ord(p^));
+      end
+      else
+        tmp.AddDirect('\', p^);
+      inc(p);
+    end;
+    FastSetString(result, tmp.Buffer, tmp.Size);
+  finally
+    tmp.Store.Done;
+  end;
+end;
+
+procedure TableNameVar(const Prefix, Name: RawUtf8; var result: RawUtf8);
+begin
+  result := Name;
+  if PosExChar(#0, Name) <> 0 then
+    result := TableEscapeName(Name)
+  else if NeedsEscape(pointer(Name), [#1..#31, #127, '.', '\', '[', ']']) then
+    if NeedsEscape(pointer(Name), [#1..#31, #127]) then
+      result := TableEscapeName(Name) // printable control characters
+    else
+      result := EscapeChar(Name, ['.', '\', '[', ']']);
+  if (Name = '__rowid') or
+     (Name = '__parentid') or
+     (Name = '__index') then
+    result := Join(['\', result]);
+  if Prefix <> '' then
+    result := Join([Prefix, '.', result]);
+end;
+
+function TableName(const Prefix, Name: RawUtf8): RawUtf8;
+  {$ifdef HASINLINE} inline; {$endif}
+begin
+  TableNameVar(Prefix, Name, result);
+end;
+
+function TableScalarType(ValueType: PtrUInt): PtrUInt;
+begin
+  // used only for the explicit tboStrictTypes option
+  case ValueType of
+    varSmallInt .. varCurrency,
+    varShortInt .. varOleUInt:
+      result := varDouble;
+    varDate,
+    varOleStr,
+    {$ifdef HASVARUSTRING} varUString, {$endif}
+    varString:
+      result := varString;
+  else
+    result := ValueType;
+  end;
+end;
+
+procedure TableText(Value: PVarData; Options: TTableOptions;
+  var Text: RawUtf8);
+var
+  tmp: TVarData;
+begin
+  if Value^.VType and varByRef <> 0 then
+    Value := pointer(SetVarDataUnRef(Value^.VType, Value, tmp));
+  if Value^.VType <= varNull then
+    if tboNullAsText in Options then
+      Text := NULL_STR_VAR
+    else
+      FastAssignNew(Text)
+  else if Value^.VType = varBoolean then
+    Text := BOOL_UTF8[ord(Value^.VBoolean) <> 0]
+  else
+    VariantToUtf8(PVariant(Value)^, Text);
+end;
+
+
+{ TTableSchema }
+
+destructor TTableSchema.Destroy;
+var
+  i: integer;
+  f: PTableField;
+begin
+  f := pointer(Fields);
+  for i := 1 to Count do
+  begin
+    f^.Objects.Free;
+    f^.Child.Free;
+    inc(f);
+  end;
+  inherited Destroy;
+end;
+
+function TTableSchema.Find(const Name: RawUtf8): PTableField;
+var
+  i: PtrInt;
+begin
+  i := FindRawUtf8(pointer(Names), Name, Count, {casesensitive=}true);
+  if i < 0 then
+    result := nil
+  else
+    result := @Fields[i];
+end;
+
+function TTableSchema.Add(const Name, Prefix: RawUtf8): PTableField;
+var
+  i: PtrInt;
+begin
+  if Count = length(Fields) then
+    SetLength(Fields, NextGrow(Count));
+  i := AddRawUtf8(Names, Count, Name);
+  result := @Fields[i];
+  result^.Column := -1;
+  TableNameVar(Prefix, Name, result^.ColumnName);
+end;
+
+
+{ TTableData }
+
+constructor TTableData.Create(aParent: TTableData; const Name: RawUtf8;
+  aDepth: integer; aArrayRows: boolean);
+begin
+  inherited Create;
+  Depth := aDepth;
+  ArrayRows := aArrayRows;
+  Field.Column := -1;
+  if aParent = nil then
+  begin
+    Info.Name := Name;
+    Info.Path := '$';
+  end
+  else
+  begin
+    Join([aParent.Info.Name, '.', Name], Info.Name);
+    Info.Path := aParent.Info.Path;
+    if aParent.ArrayRows then
+      Append(Info.Path, '[]');
+    Append(Info.Path, '.', Name);
+    Info.ParentName := aParent.Info.Name;
+  end;
+end;
+
+destructor TTableData.Destroy;
+begin
+  Field.Objects.Free;
+  inherited Destroy;
+end;
+
+procedure TTableData.AddRow(Value: PVarData; ParentID: TID;
+  ArrayIndex: integer);
+var
+  r: PTableSourceRow;
+begin
+  if Count = length(Rows) then
+    SetLength(Rows, NextGrow(Count));
+  r := @Rows[Count];
+  r^.Value := VarDataFromVariant(PVariant(Value)^);
+  r^.ParentID := ParentID;
+  r^.ArrayIndex := ArrayIndex;
+  inc(Count);
+end;
+
+procedure TTableData.AddArray(Value: PDocVariantData; ParentID: TID);
+var
+  n, i: PtrInt;
+begin
+  n := Count + Value^.Count;
+  if n > length(Rows) then
+    SetLength(Rows, NextGrow(n)); // pre-allocate
+  for i := 0 to Value^.Count - 1 do
+    AddRow(pointer(@Value^.Values[i]), ParentID, i);
+end;
+
+
+{ TTableExport }
+
+destructor TTableExport.Destroy;
+begin
+  fRoot.Free;
+  inherited Destroy;
+end;
+
+function TTableExport.Message(const Text, Field: RawUtf8): RawUtf8;
+var
+  path, msg: RawUtf8;
+begin
+  if fTable = nil then
+    path := '$'
+  else
+    path := fTable.Info.Path;
+  if Field <> '' then
+    Append(path, '.', Field);
+  msg := Text;
+  if Utf8TruncateToLength(path, 256) then
+    Append(path, '...');
+  if Utf8TruncateToLength(msg, 256) then
+    Append(msg, '...');
+  Join([path, ': ', msg], result);
+end;
+
+function TTableExport.Fail(Code: TTableResult; const Text, Field: RawUtf8): boolean;
+begin
+  fResult := Code;
+  fInfo := Message(Text, Field);
+  result := false;
+end;
+
+procedure TTableExport.FailTable(Code: TTableResult;
+  const Text, TablePrefix, TableName: RawUtf8);
+var
+  field: RawUtf8;
+begin
+  fResult := Code;
+  TableNameVar(TablePrefix, TableName, field);
+  fInfo := Message(Text, field);
+end;
+
+procedure TTableExport.Remark(const Text, Field: RawUtf8);
+begin
+  fResult := tbrSuccessWithRemarks;
+  inc(fRemarks);
+  if fRemarks > TABLE_MAX_REMARKS then
+    exit;
+  if fInfo <> '' then
+    Append(fInfo, #10);
+  Append(fInfo, Message(Text, Field));
+end;
+
+function TTableExport.MergeField(var Field: TTableField;
+  Value: PVarData; Kind: TDocVariantKind): boolean;
+var
+  vt: TVarType;
+begin
+  result := true;
+  vt := Value^.VType and not varByRef;
+  if vt <= varNull then
+    exit;
+  if Field.ValueType = varEmpty then
+  begin
+    Field.ValueType := vt;
+    Field.Kind := kind;
+  end
+  else if Field.Kind <> kind then
+    result := Fail(tbrInvalidData, 'conflicting scalar/object/array shapes',
+      Field.ColumnName)
+  else if (kind = dvUndefined) and
+          (tboStrictTypes in fOptions) and
+          (TableScalarType(Field.ValueType) <> TableScalarType(vt)) then
+    result := Fail(tbrInvalidData, 'conflicting non-null scalar types',
+      Field.ColumnName);
+end;
+
+function TTableExport.DiscoverObject(Table: TTableData;
+  var Field: TTableField; Value: PDocVariantData; ID: TID;
+  Depth: integer): boolean;
+var
+  i: PtrInt;
+  schema: TTableSchema;
+  item: PTableField;
+  valueitem: PVarData;
+  kind: TDocVariantKind;
+begin
+  result := false;
+  if Depth >= TableMaxDepth then
+  begin
+    Fail(tbrTooDeep, 'maximum table nesting exceeded', Field.ColumnName);
+    exit;
+  end;
+  inc(Depth);
+  if Field.Objects = nil then
+    Field.Objects := TTableSchema.Create;
+  schema := Field.Objects;
+  inc(schema.Samples);
+  for i := 0 to Value^.Count - 1 do
+  begin
+    // most JSON objects keep the same property order in every row
+    if (i < schema.Count) and
+       (schema.Names[i] = Value^.Names[i]) then
+      item := @schema.Fields[i]
+    else
+      item := schema.Find(Value^.Names[i]);
+    if item = nil then
+    begin
+      if schema.Samples > 1 then
+      begin
+        if tboStrictFields in fOptions then
+        begin
+          FailTable(tbrInvalidData, 'new field after the first row',
+            Field.ColumnName, Value^.Names[i]);
+          exit;
+        end;
+        if tboFirstRowFields in fOptions then
+        begin
+          Remark('new field ignored by tboFirstRowFields', Field.ColumnName);
+          continue;
+        end;
+      end;
+      item := schema.Add(Value^.Names[i], Field.ColumnName);
+      if schema.Samples > 1 then
+        Remark('new field; earlier rows have empty cells', item^.ColumnName);
+    end;
+    if item^.Seen = schema.Samples then
+      continue; // native name lookup uses the first occurrence
+    item^.Seen := schema.Samples;
+    valueitem := VarDataFromVariant(Value^.Values[i]);
+    kind := _Safe(PVariant(valueitem)^)^.Kind;
+    if not MergeField(item^, valueitem, kind) then
+      exit;
+    case kind of
+      dvObject:
+        if not DiscoverObject(Table, item^, pointer(valueitem), ID, Depth) then
+          exit;
+      dvArray:
+        begin
+          if Depth >= TableMaxDepth then
+          begin
+            Fail(tbrTooDeep, 'maximum table nesting exceeded', item^.ColumnName);
+            exit;
+          end;
+          if item^.Child = nil then
+            item^.Child := TTableData.Create(Table, item^.ColumnName,
+              Depth + 1, {arrayrows=}true);
+          item^.Child.AddArray(pointer(valueitem), ID);
+        end;
+    end;
+  end;
+  for i := 0 to schema.Count - 1 do
+    if schema.Fields[i].Seen <> schema.Samples then
+    begin
+      if tboStrictFields in fOptions then
+      begin
+        Fail(tbrInvalidData, 'missing field', schema.Fields[i].ColumnName);
+        exit;
+      end;
+      Remark('missing field; emitted empty cells', schema.Fields[i].ColumnName);
+    end;
+  result := true;
+end;
+
+procedure TTableExport.Columns(Table: TTableData; var Field: TTableField);
+var
+  i: PtrInt;
+begin
+  case Field.Kind of
+    dvObject:
+      for i := 0 to Field.Objects.Count - 1 do
+        Columns(Table, Field.Objects.Fields[i]);
+    dvArray:
+      exit;
+  else
+    Field.Column := AddRawUtf8(Table.Info.Columns, Table.ColumnCount,
+                      Field.ColumnName);
+  end;
+end;
+
+function TTableExport.DiscoverChildren(var Field: TTableField): boolean;
+var
+  i: PtrInt;
+begin
+  result := false;
+  if Field.Child <> nil then
+    if not Discover(Field.Child) then
+      exit;
+  if Field.Objects <> nil then
+    for i := 0 to Field.Objects.Count - 1 do
+      if not DiscoverChildren(Field.Objects.Fields[i]) then
+        exit;
+  result := true;
+end;
+
+function TTableExport.Discover(Table: TTableData): boolean;
+var
+  i: PtrInt;
+  rowkind: TTableRowKind;
+begin
+  result := false;
+  fTable := Table;
+  // select the row layout before expanding any child arrays
+  for i := 0 to Table.Count - 1 do
+  begin
+    case _Safe(PVariant(Table.Rows[i].Value)^)^.Kind of
+      dvObject:
+        rowkind := trkObject;
+      dvArray:
+        rowkind := trkJson;
+    else
+      rowkind := trkScalar;
+    end;
+    if i = 0 then
+      Table.Kind := rowkind
+    else if rowkind <> Table.Kind then
+      Table.Kind := trkJson;
+  end;
+  if Table.Kind = trkJson then
+  begin
+    if not (tboMixedAsJson in fOptions) or
+       (tboStrictTypes in fOptions) then
+    begin
+      Fail(tbrInvalidData,
+        'mixed array items require tboMixedAsJson without tboStrictTypes');
+      exit;
+    end;
+    Remark('mixed array container items emitted as JSON');
+    fHasJson := true;
+  end;
+  if Table.Kind = trkObject then
+  begin
+    Table.Field.Kind := dvObject;
+    for i := 0 to Table.Count - 1 do
+      if not DiscoverObject(Table, Table.Field, pointer(Table.Rows[i].Value),
+        TID(i) + 1, Table.Depth) then
+        exit;
+  end
+  else
+  begin
+    Table.Field.ColumnName := 'value';
+    if (Table.Kind = trkScalar) and
+       (tboStrictTypes in fOptions) then
+      for i := 0 to Table.Count - 1 do
+        if not MergeField(Table.Field, Table.Rows[i].Value) then
+          exit;
+  end;
+  if Table.ArrayRows and
+     (tboKeepArrayIndex in fOptions) then
+    AddRawUtf8(Table.Info.Columns, Table.ColumnCount, '__index');
+  Columns(Table, Table.Field);
+  SetLength(Table.Info.Columns, Table.ColumnCount);
+  if fLast <> nil then
+    fLast.Next := Table;
+  fLast := Table;
+  result := DiscoverChildren(Table.Field);
+end;
+
+procedure TTableExport.FillRow(var Field: TTableField; Value: PVarData;
+  var Values: TRawUtf8DynArray);
+var
+  doc: PDocVariantData;
+  i, j: PtrInt;
+  ordered: boolean;
+begin
+  Value := VarDataFromVariant(PVariant(Value)^);
+  if Field.Column >= 0 then
+    TableText(Value, fOptions, Values[Field.Column])
+  else if (Field.Kind = dvObject) and
+          (_Safe(PVariant(Value)^)^.Kind = dvObject) then
+  begin
+    doc := pointer(Value);
+    // use direct positions only when the complete name sequence matches
+    ordered := doc^.Count = Field.Objects.Count;
+    if ordered then
+      for i := 0 to Field.Objects.Count - 1 do
+        if doc^.Names[i] <> Field.Objects.Names[i] then
+        begin
+          ordered := false;
+          break;
+        end;
+    for i := 0 to Field.Objects.Count - 1 do
+    begin
+      if ordered then
+        j := i
+      else
+        j := doc^.GetValueIndex(pointer(Field.Objects.Names[i]),
+          length(Field.Objects.Names[i]), {casesensitive=}true);
+      if j >= 0 then
+        FillRow(Field.Objects.Fields[i], pointer(@doc^.Values[j]), Values);
+    end;
+  end;
+end;
+
+procedure TTableExport.WriteTable(Table: TTableData);
+var
+  i: PtrInt;
+  row: TTableRow;
+  value: PVarData;
+begin
+  fOnWrite(tweBegin, Table.Info, nil);
+  if Table.Count <> 0 then
+    SetLength(row.Values, length(Table.Info.Columns));
+  for i := 0 to Table.Count - 1 do
+  begin
+    row.ID := succ(i);
+    row.ParentID := Table.Rows[i].ParentID;
+    // reuse storage unless a callback retained a managed copy of the row
+    EnsureUnique(row.Values);
+    if row.Values <> nil then
+      StringClearSeveral(pointer(row.Values), length(row.Values));
+    if Table.ArrayRows and
+       (tboKeepArrayIndex in fOptions) then
+      UInt32ToUtf8(Table.Rows[i].ArrayIndex, row.Values[0]);
+    value := Table.Rows[i].Value;
+    if (Table.Kind = trkJson) and
+       (_Safe(PVariant(value)^)^.Kind <> dvUndefined) then
+    begin
+      fJson.CancelAll;
+      fJson.AddVariant(PVariant(value)^);
+      fJson.SetText(row.Values[Table.Field.Column]);
+    end
+    else
+      FillRow(Table.Field, value, row.Values);
+    fOnWrite(tweRow, Table.Info, @row);
+  end;
+  fOnWrite(tweEnd, Table.Info, nil);
+end;
+
+function TTableExport.Run(const Doc: variant; const OnWrite: TOnTableWrite;
+  Options: TTableOptions; const RootName: RawUtf8;
+  out Info: RawUtf8): TTableResult;
+var
+  table: TTableData;
+  value: PVarData;
+  arrayroot: boolean;
+  tmp: TTextWriterStackBuffer;
+begin
+  fOptions := Options;
+  fOnWrite := OnWrite;
+  if not Assigned(OnWrite) then
+    Fail(tbrOutputError, 'no table writer callback')
+  else if RootName = '' then
+    Fail(tbrInvalidData, 'empty root name')
+  else
+  try
+    value := VarDataFromVariant(Doc);
+    arrayroot := _Safe(PVariant(value)^)^.Kind = dvArray;
+    fRoot := TTableData.Create(nil, TableName('', RootName),
+      ord(arrayroot), arrayroot);
+    if arrayroot then
+      fRoot.AddArray(pointer(value), 0)
+    else
+      fRoot.AddRow(value, 0, -1);
+    if Discover(fRoot) then
+    begin
+      fTable := nil;
+      try
+        if fHasJson then
+        begin
+          fJson := TJsonWriter.CreateOwnedStream(tmp);
+          fJson.CustomOptions := [twoForceJsonStandard];
+        end;
+        try
+          table := fRoot;
+          repeat
+            WriteTable(table);
+            table := table.Next;
+          until table = nil;
+        finally
+          FreeAndNil(fJson);
+        end;
+      except
+        on E: EOutOfMemory do // paranoid check - expected by tests
+          raise;
+        on E: Exception do
+          Fail(tbrOutputError, StringToUtf8(E.Message));
+      end;
+    end;
+  except
+    on E: EOutOfMemory do
+      raise;
+    on E: Exception do
+      Fail(tbrInvalidData, StringToUtf8(E.Message));
+  end;
+  if (fResult = tbrSuccessWithRemarks) and
+     (fRemarks > TABLE_MAX_REMARKS) then
+    Append(fInfo, [#10, fRemarks - TABLE_MAX_REMARKS,
+      ' additional remarks omitted']);
+  Info := fInfo;
+  result := fResult;
+end;
+
+
+type
+  TTableTextWriter = class(TTextWriter)
+  protected
+    fFormat: TTableTextFormat;
+    fCsv: TTextPairs;
+    fCount: integer;
+    fMarkdownTemp: TTextWriterStackBuffer;
+    fMarkdown: TTextWriter;
+    procedure AddText(const Text: RawUtf8); virtual;
+    procedure AddCell(const Text: RawUtf8);
+    procedure AddID(ID: TID);
+    procedure EndRow;
+  public
+    constructor Create(Format: TTableTextFormat;
+      var Temp: TTextWriterStackBuffer);
+    destructor Destroy; override;
+    procedure WriteTable(Event: TTableWriteEvent;
+      const Table: TTableInfo; Row: PTableRow); virtual;
+  end;
+
+function TableFenceLength(const Csv: RawUtf8): integer;
+var
+  i, run: PtrInt;
+begin
+  result := 3;
+  run := 0;
+  for i := 1 to length(Csv) do
+    if Csv[i] = '`' then
+    begin
+      inc(run);
+      if run >= result then
+        result := run + 1;
+    end
+    else
+      run := 0;
+end;
+
+constructor TTableTextWriter.Create(Format: TTableTextFormat;
+  var Temp: TTextWriterStackBuffer);
+begin
+  inherited CreateOwnedStream(Temp);
+  fFormat := Format;
+  if Format = ttfMarkdownCsv then
+    fMarkdown := TTextWriter.CreateOwnedStream(fMarkdownTemp);
+end;
+
+destructor TTableTextWriter.Destroy;
+begin
+  fMarkdown.Free;
+  inherited Destroy;
+end;
+
+procedure TTableTextWriter.AddText(const Text: RawUtf8);
+var
+  p, beg, last: PUtf8Char;
+begin
+  if Text = '' then
+    exit;
+  case fFormat of
+    ttfCsv,
+    ttfMarkdownCsv:
+      begin
+        if (PosExChar(',', Text) <> 0) or
+           (PosExChar('"', Text) <> 0) or
+           (PosExChar(#13, Text) <> 0) or
+           (PosExChar(#10, Text) <> 0) then
+          AddQuotedStr(pointer(Text), length(Text), '"')
+        else
+          AddString(Text);
+      end;
+    ttfMarkdownPipe:
+      begin
+        p := pointer(Text);
+        last := p + length(Text);
+        repeat
+          beg := p;
+          while (p < last) and
+                not (p^ in [#0 .. #31, #127, '!' .. '/', ':' .. '@',
+                            '[' .. '`', '{' .. '~']) do
+            inc(p);
+          AddNoJsonEscape(beg, p - beg);
+          if p = last then
+            break;
+          case p^ of
+            #13, #10:
+              begin
+                if (p^ = #13) and
+                   (p[1] = #10) then
+                  inc(p);
+                AddShorter('<br>');
+              end;
+            #0 .. #9, #11, #12, #14 .. #31, #127:
+              begin
+                Add('&', '#');
+                Add(PtrInt(ord(p^)));
+                Add(';');
+              end;
+            '&', '<', '>', '"':
+              AddShorter(HTML_ESCAPED[HTML_ESC[hfAnyWhere][p^]]);
+          else
+            Add('\', p^);
+          end;
+          inc(p);
+        until p = last;
+      end;
+  end;
+end;
+
+const
+  TABLE_SEPARATOR: array[TTableTextFormat] of TShort3 =
+    (',', ',', ' | ');
+
+procedure TTableTextWriter.AddCell(const Text: RawUtf8);
+begin
+  AddShorter(TABLE_SEPARATOR[fFormat]);
+  AddText(Text);
+end;
+
+procedure TTableTextWriter.AddID(ID: TID);
+begin
+  AddShorter(TABLE_SEPARATOR[fFormat]);
+  Add(Int64(ID));
+end;
+
+procedure TTableTextWriter.EndRow;
+begin
+  if fFormat = ttfMarkdownPipe then
+    Add(' ', '|');
+  Add(#10);
+end;
+
+procedure TTableTextWriter.WriteTable(Event: TTableWriteEvent;
+  const Table: TTableInfo; Row: PTableRow);
+var
+  i, n: PtrInt;
+  csv: RawUtf8;
+begin
+  case Event of
+    tweBegin:
+      begin
+        case fFormat of
+          ttfCsv:
+            begin
+              CancelAll;
+              if fCount = length(fCsv) then
+                SetLength(fCsv, NextGrow(fCount));
+              fCsv[fCount].Name := Table.Name;
+              inc(fCount);
+            end;
+          ttfMarkdownCsv:
+            CancelAll; // one CSV table, later appended to fMarkdown
+          ttfMarkdownPipe:
+            begin
+              AddShorter('## ');
+              AddText(Table.Name);
+              AddShorter(#10#10'| ');
+            end;
+        end;
+        AddShorter('__rowid');
+        if Table.ParentName <> '' then
+        begin
+          AddShorter(TABLE_SEPARATOR[fFormat]);
+          AddShort('__parentid');
+        end;
+        for i := 0 to high(Table.Columns) do
+          if (fFormat = ttfMarkdownPipe) and
+             (Table.Columns[i] = '__index') then
+            AddShort(' | __index')
+          else
+            AddCell(Table.Columns[i]);
+        EndRow;
+        if fFormat = ttfMarkdownPipe then
+        begin
+          n := length(Table.Columns) + ord(Table.ParentName <> '');
+          AddShorter('| ---');
+          for i := 1 to n do
+            AddShorter(' | ---');
+          EndRow;
+        end;
+      end;
+    tweRow:
+      begin
+        if fFormat = ttfMarkdownPipe then
+          Add('|', ' ');
+        Add(Int64(Row^.ID));
+        if Table.ParentName <> '' then
+          AddID(Row^.ParentID);
+        for i := 0 to high(Row^.Values) do
+          AddCell(Row^.Values[i]);
+        EndRow;
+      end;
+    tweEnd:
+      case fFormat of
+        ttfCsv:
+          SetText(fCsv[fCount - 1].Value);
+        ttfMarkdownCsv:
+          begin
+            SetText(csv);
+            fMarkdown.AddShorter('### ');
+            fMarkdown.AddString(Table.Name);
+            fMarkdown.AddShorter('.csv'#10);
+            n := TableFenceLength(csv);
+            fMarkdown.AddChars('`', n);
+            fMarkdown.AddShorter('csv'#10);
+            fMarkdown.AddString(csv);
+            if (csv = '') or
+               (csv[length(csv)] <> #10) then
+              fMarkdown.AddDirect(#10);
+            fMarkdown.AddChars('`', n);
+            fMarkdown.AddDirect(#10, #10);
+          end;
+        ttfMarkdownPipe:
+          Add(#10);
+      end;
+  end;
+end;
+
+
+function VariantToTables(const Doc: variant; const OnWrite: TOnTableWrite;
+  out Info: RawUtf8; Options: TTableOptions;
+  const RootName: RawUtf8): TTableResult;
+var
+  tables: TTableExport;
+begin
+  tables := TTableExport.Create;
+  try
+    result := tables.Run(Doc, OnWrite, Options, RootName, Info);
+  finally
+    tables.Free;
+  end;
+end;
+
+function TableLoadJson(const Json: RawUtf8; out Doc: variant;
+  out Info: RawUtf8): TTableResult;
+var
+  p: pointer;
+  len: PtrInt;
+  parser: TGetJsonField;
+  tmp: TSynTempBuffer;
+begin
+  VarClear(Doc);
+  result := tbrInvalidJson;
+  Info := 'JSON should be UTF-8';
+  p := pointer(Json);
+  len := length(Json);
+  if (BomFile(p, len) in [bomUtf16LE, bomUtf16BE]) or
+     not IsValidUtf8NotVoid(p, len) then
+    exit;
+  // JsonToAnyVariant() stops without complaining: check the whole input once
+  Info := 'Invalid JSON';
+  if not IsValidJson(p, len, {strict=}true) then
+    exit;
+  tmp.Init(p, len); // one temporary copy before in-place decoding
+  try
+    parser.Json := tmp.buf;
+    JsonToAnyVariant(Doc, parser, @JSON_TABLE, {double=}true);
+    if (parser.Json = nil) or
+       (parser.EndOfObject <> #0) then
+      VarClear(Doc)
+    else
+    begin
+      result := tbrSuccess;
+      FastAssignNew(Info);
+    end;
+  finally
+    tmp.Done;
+  end;
+end;
+
+function JsonToTables(const Json: RawUtf8; const OnWrite: TOnTableWrite;
+  out Info: RawUtf8; Options: TTableOptions;
+  const RootName: RawUtf8): TTableResult;
+var
+  doc: variant;
+begin
+  result := TableLoadJson(Json, doc, Info);
+  if result = tbrSuccess then
+    result := VariantToTables(doc, OnWrite, Info, Options, RootName);
+end;
+
+function TableToText(const Doc: variant; Format: TTableTextFormat;
+  var Md: RawUtf8; var Csv: TTextPairs; var Info: RawUtf8;
+  Options: TTableOptions; const RootName: RawUtf8): TTableResult;
+var
+  writer: TTableTextWriter;
+  temp: TTextWriterStackBuffer;
+begin
+  FastAssignNew(Md);
+  Csv := nil;
+  writer := TTableTextWriter.Create(Format, temp);
+  try
+    result := VariantToTables(Doc, writer.WriteTable, Info, Options, RootName);
+    if result in [tbrSuccess, tbrSuccessWithRemarks] then
+      // publish output only after every table has been written
+      case Format of
+        ttfCsv:
+          Csv := copy(writer.fCsv, 0, writer.fCount);
+        ttfMarkdownCsv:
+          writer.fMarkdown.SetText(Md);
+        ttfMarkdownPipe:
+          writer.SetText(Md);
+      end;
+  finally
+    writer.Free;
+  end;
+end;
+
+function VariantToMd(const Doc: variant; out Md, Info: RawUtf8;
+  Options: TTableOptions; const RootName: RawUtf8;
+  Format: TTableTextFormat): TTableResult;
+var
+  csv: TTextPairs;
+begin
+  if Format = ttfCsv then
+  begin
+    Info := 'Use VariantToCsv for CSV output';
+    result := tbrInvalidData;
+    exit;
+  end;
+  result := TableToText(Doc, Format, Md, csv, Info, Options, RootName);
+end;
+
+function JsonToMd(const Json: RawUtf8; out Md, Info: RawUtf8;
+  Options: TTableOptions; const RootName: RawUtf8;
+  Format: TTableTextFormat): TTableResult;
+var
+  doc: variant;
+begin
+  if Format = ttfCsv then
+  begin
+    Info := 'Use JsonToCsv for CSV output';
+    result := tbrInvalidData;
+    exit;
+  end;
+  result := TableLoadJson(Json, doc, Info);
+  if result = tbrSuccess then
+    result := VariantToMd(doc, Md, Info, Options, RootName, Format);
+end;
+
+function VariantToCsv(const Doc: variant; out Csv: TTextPairs;
+  out Info: RawUtf8; Options: TTableOptions;
+  const RootName: RawUtf8): TTableResult;
+var
+  md: RawUtf8;
+begin
+  result := TableToText(Doc, ttfCsv, md, Csv, Info, Options, RootName);
+end;
+
+function JsonToCsv(const Json: RawUtf8; out Csv: TTextPairs;
+  out Info: RawUtf8; Options: TTableOptions;
+  const RootName: RawUtf8): TTableResult;
+var
+  doc: variant;
+begin
+  Csv := nil;
+  result := TableLoadJson(Json, doc, Info);
+  if result = tbrSuccess then
+    result := VariantToCsv(doc, Csv, Info, Options, RootName);
+end;
+
 
 
 { ************* Markup (e.g. Markdown or Emoji) process }
@@ -6335,9 +7898,15 @@ type
     Vars: TBinDictionary;
     IfLevel: TPreprocIfLevel;       // 8-bit
     IncludeDepth: byte;             // 8-bit
-    Options: TPreprocFlags;         // 8-bit
+    Options: TPreprocFlags;         // 16-bit
     IfSkip: set of TPreprocIfLevel; // 32-bit
     IncludeFolder: TFileName;
+    Statistics: PPreprocStatistics;
+    JsonParser: ^TJsonParser; // assigned only by the JSON writer API
+    procedure JsonVerbatim(P: PUtf8Char; Len: PtrInt);
+    procedure ApplySettings(const Settings: TPreprocSettings);
+    procedure CheckText(P: PUtf8Char; Len: PtrInt; const Context: ShortString);
+    procedure IncludeError(const FileName: TFileName; const Reason: ShortString);
     procedure DoSkip(var P: PUtf8Char);
     function DoFind(Key: pointer; KeyLen: PtrInt; var ValueLen: PtrInt): pointer;
     function DoIf(P: PUtf8Char): PUtf8Char;
@@ -6376,10 +7945,79 @@ begin
   Vars.Free;
 end;
 
+procedure TPreproc.CheckText(P: PUtf8Char; Len: PtrInt;
+  const Context: ShortString);
+begin
+  if Len = 0 then
+    exit;
+  if (jppStrictInclude in Options) and
+     (PosChar(P, Len, #0) <> nil) then
+    EPreprocException.RaiseUtf8('% contains a zero byte', [Context]);
+  if (jppValidateUtf8 in Options) and
+     not IsValidUtf8NotVoid(P, Len) then
+    EPreprocException.RaiseUtf8('% is not valid UTF-8', [Context]);
+end;
+
+procedure TPreproc.ApplySettings(const Settings: TPreprocSettings);
+var
+  i, n, k, l: PtrInt;
+  p: PUtf8Char;
+  m: TPreprocMarker;
+  tmp: TSynTempAdder;
+begin
+  Statistics := Settings.Statistics;
+  if (Settings.IncludeRoot <> '') and
+     (IncludeFolder = '') and
+     (jppStrictInclude in Options) then
+    EPreprocException.RaiseUtf8('Include root does not exist: %',
+      [Settings.IncludeRoot]);
+  tmp.Init;
+  try
+    for i := 0 to high(Settings.Defines) do
+    begin
+      p := pointer(Settings.Defines[i]);
+      n := length(Settings.Defines[i]);
+      CheckText(p, n, 'definition');
+      k := PosExChar('=', Settings.Defines[i]);
+      if k <= 1 then
+        EPreprocException.RaiseUtf8('Definition % expects name=value', [i + 1]);
+      dec(k); // name length, excluding '='
+      if not (p^ in ['A'..'Z', 'a'..'z', '_']) then
+        EPreprocException.RaiseUtf8('Invalid name in definition %', [i + 1]);
+      for l := 1 to k - 1 do
+        if not (p[l] in ['A'..'Z', 'a'..'z', '0'..'9', '_', '.', '-']) then
+          EPreprocException.RaiseUtf8('Invalid name in definition %', [i + 1]);
+      l := n - k - 1;
+      if (l <> 0) and
+         IsConstantOrNumberJson(p + k + 1, l) then
+        m := pmConstNum
+      else
+        m := pmPlainString;
+      tmp.Size := 0;
+      tmp.AddDirect(AnsiChar(m));
+      tmp.Add(p + k + 1, l); // literal, no DSL injection or macro expansion
+      Vars.Update(p, tmp.Buffer, k, tmp.Size);
+    end;
+  finally
+    tmp.Store.Done;
+  end;
+end;
+
+procedure TPreproc.IncludeError(const FileName: TFileName;
+  const Reason: ShortString);
+begin
+  if jppStrictInclude in Options then
+    EPreprocException.RaiseUtf8('Include %: %', [FileName, Reason]);
+  if (jppDebugComment in Options) and
+     Assigned(OnAddDebugComment) then
+    OnAddDebugComment(Reason);
+end;
+
 function TPreproc.DoFind(Key: pointer; KeyLen: PtrInt; var ValueLen: PtrInt): pointer;
 begin
   result := Vars.Find(Key, KeyLen, @ValueLen); // from known variables/templates
-  if result = nil then
+  if (result = nil) and
+     not (jppNoNamespaces in Options) then
     result := GlobalInfoFind(Key, KeyLen, ValueLen); // global macros
 end;
 
@@ -6389,6 +8027,8 @@ var
   key: PUtf8Char;
   keylen: PtrInt;
   ending: AnsiChar;
+label
+  trimmarker;
 begin
   result := P;
   inc(result); // called with P^ = '$'
@@ -6414,17 +8054,18 @@ begin
     inc(result);
     if result^ = '$' then // $ident|$default$$ or $(ident|$(def1)|$(def2))}
     begin
-      result := Expand(result, key, keylen, KeepMarker); // cascaded defaults
+      result := Expand(result, key, keylen, {KeepMarker=}true); // cascaded defaults
       if Value = nil then // fallback to the nested $default$
       begin
         Value := key;
         Len := keylen;
       end;
       while (result^ <> ending) and
-            (result^ in [#0 .. #31]) do
+            (result^ > ' ') do
         inc(result);
-      inc(result); // skip trailing $ or }
-      exit;
+      if result^ = ending then
+        inc(result);   // skip trailing $ or }
+      goto trimmarker; // strip the selected value marker exactly once
     end;
     key := result;
     while (result^ <> ending) and
@@ -6439,6 +8080,7 @@ begin
     end;
   end;
   inc(result); // skip trailing $ } )
+trimmarker:
   if (Value = nil) or
      KeepMarker or
      (TPreprocMarker(Value^) > high(TPreprocMarker)) then
@@ -6454,17 +8096,23 @@ var
   m: TPreprocMarker;
 begin
   result := Expand(P, v, l, {KeepMarker=}true);
-  if v = nil then // this $(ident) was not found
+  if (v = nil) or
+     (L <= 0) then // this $(ident) was not found - or void
     exit;
   m := TPreprocMarker(v^);
   if m = pmTemplate then
-    exit;// { } [] not expanded in "string"
-  if m <= high(m) then // skip marker
+    exit; // { } [] not expanded in "string"
+  if byte(m) <= byte(high(m)) then
   begin
     inc(v);
     dec(l);
-  end;
-  W.AddShort(v, l);
+    if m <> pmPlainString then
+    begin
+      W.AddNoJsonEscape(v, l); // no escape for pmConstNum or pmEscapedString
+      exit;
+    end;
+  end; // out of range m would fallback to pmPlainString
+  TJsonWriter(W).AddJsonEscape(v, l); // raw text needs some escape
 end;
 
 procedure TPreproc.DoEndif(var P: PUtf8Char);
@@ -6477,7 +8125,8 @@ begin
        (IfLevel in IfSkip) then
       DoSkip(P); // continue skip as in DoIf()
   end
-  else if Assigned(OnAddDebugComment) then
+  else if (jppDebugComment in Options) and
+          Assigned(OnAddDebugComment) then
     OnAddDebugComment('$endif$ with no prior $if')
 end;
 
@@ -6517,35 +8166,41 @@ procedure TPreproc.DoSkip(var P: PUtf8Char);
 begin
   repeat
     P := PosChar(P, '$'); // use SSE2 on x86_64
-    case ParseIfDollar(P) of
-      piNone:
-        inc(P);
-      piIf:
-        begin
-          dec(P, 4); // caller should detect and execute DslIf()
-          exit;
-        end;
-      piIfDef:
-        begin
-          dec(P, 7);
-          exit;
-        end;
-      piEnd:
-        begin
-          DoEndif(P);
-          exit;
-        end;
-      piElse:
-        if IfLevel = 0 then // paranoid
-          exit
-        else if IfLevel in IfSkip then
-        begin
-          exclude(IfSkip, IfLevel); // include until $end$
-          exit;
-        end
-        else
-          include(IfSkip, IfLevel);  // and continue skip loop
-    end;
+    if P <> nil then
+      case ParseIfDollar(P) of
+        piNone:
+          inc(P);
+        piIf:
+          begin
+            dec(P, 4); // caller should detect and execute DslIf()
+            exit;
+          end;
+        piIfDef:
+          begin
+            dec(P, 7);
+            exit;
+          end;
+        piEnd:
+          begin
+            DoEndif(P);
+            exit;
+          end;
+        piElse:
+          if IfLevel = 0 then // paranoid
+            exit
+          else if IfLevel in IfSkip then
+          begin
+            exclude(IfSkip, IfLevel); // include until $end$
+            exit;
+          end
+          else
+            include(IfSkip, IfLevel);  // and continue skip loop
+      end
+      else
+      begin
+        P := @NULCHAR; // missing ending $
+        break;
+      end;
   until false;
 end;
 
@@ -6613,11 +8268,13 @@ begin // P^ = 'id$' or 'id = val$' from '$ifdef id$' or '$if id = val$'
        inc(exp.NameStart); // trim marker after raw DoFind()
        dec(exp.NameLen);
       end;
-      if exp.ValueLen < 0 then
-        match := exp.NameStart <> nil // $ifdef id$ just need DoFind() <> nil
+      if exp.ValueLen < 0 then // $ifdef id$ just need DoFind() <> nil
+        match := (exp.NameStart <> nil) and
+                 (exp.NameLen > 0)
       else if (exp.ValueStart = nil) or
               (exp.ValueLen = 0) then
-        match := (exp.NameStart = nil) or (exp.NameLen = 0) // both void
+        match := (exp.NameStart = nil) or
+                 (exp.NameLen = 0) // both void
       else
         match := EvaluateTextExpression(exp); // non-void = < > <= >= ~ ~~ * **
       inc(IfLevel);
@@ -6630,7 +8287,8 @@ begin // P^ = 'id$' or 'id = val$' from '$ifdef id$' or '$if id = val$'
         exit; // no inc(result) after DslSkip()
       end;
     end
-  else if Assigned(OnAddDebugComment) then
+  else if (jppDebugComment in Options) and
+          Assigned(OnAddDebugComment) then
     OnAddDebugComment('too many nested $if$ (15 allowed)');
   if result^ = '$' then
     inc(result);
@@ -6652,7 +8310,8 @@ begin
           include(IfSkip, IfLevel); // skip until $end$
           DoSkip(P);
         end
-      else if Assigned(OnAddDebugComment) then
+      else if (jppDebugComment in Options) and
+              Assigned(OnAddDebugComment) then
         OnAddDebugComment('$else$ with no prior $if');
     piEnd:         // $endif$
       DoEndif(P);
@@ -6682,7 +8341,11 @@ begin
           dec(level);
       '"':
         result := GotoEndOfJsonString(result);
+      '''':
+        result := GotoEndOfQuotedString(result);
     end;
+    if result^ = #0 then
+      exit; // unterminated quoted string
     inc(result);
   until false;
 end;
@@ -6690,6 +8353,7 @@ end;
 procedure TPreproc.DoRegister(m: TPreprocMarker; k, v, ve: PUtf8Char; kl: PtrInt);
 var
   beg, val: PUtf8Char;
+  vm: TPreprocMarker;
   l, vallen: PtrInt; // @vallen = PPtrInt
   comment: PShortString;
   tmp: TSynTempAdder;
@@ -6698,10 +8362,14 @@ begin
   tmp.AddDirect(AnsiChar(m)); // type: #0=template #1="string" #2=const/num
   repeat
     beg := v;
-    while (v < ve) and
-          (cardinal(PWord(v)^) <> SLASH_16) and
-          not (v^ in ['$', '#']) do
-      inc(v);
+    while (v < ve) and (v^ <> '$') do
+      if (m = pmTemplate) and
+         ((v^ = '#') or
+          (cardinal(PWord(v)^) = SLASH_16)) and
+         (v[-1] <= ' ') then
+        break
+      else
+        inc(v);
     tmp.Add(beg, v - beg);
     if v >= ve then
       break;
@@ -6711,28 +8379,44 @@ begin
         continue
       else
       begin
-        // $ident$ ${ident} $env:NAME$ ${env:NAME}
-        v := Expand(v, val, vallen, {KeepMarker=}false);
+        // $ident$ ${ident} $env:NAME$ ${env:NAME} ExpandTo() into tmp
+        v := Expand(v, val, vallen, {KeepMarker=}true);
         if val <> nil then
-          tmp.Add(val, vallen); // early evaluation of $(ident) within templates
+        begin
+          vm := TPreprocMarker(val^);
+          if (vallen > 0) and
+             (byte(vm) <= byte(high(vm))) then
+          begin
+            inc(val);
+            dec(vallen);
+          end
+          else
+            vm := pmPlainString;
+          if (m = pmEscapedString) and
+             (vm = pmPlainString) then
+            AdderJsonEscape(tmp, val, val + vallen)
+          else
+            tmp.Add(val, vallen);
+        end;
       end
     else
     begin
       // # comment or // comment
       l := v - beg;
       while (l <> 0) and
-            (v[l - 1] = ' ') do
+            (beg[l - 1] = ' ') do
         dec(l); // trim right
       if l > 0 then
       begin
-        tmp.Add(beg, l);
+        dec(tmp.Store.added, v - beg - l);
         tmp.AddDirect(#10);
       end;
       v := GotoNextLineSmall(v);
     end;
   until v >= ve;
   Vars.Update(k, tmp.Buffer, kl, tmp.Size);
-  if Assigned(OnAddDebugComment) then
+  if (jppDebugComment in Options) and
+     Assigned(OnAddDebugComment) then
   begin
     comment := tmp.Buffer;
     if tmp.Size > 100 then
@@ -6766,6 +8450,8 @@ begin // called with P^ = '$$'
     P := result; // P^ = line just after '$$$' = verbatim start
     repeat
       result := GotoNextNotSpace(GotoNextLineSmall(result));
+      if result^ = #0 then
+        exit; // unterminated $$$ block
     until (result^ = '$') and
           (cardinal(PWord(result + 1)^) = DOLLAR_16);
     if Assigned(OnVerbatim) then
@@ -6794,7 +8480,9 @@ ok: result := GotoNextNotSpace(result);
         continue;     // comment line
       'i',
       'I':
-        if (IncludeFolder <> '') and
+        if ((IncludeFolder <> '') or
+            (jppIncludeAbsolute in Options) or
+            (jppStrictInclude in Options)) and
            (result[1] in ['n', 'N']) then
           case IdemPCharSep(result + 2, 'CLUDE |SERT |') of
             0:
@@ -6804,7 +8492,7 @@ ok: result := GotoNextNotSpace(result);
               end;
             1:
               begin
-                DoInclude(GotoNextNotSpace(result + 8), {verbatim=}true);
+                DoInclude(GotoNextNotSpace(result + 7), {verbatim=}true);
                 continue; // this is a reserved keyword, never an identifier
               end;
           end;
@@ -6828,23 +8516,30 @@ ok: result := GotoNextNotSpace(result);
       '[': // value = whole {..}/[..] text block
         begin
           result := GotoTemplateEnding(result);
-          DoRegister(pmTemplate, key, value, result - 1, keylen);
+          DoRegister(pmTemplate, key, value, result, keylen);
           continue; // has been expanded and processed for any nested $if$
         end;
-      '"',
+      '"':
+        result := GotoEndOfJsonString(result);   // handles \" the JSON way
       '''':
         result := GotoEndOfQuotedString(result); // ignore double quotes within
     else
       begin
         value := result;
-        while not (result^ in [#0 .. #31, '#', '/']) do
+        while not (result^ in [#0 .. #31]) do
         begin
+          // detect real // comments but keep valid http://... content
+          if ((result^ = '#') or
+              ((result^ = '/') and (result[1] = '/'))) and
+             ((result = value) or (result[-1] <= ' ')) then
+            break;
           // unquoted value in $$ DSL section = till end of line or comment
           if result^ in ['\', '"'] then
             marker := pmPlainString; // would need W.AddJsonEscape()
           inc(result);
         end;
-        while result[-1] = ' ' do
+        while (result > value) and
+              (result[-1] = ' ') do
           dec(result); // trim right
         if IsConstantOrNumberJson(value, result - value) then
           marker := pmConstNum;
@@ -6857,69 +8552,256 @@ end;
 
 procedure TPreproc.DoInclude(P: PUtf8Char; Verbatim: boolean);
 var
-  tmp: ShortString; // to compute the expanded filename
+  tmp: ShortString; // bounded expanded name, never silently truncated
   v: PUtf8Char;
   vlen: PtrInt;     // @vlen = PPtrInt
-  c: AnsiChar;
-  txt: RawUtf8;     // UTF-8 file name
+  c, quote: AnsiChar;
+  txt: RawUtf8;     // UTF-8 file name or content
   fn: TFileName;    // RTL file name
 begin
   tmp[0] := #0;
-  if P^ in ['"', ''''] then
-    inc(P); // allow quoted "<filename>", but with no quotes support
+  quote := P^;
+  if quote in ['"', ''''] then
+    inc(P)
+  else
+    quote := #0;
   while not (P^ in [#0, '"', '''', #13, #10]) do
   begin
+    if (quote = #0) and
+       ((P^ = '#') or
+        ((P^ = '/') and
+         (P[1] = '/') and
+         (P[-1] <= ' '))) then
+      break;
     if P^ = '$' then
     begin
       P := Expand(P, v, vlen, {KeepMarker=}false);
-      if v <> nil then // include "config/general-$mode$.json"
+      if v <> nil then
+      begin
+        if vlen > high(tmp) - ord(tmp[0]) then
+        begin
+          IncludeError('', 'expanded file name exceeds 255 bytes');
+          exit;
+        end;
         AppendShortBuffer(pointer(v), vlen, high(tmp), @tmp);
+      end;
     end
     else
     begin
+      if ord(tmp[0]) = high(tmp) then
+      begin
+        IncludeError('', 'expanded file name exceeds 255 bytes');
+        exit;
+      end;
       c := P^;
       if c = InvertedPathDelim then
-        c := PathDelim; // normalize for direct cross-platform support
+        c := PathDelim;
       AppendShortCharSafe(c, tmp);
+      inc(P);
     end;
+  end;
+  if (quote <> #0) and
+     (P^ <> quote) then
+  begin
+    IncludeError('', 'unterminated quoted file name');
+    exit;
+  end;
+  while (tmp[0] <> #0) and
+        (tmp[ord(tmp[0])] <= ' ') do
+    dec(tmp[0]);
+  if tmp[0] = #0 then
+  begin
+    IncludeError('', 'empty file name');
+    exit;
   end;
   if IncludeDepth >= DSL_INCLUDE_DEPTH then
   begin
-    if Assigned(OnAddDebugComment) then
-      OnAddDebugComment('include too deep: rejected');
+    IncludeError('', 'include nesting exceeds 4 levels');
     exit;
   end;
-  fn := MakeString([tmp]);
+  fn := NormalizeFileName(Utf8DecodeToString(@tmp[1], ord(tmp[0])));
   if IsExpandedPath(fn) then
   begin
     if not (jppIncludeAbsolute in Options) then
+    begin
+      IncludeError(fn, 'absolute paths are disabled');
       exit;
-  end else if SafeFileName(fn) then
+    end;
+  end
+  else if (IncludeFolder <> '') and
+          SafePathName(fn) then
     fn := IncludeFolder + fn
   else
-    exit;
-  txt := RawUtf8FromFile(fn);
-  if Assigned(OnAddDebugComment) then
   begin
-    if txt = '' then
-      AppendShort(' not found: skipped', tmp)
-    else
-    begin
-      AppendShort(' included: size=', tmp);
-      AppendShortCardinal(length(txt), tmp);
-    end;
-    OnAddDebugComment(tmp);
-  end;
-  if txt = '' then
+    IncludeError(fn, 'relative path is unsafe or no include root was supplied');
     exit;
+  end;
+  if not FileExists(fn) then
+  begin
+    if not (jppAllowMissingInclude in Options) then
+      IncludeError(fn, 'file not found');
+    exit;
+  end;
+  txt := RawUtf8FromFile(fn); // supports BOM and UTF-16 encoding
+  if txt = '' then
+  begin
+    IncludeError(fn, 'empty or unreadable include file');
+    exit;
+  end;
+  CheckText(pointer(txt), length(txt), 'included file');
+  if Statistics <> nil then
+  begin
+    if Verbatim then
+      inc(Statistics^.InsertFiles)
+    else
+      inc(Statistics^.IncludeFiles);
+    inc(Statistics^.IncludeBytes, length(txt));
+  end;
   inc(IncludeDepth);
-  if Verbatim then
-    OnVerbatim(pointer(txt), length(txt)) // insert <filename>
-  else
-    OnAppend(pointer(txt));               // include <filename>
-  dec(IncludeDepth);
+  try
+    if Verbatim then
+      OnVerbatim(pointer(txt), length(txt))
+    else if not OnAppend(pointer(txt)) then
+      IncludeError(fn, 'included content could not be parsed');
+  finally
+    dec(IncludeDepth);
+  end;
 end;
 
+procedure TPreproc.JsonVerbatim(P: PUtf8Char; Len: PtrInt);
+var
+  tmp: TSynTempBuffer;
+  bak: TPreprocAbstract;
+begin
+  if P[Len] <> #0 then
+  begin
+    tmp.Init(P, Len); // $$$ blocks are not necessarily zero-terminated
+    P := tmp.buf;
+  end
+  else
+    tmp.buf := nil;
+  bak := JsonParser^.FmtPreproc;
+  try
+    JsonParser^.FmtPreproc := nil; // insert is parsed, but never expanded
+    if not JsonParser^.Reformat(P) then
+      IncludeError('', 'inserted or verbatim content could not be parsed');
+  finally
+    JsonParser^.FmtPreproc := bak;
+    tmp.Done;
+  end;
+end;
+
+function PreprocJsonStart(P: PUtf8Char): PUtf8Char;
+begin
+  // Same look-ahead as AddJsonReformat(), before enclosing an implicit object.
+  result := P;
+  repeat
+    result := GotoNextNotSpace(result);
+    if result^ = '#' then
+      result := GotoNextLineSmall(result + 1)
+    else if (result^ = '/') and
+            (result[1] in ['/', '*']) then
+    begin
+      P := GotoEndOfSlashComment(result);
+      if P = result then
+        exit; // preserve an incomplete comment for the parser
+      result := P;
+    end
+    else if cardinal(PWord(result)^) = DOLLAR_16 then
+    begin
+      repeat
+        inc(result);
+        if result^ = #0 then
+          exit;
+      until cardinal(PWord(result)^) = DOLLAR_16;
+      result := GotoNextLineSmall(result + 2);
+    end
+    else
+      break;
+  until result^ = #0;
+end;
+
+function JsonPreprocessToWriter(P: PUtf8Char; W: TJsonWriter;
+  Format: TTextWriterJsonFormat; const Settings: TPreprocSettings): boolean;
+var
+  preproc: TPreproc;
+  parser: TJsonParser;
+  opt: TTextWriterOptions;
+  start, stop: PUtf8Char;
+  level: integer;
+  implicit: boolean;
+begin
+  result := false;
+  if (P = nil) or
+     (W = nil) then
+    exit;
+  P := GotoNextNotSpace(P);
+  if P^ = #0 then
+    exit;
+  preproc := nil;
+  opt := W.CustomOptions;
+  level := W.HumanReadableLevel;
+  try
+    if (jppValidateUtf8 in Settings.Flags) and
+       not IsValidUtf8NotVoid(P, StrLen(P)) then
+      EPreprocException.RaiseU('Input is not valid UTF-8');
+    if not (jppNoExpand in Settings.Flags) then
+    begin
+      preproc := TPreproc.Create(Settings.Flags, Settings.IncludeRoot);
+      preproc.ApplySettings(Settings);
+    end;
+    if Format <> jsonHumanReadable then
+      W.CustomOptions := opt + [twoIndentSpaces];
+    implicit := jppJsonImplicitObject in Settings.Flags;
+    if implicit then
+    begin
+      start := PreprocJsonStart(P);
+      implicit := not (start^ in ['{', '[']);
+      if implicit and
+         (start^ <> #0) then
+      begin
+        parser.Init({strict=}true, nil);
+        stop := parser.GotoEnd(start);
+        if (stop <> nil) and
+           (PreprocJsonStart(stop)^ = #0) then
+          implicit := false; // a scalar may have leading/trailing comments
+      end;
+    end;
+    parser.InitReformat(Format, W, preproc);
+    if jppNoComments in Settings.Flags then
+      exclude(parser.Fmt, jrfComments);
+    if preproc <> nil then
+    begin
+      preproc.JsonParser := @parser;
+      preproc.OnVerbatim := preproc.JsonVerbatim; // propagate insert failures
+    end;
+    if implicit then
+    begin
+      W.AddDirect('{');
+      W.HumanReadableLevel := level + 1;
+      parser.Stack[0] := parser.State;
+      parser.StackCount := 1; // the implicit object remains open until below
+      parser.State := stObjectNameFirst;
+    end;
+    result := parser.Reformat(P) and
+              (parser.StackCount = ord(implicit));
+    if implicit and
+       result then
+    begin
+      if (jrfTrailingComma in parser.Fmt) and
+         not (parser.State in [stObjectNameFirst, stValueFirst]) then
+        W.AddDirect(',');
+      W.HumanReadableLevel := level;
+      if jrfIndent in parser.Fmt then
+        W.AddCRAndIndent;
+      W.AddDirect('}');
+    end;
+  finally
+    W.HumanReadableLevel := level;
+    W.CustomOptions := opt;
+    preproc.Free;
+  end;
+end;
 
 function JsonPreprocess(const Json: RawUtf8; Format: TTextWriterJsonFormat;
   Flags: TPreprocFlags; const IncludeRoot: TFileName): RawUtf8;
@@ -6928,7 +8810,9 @@ var
 begin
   preproc := TPreProc.Create(Flags, IncludeRoot);
   try
-    JsonBufferReformat(pointer(Json), result, Format, preproc);
+    preproc.CheckText(pointer(Json), length(Json), 'input');
+    if not JsonBufferReformat(pointer(Json), result, Format, preproc) then
+      FastAssignNew(result);
   finally
     preproc.Free;
   end;
@@ -6941,6 +8825,7 @@ var
 begin
   preproc := TPreProc.Create(Flags, IncludeRoot);
   try
+    preproc.CheckText(pointer(Json), length(Json), 'input');
     result := JsonBufferReformatToFile(pointer(Json), Dest, Format, preproc);
   finally
     preproc.Free;
@@ -6954,6 +8839,7 @@ var
 begin
   preproc := TPreProc.Create(Flags, IncludeRoot);
   try
+    preproc.CheckText(pointer(Json), length(Json), 'input');
     result := JsonBufferReformatToStream(pointer(Json), Dest, Format, preproc);
   finally
     preproc.Free;
@@ -6968,7 +8854,7 @@ type
   TPreprocText = class(TPreproc)
   protected
     W: TTextWriter;
-    LineFeed: cardinal;    // e.g. #13#10
+    LineFeed: cardinal;    // e.g. #13#10 encoded as 32-bit constant
     LineFeedLen: cardinal; // e.g. 2
     // TPreprocAbstract OnAppend/OnVerbatim/OnAddDebugComment callbacks
     function TextAppend(P: PUtf8Char): boolean;
@@ -6978,12 +8864,6 @@ type
     function TextPreprocessToWriter(P: PUtf8Char; Dest: TTextWriter): boolean;
   end;
 
-function TPreprocText.TextAppend(P: PUtf8Char): boolean;
-begin
-  W.AddNoJsonEscape(P, StrLen(P));
-  result := true; // not used anyway
-end;
-
 procedure TPreprocText.TextVerbatim(P: PUtf8Char; Len: PtrInt);
 begin
   W.AddNoJsonEscape(P, Len);
@@ -6991,18 +8871,58 @@ end;
 
 procedure TPreprocText.TextComment(const info: ShortString);
 begin
-  PCardinal(W.B + 1)^ := LineFeed;
-  inc(W.B, LineFeedLen);
+  W.AddShort4(LineFeed, LineFeedLen);
   W.AddShort('# debug: ');
   W.AddShort(info);
   PCardinal(W.B + 1)^ := LineFeed;
   inc(W.B, LineFeedLen);
 end;
 
-function TPreprocText.TextPreprocessToWriter(P: PUtf8Char; Dest: TTextWriter): boolean;
+function TPreprocText.TextAppend(P: PUtf8Char): boolean;
 var
   B, v: PUtf8Char;
   l: PtrInt;
+begin
+  result := false;
+  if (P = nil) or
+     (W = nil) then
+    exit;
+  repeat
+    // copy all literal text preceding the next '$'
+    B := P;
+    while (P^ <> #0) and
+          (P^ <> '$') do
+      inc(P);
+    if P > B then
+      W.AddNoJsonEscape(B, P - B);
+    if P^ = #0 then
+      break;
+    if P[1] = '$' then
+      // $$ ... $$ or $$$ ... $$$
+      P := ParseSection(P)
+    else if WasIf(P) then
+      // $if$ / $else$ / $endif$ - WasIf updates P, potentially skipping content
+      continue
+    else if P[1] in ['(', '{'] then
+    begin
+      // $(ident) or ${ident}
+      P := Expand(P, v, l, {KeepMarker=}false);
+      if v <> nil then
+        W.AddNoJsonEscape(v, l);
+    end
+     else
+    begin
+      // '$' is kept verbatim (e.g. $ident$ is not expanded in text mode)
+      W.AddDirect('$');
+      inc(P);
+    end;
+  until false;
+  result := true;
+end;
+
+function TPreprocText.TextPreprocessToWriter(P: PUtf8Char; Dest: TTextWriter): boolean;
+var
+  B: PUtf8Char;
 begin
   result := false;
   if (P = nil) or
@@ -7031,32 +8951,40 @@ begin
     end;
     P := B;
   end;
-  // main loop
-  repeat
-    while (P^ <> #0) and
-          (P^ <> '$') do
-      inc(P);
-    W.AddNoJsonEscape(B, P - B);
-    if P^ = #0 then
-      break;
-    if P[1] = '$' then
-    begin
-      B := ParseSection(P);    // $$ ... $$ DSL section: include + vars
-      continue;
-    end;
-    B := P;
-    if WasIf(B) then           // $if$ $else$ $endif$
-      continue;
-    if P[1] in ['(', '{'] then // only $(ident) ${ident} - not $ident$
-    begin
-      P := Expand(P, v, l, {keepmarker=}false);
-      if v <> nil then
-        W.AddShort(v, l);
-    end
-    else
-      inc(P); // this was not $(ident) -> write verbatim and continue
-  until false;
-  result := true;
+  result := TextAppend(P);
+end;
+
+
+function TextPreprocessToWriter(P: PUtf8Char; W: TTextWriter;
+  const Settings: TPreprocSettings): boolean;
+var
+  preproc: TPreprocText;
+  len: PtrInt;
+begin
+  result := false;
+  if (P = nil) or
+     (W = nil) then
+    exit;
+  len := 0;
+  if Settings.Flags * [jppNoExpand, jppValidateUtf8] <> [] then
+    len := StrLen(P);
+  if (jppValidateUtf8 in Settings.Flags) and
+     (len <> 0) and
+     not IsValidUtf8NotVoid(P, len) then
+    EPreprocException.RaiseU('Input is not valid UTF-8');
+  if jppNoExpand in Settings.Flags then
+  begin
+    W.AddNoJsonEscape(P, len);
+    result := true;
+    exit;
+  end;
+  preproc := TPreprocText.Create(Settings.Flags, Settings.IncludeRoot);
+  try
+    preproc.ApplySettings(Settings);
+    result := preproc.TextPreprocessToWriter(P, W);
+  finally
+    preproc.Free;
+  end;
 end;
 
 
@@ -7073,6 +9001,7 @@ begin
     exit;
   preproc := TPreprocText.Create(Flags, IncludeRoot);
   try
+    preproc.CheckText(pointer(Text), length(Text), 'input');
     W := TTextWriter.Create(Dest, @temp, SizeOf(temp));
     try
       result := preproc.TextPreprocessToWriter(pointer(Text), W);
@@ -7107,8 +9036,7 @@ begin
   try
     F := TFileStreamEx.Create(Dest, fmCreate);
     try
-      TextPreprocessToStream(Text, F, Flags, IncludeRoot);
-      result := true;
+      result := TextPreprocessToStream(Text, F, Flags, IncludeRoot);
     finally
       F.Free;
     end;

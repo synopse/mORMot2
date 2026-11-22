@@ -536,10 +536,10 @@ type
     fCurrentID: integer; // thread-safe TRestClientCallbackID sequence generator
     function UnRegisterByIndex(index: integer): boolean;
   public
-    /// the associated REST instance
-    Owner: TRestClientUri;
     /// how many callbacks are registered
     Count: integer;
+    /// the associated REST instance
+    Owner: TRestClientUri;
     /// list of registered interface callbacks
     List: array of TRestClientCallbackItem;
     /// initialize the storage list
@@ -738,6 +738,7 @@ type
     // remote services, and more generaly any Services.Resolve() call
     // - create and initialize the internal TServiceContainerClient if no
     // service interface has been registered yet
+    // - Services registration is not thread-safe and should be done at startup
     // - may be used to inject some dependencies, which are not interface-based
     // remote services, but internal IoC, without the ServiceRegister()
     // or ServiceDefine() methods - e.g.
@@ -752,6 +753,7 @@ type
     // - that is, server side will be called to check for the availability of
     // each interface
     // - you can specify an optional custom contract for the first interface
+    // - Services registration is not thread-safe and should be done at startup
     function ServiceRegister(const aInterfaces: array of PRttiInfo;
       aInstanceCreation: TServiceInstanceImplementation = sicSingle;
       const aContractExpected: RawUtf8 = ''): boolean; overload; virtual;
@@ -765,6 +767,7 @@ type
     // - that is, server side will be called to check for the availability of
     // each interface
     // - you can specify an optional custom contract for the first interface
+    // - Services registration is not thread-safe and should be done at startup
     function ServiceRegister(aInterface: PRttiInfo;
       aInstanceCreation: TServiceInstanceImplementation = sicSingle;
       const aContractExpected: RawUtf8 = '';
@@ -773,15 +776,18 @@ type
     // - will return TRUE on success, filling Obj output variable with the
     // corresponding interface instance
     // - will return FALSE on error
+    // - Services registration is not thread-safe and should be done at startup
     function ServiceRegisterClientDriven(aInterface: PRttiInfo; out Obj;
       const aContractExpected: RawUtf8 = ''): boolean; overload;
     /// register one or several Services on the client side via their interfaces
+    // - Services registration is not thread-safe and should be done at startup
     // - this method expects the interface(s) to have been registered previously:
     // ! TInterfaceFactory.RegisterInterfaces([TypeInfo(IMyInterface),...]);
     function ServiceDefine(const aInterfaces: array of TGuid;
       aInstanceCreation: TServiceInstanceImplementation = sicSingle;
       const aContractExpected: RawUtf8 = ''): boolean; overload;
     /// register a Service on the client side via its interface
+    // - Services registration is not thread-safe and should be done at startup
     // - this method expects the interface to have been registered previously:
     // ! TInterfaceFactory.RegisterInterfaces([TypeInfo(IMyInterface),...]);
     function ServiceDefine(const aInterface: TGuid;
@@ -789,6 +795,7 @@ type
       const aContractExpected: RawUtf8 = '';
       aIgnoreAnyException: boolean = true): TServiceFactoryClient; overload;
     /// register and retrieve the sicClientDriven Service instance
+    // - Services registration is not thread-safe and should be done at startup
     // - this method expects the interface to have been registered previously:
     // ! TInterfaceFactory.RegisterInterfaces([TypeInfo(IMyInterface),...]);
     function ServiceDefineClientDriven(const aInterface: TGuid; out Obj;
@@ -796,6 +803,7 @@ type
     /// register a sicShared Service instance communicating via JSON objects
     // - will force SERVICE_CONTRACT_NONE_EXPECTED, ParamsAsJsonObject=true and
     // ResultAsJsonObjectWithoutResult=true
+    // - Services registration is not thread-safe and should be done at startup
     // - may be used e.g. for accessing a sessionless public REST/JSON API, i.e.
     // ! TRestServer.ServiceDefine(...).ResultAsJsonObjectWithoutResult := true
     // - this method expects the interface to have been registered previously:
@@ -1309,9 +1317,9 @@ class function TRestClientAuthentication.ClientGetSessionKey(
   Sender: TRestClientUri; User: TAuthUser;
   const aNameValueParameters: array of const): RawUtf8;
 var
-  resp, hdr: RawUtf8;
+  resp, hdr, name: RawUtf8;
   values: array[0..high(AUTH_N)] of TValuePUtf8Char;
-  cookie: PUtf8Char;
+  cookie, eq: PUtf8Char;
   a: integer;
 begin
   if (Sender.CallBackGet('auth', aNameValueParameters, resp,
@@ -1350,15 +1358,33 @@ begin
       Sender.fComputeSignature := TRestClientAuthenticationSignedUri.
         GetComputeSignature(TRestAuthenticationSignedUriAlgo(a))
   end
-  else
+  else if InheritsFrom(TRestClientAuthenticationHttpAbstract) then
   begin
-    cookie := FindNameValue(pointer(hdr), 'SET-COOKIE: ');
-    if cookie = nil then
-      exit; // use the default suaCRC32 algorithm as fallback
-    cookie := GotoNextNotSpace(cookie);
-    if IdemPChar(cookie, '__SECURE-') then
-      inc(cookie, 9); // e.g. if rsoCookieSecure is in Server.Options
-    GetNextItem(cookie, ';', Sender.fSession.IDHexa8); // use first cookie
+    // only HTTP-based authentication transmits its session as cookie
+    // (see TRestClientAuthenticationHttpAbstract.ClientSessionSign) - URI-based
+    // schemes (e.g. the default suaCRC32 signature) should never use a cookie,
+    // which may have been set by a reverse proxy (e.g. Azure App Proxy), since
+    // a non-void IDHexa8 would also skip the PrivateKey computation in
+    // SessionCreate() and make any further signature fail with 403
+    // - the server names its session cookie after Model.Root: search for it
+    // among all Set-Cookie headers, ignoring any other (e.g. proxy) cookie
+    name := StringReplaceChars(Sender.fModel.Root, '/', '_'); // as SetOutCookie()
+    cookie := pointer(hdr);
+    repeat
+      cookie := FindNameValue(cookie, 'SET-COOKIE: ');
+      if cookie = nil then
+        exit; // no session cookie: use the default suaCRC32 algorithm
+      cookie := GotoNextNotSpace(cookie);
+      if IdemPChar(cookie, '__SECURE-') then
+        inc(cookie, 9); // e.g. if rsoCookieSecure is in Server.Options
+      eq := PosChar(cookie, '='); // bounded by #0, so never reads beyond hdr
+      if (eq <> nil) and
+         IdemPropNameU(name, cookie, eq - cookie) then
+      begin
+        GetNextItem(cookie, ';', Sender.fSession.IDHexa8); // 'root=value'
+        exit;
+      end;
+    until false;
   end;
 end;
 
@@ -2291,15 +2317,19 @@ begin
         on E: Exception do
         begin
           InternalClose;
-          if (started = 0) or
-             (isDestroying in fInternalState) then
+          if isDestroying in fInternalState then
             exit;
+          exc := PPointer(E)^; // no SetLastException() which calls OnFailed()
+          fLastErrorCode := HTTP_CLIENTERROR;
+          fLastErrorException := exc;
+          ObjectToJson(E, fLastErrorMessage, TEXTWRITEROPTIONS_DEBUG);
           if Assigned(fOnConnectionFailed) then
             try
               fOnConnectionFailed(self, E, nil);
             except
             end;
-          exc := PPointer(E)^;
+          if started = 0 then
+            exit;
         end;
       end;
       if InternalIsOpen then
@@ -2332,6 +2362,9 @@ begin
   finally
     fSafe.Leave;
   end;
+  fLastErrorCode := HTTP_SUCCESS;
+  fLastErrorMessage := '';
+  fLastErrorException := nil;
   if Assigned(fOnConnected) then
     try
       with fLogClass.Enter(self, 'IsOpen: call OnConnected') do
@@ -2372,6 +2405,7 @@ var
     try
       InternalClose; // e.g. websockets calls OnWebSocketsClosed to unregister
     finally
+      FreeAndNilSafe(fFakeCallbacks);
       inherited Destroy; // fModel.Free if owned by this TRest instance
       FreeAndNilSafe(fBackgroundThread); // should be done after fServices.Free
       fOnIdle := nil;
@@ -2385,7 +2419,6 @@ begin
   {$ifdef OSWINDOWS}
   fServiceNotificationMethodViaMessages.Wnd := 0; // disable notification
   {$endif OSWINDOWS}
-  FreeAndNilSafe(fFakeCallbacks);
   try
     // unlock all records still locked by this client
     if fModel <> nil then
@@ -2714,10 +2747,11 @@ begin
           exit;
       end;
       StatusCodeToReason(Call.OutStatus, StatusMsg);
-      if Call.OutBody = '' then
-        fLastErrorMessage := StatusMsg
-      else
-        fLastErrorMessage := Call.OutBody;
+      if Call.OutBody <> '' then
+        fLastErrorMessage := Call.OutBody
+      else if (Call.OutStatus <> HTTP_CLIENTERROR) or
+              (fLastErrorException = nil) then
+        fLastErrorMessage := StatusMsg;
       InternalLog('% % returned % (%) with message %',
         [method, url, Call.OutStatus, StatusMsg, fLastErrorMessage],
         LOG_TRACEERROR[Call.OutStatus <> HTTP_NOTFOUND]); // 404 is not fatal

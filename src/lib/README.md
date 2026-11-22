@@ -89,6 +89,7 @@ Security Support Provider Interface (SSPI) Support on Windows
 - Middle-Level SSPI Wrappers
 - High-Level Client and Server Authentication using SSPI e.g. in `mormot.core.rest`
 - Lan Manager Access Functions
+- Low-Level Cryptography Next Generation (CNG) API
 
 ### mormot.lib.gssapi
 

@@ -58,7 +58,7 @@ type
   PDecimal128Bits = ^TDecimal128Bits;
 
   /// enough characters to contain any TDecimal128 text representation
-  TDecimal128Str = array[0..42] of AnsiChar;
+  TDecimal128Str = TTemp47;
 
   /// some special 128-bit decimal values
   // - see TDecimal128.SetSpecial to set the corresponding value
@@ -1719,6 +1719,9 @@ begin
   end;
 end;
 
+const
+  BIGPOW10: QWord = 100000000000000000;
+
 function TDecimal128.FromText(text: PUtf8Char; textlen: integer): TDecimal128SpecialValue;
 var
   P, PEnd: PUtf8Char;
@@ -1908,7 +1911,7 @@ begin
   end
   else
   begin
-    mul64x64(signhi, 100000000000000000, sign);
+    mul64x64(signhi, BIGPOW10, sign);
     inc(sign.L, signlo);
     {$ifdef FPC}
     if sign.L < signlo then
@@ -2445,7 +2448,7 @@ var
         exit
       else
         inc(L);
-    Iso8601ToDateTimePUtf8CharVar(P + 1, L, varvalue.VDate);
+    Iso8601ToDateTimePUtf8CharVar(P + 1, L - 1, varvalue.VDate);
     if varvalue.VDate <> 0 then
       Return(betDateTime, P + L + 1, GotoEndOfObject);
   end;

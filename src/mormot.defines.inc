@@ -101,6 +101,9 @@
 {.$define NOGSSAPIAUTH}
 // disable POSIX mormot.lib.gsssapi support in mormot.rest.client/server units
 
+{.$define NOKERBEROSCLIENT}
+// disable SSPI/GSSAPI support in mormot.net.client.pas
+
 {.$define NOPOINTEROFFSET}
 // disable TOrmTable offsets on 64-bit for JSON > 2GB
 
@@ -149,12 +152,12 @@
     HASCODEPAGE HASVARUSTRING STRCNT32 DACNT32 HASDYNARRAYTYPE HASQWORD
     HASITERATORS HASIMPLICITOPERATOR HASDBFTWIDE HASDBFNEW
     HASTTHREADSTART HASTTHREADTERMINATESET HASINTERFACEASTOBJECT
-    HASEXTRECORDRTTI HASSLOWMUL64
+    HASEXTRECORDRTTI HASSLOWMUL64 HASBITINTRINSICS
     HAS_UI HAS_UI_VCL_LCL HAS_UI_PDF
     CPU32 CPU64
     CPUINTEL CPUX86 CPUX64 CPUARM3264 CPUARM CPUAARCH64 CPUX86NOTPIC
     NOASMBLOCK KEEP_STACKFRAMES
-    ASMINTEL ASMINTELNOTPIC ASMSSE2 ASMAESNI
+    ASMINTEL ASMINTELNOTPIC ASMSSE2 ASMAESNI ASMARM ASMARM64 ASMINTELARM
     ASMX86 ASMX86NOTPIC ASMX64 ASMX64NOTPIC ASMX64AVX0 ASMX64AVX1
     ABIX86 ABIX64 ABIWINX64 ABISYSVX64 ABIA32 ABIA64 ABIWINA64 ABISYSVA64
     TSYNEXTENDED80 EXTENDEDTOSHORT_USESTR DOUBLETOSHORT_USEGRISU
@@ -199,11 +202,12 @@
   {$define HASINLINE}
   {$define HASINLINEFPC}      // Delphi can't inline local constants
   {$define HASINLINEWINAPI}   // Delphi has troubles inlining Windows API calls
-  {$define HASSAFEINLINE}     // Delphi 2007-2009 have troubles inlining
+  {$define HASSAFEINLINE}     // Delphi 2007-2010 have troubles inlining
   {$define HASSAFEFPCINLINE}  // FPC 3.2.0 specific inlining troubles
   {$define NODELPHIASM}       // avoid e.g. low-level System.@LStrFromPCharLen
   {$define HASDYNARRAYTYPE}   // eltype2 field, used e.g. for T*ObjArray
   {$define HASQWORD}
+  {$define HASBITINTRINSICS}  // e.g. BsfDWord()
   {$define HASITERATORS}
   {$define HASSAFEITERATORS}
   {$define HASIMPLICITOPERATOR}
@@ -216,8 +220,7 @@
   {$define USERECORDWITHMETHODS}   // use "object" only for Delphi 7/2007
   {$define USERECORDWITHMETHODSSAFE}
   {$define FPC_OR_UNICODE}
-  {$define FPC_OR_DELPHIXE}        // to circumvent Delphi internal errors
-  {$define FPC_OR_DELPHIXE4}
+  {$define FPC_OR_DELPHIXE4}       // circumvent Delphi < XE4 internal errors
 
   { warnings are defined below, after FPC versions identification }
 
@@ -384,6 +387,8 @@
       {$ASMMODE INTEL}         // as Delphi requires
       {$define CPUINTEL}
       {$define ASMINTEL}
+      {$define ASMINTELARM}
+      {$define ASMINTELARM64}
       {$define ASMX64}
       {$define FPC_CODEALIGN}  // we can use {$CODEALIGN LOOP=16} conditional
       {$define FPC_CPUX64}
@@ -405,6 +410,10 @@
       {$define CPUARM3264}
       {$define FPC_CPUARM}     // circumvent bug e.g. about sets in registers
       {$define FPC_CPUAARCH64}
+      {$define ASMARM}         // Locked*() in mormot.core.base.asmarm.inc
+      {$define ASMARM64}
+      {$define ASMINTELARM}
+      {$define ASMINTELARM64}
       {$ifdef OSWINDOWS}       // aarch64-win64 compatibility
         {$undef FPC_SINGLEABI}
         {$define DISPINVOKE_NO_OLESTR} // avoid late binding _ := 'constant'
@@ -417,6 +426,8 @@
       {$define FPC_INTEL}
       {$ASMMODE INTEL}         // as Delphi requires
       {$define ASMINTEL}
+      {$define ASMINTELARM}
+      {$define ASMINTELARM64}
       {$define ASMX86}
       {$define CPUINTEL}
       {.$define FPC_CODEALIGN} // no need of {$CODEALIGN LOOP=16} conditional
@@ -438,6 +449,10 @@
     {$ifdef CPUARM}
       {$define CPUARM3264}
       {$define FPC_CPUARM}
+      {$ifdef CPUARM_HAS_DMB}  // ARMv7+
+        {$define ASMARM}       // Locked*() in mormot.core.base.asmarm.inc
+        {$define ASMINTELARM}
+      {$endif CPUARM_HAS_DMB}
     {$endif CPUARM}
     {$define STRCNT32}         // 32-bit TAnsiRec.Ref
     {$define DACNT32}          // 32-bit TDynArrayRec.refCnt
@@ -579,6 +594,7 @@
       http://blog.synopse.info/post/2011/01/29/record-and-object-issue-in-Delphi-2010 }
     {$define UNDIRECTDYNARRAY}
     {$define HASTTHREADFINISHED}    // Delphi 2009 introduced TThread.Finished
+    {$define HASRAISEEXCEPTOBJPROC} // Delphi 2009+ RaiseExceptObjProc() global
   {$else}
     {$define HASNOSTATICRTTI}        // Delphi 7/2007 has no TypeInfo(TGuid)
   {$endif UNICODE}
@@ -630,6 +646,8 @@
     {$endif CPUARM64}
     {$ifdef CPUINTEL}
       {$define ASMINTEL}
+      {$define ASMINTELARM}
+      {$define ASMINTELARM64}
     {$else}
       {$ifdef CPU64BITS}  // handle non INTEL/AMD Delphi targets
         {$define CPU64}
@@ -643,6 +661,8 @@
     {$define CPUINTEL}
     {$define CPUX86}
     {$define ASMINTEL}
+    {$define ASMINTELARM}
+    {$define ASMINTELARM64}
     {$define ASMX86}
   {$ifend}
 
@@ -686,9 +706,7 @@
     {$if CompilerVersion >= 21.0}
       {$define ISDELPHI2010}
       {$define USERECORDWITHMETHODSSAFE} // circumvent Delphi 2009 issue
-      {$define HASSAFEINLINE}     // Delphi 2007-2009 have troubles inlining :(
-      {$define HASSAFEFPCINLINE}  // FPC specific inlining troubles
-      {$define HASDYNARRAYTYPE}   // eltype2 field, used e.g. for T*ObjArray
+      {$define HASDYNARRAYTYPE}      // eltype2 field, used e.g. for T*ObjArray
       {$define HASEXTRECORDRTTI}     // Delphi 2010 extended RTTI for records
       {$define HASIMPLICITOPERATOR}  // Delphi 2010+ "implicit operator" is ok
       {$define ISDELPHI2010_OR_FPC_NEWRTTI}
@@ -703,10 +721,11 @@
       {$endif NEWRTTINOTUSED}
     {$ifend}
     {$if CompilerVersion >= 22.0} // = Delphi XE
-      {$define FPC_OR_DELPHIXE}   // Delphi 2007/2009/2010 inlining bugs
       {$define ISDELPHIXE}
       {$define HASGENERICS}       // somewhat unusable generics (?)
       {$define ORMGENERICS}
+      {$define HASSAFEINLINE}     // Delphi 2007-2010 have troubles inlining :(
+      {$define HASSAFEFPCINLINE}  // FPC specific inlining troubles
     {$ifend}
     {$if CompilerVersion >= 23.0} // = Delphi XE2
       {$define ISDELPHIXE2}
@@ -777,6 +796,7 @@
     {$if CompilerVersion >= 34.0} // = Delphi 10.4
       {$define ISDELPHI104}
       {$define HASCACHEDRESSTRING} // introducing LoadResStringFunc()
+      {$define HASBITINTRINSICS}   // introducing CountTrailingZeros32()
     {$ifend}
     {$if CompilerVersion >= 35.0} // = Delphi 11.x Alexandria
       {$define ISDELPHI11}
@@ -826,7 +846,6 @@
   {$else}
     {$define POSIXDELPHI}
     {$define NOASMBLOCK}             // no "asm" block support by LLVM compilers
-    {$define NOEXCEPTIONINTERCEPT}   // TODO: interception for Delphi POSIX
     {$ifdef CPUX64}
       {$define DISPINVOKE_SYSVAMD64} // use SysV AMD64 va_list layout
     {$endif CPUX64}
@@ -942,6 +961,10 @@
   {$ifdef NOASMBLOCK}
     {$undef ASMINTEL}
     {$undef ASMINTELNOTPIC}
+    {$undef ASMARM}
+    {$undef ASMARM64}
+    {$undef ASMINTELARM}
+    {$undef ASMINTELARM64}
     {$undef ASMSSE2}
     {$undef ASMAESNI}
     {$undef ASMX86}
@@ -985,9 +1008,10 @@
   {$endif CPU32}
   {$ifdef OSLINUX}
     {$define OSLINUXANDROID}
+    {$define HAS_IP_PKTINFO}  // SetPacketInfo/RecvFromIf/SendToIf support
     {$define OSELF}
     {$ifdef FPC}
-      {$define OSFUTEX}   // direct futex syscall on FPC Linux
+      {$define OSFUTEX}       // direct futex syscall on FPC Linux
     {$endif FPC}
     {$ifdef ABIX86}
       {$define OSLINUXINTEL}
@@ -1014,10 +1038,14 @@
   {$endif OSANDROID}
   {$ifdef OSDARWIN}
     {$define OSBSDDARWIN}     // OSBSDDARWIN = OSBSD or OSDARWIN
+    {$define HAS_IP_PKTINFO}  // SetPacketInfo/RecvFromIf/SendToIf support
   {$endif OSDARWIN}
   {$ifdef OSBSD}
     {$define OSBSDDARWIN}     // OSBSDDARWIN = OSBSD or OSDARWIN
     {$define OSELF}           // OSX has its own macho executable format
+    {$ifdef OSNETBSD}         // other BSD (especially OpenBSD) are too diverse
+      {$define HAS_IP_PKTINFO}
+    {$endif OSNETBSD}
   {$endif OSBSD}
 {$endif OSWINDOW}
 

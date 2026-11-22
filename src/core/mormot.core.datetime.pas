@@ -191,7 +191,6 @@ function Iso8601CheckAndDecode(P: PUtf8Char; L: PtrInt;
 // - calls internally Iso8601ToTimeLogPUtf8Char() and returns true if contains
 // at least a valid year (YYYY)
 function IsIso8601(P: PUtf8Char; L: PtrInt): boolean;
-  {$ifdef HASINLINE}inline;{$endif}
 
 /// Time conversion from ISO-8601 (with no Date part)
 // - handle 'hhmmss' and 'hh:mm:ss' format
@@ -250,7 +249,7 @@ function DateTimeToIso8601(D: TDateTime; Expanded: boolean; FirstChar: AnsiChar 
 
 /// raw basic Date/Time conversion into ISO-8601 RawUtf8
 procedure DateTimeToIso8601Var(D: TDateTime; Expanded, WithMS: boolean;
-  FirstChar, QuotedChar: AnsiChar; var Result: RawUtf8);
+  FirstChar, QuotedChar: AnsiChar; var Result: RawUtf8; AlwaysDateAndTime: boolean = true);
 
 /// raw basic Date/Time conversion into ISO-8601 ShortString
 function DateTimeToIso8601Short(D: TDateTime; Expanded: boolean = true;
@@ -266,7 +265,7 @@ function DateTimeToIso8601Short(D: TDateTime; Expanded: boolean = true;
 // - returns the number of chars written to P^ buffer
 function DateTimeToIso8601(P: PUtf8Char; D: TDateTime; Expanded: boolean;
   FirstChar: AnsiChar = 'T'; WithMS: boolean = false;
-  QuotedChar: AnsiChar = #0): PtrInt; overload;
+  QuotedChar: AnsiChar = #0; AlwaysDateAndTime: boolean = true): PtrInt; overload;
 
 /// basic Date conversion into ISO-8601
 // - use 'YYYYMMDD' format if not Expanded
@@ -1606,11 +1605,11 @@ begin
      (Day = 0) or             // 1..xx
      (cardinal(Year - 1) >= 9999) then  // 1..9999 as FPC RTL itself
     exit;
-  {$ifdef WIN64DELPHI}
+  {$ifdef CPU64}
   d := (QWord(Year) * DIV100_INV) shr 37; // we can avoid div on Delphi Win64
   {$else}
   d := Year div 100; // use fast reciprocal on FPC, plain div on Delphi Win32
-  {$endif WIN64DELPHI}
+  {$endif CPU64}
   m := Year - (d * 100);
   if Day > DaysPerMonth[(Year and 3 = 0) and // inlined IsLeapYear()
             ((m <> 0) or ((d and 3) = 0))][Month] then
@@ -1744,19 +1743,127 @@ begin
   result := tmp;
 end;
 
+function Iso8601FractionToMS(P: PUtf8Char; L: PtrInt): cardinal;
+  {$ifdef HASINLINE} inline; {$endif}
+var
+  c: cardinal;
+begin
+  result := 0;
+  if L <= 0 then
+    exit;
+  c := ord(P[0]) - 48;
+  if c > 9 then
+    exit;
+  result := c * 100;
+  if L < 2 then
+    exit;
+  c := ord(P[1]) - 48;
+  if c > 9 then
+    exit;
+  inc(result, c * 10);
+  if L < 3 then
+    exit;
+  c := ord(P[2]) - 48;
+  if c <= 9 then
+    inc(result, c);
+end;
+
+// internal inlined ISO-8601 time text decoder used by other functions
+type
+  TIsoTime = record
+    H, M, S, MS: cardinal;
+  end;
+
+function _Iso8601DecodeTime(P: PUtf8Char; L: PtrInt; var iso: TIsoTime): boolean;
+  {$ifdef HASINLINE}inline;{$endif}
+var
+  i: PtrInt;
+begin
+  result := false;
+  if P = nil then
+    exit;
+  if L = 0 then
+    while P[L] <> #0 do
+      inc(L);
+  i := 0;
+  if (L > 0) and (P[0] = 'T') then
+    inc(i);
+  if (L - i < 2) or
+     not (P[i] in ['0'..'9']) or
+     not (P[i + 1] in ['0'..'9']) then
+    exit;
+  iso.H := (ord(P[i]) - 48) * 10 + ord(P[i + 1]) - 48;
+  iso.M := 0;
+  iso.S := 0;
+  iso.MS := 0;
+  if iso.H >= 24 then
+    exit;
+  inc(i, 2);
+  if (i = L) or ((i + 1 = L) and (P[i] = 'Z')) then
+  begin
+    result := true;
+    exit;
+  end;
+  if P[i] = ':' then
+    inc(i)
+  else if not (P[i] in ['0'..'9']) then
+    exit;
+  if (L - i < 2) or
+     not (P[i] in ['0'..'9']) or
+     not (P[i + 1] in ['0'..'9']) then
+    exit;
+  iso.M := (ord(P[i]) - 48) * 10 + ord(P[i + 1]) - 48;
+  if iso.M >= 60 then
+    exit;
+  inc(i, 2);
+  if (i = L) or ((i + 1 = L) and (P[i] = 'Z')) then
+  begin
+    result := true;
+    exit;
+  end;
+  if P[i] = ':' then
+    inc(i)
+  else if not (P[i] in ['0'..'9']) then
+    exit;
+  if (L - i < 2) or
+     not (P[i] in ['0'..'9']) or
+     not (P[i + 1] in ['0'..'9']) then
+    exit;
+  iso.S := (ord(P[i]) - 48) * 10 + ord(P[i + 1]) - 48;
+  if iso.S >= 60 then
+    exit;
+  inc(i, 2);
+  if (i < L) and (P[i] = '.') then
+  begin
+    inc(i);
+    if (i = L) or not (P[i] in ['0'..'9']) then
+      exit;
+    iso.MS := Iso8601FractionToMS(@P[i], L - i);
+    while (i < L) and (P[i] in ['0'..'9']) do
+      inc(i);
+  end;
+  // preserve the existing UTC marker and unconverted numeric offset policy
+  result := (i = L) or
+            ((i + 1 = L) and (P[i] = 'Z')) or
+            ((i < L) and (P[i] in ['+', '-']));
+end;
+
 procedure Iso8601ToDateTimePUtf8CharVar(P: PUtf8Char; L: PtrInt;
   var result: TDateTime);
 var
-  b, y, m, d, h, mi, ss, ms: cardinal;
+  b, y, m, d: cardinal;
+  t: TIsoTime;
   time: TDateTime;
+  {$ifdef FPC}
+  y100: cardinal;
+  {$else}
   d100: TDiv100Rec;
+  {$endif FPC}
   {$ifdef CPUX86NOTPIC}
   tab: TNormTableByte absolute ConvertHexToBin;
   {$else}
   tab: PByteArray; // faster on PIC, ARM and x86_64
   {$endif CPUX86NOTPIC}
-// expect 'YYYYMMDDThhmmss[.sss]' format but handle also
-// 'YYYY-MM-DDThh:mm:ss[.sss]' or plain '[T]hh:mm:ss[.sss]'
 begin
   PInt64(@result)^ := 0;
   if P = nil then
@@ -1764,28 +1871,29 @@ begin
   if L = 0 then
     while P[L] <> #0 do // no need to call external StrLen() for a few chars
       inc(L);
-  if L < 4 then
-    exit; // we need 'YYYY' at least
+  if L < 2 then
+    exit; // at least 'hh' or 'YYYY'
   if (P[0] = '''') and
      (P[L - 1] = '''') then
   begin
     // in-place unquote of input - typical from SQL values
     inc(P);
     dec(L, 2);
-    if L < 4 then
+    if L < 2 then
       exit;
   end;
-  if P[0] = 'T' then // 'Thhmmss[.sss]'
+  if (P[0] = 'T') or (L = 2) or
+     ((L >= 3) and (P[2] = ':')) then
   begin
-    dec(P, 8); // hhmmss at P[9..] position
-    inc(L, 8);
-  end
-  else if P[2] = ':' then // 'hh:mm:ss[.sss]'
-  begin
-    dec(P, 9); // hh:mm:ss at P[9..] position
-    inc(L, 9);
-  end
-  else
+    if not _Iso8601DecodeTime(P, L, t) then
+      exit;
+    result := integer(cardinal(t.H * MilliSecsPerHour) +
+                      cardinal(t.M * MilliSecsPerMin) +
+                      cardinal(t.S * MilliSecsPerSec) + t.MS) * MilliSecsPerDate;
+    exit;
+  end;
+  if L < 4 then
+    exit;
   begin
     {$ifndef CPUX86NOTPIC}
     tab := @ConvertHexToBin;
@@ -1851,49 +1959,31 @@ begin
     end;
     if y > 9999 then
       exit; // avoid integer overflow e.g. if '0000' is an invalid date
-    Div100(y, d100{%H-});
-    unaligned(result) := cardinal(cardinal(D1 * d100.d) shr 2) +
-                         cardinal(cardinal(D0 * d100.m) shr 2) +
+    {$ifdef FPC}
+    y100 := y div 100; // FPC will use fast reciprocal
+    unaligned(result) := cardinal(cardinal(D1 * y100) shr 2) +
+                         cardinal(cardinal(D0 * (y - y100 * 100)) shr 2) +
                          cardinal(cardinal(D2 * m + 2) div 5) + d;
+    {$else}
+    Div100(y, d100{%H-});
+    result := cardinal(cardinal(D1 * d100.d) shr 2) +
+              cardinal(cardinal(D0 * d100.m) shr 2) +
+              cardinal(cardinal(D2 * m + 2) div 5) + d;
+    {$endif FPC}
     unaligned(result) := unaligned(result) - D1899; // avoid sign issue
-    if L < 15 then
-      exit; // not enough space to retrieve the time
+    if L <= 8 then
+      exit; // valid date-only (including reduced-precision dates)
+    if (L < 11) or not (P[8] in ['T', ' ']) or
+       not _Iso8601DecodeTime(@P[9], L - 9, t) then
+    begin
+      PInt64(@result)^ := 0; // never silently discard a malformed time
+      exit;
+    end;
   end;
-  h := ord(P[9]) * 10 + ord(P[10]) - (48 + 480);
-  if P[11] = ':' then
-  begin
-    inc(P);
-    dec(L);
-  end; // allow hh:mm:ss
-  mi := ord(P[11]) * 10 + ord(P[12]) - (48 + 480);
-  if P[13] = ':' then
-  begin
-    inc(P);
-    dec(L);
-  end; // allow hh:mm:ss
-  ss := ord(P[13]) * 10 + ord(P[14]) - (48 + 480);
-  if (L > 16) and
-     (P[15] = '.') then
-  begin
-    // one or more digits representing a decimal fraction of a second
-    ms := ord(P[16]) * 100 - 4800;
-    if L > 17 then
-      ms := ms {%H-}+ byte(P[17]) * 10 - 480;
-    if L > 18 then
-      ms := ms + byte(P[18]) - 48;
-    if ms > MilliSecsPerSec then
-      ms := 0;
-  end
-  else
-    ms := 0;
-  if (h >= 24) or
-     (mi >= 60) or
-     (ss >= 60) then
-    exit;
   // inlined EncodeTime()
-  time := integer(cardinal(h * MilliSecsPerHour) +
-                  cardinal(mi * MilliSecsPerMin) +
-                  cardinal(ss * MilliSecsPerSec) + ms) * MilliSecsPerDate;
+  time := integer(cardinal(t.H * MilliSecsPerHour) +
+                  cardinal(t.M * MilliSecsPerMin) +
+                  cardinal(t.S * MilliSecsPerSec) + t.MS) * MilliSecsPerDate;
   if result < 0 then
     unaligned(result) := unaligned(result) - time
   else
@@ -1918,10 +2008,10 @@ function Iso8601CheckAndDecode(P: PUtf8Char; L: PtrInt;
 begin
   if P = nil then
     result := false
-  else if (((L = 9) or (L = 13)) and
-            (P[0] = 'T') and (P[3] = ':')) or // 'Thh:mm:ss[.sss]'
+  else if (((L = 9) or (L = 13)) and // quickly validate the allowed masks
+            (P[0] = 'T') and (P[3] = ':')) or
           ((L = 10) and
-           (P[4] = '-') and (P[7] = '-')) or // 'YYYY-MM-DD'
+           (P[4] = '-') and (P[7] = '-')) or
           (((L = 19) or (L = 23)) and
            (P[4] = '-') and (P[10] = 'T')) then
   begin
@@ -1933,8 +2023,13 @@ begin
 end;
 
 function IsIso8601(P: PUtf8Char; L: PtrInt): boolean;
+var
+  t: TIsoTime;
 begin
   result := Iso8601ToTimeLogPUtf8Char(P, L) <> 0;
+  // the TTimeLog encoding of midnight without a date is zero, not an error
+  if not result and (P <> nil) then
+    result := _Iso8601DecodeTime(P, L, t);
 end;
 
 function Iso8601ToTimePUtf8Char(P: PUtf8Char; L: PtrInt): TDateTime;
@@ -1948,62 +2043,26 @@ end;
 procedure Iso8601ToTimePUtf8CharVar(P: PUtf8Char; L: PtrInt;
   var result: TDateTime);
 var
-  H, MI, SS, MS: cardinal;
+  t: TIsoTime;
 begin
-  if Iso8601ToTimePUtf8Char(P, L, H, MI, SS, MS) then
-    unaligned(result) := integer(cardinal(H * MilliSecsPerHour) +
-                         cardinal(MI * MilliSecsPerMin) +
-                         cardinal(SS * MilliSecsPerSec + MS)) * MilliSecsPerDate
+  if _Iso8601DecodeTime(P, L, t) then
+    unaligned(result) := integer(cardinal(t.H * MilliSecsPerHour) +
+                         cardinal(t.M * MilliSecsPerMin) +
+                         cardinal(t.S * MilliSecsPerSec + t.MS)) * MilliSecsPerDate
   else
     PInt64(@result)^ := 0;
 end;
 
 function Iso8601ToTimePUtf8Char(P: PUtf8Char; L: PtrInt;
   var H, M, S, MS: cardinal): boolean;
+var
+  t: TIsoTime;
 begin
-  result := false; // error
-  if P = nil then
-    exit;
-  if L = 0 then
-    while P[L] <> #0 do // no need to call external StrLen() for a few chars
-      inc(L);
-  if L < 6 then
-    exit; // we need 'hhmmss' at least
-  if P[0] = 'T' then
-  begin
-    inc(P); // 'Thhmmss' -> 'hhmmss'
-    dec(L);
-  end;
-  H := ord(P[0]) * 10 + ord(P[1]) - (48 + 480);
-  if P[2] = ':' then
-  begin
-    inc(P);
-    dec(L);
-  end; // allow hh:mm:ss
-  M := ord(P[2]) * 10 + ord(P[3]) - (48 + 480);
-  if P[4] = ':' then
-  begin
-    inc(P);
-    dec(L);
-  end; // allow hh:mm:ss
-  S := ord(P[4]) * 10 + ord(P[5]) - (48 + 480);
-  if (L > 6) and
-     (P[6] = '.') then
-  begin
-    // one or more digits representing a decimal fraction of a second
-    MS := ord(P[7]) * 100 - 4800;
-    if L > 7 then
-      MS := MS {%H-}+ ord(P[8]) * 10 - 480;
-    if L > 8 then
-      MS := MS + ord(P[9]) - 48;
-  end
-  else
-    MS := 0;
-  if (H < 24) and
-     (M < 60) and
-     (S < 60) and
-     (MS < MilliSecsPerSec) then
-    result := true;
+  result := _Iso8601DecodeTime(P, L, t);
+  H := t.H;
+  M := t.M;
+  S := t.S;
+  MS := t.MS;
 end;
 
 function Iso8601ToDatePUtf8Char(P: PUtf8Char; L: PtrInt;
@@ -2076,16 +2135,19 @@ begin
     unaligned(result) := date + Time;
 end;
 
-{$ifndef CPUX86NOTPIC}
-procedure YearToPChar2(tab: PWordArray; Y: PtrUInt; P: PUtf8Char); inline;
+procedure YearToPCharTab(tab: PWordArray; Y: PtrUInt; P: PUtf8Char);
+  {$ifdef HASINLINE} inline; {$endif}
 var
-  d100: TDiv100Rec;
+  d100: PtrUInt;
 begin
-  Div100(Y, d100{%H-});
-  PWordArray(P)[0] := tab[d100.D];
-  PWordArray(P)[1] := tab[d100.M];
+  {$ifdef CPU64}
+  d100 := (Y * DIV100_INV) shr 37; // we can avoid div on Delphi Win64
+  {$else}
+  d100 := Y div 100; // FPC use fast reciprocal (and x86 has YearToPChar asm)
+  {$endif CPU64}
+  PCardinal(P)^ := tab[d100];
+  PCardinal(P + 2)^ := tab[Y - (d100 * 100)];
 end;
-{$endif CPUX86NOTPIC}
 
 function DateToIso8601PChar(P: PUtf8Char; Expanded: boolean;
   Y, M, D: PtrUInt): PUtf8Char;
@@ -2101,7 +2163,7 @@ begin
   YearToPChar(Y, P);
   {$else}
   tab := @TwoDigitLookupW;
-  YearToPChar2(tab, Y, P);
+  YearToPCharTab(tab, Y, P);
   {$endif CPUX86NOTPIC}
   inc(P, 4);
   if Expanded then
@@ -2109,14 +2171,14 @@ begin
     P^ := '-';
     inc(P);
   end;
-  PWord(P)^ := tab[M];
+  PCardinal(P)^ := tab[M];
   inc(P, 2);
   if Expanded then
   begin
     P^ := '-';
     inc(P);
   end;
-  PWord(P)^ := tab[D];
+  PCardinal(P)^ := tab[D];
   result := P + 2;
 end;
 
@@ -2138,28 +2200,28 @@ begin
   {$ifndef CPUX86NOTPIC}
   tab := @TwoDigitLookupW;
   {$endif CPUX86NOTPIC}
-  PWord(P)^ := tab[H];
+  PCardinal(P)^ := tab[H];
   inc(P, 2);
   if Expanded then
   begin
     P^ := ':';
     inc(P);
   end;
-  PWord(P)^ := tab[M];
+  PCardinal(P)^ := tab[M];
   inc(P, 2);
   if Expanded then
   begin
     P^ := ':';
     inc(P);
   end;
-  PWord(P)^ := tab[S];
+  PCardinal(P)^ := tab[S];
   inc(P, 2);
   if WithMS then
   begin
     {$ifdef CPUX86NOTPIC}
     YearToPChar(MS, P);
     {$else}
-    YearToPChar2(tab, MS, P);
+    YearToPCharTab(tab, MS, P);
     {$endif CPUX86NOTPIC}
     P^ := '.'; // override first digit
     inc(P, 4);
@@ -2197,7 +2259,8 @@ begin
 end;
 
 function DateTimeToIso8601(P: PUtf8Char; D: TDateTime; Expanded: boolean;
-  FirstChar: AnsiChar; WithMS: boolean; QuotedChar: AnsiChar): PtrInt;
+  FirstChar: AnsiChar; WithMS: boolean; QuotedChar: AnsiChar;
+  AlwaysDateAndTime: boolean): PtrInt;
 var
   beg: PUtf8Char;
 begin
@@ -2207,8 +2270,12 @@ begin
     P^ := QuotedChar;
     inc(P);
   end;
-  P := DateToIso8601PChar(D, P, Expanded);
-  P := TimeToIso8601PChar(D, P, Expanded, FirstChar, WithMS);
+  if AlwaysDateAndTime or // see TTextDateWriter.AddDateTime()
+     (trunc(D) <> 0) then
+    P := DateToIso8601PChar(D, P, Expanded);
+  if AlwaysDateAndTime or
+     (frac(D) <> 0) then
+    P := TimeToIso8601PChar(D, P, Expanded, FirstChar, WithMS);
   if QuotedChar <> #0 then
   begin
     P^ := QuotedChar;
@@ -2224,13 +2291,13 @@ begin
 end;
 
 procedure DateTimeToIso8601Var(D: TDateTime; Expanded, WithMS: boolean;
-  FirstChar, QuotedChar: AnsiChar; var Result: RawUtf8);
+  FirstChar, QuotedChar: AnsiChar; var Result: RawUtf8; AlwaysDateAndTime: boolean);
 var
   tmp: TTemp32;
 begin
   // D=0 is handled in DateTimeToIso8601Text()
   FastSetString(result, @tmp,
-    DateTimeToIso8601(@tmp, D, Expanded, FirstChar, WithMS, QuotedChar));
+    DateTimeToIso8601(@tmp, D, Expanded, FirstChar, WithMS, QuotedChar, AlwaysDateAndTime));
 end;
 
 function DateTimeToIso8601Short(D: TDateTime; Expanded, WithMS: boolean;
@@ -2936,14 +3003,14 @@ end;
 
 function TSynSystemTime.FromTimeBuffer(P: PUtf8Char; L: PtrInt): boolean;
 var
-  h, mi, ss, ms: cardinal;
+  t: TIsoTime;
 begin
-  if Iso8601ToTimePUtf8Char(P, L, h, mi, ss, ms) then
+  if _Iso8601DecodeTime(P, L, t) then
   begin
-    Hour := h;
-    Minute := mi;
-    Second := ss;
-    MilliSecond := ms;
+    Hour := t.H;
+    Minute := t.M;
+    Second := t.S;
+    MilliSecond := t.MS;
     result := true;
   end
   else
@@ -3218,26 +3285,25 @@ end;
 
 procedure TSynSystemTime.ToLogTime(Dest: PUtf8Char);
 var
-  d100: TDiv100Rec;
   {$ifdef CPUX86NOTPIC}
   tab: TWordArray absolute TwoDigitLookupW;
   {$else}
   tab: PWordArray;
   {$endif CPUX86NOTPIC}
 begin
-  Div100(Year, d100{%H-});
-  {$ifndef CPUX86NOTPIC}
+  {$ifdef CPUX86NOTPIC}
+  YearToPChar(Year, Dest);
+  {$else}
   tab := @TwoDigitLookupW;
+  YearToPCharTab(tab, Year, Dest);
   {$endif CPUX86NOTPIC}
-  PWord(Dest)^     := tab[d100.D];
-  PWord(Dest + 2)^ := tab[d100.M];
-  PWord(Dest + 4)^ := tab[PtrUInt(Month)];
-  PWord(Dest + 6)^ := tab[PtrUInt(Day)];
+  PCardinal(Dest + 4)^ := tab[PtrUInt(Month)];
+  PCardinal(Dest + 6)^ := tab[PtrUInt(Day)];
   Dest[8] := ' ';
-  PWord(Dest + 9)^  := tab[PtrUInt(Hour)];
-  PWord(Dest + 11)^ := tab[PtrUInt(Minute)];
-  PWord(Dest + 13)^ := tab[PtrUInt(Second)];
-  PWord(Dest + 15)^ := tab[PtrUInt(Millisecond) shr 4]; // rounded in 0..62 range
+  PCardinal(Dest + 9)^  := tab[PtrUInt(Hour)];
+  PCardinal(Dest + 11)^ := tab[PtrUInt(Minute)];
+  PCardinal(Dest + 13)^ := tab[PtrUInt(Second)];
+  PCardinal(Dest + 15)^ := tab[PtrUInt(Millisecond) shr 4]; // rounded in 0..62 range
 end;
 
 procedure TSynSystemTime.AddLogTime(WR: TTextWriter);
@@ -3299,20 +3365,20 @@ begin
   {$ifndef CPUX86NOTPIC}
   tab := @TwoDigitLookupW;
   {$endif CPUX86NOTPIC}
-  PWord(P)^ := tab[Day];
+  PCardinal(P)^ := tab[Day];
   PCardinal(P + 2)^ := PCardinal(@HTML_MONTH_NAMES[Month])^;
   P[2] := '/'; // overwrite HTML_MONTH_NAMES[][0]
   P[6] := '/';
   y := Year;
   d100 := y div 100;
-  PWord(P + 7)^  := tab[d100];
-  PWord(P + 9)^  := tab[y - (d100 * 100)];
+  PCardinal(P + 7)^  := tab[d100];
+  PCardinal(P + 9)^  := tab[y - (d100 * 100)];
   P[11] := ':';
-  PWord(P + 12)^ := tab[Hour];
+  PCardinal(P + 12)^ := tab[Hour];
   P[14] := ':';
-  PWord(P + 15)^ := tab[Minute];
+  PCardinal(P + 15)^ := tab[Minute];
   P[17] := ':';
-  PWord(P + 18)^ := tab[Second];
+  PCardinal(P + 18)^ := tab[Second];
   P[20] := ' ';
   result := 21;
 end;
@@ -3440,6 +3506,7 @@ var
   {$else}
   tab: PWordArray;
   {$endif CPUX86NOTPIC}
+  P: PUtf8Char;
 begin
   if IsZero or
      (high(result) < 12) then
@@ -3457,13 +3524,14 @@ begin
   {$ifndef CPUX86NOTPIC}
   tab := @TwoDigitLookupW;
   {$endif CPUX86NOTPIC}
-  result[0] := #12;
-  PWord(@result[1])^  := tab[Year];
-  PWord(@result[3])^  := tab[Month];
-  PWord(@result[5])^  := tab[Day];
-  PWord(@result[7])^  := tab[Hour];
-  PWord(@result[9])^  := tab[Minute];
-  PWord(@result[11])^ := tab[Second];
+  p := @result;
+  p[0] := #12;
+  PCardinal(p + 1)^  := tab[Year];
+  PCardinal(p + 3)^  := tab[Month];
+  PCardinal(p + 5)^  := tab[Day];
+  PCardinal(p + 7)^  := tab[Hour];
+  PCardinal(p + 9)^  := tab[Minute];
+  PCardinal(p + 11)^ := tab[Second];
 end;
 
 procedure TSynSystemTime.ToHuman(var Text: RawUtf8);
@@ -3709,11 +3777,18 @@ var
     Value: THttpDateNowUtc;
   end;
 
+procedure SetLocalHttpDate(var Value: THttpDateNowUtc; Tix64: Int64);
+var
+  T: TSynSystemTime;
+begin
+  FromGlobalTime(T, {local=}false, Tix64);
+  T.ToHttpDateShort(Value, 'GMT'#13#10, 'Date: ');
+end;
+
 function HttpDateNowUtc(Tix64: Int64): THttpDateNowUtc;
 var
   tix32: cardinal;
-  T: TSynSystemTime;
-  now: THttpDateNowUtc; // use a temp variable for _HttpDateNowUtc atomic set
+  now: THttpDateNowUtc;
 begin
   if Tix64 = 0 then
     tix32 := GetTickSec
@@ -3722,14 +3797,19 @@ begin
   with _HttpDateNowUtc do
   begin
     Safe.Lock;
-    if tix32 <> Tix then
+    if Value[0] = #0 then // initialize once at startup under the lock
     begin
-      Tix := tix32; // let this single thread update the Value
+      SetLocalHttpDate(Value, Tix64);
+      Tix := tix32;
+    end
+    else if tix32 > Tix then
+    begin
+      Tix := tix32;       // call OS outside of the lock on a single thread
       Safe.UnLock;
-      FromGlobalTime(T, {local=}false, Tix64);
-      T.ToHttpDateShort(now, 'GMT'#13#10, 'Date: ');
+      SetLocalHttpDate(now, Tix64);
       Safe.Lock;
-      Value := now;
+      if Tix = tix32 then // discard any obsolete computation
+        Value := now;
     end;
     MoveFast(Value[0], result[0], ord(Value[0]) + 1);
     Safe.UnLock;
@@ -4360,9 +4440,9 @@ end;
 function Iso8601ToTimeLogPUtf8Char(P: PUtf8Char; L: PtrInt;
   ContainsNoTime: PBoolean): TTimeLog;
 // bits: S=0..5 M=6..11 H=12..16 D=17..21 M=22..25 Y=26..40
-// i.e. S<64 M<64 H<32 D<32 M<16 Y<9999: power of 2 -> use fast shl/shr
 var
   v, b: PtrUInt;
+  t: TIsoTime;
   {$ifdef CPUX86NOTPIC}
   tab: TNormTableByte absolute ConvertHexToBin;
   {$else}
@@ -4370,16 +4450,24 @@ var
   {$endif CPUX86NOTPIC}
 begin
   result := 0;
+  if ContainsNoTime <> nil then
+    ContainsNoTime^ := false;
   if P = nil then
     exit;
   if L = 0 then
-    while P[L] <> #0 do // no need to call external StrLen() for a few chars
+    while P[L] <> #0 do
       inc(L);
+  if L = 0 then
+    exit;
+  if (P[0] = 'T') or (L = 2) or
+     ((L >= 3) and (P[2] = ':')) then
+  begin
+    if _Iso8601DecodeTime(P, L, t) then
+      result := (t.H shl 12) + (t.M shl 6) + t.S; // t.MS is ignored
+    exit;
+  end;
   if L < 4 then
-    exit; // we need 'YYYY' at least
-  if P[0] = 'T' then
-    dec(P, 8)
-  else
+    exit;
   begin
     // 'YYYY' -> year decode
     {$ifndef CPUX86NOTPIC}
@@ -4404,7 +4492,7 @@ begin
     else
       v := v * 10 + b;
     result := Int64(v) shl 26;  // store YYYY
-    if P[4] in ['-', '/'] then
+    if (L > 4) and (P[4] in ['-', '/']) then
     begin
       inc(P);
       dec(L);
@@ -4420,7 +4508,7 @@ begin
         result := 0;
         exit;
       end;
-      if P[6] in ['-', '/'] then
+      if (L > 6) and (P[6] in ['-', '/']) then
       begin
         inc(P);
         dec(L);
@@ -4430,9 +4518,8 @@ begin
         // YYYYMMDD
         v := ord(P[6]) * 10 + ord(P[7]) - (48 + 480 + 1); // Day 1..31 -> 0..30
         if (v <= 30) and
-           ((L = 8) or
-            (L = 14) or
-            (P[8] in [#0, ' ', 'T'])) then
+           ((L = 8) or (L = 14) or
+            ((L > 8) and (P[8] in [' ', 'T']))) then
           inc(result, v shl 17)
         else
         begin
@@ -4441,35 +4528,35 @@ begin
         end;
       end;
     end;
-    if L = 14 then
-      dec(P) // no 'T' or ' ' separator for YYYYMMDDhhmmss
-    else if L < 14 then
+    if L <= 8 then
     begin
-      // not enough place to retrieve a time
       if ContainsNoTime <> nil then
         ContainsNoTime^ := true;
       exit;
     end;
+    if (L = 14) and (P[8] in ['0'..'9']) then
+    begin
+      // Legacy compact YYYYMMDDhhmmss (without 'T').
+      if not _Iso8601DecodeTime(@P[8], 6, t) then
+        result := 0
+      else
+        inc(result, (t.H shl 12) + (t.M shl 6) + t.S);
+      exit;
+    end;
+    if L < 11 then
+    begin
+      if ContainsNoTime <> nil then
+        ContainsNoTime^ := true;
+      exit; // preserve the already decoded date
+    end;
+    if not (P[8] in ['T', ' ']) or
+       not _Iso8601DecodeTime(@P[9], L - 9, t) then
+    begin
+      result := 0;
+      exit;
+    end;
+    inc(result, (t.H shl 12) + (t.M shl 6) + t.S);
   end;
-  if ContainsNoTime <> nil then
-    ContainsNoTime^ := false;
-  b := ord(P[9]) * 10 + ord(P[10]) - (48 + 480);
-  if b <= 23 then
-    v := b shl 12
-  else
-    exit;
-  if P[11] = ':' then
-    inc(P); // allow hh:mm:ss
-  b := ord(P[11]) * 10 + ord(P[12]) - (48 + 480);
-  if b <= 59 then
-    inc(v, b shl 6)
-  else
-    exit;
-  if P[13] = ':' then
-    inc(P); // allow hh:mm:ss
-  b := ord(P[13]) * 10 + ord(P[14]) - (48 + 480);
-  if b <= 59 then
-    inc(result, PtrUInt(v + b));
 end;
 
 function Iso8601ToTimeLog(const S: RawByteString): TTimeLog;
@@ -4479,7 +4566,6 @@ end;
 
 
 { ******************* TTextDateWriter supporting date/time ISO-8601 serialization }
-
 
 { TTextDateWriter }
 
@@ -4615,13 +4701,20 @@ begin
   T.AddLogTime(self);
 end;
 
-function Value3Digits(V: cardinal; P: PUtf8Char; W: PWordArray): cardinal;
+function Value3Digits(V: PtrUInt; P: PUtf8Char; W: PWordArray): PtrUInt;
   {$ifdef HASINLINE}inline;{$endif}
 begin
-  result := V div 100;
-  PWord(P + 1)^ := W[V - result * 100];
+  {$ifdef CPU64}
+  result := (V * DIV100_INV) shr 37;    // we can avoid div on Delphi Win64
+  PWord(P + 1)^ := W[V - result * 100]; // not PCardinal()
+  V := result;
+  result := (result * DIV10_INV) shr 35;
+  {$else}
+  result := V div 100; // fast reciprocal on FPC, plain div on Delphi Win32
+  PWord(P + 1)^ := W[V - result * 100]; // not PCardinal()
   V := result;
   result := result div 10;
+  {$endif CPU64}
   P^ := AnsiChar(V - result * 10 + 48);
 end;
 

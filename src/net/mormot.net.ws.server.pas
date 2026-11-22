@@ -445,7 +445,7 @@ begin
   if ids > 0 then
   begin
     sorted.Init(pointer(aClientsConnectionID), ids * 8);
-    QuickSortInt64(sorted.buf, 0, ids - 1);
+    QuickSortInt64(sorted.buf, 0, ids - 1); // for FastFindInt64Sorted() below
   end;
   dec(ids); // WebSocketBroadcast(nil) -> ids<0 -> broadcast all
   temp.opcode := aFrame.opcode;

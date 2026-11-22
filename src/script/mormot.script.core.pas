@@ -587,7 +587,7 @@ end;
 
 procedure TThreadSafeManager.SetEngineExpireTimeOutMinutes(Value: cardinal);
 begin
-  fEngineExpireTimeOutTix := Value * MilliSecsPerMin;
+  fEngineExpireTimeOutTix := Int64(Value) * MilliSecsPerMin;
 end;
 
 function TThreadSafeManager.NewDebugger(const port: RawUtF8): IRemoteDebugger;

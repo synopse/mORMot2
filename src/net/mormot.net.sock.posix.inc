@@ -433,6 +433,93 @@ function getpeername(s: integer; name: PSockAddr; var namelen: TSockLen): intege
 
 {$endif SOCKDIRECTSYSCALL}
 
+{$ifdef HAS_IP_PKTINFO}
+
+const
+  {$ifdef OSLINUX}
+  IP_PKTINFO = 8;
+  PKTINFO_RECV_OPT = IP_PKTINFO;
+  PKTINFO_MSG_CTRUNC = $08;
+  {$endif OSLINUX}
+
+  {$ifdef OSDARWIN}
+  IP_PKTINFO = 26;
+  PKTINFO_RECV_OPT = IP_PKTINFO;
+  PKTINFO_MSG_CTRUNC = $20;
+  {$endif OSDARWIN}
+
+  {$ifdef OSNETBSD}
+  IP_PKTINFO = 25;
+  PKTINFO_RECV_OPT = 26; // IP_RECVPKTINFO
+  PKTINFO_MSG_CTRUNC = $20;
+  {$endif OSNETBSD}
+
+type
+  TSockIoVec = record
+    iov_base: pointer;
+    iov_len: size_t;
+  end;
+
+  // Native POSIX msghdr ABI
+  TSockMsgHdr = record
+    msg_name: pointer;
+    msg_namelen: cint; // 32-bit socklen_t
+    msg_iov: ^TSockIoVec;
+    {$ifdef OSLINUX}
+    msg_iovlen: size_t;
+    {$else}
+    msg_iovlen: cint;
+    {$endif OSLINUX}
+    msg_control: pointer;
+    {$ifdef OSLINUX}
+    msg_controllen: size_t;
+    {$else}
+    msg_controllen: cuint; // 32-bit socklen_t
+    {$endif OSLINUX}
+    msg_flags: cint;
+  end;
+
+  // cmsghdr followed by native in_pktinfo
+  TSockPktInfo = record
+    {$ifdef OSLINUX}
+    cmsg_len: size_t;
+    {$else}
+    cmsg_len: cuint; // 32-bit socklen_t
+    {$endif OSLINUX}
+    cmsg_level: cint;
+    cmsg_type: cint;
+    {$ifdef OSNETBSD}
+    // NetBSD aligns CMSG_DATA to the machine word size
+    {$ifdef CPU64}
+    cmsg_pad: cuint;
+    {$endif CPU64}
+    ipi_addr: TNetIP4;
+    ipi_ifindex: cuint;
+    {$else}
+    // Linux and Darwin share the same in_pktinfo layout
+    ipi_ifindex: cint;
+    ipi_spec_dst: TNetIP4;
+    ipi_addr: TNetIP4;
+    {$endif OSNETBSD}
+  end;
+
+const
+  {$ifdef OSLINUX}
+  // Linux 64-bit: cmsg_len=28, CMSG_SPACE=32
+  PKTINFO_LEN = SizeOf(size_t) + 5 * SizeOf(cint);
+  {$else}
+  // Darwin: 24; NetBSD: 20 (32-bit) or 24 (64-bit)
+  PKTINFO_LEN = SizeOf(TSockPktInfo);
+  {$endif OSLINUX}
+
+function recvmsg(s: integer; var msg: TSockMsgHdr; flags: integer): ssize_t; cdecl;
+  external clib name 'recvmsg' + LIBC_SUFFIX;
+
+function sendmsg(s: integer; var msg: TSockMsgHdr; flags: integer): ssize_t; cdecl;
+  external clib name 'sendmsg' + LIBC_SUFFIX;
+
+{$endif HAS_IP_PKTINFO}
+
 {$ifdef OSDARWIN2}
 // circumvent linking issue on Mac OSX
 function poll(fds: PPollFD; nfds, timeout: integer): integer; inline;
@@ -493,25 +580,36 @@ begin
         (cerrno <> ESysEINTR);
 end;
 
-function PollNoEintr(fds: PPollFD; nfds, timeout: integer): integer;
+function PollNoEintr(fds: PPollFD; nfds, timeout: integer; var err: integer): integer;
 var
   endtix: Int64;
 begin
-  // preserve the requested timeout across EINTR: restarting poll() with the
-  // original timeout could otherwise extend the effective wait indefinitely
+  // preserve the requested timeout across EINTR/EAGAIN: restarting poll() with
+  // the original timeout could otherwise extend the effective wait indefinitely
   endtix := 0;
-  if timeout > 0 then
-    endtix := GetTickCount64 + timeout;
+  if timeout > 0 then // integer(INFINITE) = -1
+    endtix := mormot.core.os.GetTickCount64 + timeout;
   repeat
+    err := 0;
     result := poll(fds, nfds, timeout);
-    if (result >= 0) or
-       (cerrno <> ESysEINTR) then
-      exit;
-    if endtix = 0 then
-      continue; // wait INFINITE
-    result := 0;
-    timeout := endtix - GetTickCount64;
-  until timeout <= 0; // timeout eventually elapsed while being interrupted
+    if result >= 0 then
+      exit;             // some event(s)
+    err := cerrno;
+    if (err <> ESysEINTR) and
+       (err <> ESysEAGAIN) then
+      exit;             // fatal error
+    if timeout = 0 then
+      break;            // non-blocking poll: no retry budget
+    if err = ESysEAGAIN then
+      SleepHiRes(1);    // avoid burning a core on temporary resource exhaustion
+    if timeout < 0 then
+      continue;         // INFINITE
+    timeout := endtix - mormot.core.os.GetTickCount64;
+    if timeout <= 0 then
+      break;            // timeout eventually elapsed while being interrupted
+  until false;
+  result := 0;          // notify timeout
+  err := 0;
 end;
 
 
@@ -649,8 +747,8 @@ begin
       sent := mormot.net.sock.send(TSocket(@self), Buf, len, MSG_NOSIGNAL);
     until (sent >= 0) or
           (cerrno <> ESysEINTR); // retry on SIG received
-    // man send: Upon success, send() returns the number of bytes sent.
-    // Otherwise, -1 is returned and errno set to indicate the error.
+    // man send: Upon success, send() returns the number of bytes sent
+    // - otherwise, -1 is returned and errno set to indicate the error
     len := sent;
     if len < 0 then
       result := NetLastError(NO_ERROR, rawError)
@@ -675,9 +773,9 @@ begin
           (cerrno <> ESysEINTR); // retry on SIG received
     // man recv: Upon successful completion, recv() shall return the length of
     // the message in bytes. If no messages are available to be received and the
-    // peer has performed an orderly shutdown, recv() shall return 0.
-    // Otherwise, -1 shall be returned and errno set to indicate the error,
-    // which may be nrRetry if no data is available.
+    // peer has performed an orderly shutdown, recv() shall return 0
+    // - otherwise, -1 shall be returned and errno set to indicate the error,
+    // which may be nrRetry if no data is available
     len := received;
     if len <= 0 then
       if len = 0 then
@@ -723,6 +821,97 @@ begin
     until (result >= 0) or
           (cerrno <> ESysEINTR); // retry on SIG received
 end;
+
+{$ifdef HAS_IP_PKTINFO}
+
+function TNetSocketWrap.SetPacketInfo(enable: boolean): TNetResult;
+var
+  v: integer;
+begin
+  v := ord(enable);
+  if @self = nil then
+    result := nrNoSocket
+  else if setsockopt(TSocket(@self), IPPROTO_IP, PKTINFO_RECV_OPT,
+            @v, SizeOf(v)) = NO_ERROR then
+    result := nrOk
+  else
+    result := NetLastError;
+end;
+
+function TNetSocketWrap.RecvFromIf(Buf: pointer; len: integer;
+  out addr: TNetAddr; out ifindex: integer): integer;
+var
+  iov: TSockIoVec;
+  msg: TSockMsgHdr;
+  info: TSockPktInfo;
+begin
+  ifindex := 0;
+  result := -1;
+  if @self = nil then
+    exit;
+  iov.iov_base := Buf;
+  iov.iov_len := len;
+  repeat
+    msg.msg_name       := @addr;
+    msg.msg_namelen    := SizeOf(addr);
+    msg.msg_iov        := @iov;
+    msg.msg_iovlen     := 1;
+    msg.msg_control    := @info;
+    msg.msg_controllen := SizeOf(info);
+    msg.msg_flags := 0;
+    result := recvmsg(TSocket(@self), msg, 0);
+  until (result >= 0) or
+        (cerrno <> ESysEINTR); // retry on SIG received
+  if (result >= 0) and
+     ((msg.msg_flags and PKTINFO_MSG_CTRUNC) = 0) and
+     (msg.msg_controllen >= PKTINFO_LEN) and
+     (info.cmsg_len >= PKTINFO_LEN) and
+     (info.cmsg_len <= msg.msg_controllen) and
+     (info.cmsg_level = IPPROTO_IP) and
+     (info.cmsg_type = IP_PKTINFO) then
+    ifindex := info.ipi_ifindex;
+end;
+
+function TNetSocketWrap.SendToIf(Buf: pointer; len: integer;
+  const addr: TNetAddr; ifindex: integer): TNetResult;
+var
+  iov: TSockIoVec;
+  msg: TSockMsgHdr;
+  info: TSockPktInfo;
+  sent: integer;
+begin
+  if ifindex = 0 then
+    result := SendTo(Buf, len, addr)
+  else if @self = nil then
+    result := nrNoSocket
+  else
+  begin
+    iov.iov_base := Buf;
+    iov.iov_len := len;
+    FillCharFast(info, SizeOf(info), 0); // ipi_spec_dst=0 for the interface IP
+    info.cmsg_len      := PKTINFO_LEN;
+    info.cmsg_level    := IPPROTO_IP;
+    info.cmsg_type     := IP_PKTINFO;
+    info.ipi_ifindex   := ifindex;
+    msg.msg_name       := @addr;
+    msg.msg_namelen    := addr.Size;
+    msg.msg_iov        := @iov;
+    msg.msg_iovlen     := 1;
+    msg.msg_control    := @info;
+    msg.msg_controllen := SizeOf(info);
+    msg.msg_flags      := 0;
+    repeat
+      sent := sendmsg(TSocket(@self), msg, 0);
+    until (sent >= 0) or
+          (cerrno <> ESysEINTR); // retry on SIG received
+    if sent < 0 then
+      result := NetLastError
+    else
+      result := nrOk;
+  end;
+end;
+
+{$endif HAS_IP_PKTINFO}
 
 procedure SetTimeVal(ms: PtrUInt; out tv: TTimeVal);
 var
@@ -813,12 +1002,17 @@ begin
 end;
 
 procedure TNetSocketWrap.SetLinger(linger: integer);
+{$ifdef OSDARWIN}
+const
+  SO_LINGER = $1080; // = specific SO_LINGER_SECONDS - SO_LINGER is in ticks
+{$endif OSDARWIN}
 var
   v: TLinger;
 begin
-  v.l_linger := linger;
+  v.l_linger := MaxPtrInt(0, linger);
   v.l_onoff := ord(linger >= 0);
-  SetOpt(SOL_SOCKET, SO_LINGER, @v, SizeOf(v));
+  // best effort (no exception): may be called during socket shutdown
+  setsockopt(TSocket(@self), SOL_SOCKET, SO_LINGER, @v, SizeOf(v));
   if linger > 0 then
     SetReuseAddrPort;
 end;
@@ -859,7 +1053,7 @@ end;
 function TNetSocketWrap.WaitFor(ms: integer; scope: TNetEvents;
   loerr: PNetErrorInt): TNetEvents;
 var
-  res: integer;
+  res, err: integer;
   p: TPollFD; // select() limits p.fd<FD_SETSIZE=1024 on POSIX -> use poll()
   // https://moythreads.com/wordpress/2009/12/22/select-system-call-limitation
 begin
@@ -876,15 +1070,11 @@ begin
     p.events := p.events or POLLOUT;
   // POLLERR and POLLHUP are ignored in p.events: implicit [neError]
   p.revents := 0;
-  res := PollNoEintr(@p, 1, ms); // would indentify ESysEINTR within poll()
+  res := PollNoEintr(@p, 1, ms, err); // would indentify ESysEINTR within poll()
   if res < 0 then
   begin
-    res := cerrno;
     if loerr <> nil then
-      loerr^ := res;
-    if res = ESysEAGAIN then
-      // timeout, not a true error
-      result := [];
+      loerr^ := err;
     exit;
   end;
   result := [];
@@ -894,7 +1084,7 @@ begin
     include(result, neRead);
   if p.revents and POLLOUT <> 0 then
     include(result, neWrite);
-  if p.revents and POLLERR <> 0 then
+  if p.revents and (POLLERR or POLLNVAL) <> 0 then
     include(result, neError);
   if p.revents and POLLHUP <> 0 then
     include(result, neClosed); // may return neClosed + neRead e.g. on HTTP/1.0
@@ -932,6 +1122,17 @@ begin
       exit;
   end;
   result := false; // e.g. neError or neClosed with no neRead
+end;
+
+function TNetSocketWrap.Close: TNetResult;
+begin
+  if @self = nil then
+    result := nrNoSocket
+  else if closesocket(TSocket(@self)) = NO_ERROR then
+    result := nrOk
+  else
+    // don't retry close() after EINTR: the descriptor may be released
+    result := NetLastError;
 end;
 
 
@@ -1645,6 +1846,7 @@ begin
   if (self = nil) or
      (socket = nil) or
      (byte(events) = 0) or
+     fTerminated or
      (fCount = fMaxSockets) then
     exit;
   e := PseToPollEvent(events);
@@ -1672,6 +1874,7 @@ begin
         else if fd < 0 then
           // found a void entry
           new := i;
+        inc(p);
       end;
   if new < 0 then
   begin
@@ -1755,7 +1958,7 @@ begin
       include(result, pseRead);
     if r and POLLOUT <> 0 then
       include(result, pseWrite);
-    if r and POLLERR <> 0 then
+    if r and (POLLERR or POLLNVAL) <> 0 then
       include(result, pseError);
     if r and POLLHUP <> 0 then
       include(result, pseClosed);
@@ -1785,13 +1988,15 @@ function TPollSocketPoll.WaitForModified(var results: TPollSocketResults;
   timeoutMS: integer): boolean;
 var
   n: PtrInt;
+  err: integer;
 begin
   result := false; // error
   if (self = nil) or
+     fTerminated or
      (fCount = 0) then
     exit;
   // here fCount=0 would not permit next async subscription
-  n := PollNoEintr(pointer(fFD), fFDCount, timeoutMS); // ignoring EINTR signals
+  n := PollNoEintr(pointer(fFD), fFDCount, timeoutMS, err); // ignoring EINTR
   results.Count := n;
   if n <= 0 then
     exit;
@@ -1814,7 +2019,7 @@ end;
 function WaitForSeveral(const Sockets: TPollSocketsSubscribeDynArray;
   var results: TPollSocketResults; timeoutMS: integer): boolean;
 var
-  n, res: integer;
+  n, res, err: integer;
   fd: array of TPollFD;
   s: PPollSocketsSubscribe;
   p: PPollFD;
@@ -1842,7 +2047,7 @@ begin
   until n = 0;
   if res = 0 then
     exit; // no pseRead to check
-  n := PollNoEintr(pointer(fd), res, timeoutMS); // ignoring EINTR signals
+  n := PollNoEintr(pointer(fd), res, timeoutMS, err); // ignoring EINTR
   if n <= 0 then
     exit;
   results.Count := n;
@@ -1883,6 +2088,7 @@ type
   TPollSocketEpoll = class(TPollSocketAbstract)
   protected
     fEPFD: integer;
+    fWakeFD: integer; // eventfd registered in epoll, to interrupt epoll_wait
   public
     constructor Create(aOwner: TPollSockets); override;
     destructor Destroy; override;
@@ -1907,23 +2113,58 @@ type
 // is defined for TPollSocketEpoll.FollowEpoll = true
 
 constructor TPollSocketEpoll.Create(aOwner: TPollSockets);
+var
+  e: TEPoll_Event;
+  err: integer;
 begin
   inherited Create(aOwner);
   fEPFD := epoll_create(10000); // since 2.6.8 size is ignored
+  if fEPFD <= 0 then
+    exit;
+  // keep the wakeup fd readable after termination: all concurrent waiters
+  // must be released, not just the first one (level-triggered epoll)
+  {$ifdef OSLINUX}
+  fWakeFD := LinuxEventFD({nonblocking=}true, {semaphore=}false);
+  {$else}
+  fWakeFD := 0; // e.g. Delphi Android: no LinuxEventFD() wrapper available
+  {$endif OSLINUX}
+  if fWakeFD <= 0 then
+    exit; // fallback to the existing bounded epoll_wait timeout
+  e.events := EPOLLIN;
+  e.data.ptr := @fWakeFD; // private marker, not an application socket tag
+  repeat
+    err := epoll_ctl(fEPFD, EPOLL_CTL_ADD, fWakeFD, @e);
+  until (err = 0) or
+        (cerrno <> ESysEINTR);
+  if err <> 0 then
+  begin
+    FileClose(fWakeFD);
+    fWakeFD := 0; // unsupported: keep the legacy timeout behavior
+  end;
 end;
 
 destructor TPollSocketEpoll.Destroy;
 begin
   Terminate;
+  // TPollSockets.Destroy must first wait for any active GetOne() call
+  if fEPFD > 0 then
+    // note: closing fEPFD sooner (e.g. in Terminate) wouldn't wake epoll_wait()
+    FileClose(fEPFD);
+  fEPFD := -1;
+  if fWakeFD > 0 then
+    FileClose(fWakeFD);
+  fWakeFD := -1;
   inherited;
 end;
 
 procedure TPollSocketEpoll.Terminate;
 begin
-  if fEPFD <= 0 then
-    exit;
-  FileClose(fEPFD);
-  fEPFD := -1;
+  inherited Terminate; // set fTerminated flag
+  // use fWakeFD to release any pending WaitForModified()
+  if fWakeFD > 0 then
+    {$ifdef OSLINUX}
+    LinuxEventFDWrite(fWakeFD, 1);
+    {$endif OSLINUX}
 end;
 
 class function TPollSocketEpoll.FollowEpoll: boolean;
@@ -1962,8 +2203,10 @@ begin
   result := false;
   if (self = nil) or
      (socket = nil) or
+     fTerminated or
      (fEPFD <= 0) or
      (PtrUInt(socket) = PtrUInt(fEPFD)) or
+     (PtrUInt(socket) = PtrUInt(fWakeFD)) or
      (byte(events) = 0) then
     exit;
   e.data.ptr := pointer(tag); // don't use data.u64
@@ -1981,30 +2224,31 @@ begin
   if not result then
     exit;
   LockedInc32(@fCount);
-  fMaxSockets := fCount;
+  fMaxSockets := fCount; // TPollSocketEpoll has no actual limitation
 end;
 
 function TPollSocketEpoll.Unsubscribe(socket: TNetSocket): boolean;
 var
   e: TEPoll_Event; // should be there even if not used (old kernel < 2.6.9)
 begin
+  result := false;
   if (self = nil) or
      (socket = nil) or
-     (fEPFD <= 0) or
      (PtrUInt(socket) = PtrUInt(fEPFD)) then
-    result := false
-  else
+    exit;
+  if fEPFD > 0 then
   begin
     result := EpollCtlNoEIntr(fEPFD, EPOLL_CTL_DEL, socket, e);
     if result then
     begin
       LockedDec32(@fCount);
-      fMaxSockets := fCount;
+      fMaxSockets := fCount; // TPollSocketEpoll has no actual limitation
     end;
-    if (fOwner <> nil) and
-       fOwner.fUnsubscribeShutdownSocket then
-      socket.ShutdownAndClose({rdwr=}false);
   end;
+  // eventually close the raw socket if marked as such
+  if (fOwner <> nil) and
+     fOwner.fUnsubscribeShutdownSocket then
+    socket.ShutdownAndClose({rdwr=}false);
 end;
 
 function EpollWaitNoEintr(epfd: integer; events: PEPoll_Event;
@@ -2039,12 +2283,13 @@ var
 begin
   result := false; // error or nothing new
   if (self = nil) or
+     fTerminated or
      (fEPFD <= 0) then
     exit;
   // we allow fCount=0 which enable background epoll_ctl subscription
   n := EpollWaitNoEintr(fEPFD, @tmp, length(tmp), timeoutMS);
   // if pending > length(tmp): epoll_wait() would round-robin
-  results.Count := n;
+  results.Count := 0; // validate each eventfd
   if n <= 0 then
     exit; // nothing new
   // epoll notified some sockets
@@ -2060,39 +2305,43 @@ begin
   ee := @tmp;
   er := pointer(results.Events);
   repeat
-    ev := ee^.events;
-    {$ifdef FPC}
-    byte(e) := byte([pseRead]); // optimized for the most common case
-    {$else}
-    e := [pseRead];
-    {$endif FPC}
-    if ev <> EPOLLIN then
+    if ee^.data.ptr <> @fWakeFD then // never expose internal wakeup as a socket
     begin
-      if ev and (EPOLLIN or EPOLLPRI) = 0 then
-        byte(e) := 0;
-      if ev and EPOLLOUT <> 0 then
-        include(e, pseWrite);
-      if ev and EPOLLERR <> 0 then
-        include(e, pseError);
-      if ev and EPOLLCLOSE <> 0 then
-        include(e, pseClosed);
+      ev := ee^.events;
+      {$ifdef FPC}
+      byte(e) := byte([pseRead]); // optimized for the most common case
+      {$else}
+      e := [pseRead];
+      {$endif FPC}
+      if ev <> EPOLLIN then
+      begin
+        if ev and (EPOLLIN or EPOLLPRI) = 0 then
+          byte(e) := 0;
+        if ev and EPOLLOUT <> 0 then
+          include(e, pseWrite);
+        if ev and EPOLLERR <> 0 then
+          include(e, pseError);
+        if ev and EPOLLCLOSE <> 0 then
+          include(e, pseClosed);
+      end;
+      // inlined forward SetRes(er^, TPollSocketTag(ee^.data.ptr), e)
+      {$ifdef CPU32}
+      er^.B[4] := byte(e);
+      er^.Li := TPollSocketTag(ee^.data.ptr);
+      {$else}
+      {$ifdef OSANDROID} // keep the tagged pointer top byte - see SetRes()
+      er^ := PtrUInt(ee^.data.ptr) or (PtrUInt(byte(e)) shl 48);
+      {$else}
+      er^ := PtrUInt(ee^.data.ptr) or (PtrUInt(byte(e)) shl 60);
+      {$endif OSANDROID}
+      {$endif CPU32}
+      inc(er);
+      inc(results.Count);
     end;
-    // inlined forward SetRes(er^, TPollSocketTag(ee^.data.ptr), e)
-    {$ifdef CPU32}
-    er^.B[4] := byte(e);
-    er^.Li := TPollSocketTag(ee^.data.ptr);
-    {$else}
-    {$ifdef OSANDROID} // keep the tagged pointer top byte - see SetRes()
-    er^ := PtrUInt(ee^.data.ptr) or (PtrUInt(byte(e)) shl 48);
-    {$else}
-    er^ := PtrUInt(ee^.data.ptr) or (PtrUInt(byte(e)) shl 60);
-    {$endif OSANDROID}
-    {$endif CPU32}
     inc(ee);
-    inc(er);
     dec(n)
   until n = 0;
-  result := true;
+  result := results.Count <> 0;
 end;
 
 function PollSocketClass: TPollSocketClass;

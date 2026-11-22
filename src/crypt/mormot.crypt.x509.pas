@@ -39,6 +39,7 @@ uses
   mormot.core.json,
   mormot.crypt.core,
   mormot.crypt.secure,
+  mormot.crypt.factory,
   mormot.crypt.ecc256r1,
   mormot.crypt.ecc,
   mormot.crypt.rsa;
@@ -678,6 +679,7 @@ type
     function FingerPrint(algo: THashAlgo = hfSha1): RawUtf8;
     /// check if a FingerPrint() hexa hash match a supplied value
     // - will inline the hash computation to avoid temporary string allocation
+    // and use case-insensitive hexadecimal hash comparison
     function FingerPrintCompare(const Value: RawUtf8;
       Algo: THashAlgo = hfSha1): integer; overload;
       {$ifdef HASINLINE} inline; {$endif}
@@ -716,6 +718,10 @@ type
     procedure ToParsedInfo(out Info: TX509Parsed);
     /// returns the raw X.509 extensions as binary OID and Value pairs
     function GetExtensions: TCryptCustomExts;
+    /// compute the raw certificate digest from a DER certificate or PEM chain
+    // - for PEM input, selects the first CERTIFICATE block (the leaf certificate)
+    // - will assume SHA-512 for Ed25519 signature, as defined by RFC 8032
+    class function HashForChannelBinding(const Cert: RawByteString): RawByteString;
     /// true if the Certificate Issuer is also its Subject
     property IsSelfSigned: boolean
       read fIsSelfSigned;
@@ -1209,13 +1215,13 @@ procedure RegisterX509;
 type
   /// abstract parent class implementing ICryptCert using our TX509 class
   // - will store a certificate as TX509 and an abstract ICryptPrivateKey
-  // - is the parent of both TCryptCertX509 in this unit and TCryptCertPkcs11
-  // in mormot.crypt.pkcs11.pas
+  // - is the parent of TCryptCertX509 in this unit, TCryptCertPkcs11 in
+  // mormot.crypt.pkcs11.pas and TCryptCertCng in mormot.crypt.win.pas
   TCryptCertX509Abstract = class(TCryptCert)
   protected
     fX509: TX509;
     // may be nil or a TCryptPrivateKeyRsa, TCryptPrivateKeyEcc,
-    // TCryptPrivateKeyOpenSsl or a TCryptPrivateKeyPkcs11
+    // TCryptPrivateKeyOpenSsl, TCryptPrivateKeyPkcs11 or TCryptPrivateKeyCng
     fPrivateKey: ICryptPrivateKey;
     // overriden to use a faster search with no temporary memory allocation
     class procedure InternalFind(Cert: PICryptCert; const Value: RawByteString;
@@ -2786,7 +2792,7 @@ function TX509.FingerPrintCompare(const Value: RawUtf8; Algo: THashAlgo): intege
 begin
   if fCachedHash[Algo] = '' then
     ComputeCachedHash(Algo);
-  result := SortDynArrayAnsiString(fCachedHash[Algo], Value);
+  result := HumanHexCompare(pointer(fCachedHash[Algo]), pointer(Value));
 end;
 
 function TX509.FingerPrintCompare(Another: TX509; Algo: THashAlgo): integer;
@@ -2941,6 +2947,33 @@ begin
     fSafe.UnLock;
   end;
   Signed.AfterModified;
+end;
+
+class function TX509.HashForChannelBinding(const Cert: RawByteString): RawByteString;
+var
+  der: TCertDer;
+  x: TX509;
+  size: PtrInt;
+  dig: THash512Rec;
+begin
+  FastAssignNew(result);
+  der := PemToCert(Cert);
+  if der = '' then
+    der := Cert;  // assume a DER was specified
+  if not AsnDecChunk(Cert) then // basic input validation
+    exit;
+  x := TX509.Create;
+  try
+    if not x.LoadFromDer(Der) or
+       (x.SignatureAlgorithm = xsaNone) then
+      exit;
+    size := mormot.crypt.secure.HashForChannelBinding(der,
+      HASH_TXT[XSA_TO_HF[x.SignatureAlgorithm]], dig);
+    if size <> 0 then
+      FastSetRawByteString(result, @dig, size);
+  finally
+    x.Free;
+  end;
 end;
 
 
@@ -4277,7 +4310,7 @@ begin
     case Content of
       cccPrivateKeyOnly:
         begin
-          // may use mormot.core.secure encryption, not standard PKCS#8
+          // try standard PKCS#8 PBES2 and our mormot.crypt.secure encryption
           der := PemToDer(Saved); // see also TCryptPrivateKey.Load
           fPrivateKey := CryptPrivateKey[XKA_TO_CKA[AlgoXka]].Create; // replace
           if fPrivateKey.Load(

@@ -302,9 +302,9 @@ type
   TIListParent = class(TInterfacedObject)
   protected
     fSafe: TRWLock;
-    fCount: integer;  // external fDynArray count
-    fOptions: TListOptions;
-    fValue: pointer; // holds the actual dynamic array of <T>
+    fCount: integer;        // external fDynArray count
+    fOptions: TListOptions; // 8-bit
+    fValue: pointer;        // holds the actual dynamic array of <T>
     fDynArray: TDynArray;
     fHasher: PDynArrayHasher;
     function DoPop(var dest; opt: TListPop): boolean;

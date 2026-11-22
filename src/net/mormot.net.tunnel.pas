@@ -37,6 +37,7 @@ uses
   mormot.core.interfaces,
   mormot.crypt.core,
   mormot.crypt.secure,   // for ICryptCert
+  mormot.crypt.factory,
   mormot.crypt.ecc256r1, // for ECDHE encryption
   mormot.net.sock;
 
@@ -69,11 +70,11 @@ type
   TTunnelSession = cardinal;
   PTunnelSession = ^TTunnelSession;
 
-  /// abstract transmission layer with the central relay server
-  // - may be implemented as raw sockets or over a mORMot SOA WebSockets link
-  // - if toEcdhe or toEncrypt option is set, the frames are already encrypted
-  // - named as Tunnel*() methods to be joined as a single service interface,
-  // to leverage a single WebSockets callback
+  /// abstract transport for relay frames or local plaintext
+  // - relay frames have a 4-byte TTunnelSession trailer and may be encrypted
+  // - when used as OpenDirect()'s LocalTransmit or TTunnelSocketTransmit,
+  // TunnelSend() receives plaintext without the session trailer
+  // - the Tunnel*() methods can be exposed as a single SOA service interface
   ITunnelTransmit = interface(IInvokable)
     ['{AA661151-81EA-4665-895E-1487EF459AFF}']
     /// main method to emit the supplied binary Frame to the relay server
@@ -112,26 +113,26 @@ type
     fSafe: TOSLightLock; // protect especially fClientSock at startup/closure
     fState: (stCreated, stAccepting, stProcessing, stTerminated);
     fStarted: boolean;
-    fOwner: TTunnelLocal;
-    fTransmit: ITunnelTransmit;
+    fOwner: TTunnelLocal; // lifetime guaranteed by TTunnelLocal.Destroy
     fSession: TTunnelSession;
-    fAes: array[{sending:}boolean] of TAesAbstract;
     fServerSock, fClientSock: TNetSocket;
     fClientAddr: TNetAddr;
     fPort: TNetPort;
     fTimeoutAcceptSecs: cardinal;
     function TransmitSock: TNetSocket;
       {$ifdef HASINLINE} inline; {$endif}
-    /// accept/connect the connection, then crypt/redirect to fTransmit
+    /// accept/connect the socket, then forward plaintext to/from the owner
     procedure DoExecute; override;
   public
-    /// initialize the thread - called from Open()
-    constructor Create(owner: TTunnelLocal; const transmit: ITunnelTransmit;
-      const key, iv: THash128; sock: TNetSocket; acceptSecs: cardinal); reintroduce;
-    /// release all sockets and encryption state
+      /// create a suspended TCP worker, started by TTunnelLocal after handshake
+    constructor Create(owner: TTunnelLocal;
+      sock: TNetSocket; acceptSecs: cardinal); reintroduce;
+      /// abort, join and release sockets; crypto state belongs to TTunnelLocal
     destructor Destroy; override;
-    /// redirected from TTunnelLocal.Send
+   /// forward received plaintext to the local TCP socket
     procedure OnReceived(Frame: pointer; FrameLen: PtrInt);
+    /// shutdown both sockets and terminate the thread
+    procedure Abort;
     /// true if internal state is stProcessing, i.e. after accept() and within
     // the main redirection loop
     function Processing: boolean;
@@ -140,6 +141,35 @@ type
     /// how much time this background thread should wait for accept()
     property TimeoutAcceptSecs: cardinal
       read fTimeoutAcceptSecs;
+    /// the main bound port
+    property Port: TNetPort
+      read fPort;
+    /// the associated TTunnelSession
+    property Session: TTunnelSession
+      read fSession;
+  end;
+
+  /// socket adapter implementing a local plaintext ITunnelTransmit endpoint
+  // - owns the TTunnelLocalThread processing the local TCP socket
+  // - ITunnelTransmit.TunnelSend receives plaintext without a session trailer
+  // - TTunnelLocal owns this adapter through its fLocalTransmit interface
+  // - ClosePort() aborts the thread; the adapter destructor joins and frees it
+  // - final interface release must not occur from the worker thread itself
+  TTunnelSocketTransmit = class(TInterfacedObject, ITunnelTransmit)
+  protected
+    fThread: TTunnelLocalThread;
+  public
+    /// initialize the adaptor and own the (still suspended) thread
+    constructor Create(owner: TTunnelLocal; sock: TNetSocket;
+      acceptSecs: cardinal);
+    /// join and finalize the owned thread
+    destructor Destroy; override;
+    /// raw access to the background thread
+    property Thread: TTunnelLocalThread
+      read fThread;
+    // ITunnelTransmit methods
+    procedure TunnelSend(const Frame: RawByteString);
+    function TunnelInfo: variant;
   end;
 
   /// define the wire frame layout for TTunnelLocal optional ECDHE handshake
@@ -151,9 +181,12 @@ type
   end;
 
   /// identify the TTunnelLocal handshake protocol version
+  // - tlmVersion2 is the first stable actually released, using AES-GCM with
+  // each frame authentication and proper distinct receive/send keys
   TTunnelLocalMagic = (
     tlmNone,
-    tlmVersion1);
+    tlmVersion1_aesctr,
+    tlmVersion2);
 
   /// the header of the inital frame exchanged between both TTunnelLocal ends
   // - full header content (therefore the execution context) should match
@@ -182,6 +215,9 @@ type
   end;
   PTunnelLocalHandshake = ^TTunnelLocalHandshake;
 
+  /// define the internal state of a TTunnelLocal instance
+  TTunnelLocalFlags = set of (fSocketBound, fClosed, fClosePortNotified);
+
   /// abstract tunneling service implementation
   // - is properly implemented by TTunnelLocalServer/TTunnelLocalClient classes
   // - published ITunnelTransmit so that could be used as receival callback
@@ -189,13 +225,18 @@ type
   TTunnelLocal = class(TInterfacedPersistent,
     ITunnelLocal, ITunnelTransmit)
   protected
-    fSession: TTunnelSession;
-    fSendSafe: TMultiLightLock; // protect fHandshake+fThread
+    fSafe: TOSLightLock; // protect fHandshake, fFlags and fFramesIn/Out
     fPort, fRemotePort: TNetPort;
+    fSession: TTunnelSession;
     fOptions: TTunnelOptions;
-    fFlags: set of (fSocketBound, fClosePortNotified);
-    fClosed, fVerboseLog: boolean;
-    fThread: TTunnelLocalThread;
+    fFlags: TTunnelLocalFlags;
+    fVerboseLog: boolean;
+    fThread: TTunnelLocalThread; // non-owning: fLocalTransmit owns the worker
+    fLocalTransmit: ITunnelTransmit; // receives plaintext: TCP or in-process
+    fAesGcm: array[{sending:}boolean] of TAesAbstract;
+    fReady, fSending: boolean;
+    fSendSafe, fRecvSafe: TOSLightLock;
+    fSendQueue: TSynQueue;
     fHandshake: TSynQueue;
     fHandshakeEvent: TSynEvent;
     fEcdhe: TEccKeyPair;
@@ -205,6 +246,7 @@ type
     fLogClass: TSynLogClass;
     fStartTicks: cardinal; // GetUptimeSec value
     fInfo: TDocVariantData;
+    fAesIv: array[{sending:}boolean] of TAesBlock;
     // methods to be overriden according to the client/server side
     procedure IncludeOptionsFromCert; virtual; abstract;
     procedure EcdheHashRandom(var hmac: THmacSha256;
@@ -213,34 +255,42 @@ type
     procedure FrameSign(var frame: RawByteString); virtual;
     function FrameVerify(frame: PAnsiChar; framelen, payloadlen: PtrInt): boolean; virtual;
     function GetElapsed: cardinal;
+    procedure DrainHandshakeQueue;
+    procedure SendFrame(const Frame: RawByteString);
+    procedure EncryptGcm(var Frame: RawByteString);
+    function DecryptGcm(Frame: pointer; FrameLen: PtrInt): RawByteString;
+    procedure RelayFrame(const aFrame: RawByteString);
     // can be overriden to customize this class process
     procedure AfterHandshake; virtual;
     procedure OnTunnelInfo(var Info: TDocVariantData); virtual;
-    function OpenInternal(Sess: TTunnelSession;
-      const Transmit: ITunnelTransmit; TransmitOptions: TTunnelOptions;
-      TimeOutMS: integer; const AppSecret: RawUtf8; Sock: TNetSocket;
-      LocalPort: TNetPort; SocketBound: boolean;
+    // shared handshake and setup for Open(), OpenSocket() and OpenDirect()
+    function OpenInternal(Sess: TTunnelSession; const Transmit: ITunnelTransmit;
+      TransmitOptions: TTunnelOptions; TimeOutMS: integer; const AppSecret: RawUtf8;
+      var Sock: TNetSocket; LocalPort: TNetPort; SocketBound: boolean;
       const InfoNameValue: array of const;
-      const SignCert, VerifyCert: ICryptCert): TNetPort;
+      const SignCert, VerifyCert: ICryptCert;
+      const LocalTransmit: ITunnelTransmit = nil): TNetPort;
   public
-    /// initialize the instance for process
-    // - if no Context value is supplied, will compute an ephemeral key pair
-    // - call Open() to perform actual handshaking and start the background
-    // tunnelling thread
+    /// initialize a tunnel endpoint without opening a transport yet
+    // - SpecificKey may supply an ECDHE key pair; otherwise an ephemeral
+    // key pair is generated during opening when toEcdhe is enabled
+    // - Open() and OpenSocket() use a TCP worker; OpenDirect() attaches
+    // the supplied in-process plaintext destination
     constructor Create(Logger: TSynLogClass = nil;
       SpecificKey: PEccKeyPair = nil); reintroduce;
+    /// close the session and finalize any owned TCP worker
+    destructor Destroy; override;
     /// wait until the peer has actually started its tunnel handshake
-    // - this is an event-driven synchronization helper for demand-driven
-    // forwarding, and does not consume nor reorder the first handshake frame
-    // - Sess should be the identifier returned by ITunnelOpen.TunnelPrepare()
-    // or supplied to ITunnelOpen.TunnelAccept()
-    // - returns immediately if a handshake frame was already queued, otherwise
-    // waits up to TimeOutMS for ITunnelTransmit.TunnelSend() to receive one
-    // - returns false on timeout, ClosePort(), or if Open()/OpenSocket() already
-    // started; raises ETunnel if the queued frame belongs to another session
-    // - there should be a single waiter per TTunnelLocal instance; never have
-    // both tunnel ends only call WaitForHandshake(), since one end must initiate
-    // the handshake by calling Open() or OpenSocket()
+    // - event-driven synchronization for demand-driven tunnelling
+    // - Sess is returned by ITunnelOpen.TunnelPrepare() or supplied to
+    // ITunnelOpen.TunnelAccept()
+    // - returns immediately if a handshake frame is already queued,
+    // otherwise waits up to TimeOutMS without consuming that frame
+    // - returns false on timeout, ClosePort(), or once Open(), OpenSocket()
+    // or OpenDirect() has started
+    // - raises ETunnel if the queued frame belongs to another session
+    // - only one waiter is supported per instance; at least one endpoint
+    // must initiate the handshake using Open(), OpenSocket() or OpenDirect()
     function WaitForHandshake(Sess: TTunnelSession; TimeOutMS: integer): boolean;
     /// start tunnelling over an already-connected TCP socket
     // - intended for demand-driven port forwarding: the application may bind
@@ -256,31 +306,67 @@ type
       const AppSecret: RawUtf8; var Socket: TNetSocket; LocalPort: TNetPort;
       const InfoNameValue: array of const; const SignCert: ICryptCert = nil;
       const VerifyCert: ICryptCert = nil): TNetPort;
+    /// open a tunnel directly to an in-process plaintext destination
+    // - no local TCP socket or background thread is created
+    // - inherited by TTunnelLocalClient and TTunnelLocalServer, preserving
+    // their opposite cryptographic handshake roles
+    // - Transmit carries relay frames with a 4-byte session trailer,
+    // optionally encrypted according to TransmitOptions
+    // - LocalTransmit.TunnelSend receives plaintext without this trailer
+    // - use SendData() to transmit local application data, e.g. KVM frames
+    // - performs the same reciprocal handshake as Open() and OpenSocket(),
+    // with optional shared-secret and/or certificate authentication
+    // - the local port remains zero, so check this boolean result
+    // - returns false on handled setup failure; invalid calls raise ETunnel
+    function OpenDirect(Sess: TTunnelSession;
+      const Transmit, LocalTransmit: ITunnelTransmit;
+      TransmitOptions: TTunnelOptions; TimeOutMS: integer;
+      const AppSecret: RawUtf8; const InfoNameValue: array of const;
+      const SignCert: ICryptCert = nil;
+      const VerifyCert: ICryptCert = nil): boolean;
+    /// send plaintext from an in-process endpoint or the local TCP worker
+    // - encrypts if configured and appends the session trailer
+    // - serializes outgoing frames to preserve AES-GCM IV and transport order
+    // - concurrent or nested SendData() calls may enqueue their frames
+    // - ignored if the tunnel is not ready or has been closed
+    procedure SendData(const Data: RawByteString);
     /// main method to initialize tunnelling process
     // - Sess genuine integer identifier should match on both sides
     // - Transmit.TunnelSend will be used for sending raw data to the other end
     // - TransmitOptions will be amended to follow SignCert/VerifyCert properties
-    // - TimeOutMS is the delay to receive an handshake answer from the other
-    // end - this value will be used * 2 as TTunnelLocalThread.fTimeoutAcceptSecs
-    // - AppSecret is used during handshake (and toEncrypt with no toEcdhe), and
-    // should match on both sides
+    // - TimeOutMS limits the handshake wait and determines the background
+    // TCP worker's accept timeout, with an additional safety margin
+    // - AppSecret is used during handshake authentication and encryption key
+    // derivation, and should match on both sides - it should be a confidential,
+    // cryptographically random value with at least 128 bits of entropy,
+    // provisioned independently of the relay - don't use a short obvious text
+    // or PIN number for this - a unique 128-bit random secret securely shared
+    // between both ends would provide mutual authentication without certificates
+    // - AppSecret may be permanent or generated for each session - a per-session
+    // secret provides better isolation, whereas a shared permanent secret only
+    // authenticates membership in the group of endpoints knowing this secret
     // - if Address has a port, will connect a socket to this address:port
     // - if Address has no port, will bound its address an an ephemeral port,
     // which is returned as result for proper client connection
     // - InfoNameValue are name/value pairs of some JSON fields which will be
-    // included to ITunnelTransmit.TunnelInfo returned object (e.g. Host name)
+    // included to ITunnelTransmit.TunnelInfo returned object (e.g. Host name) -
+    // is obfuscated using AppSecret but should not contain sensitive data
     // - SignCert/VerifyCert should have [cuDigitalSignature] usage, and match
-    // VerifyCert/SignCert corresponding certificate on other side
-    // - raise ETunnel or return 0 on error; return the new local port on sucsess
+    // VerifyCert/SignCert corresponding certificate on other side - without
+    // VerifyCert, peer authentication relies on AppSecret being strong and
+    // confidential, and proves possession of this shared secret, not the
+    // identity of a specific endpoint
+    // - raise ETunnel or return 0 on error; return the new local port on success
     // - should be called only once per TTunnelLocal instance
     function Open(Sess: TTunnelSession; const Transmit: ITunnelTransmit;
-      TransmitOptions: TTunnelOptions; TimeOutMS: integer; const AppSecret, Address: RawUtf8;
-      const InfoNameValue: array of const; const SignCert: ICryptCert = nil;
-      const VerifyCert: ICryptCert = nil): TNetPort;
-    /// finalize this instance, and its local TCP server
-    destructor Destroy; override;
-    /// called e.g. by CallbackReleased() or by Destroy
-    procedure ClosePort;
+      TransmitOptions: TTunnelOptions; TimeOutMS: integer;
+      const AppSecret, Address: RawUtf8; const InfoNameValue: array of const;
+      const SignCert: ICryptCert = nil; const VerifyCert: ICryptCert = nil): TNetPort;
+    /// close a TCP or direct tunnel and notify the peer if needed
+    // - aborts any TCP worker, but does not join or free it here
+    // - final worker cleanup occurs during owner destruction
+    // - may also be called by CallbackReleased() or application UI code
+    procedure ClosePort(FromNotify: boolean = false);
   public
     /// ITunnelTransmit method: when a Frame is received from the relay server
     procedure TunnelSend(const aFrame: RawByteString);
@@ -290,7 +376,7 @@ type
     function LocalPort: RawUtf8;
     /// ITunnelLocal method: return the remote port
     function RemotePort: cardinal;
-    /// ITunnelLocal method: check if the background thread uses E2EE
+    /// ITunnelLocal method: check whether payload encryption is enabled
     function Encrypted: boolean;
     /// ITunnelLocal method: when a ITunnelTransmit remote callback is finished
     procedure CallbackReleased(const callback: IInvokable;
@@ -305,11 +391,10 @@ type
     property RawTransmit: ITunnelTransmit
       read fTransmit write fTransmit;
   published
-    /// the ephemeral port on the loopback as returned by Open()
+    /// the local TCP port, or zero with OpenDirect()
     property Port: TNetPort
       read fPort;
-    /// the ephemeral port on the remote loopback as returned by Open()
-    // on the other side
+    /// the peer TCP port, or zero if the peer uses OpenDirect()
     property Remote: TNetPort
       read fRemotePort;
     /// the connection specifications, as used by Open()
@@ -318,7 +403,7 @@ type
     /// the TTunnelSession as supplied to Open()
     property Session: TTunnelSession
       read fSession;
-    /// access to the associated background thread processing the data
+    /// non-owning TCP worker reference; nil with OpenDirect()
     property Thread: TTunnelLocalThread
       read fThread;
     /// how many bytes have been received
@@ -336,12 +421,13 @@ type
     /// number of seconds elapsed since Open()
     property Elapsed: cardinal
       read GetElapsed;
-    /// equals true after ClosePort
-    property Closed: boolean
-      read fClosed;
+    /// define the current state of this instance
+    property Flags: TTunnelLocalFlags
+      read fFlags;
   end;
 
 function ToText(opt: TTunnelOptions): ShortString; overload;
+function ToText(flg: TTunnelLocalFlags): ShortString; overload;
 
 /// extract the 32-bit session trailer from a ITunnelTransmit.TunnelSend() frame
 function FrameSession(const Frame: RawByteString): TTunnelSession;
@@ -449,61 +535,52 @@ type
 
 type
   /// abstract parent to ITunnelAgent/ITunnelConsole service endpoints
-  // - with shared methods to validate or cancel a two-phase startup
-  // - here "agent" is a simple TTunnelLocal application opening a localhost
-  // port, for transmitting some information (e.g. a VNC server) to a remote
-  // "console" with its own local TCP endpoint (e.g. a VNC viewer)
-  // - one TTunnelSession always represents one TCP byte stream; several local
-  // clients should therefore use distinct sessions even if they all connect to
-  // the same backend server, just like several SSH forwarding channels
-  // - the existing eager/static startup remains:
-  // 1) create TTunnelLocalClient/TTunnelLocalServer callbacks;
-  // 2) call TunnelPrepare() on either endpoint to retrieve a session ID;
-  // 3) call TunnelAccept() on the other endpoint with this session ID;
-  // 4) call TTunnelLocal.Open() on both endpoints (one call usually executes in
-  // another thread because the two handshakes are reciprocal);
-  // 5) after both Open() calls succeed, call TunnelCommit() on both endpoints,
-  // or TunnelRollback() on startup failure
-  // - an SSH -R-like demand-driven startup, which does not connect the backend
-  // until a real local client has arrived, should instead be:
-  // 1) create the two TTunnelLocal callbacks and run TunnelPrepare/TunnelAccept;
-  // no backend TCP connection is needed at this stage;
-  // 2) on the side exposing the forwarded port, bind/accept the application TCP
-  // connection outside TTunnelLocal (e.g. accept the VNC viewer);
-  // 3) call TTunnelLocal.OpenSocket() with this accepted socket; it emits the
-  // first end-to-end handshake frame and waits for its peer;
-  // 4) on the backend side, WaitForHandshake() wakes from that actual frame,
-  // then connect the backend and call Open(Address:port), or call OpenSocket()
-  // if the backend socket was established by the application;
-  // 5) after both Open/OpenSocket calls succeed, call TunnelCommit() on both
-  // endpoints; rollback only this TTunnelSession if the backend connection fails
-  // - this workflow needs no Sleep(), ReadLn(), timer polling, nor frame counter:
-  // TCP accept/connect and the handshake event are the synchronization points
-  // - a pending session is already routable because the handshake itself has to
-  // cross the relay before TunnelCommit(); a protocol such as VNC may therefore
-  // emit its initial server banner immediately once Open() starts its data thread
+  // - provides a two-phase startup for end-to-end tunnel sessions
+  // - a session connects a TTunnelLocalClient to a TTunnelLocalServer
+  // - either end may use a TCP socket with Open()/OpenSocket(), or an
+  // in-process plaintext endpoint with OpenDirect() (e.g. native KVM)
+  // - one TTunnelSession identifies one bidirectional tunnel; separate TCP
+  // connections require distinct sessions, like SSH forwarding channels
+  // - the eager/static startup sequence is:
+  // 1) create both TTunnelLocal callbacks;
+  // 2) call TunnelPrepare() on one end to obtain the session ID;
+  // 3) call TunnelAccept() on the other end with this session ID;
+  // 4) call Open(), OpenSocket() or OpenDirect() on both ends, as appropriate;
+  // one side normally runs in another thread due to reciprocal handshaking;
+  // 5) once both opens succeed, call TunnelCommit() on both ends, otherwise
+  // call TunnelRollback() for the failed session
+  // - for SSH -R-like demand-driven TCP forwarding:
+  // 1) create both callbacks and run TunnelPrepare()/TunnelAccept();
+  // 2) accept the viewer's local TCP connection outside TTunnelLocal;
+  // 3) call OpenSocket() on the viewer side to initiate the handshake;
+  // 4) WaitForHandshake() wakes the backend; connect to the backend and call
+  // Open(Address:port), or OpenSocket() with its already-connected socket;
+  // 5) commit both ends only after successful opens, otherwise roll back
+  // - an in-process endpoint may use OpenDirect() instead of a TCP socket;
+  // WaitForHandshake() also works with its incoming handshake frame
+  // - no Sleep(), ReadLn(), timer polling or frame counter is needed:
+  // the handshake event and, for TCP, accept/connect provide synchronization
+  // - a pending session is already routable because the handshake itself has
+  // to cross the relay before TunnelCommit()
   // - after a timeout, the relay deletes any TunnelPrepare missing a matching
   // TunnelAccept or TunnelCommit/TunnelRollback from its internal list
   ITunnelOpen = interface(ITunnelTransmit)
     /// initiate a new relay process as a two-phase commit from this end
-    // - caller may immediately call TTunnelLocal.Open/OpenSocket on its side;
-    // for demand-driven forwarding it may instead call WaitForHandshake() and
-    // defer its backend TCP connection until the peer has a real local client
-    // - once the handshake is OK or KO, call TunnelCommit or TunnelRollback
-    function TunnelPrepare(const callback: ITunnelTransmit): TTunnelSession;
-    /// accept a new relay process as a two-phase commit from this end
-    // - the relay was initiated by TunnelPrepare on the other end, and the
-    // returned  session should be specified to this method
-    // - caller may call Open/OpenSocket immediately, or use WaitForHandshake()
-    // to defer a backend connection as described in the ITunnelOpen workflow
-    // - once the handshake is OK or KO, call TunnelCommit or TunnelRollback
+    // - caller may immediately call Open(), OpenSocket() or OpenDirect(),
+    // or use WaitForHandshake() for demand-driven startup
+    // - once the handshake succeeds or fails, commit or roll back
+    function TunnelPrepare(
+      const callback: ITunnelTransmit): TTunnelSession;
+    /// accept a relay process initiated by TunnelPrepare() on the other end
+    // - caller may call Open(), OpenSocket() or OpenDirect() immediately,
+    // or use WaitForHandshake() to defer startup until the peer initiates
+    // - once the handshake succeeds or fails, commit or roll back
     function TunnelAccept(aSession: TTunnelSession;
       const callback: ITunnelTransmit): boolean;
-    /// finalize a relay process startup after Open()/OpenSocket() success
-    // - now ITunnelTransmit.TunnelSend will redirect frames from both sides
+    /// finalize relay startup after Open(), OpenSocket() or OpenDirect()
+    // - ITunnelTransmit.TunnelSend will then route frames in both directions
     function TunnelCommit(aSession: TTunnelSession): boolean;
-    /// abort a relay after Open() failed
-    // - now this session will be flushed from the internal list
+    /// abort a failed tunnel startup and unregister its session
     function TunnelRollback(aSession: TTunnelSession): boolean;
   end;
 
@@ -670,16 +747,51 @@ type
 
 implementation
 
+{
+  Multi-threading guidelines for SOA/interface based code as implemented below:
+
+  - Use locks only to protect short-lived internal state transitions and shared
+    fields. Keep the protected region as small and deterministic as possible.
+  - Never call an interface method, callback, socket I/O, wait, or any external
+    code while holding an instance lock: such calls may block or re-enter this
+    object from another thread and easily create deadlocks.
+  - When an external call depends on protected state, capture/update that state
+    under the lock, release the lock, then perform the call.
+  - A worker thread should never own its parent through a strong interface
+    reference. The parent owns the thread, creates it suspended, publishes the
+    thread reference before Start, and remains responsible for its lifetime.
+  - Shutdown should be split in two steps: request termination / unblock any
+    pending I/O first, then join and destroy the thread from its owner.
+  - Never let a worker thread clear or free the owner's thread reference, and
+    never use FreeOnTerminate for a thread whose lifetime belongs to an object.
+  - Write highly concurrent multi-threaded regression tests to validate the
+    actual implementation. Static (even AI-based) analysis is never enough.
+  - If the code is too difficult to read and maintain it is likely you did not
+    follow those advices.
+}
+
 
 { ******************** Abstract Definitions for Port Forwarding }
 
 const
   TRAIL_SIZE = SizeOf(TTunnelSession);
 
+  // defensive limits against malformed or excessive tunnel frames
+  MAX_TUNNEL_FRAME_BYTES = 72 shl 10;       // TransmitSock.RecvWait is 64KB max
+  MAX_TUNNEL_TCP_DATA_BYTES = 64 shl 10;
+  MAX_TUNNEL_DIRECT_DATA_BYTES = 16 shl 20; // allow 16MB JPEG/KVM direct payload
+  MAX_TUNNEL_DIRECT_FRAME_BYTES = MAX_TUNNEL_DIRECT_DATA_BYTES + GMAC_SIZE + TRAIL_SIZE;
+  MAX_TUNNEL_PENDING_FRAMES = 128;    // remote end could start transmitting
+
 function ToText(opt: TTunnelOptions): ShortString;
 begin
   GetSetNameShort(TypeInfo(TTunnelOptions), opt, result, {trim=}true);
   LowerCaseShort(result);
+end;
+
+function ToText(flg: TTunnelLocalFlags): ShortString;
+begin
+  GetSetNameShort(TypeInfo(TTunnelLocalFlags), flg, result, {trim=}true);
 end;
 
 function FrameSession(const Frame: RawByteString): TTunnelSession;
@@ -697,46 +809,39 @@ end;
 { TTunnelLocalThread }
 
 constructor TTunnelLocalThread.Create(owner: TTunnelLocal;
-  const transmit: ITunnelTransmit; const key, iv: THash128; sock: TNetSocket;
-  acceptSecs: cardinal);
+  sock: TNetSocket; acceptSecs: cardinal);
 begin
   fSafe.Init; // mandatory for TOSLightLock
   fOwner := owner;
   fPort := owner.Port;
   fSession := owner.Session;
-  fTransmit := transmit;
   fTimeoutAcceptSecs := acceptSecs;
-  if not IsZero(key) then
-  begin
-    // ecc256r1 shared secret has 128-bit resolution -> 128-bit AES-CTR
-    fAes[{sending:}false] := AesIvUpdatedCreate(mCtr, key, 128, @iv);
-    fAes[{sending:}true]  := AesIvUpdatedCreate(mCtr, key, 128, @iv);
-    // won't include an IV with each frame, but update it after each frame
-  end;
   fServerSock := sock;
-  FreeOnTerminate := true;
-  inherited Create({susp=}false, nil, nil, fOwner.fLogClass, Make(['tun', fPort]));
+  inherited Create({susp=}true, nil, nil, fOwner.fLogClass, Make(['tun', fPort]));
 end;
 
 destructor TTunnelLocalThread.Destroy;
 begin
-  Terminate;
-  fSafe.Lock;
-  try
-    if fOwner <> nil then
-    try
-      fOwner.fThread := nil;
-    except
-    end;
-    fServerSock.ShutdownAndClose({rdwr=}true);
-    fClientSock.ShutdownAndClose({rdwr=}true);
-  finally
-    fSafe.UnLock;
-  end;
-  inherited Destroy;
-  FreeAndNil(fAes[true]);
-  FreeAndNil(fAes[false]);
+  Abort; // Terminate + raw sockets shutdown
+  inherited Destroy; // joins the thread
+  // eventual raw sockets FD closure
+  fServerSock.Close;
+  fServerSock := nil;
+  fClientSock.Close;
+  fClientSock := nil;
+  // release internal resources
+  fOwner := nil;
   fSafe.Done; // mandatory for TOSLightLock
+end;
+
+procedure TTunnelLocalThread.Abort;
+begin
+  if self = nil then
+    exit;
+  Terminate;
+  // abort the connections but does not close them yet
+  fServerSock.RawShutdown; // no fSafe.Lock needed for this raw socket API
+  fClientSock.RawShutdown;
 end;
 
 function TTunnelLocalThread.Processing: boolean;
@@ -755,10 +860,10 @@ end;
 procedure TTunnelLocalThread.OnReceived(Frame: pointer; FrameLen: PtrInt);
 var
   res: TNetResult;
-  data: RawByteString;
 begin
-  // validate and optionally decrypt the input frame
-  if Terminated or
+  // input is already authenticated plaintext from TTunnelLocal
+  if (self = nil) or
+     Terminated or
      (Frame = nil) then
     exit;
   if not fSafe.TryLock then
@@ -768,23 +873,9 @@ begin
     fLogClass.Add.Log(sllDebug, 'OnReceived: accepted', self);
   end;
   try
-    if fAes[{sending:}false] <> nil then
-    begin
-      data := fAes[false].DecryptPkcs7Buffer(
-        Frame, FrameLen, {ivatbeg=}false, {raise=}false);
-      if data = '' then
-      begin
-        Terminate;
-        ETunnel.RaiseUtf8('%.OnReceived(%): decrypt error', [self, fPort]);
-      end;
-      Frame := pointer(data);
-      FrameLen := length(data);
-    end;
-    // relay the (decrypted) data to the local loopback
+    // relay plaintext to the local loopback
     if Terminated then
       exit;
-    if fOwner <> nil then
-      inc(fOwner.fBytesIn, FrameLen);
     res := TransmitSock.SendAll(Frame, FrameLen, @Terminated);
   finally
     fSafe.UnLock;
@@ -792,6 +883,7 @@ begin
   if (res = nrOk) or
      Terminated then
     exit;
+  // abort on any TCP retransmission error by design
   ETunnel.RaiseUtf8('%.OnReceived(%): error % when retransmitting',
     [self, fPort, _NR[res]]);
   Terminate;
@@ -802,10 +894,11 @@ var
   tmp: RawByteString;
   res: TNetResult;
   err: integer;
-  start: cardinal;
+  endtix: cardinal;
 begin
   fStarted := true;
   try
+    res := nrOk;
     if (fOwner <> nil) and
        (fSocketBound in fOwner.fFlags) then
     begin
@@ -815,11 +908,14 @@ begin
         'DoExecute: waiting for accept on port %', [fPort], self);
       fSafe.Lock; // protect early fClientSock access in OnReceived()
       try
-        start := GetTickSec; // socket timeout is 500ms: use a loop
+        endtix := GetTickSec + fTimeoutAcceptSecs; // socket timeout is 500ms
         repeat
+          if Terminated then
+            break;
           res := fServerSock.Accept(fClientSock, fClientAddr, {async=}false, @err);
-          if (res = nrOk) and
-             not Terminated then
+          if Terminated then
+            break;
+          if res = nrOk then
           begin
             fLog.Log(sllTrace,
               'DoExecute: accepted %', [fClientAddr.IPShort({port=}true)], self);
@@ -833,22 +929,24 @@ begin
               (fState = stProcessing) or
               (fOwner = nil) or
               (res <> nrRetry) or
-              (GetTickSec - start > fTimeoutAcceptSecs);
+              (GetTickSec > endtix);
       finally
         fSafe.UnLock;
       end;
+      // local client is connected: deliver frames buffered during the handshake
+      if (fState = stProcessing) and
+         not Terminated and
+         (fOwner <> nil) then
+        fOwner.DrainHandshakeQueue;
     end
     else
-    begin
       // newsocket() with connect() was done in the main thread
-      res := nrOk;
       fState := stProcessing;
-    end;
     if fState = stProcessing then
       while not Terminated do
       begin
         // wait for some data on the local loopback
-        res := TransmitSock.RecvWait(100, tmp, @Terminated);
+        res := TransmitSock.RecvWait(100, tmp, @Terminated); // max 64KB
         case res of
           nrRetry:
             continue;
@@ -862,21 +960,10 @@ begin
             if (tmp <> '') and
                not Terminated then
             begin
-              // emit the (encrypted) data with a 32-bit TTunnelSession trailer
-              if fOwner <> nil then
-                inc(fOwner.fBytesOut, length(tmp)); // size before encryption
-              if fAes[{send:}true] <> nil then
-                tmp := fAes[true].EncryptPkcs7(tmp, {ivatbeg=}false, TRAIL_SIZE)
-              else
-                SetLength(tmp, length(tmp) + TRAIL_SIZE);
-              PTunnelSession(@PByteArray(tmp)[length(tmp) - TRAIL_SIZE])^ := fSession;
-              if (fTransmit <> nil) and
+              // encryption/framing is owned by TTunnelLocal
+              if (fOwner <> nil) and
                  not Terminated then
-              begin
-                if fOwner <> nil then
-                  inc(fOwner.fFramesOut);
-                fTransmit.TunnelSend(tmp);
-              end;
+                fOwner.SendData(tmp);
             end;
         else
           ETunnel.RaiseUtf8('%.Execute(%): error % receiving',
@@ -910,135 +997,233 @@ begin
 end;
 
 
+{ TTunnelSocketTransmit }
+
+constructor TTunnelSocketTransmit.Create(owner: TTunnelLocal;
+  sock: TNetSocket; acceptSecs: cardinal);
+begin
+  inherited Create;
+  fThread := TTunnelLocalThread.Create(owner, sock, acceptSecs);
+end;
+
+destructor TTunnelSocketTransmit.Destroy;
+begin
+  FreeAndNil(fThread); // Abort + join, never done in ClosePort()
+  inherited Destroy;
+end;
+
+procedure TTunnelSocketTransmit.TunnelSend(const Frame: RawByteString);
+begin
+  if fThread <> nil then
+    fThread.OnReceived(pointer(Frame), length(Frame));
+end;
+
+function TTunnelSocketTransmit.TunnelInfo: variant;
+begin
+  VarClear(result); // local plaintext adapter has no relay metadata
+end;
+
+
 { TTunnelLocal }
 
 constructor TTunnelLocal.Create(Logger: TSynLogClass; SpecificKey: PEccKeyPair);
 begin
+  fSafe.Init; // mandatory for TOSLightLock
+  fSendSafe.Init;
+  fRecvSafe.Init;
   fLogClass := Logger;
   inherited Create;
   if SpecificKey <> nil then
     fEcdhe := SpecificKey^;
   fHandshake := TSynQueue.Create(TypeInfo(TRawByteStringDynArray));
+  fSendQueue := TSynQueue.Create(TypeInfo(TRawByteStringDynArray));
   fHandshakeEvent := TSynEvent.Create;
 end;
 
 destructor TTunnelLocal.Destroy;
+var
+  log: ISynLog;
 begin
-  if fThread <> nil then
-    ClosePort; // calls Terminate
-  fHandshakeEvent.Free;
+  fLogClass.EnterLocal(log, 'Destroy %', [fPort], self);
+  ClosePort;                // aborts the worker; never joins
+  fThread := nil;           // non-owning alias: do not free it directly
+  fLocalTransmit := nil;    // joins and destroys the thread, outside fSafe.Lock
+  FreeAndNil(fAesGcm[true]);
+  FreeAndNil(fAesGcm[false]);
   inherited Destroy;
   FillCharFast(fEcdhe, SizeOf(fEcdhe), 0);
   FreeAndNil(fHandshake); // if Open() was not called
+  FreeAndNil(fSendQueue);
+  fHandshakeEvent.Free;
+  fRecvSafe.Done;
+  fSendSafe.Done;
+  fSafe.Done; // mandatory for TOSLightLock
 end;
 
-procedure TTunnelLocal.ClosePort;
+procedure TTunnelLocal.ClosePort(FromNotify: boolean);
 var
-  thread: TTunnelLocalThread;
   frame: RawByteString; // notification frame to unregister to the other side
   callback: TNetSocket; // touch-and-go to the server to release main Accept()
   log: ISynLog;
 begin
   if self = nil then
     exit;
-  if fHandshakeEvent <> nil then
-    fHandshakeEvent.SetEvent; // release a possible WaitForHandshake()
-  fLogClass.EnterLocal(log, 'ClosePort %', [fPort], self);
-  fSendSafe.Lock; // protect fHandshake+fThread
+  fLogClass.EnterLocal(log, 'ClosePort % FromNotify=% AlreadyClosed=%',
+    [fPort, BOOL_STR[FromNotify], BOOL_STR[fClosed in fFlags]], self);
+  fSafe.Lock; // protect fHandshake and fFlags
   try
-    if not (fClosePortNotified in fFlags) then
-      try
-        // send frame with only session (and no payload) to notify as closed
-        include(fFlags, fClosePortNotified);
+    if (not FromNotify) and
+       (not (fClosePortNotified in fFlags)) then
+    begin
+      // send frame with only session (and no payload) to notify as closed
+      if Assigned(log) then
+        log.Log(sllTrace, 'ClosePort: notify other end', self);
+      PTunnelSession(FastNewRawByteString(frame, TRAIL_SIZE))^ := fSession;
+      inc(fFramesOut);
+    end;
+    include(fFlags, fClosePortNotified);
+    if fThread <> nil then
+    try
+      fThread.Abort; // Terminate + both sockets forced shutdown
+      if fThread.fState = stAccepting then
+      begin
         if Assigned(log) then
-          log.Log(sllTrace, 'ClosePort: notify other end', self);
-        PTunnelSession(FastNewRawByteString(frame, TRAIL_SIZE))^ := fSession;
-        if Assigned(fTransmit) then
-        begin
-          inc(fFramesOut);
-          fTransmit.TunnelSend(frame);
-        end;
-      except
+          log.Log(sllDebug, 'ClosePort: release accept', self);
+        if NewTcpClientSocket(IP4local, UInt32ToUtf8(fPort), 10, callback) = nrOK then
+          // Windows socket may not release Accept() until connected
+          callback.ShutdownAndClose({rdwr=}false);
       end;
-    thread := fThread;
-    if thread <> nil then
-      try
-        fThread := nil;
-        thread.Terminate;
-        if thread.fState = stAccepting then
-        begin
-          if Assigned(log) then
-            log.Log(sllDebug, 'ClosePort: release accept', self);
-          if NewTcpClientSocket(IP4local, UInt32ToUtf8(fPort), 10, callback) = nrOK then
-            // Windows socket may not release Accept() until connected
-            callback.ShutdownAndClose({rdwr=}false);
-        end;
-      except
-      end;
+    except
+    end;
+    include(fFlags, fClosed); // before UnLock and SetEvent
+    fReady := false;
   finally
-    fSendSafe.UnLock;
+    fSafe.UnLock;
   end;
+  if Assigned(fTransmit) and // happens on early closure
+     (frame <> '') then      // outside of the lock, just like SendFrame()
+    try
+      fTransmit.TunnelSend(frame); // notify the other end of closure
+    except
+    end;
   if Assigned(log) then
-    log.Log(sllTrace, 'ClosePort: %', [self]); // final statistics
+    log.Log(sllTrace, 'ClosePort: final %', [self]); // final statistics
   fPort := 0;
-  fClosed := true;
+  fHandshakeEvent.SetEvent; // release a possible WaitForHandshake()
 end;
 
 procedure TTunnelLocal.TunnelSend(const aFrame: RawByteString);
-var
-  l: PtrInt;
-  p: PAnsiChar;
 begin
   // ITunnelTransmit method: when a Frame is received from the relay server
-  l := length(aFrame);
   if fVerboseLog then
-    fLogClass.Add.Log(sllTrace, 'TunnelSend=%', [l]);
-  dec(l, TRAIL_SIZE);
-  if l < 0 then
-    ETunnel.RaiseUtf8('%.Send: unexpected size=%', [self, l]);
-  fSendSafe.Lock; // protect fHandshake+fThread
+    fLogClass.Add.Log(sllTrace, 'TunnelSend=%', [length(aFrame)]);
+  fSafe.Lock; // protect fHandshake and fFlags
   try
+    // reject unreasonably large incoming frames before queuing or decrypting
+    if (length(aFrame) > MAX_TUNNEL_DIRECT_FRAME_BYTES) or
+       ((fHandshake <> nil) and // small limit during handshake - within lock
+        (length(aFrame) > MAX_TUNNEL_FRAME_BYTES)) then // large direct KVM frames
+      ETunnel.RaiseUtf8('%.TunnelSend: oversized frame=%', [self, length(aFrame)]);
+    // handle special rendez-vous initial phase
     inc(fFramesIn);
     if fHandshake <> nil then
     begin
-      // handle special rendez-vous initial phase
-      if l = 0 then
-      begin
-        // received frame with only session (and no payload) to notify as closed
-        include(fFlags, fClosePortNotified);
-        if fHandshakeEvent <> nil then
-          fHandshakeEvent.SetEvent;
-        fClosed := true;
-        exit;
-      end;
-      fLogClass.Add.Log(sllTrace, 'TunnelSend: into Handshake queue', self);
-      fHandshake.Push(aFrame); // during handshake phase - maybe before Open
-      if fHandshakeEvent <> nil then
-        fHandshakeEvent.SetEvent;
+      fLogClass.Add.Log(sllTrace, 'TunnelSend: Handshake phase', self);
+      if length(aFrame) <= TRAIL_SIZE then // received closure notification
+        fFlags := fFlags + [fClosed, fClosePortNotified]
+      else if fHandshake.Count >= MAX_TUNNEL_PENDING_FRAMES then
+        ETunnel.RaiseUtf8('%.TunnelSend: handshake queue overflow', [self])
+      else
+        fHandshake.Push(aFrame); // during handshake phase - maybe before Open
+      fHandshakeEvent.SetEvent;  // eventually wake the waiting thread
       exit;
     end;
-    p := pointer(aFrame);
-    if PTunnelSession(p + l)^ <> fSession then
-      ETunnel.RaiseUtf8('%.Send: session mismatch', [self]);
-    if l = 0 then
-    begin
-      // received frame with only session (and no payload) to notify as closed
-      include(fFlags, fClosePortNotified);
-      ClosePort;
-    end
-    else if fThread <> nil then // = nil after ClosePort (too late)
-      fThread.OnReceived(p, l) // regular tunelling process
-    else
-      fLogClass.Add.Log(sllWarning, 'TunnelSend: Thread=nil', self); // unlikely
   finally
-    fSendSafe.UnLock;
+    fSafe.UnLock;
+  end;
+  // if we reached here we are in the main forwarding phase
+  RelayFrame(aFrame);
+end;
+
+procedure TTunnelLocal.RelayFrame(const aFrame: RawByteString);
+var
+  l: PtrInt;
+  p: PAnsiChar;
+  data: RawByteString;
+  local: ITunnelTransmit;
+begin
+  l := length(aFrame) - TRAIL_SIZE;
+  if l < 0 then
+    ETunnel.RaiseUtf8('%.Send: unexpected size=%', [self, l]);
+  p := pointer(aFrame);
+  if PTunnelSession(p + l)^ <> fSession then // no fSession yet during handshake
+    ETunnel.RaiseUtf8('%.Send: session mismatch', [self]);
+  if l = 0 then
+  begin
+    ClosePort({FromNotify=}true);
+    exit;
+  end;
+  // One decoder and one plaintext recipient per session, in wire order.
+  fRecvSafe.Lock;
+  try
+    if not fReady or (fClosed in fFlags) then
+      exit;
+    if fAesGcm[false] <> nil then
+    begin
+      try
+        data := DecryptGcm(p, l);
+      except
+        ClosePort; // invalid frame must not leave the IV state usable
+        raise;
+      end;
+      if data = '' then
+      begin
+        ClosePort;
+        ETunnel.RaiseUtf8('%.RelayFrame: invalid GCM frame', [self]);
+      end;
+    end
+    else
+      FastSetRawByteString(data, p, l);
+    inc(fBytesIn, length(data));
+    local := fLocalTransmit;
+    if Assigned(local) then
+      local.TunnelSend(data); // plaintext, without session trailer
+  finally
+    fRecvSafe.UnLock;
   end;
 end;
 
 function TTunnelLocal.WaitForHandshake(
   Sess: TTunnelSession; TimeOutMS: integer): boolean;
 var
-  frame: RawByteString;
+  state: (sAbort, sPending, sReady);
+
+  procedure RetrieveState;
+  var
+    frame: RawByteString;
+  begin
+    fSafe.Lock;
+    try
+      state := sAbort;
+      if (fClosed in fFlags) or
+         (fThread <> nil) or
+         (fHandshake = nil) then
+        exit;
+      if fSession = 0 then
+        fSession := Sess
+      else if fSession <> Sess then
+        ETunnel.RaiseUtf8('%.WaitForHandshake: session mismatch', [self]);
+      state := sPending;
+      if not fHandshake.Peek(frame) then
+        exit;
+      if FrameSession(frame) <> Sess then
+        ETunnel.RaiseUtf8('%.WaitForHandshake: wrong session trailer', [self]);
+      state := sReady;
+    finally
+      fSafe.UnLock;
+    end;
+  end;
+
 begin
   result := false;
   if (self = nil) or
@@ -1046,53 +1231,24 @@ begin
     exit;
   // first inspect the queue while protected by the same lock as TunnelSend():
   // supports a handshake which arrived before WaitForHandshake() was called
-  fSendSafe.Lock;
-  try
-    if fClosed or
-       (fThread <> nil) or
-       (fHandshake = nil) then
+  RetrieveState;
+  if state <> sReady then
+    if (state <> sAbort) and
+       fHandshakeEvent.WaitFor(TimeOutMS) then
+      // TSynEvent preserves an early SetEvent(), so there is no lost wakeup
+      // between the queue check above and this wait - no frame is consumed here
+      RetrieveState
+    else
       exit;
-    if (fSession <> 0) and
-       (fSession <> Sess) then
-      ETunnel.RaiseUtf8('%.WaitForHandshake: session mismatch', [self]);
-    fSession := Sess;
-    if fHandshake.Peek(frame) then
-    begin
-      if FrameSession(frame) <> Sess then
-        ETunnel.RaiseUtf8('%.WaitForHandshake: wrong session trailer', [self]);
-      result := true;
-      exit;
-    end;
-  finally
-    fSendSafe.UnLock;
-  end;
-  // TSynEvent preserves an early SetEvent(), so there is no lost wakeup between
-  // the queue check above and this wait - no frame is consumed here
-  if (fHandshakeEvent = nil) or
-     not fHandshakeEvent.WaitFor(TimeOutMS) then
-    exit;
-  fSendSafe.Lock;
-  try
-    if fClosed or
-       (fThread <> nil) or
-       (fHandshake = nil) or
-       not fHandshake.Peek(frame) then
-      exit;
-    if FrameSession(frame) <> Sess then
-      ETunnel.RaiseUtf8('%.WaitForHandshake: wrong session trailer', [self]);
-    result := true;
-  finally
-    fSendSafe.UnLock;
-  end;
+  result := state = sReady;
 end;
 
 procedure TTunnelLocal.CallbackReleased(const callback: IInvokable;
   const interfaceName: RawUtf8);
 begin
-  if not IdemPChar(pointer(interfaceName), 'ITUNNEL') then
-    exit; // should be ITunnelLocal or ITunnelTransmit
-  include(fFlags, fClosePortNotified); // no need to notify the remote end
-  ClosePort;
+  if IdemPChar(pointer(interfaceName), 'ITUNNEL') then
+    // should be ITunnelLocal or ITunnelTransmit
+    ClosePort({FromNotify=}true);
 end;
 
 procedure TTunnelLocal.FrameSign(var frame: RawByteString);
@@ -1119,12 +1275,135 @@ begin
     result := GetUptimeSec - fStartTicks; // in seconds
 end;
 
+procedure TTunnelLocal.EncryptGcm(var Frame: RawByteString);
+var
+  n: PtrInt;
+  gcm: TAesGcmAbstract;
+  p: PAnsiChar;
+begin
+  n := length(Frame);
+  p := FastNewString(n + GMAC_SIZE + TRAIL_SIZE);
+  fAesGcm[true].IV := fAesIV[true];
+  GCM_IncIV(fAesIV[true]);                         // genuine IV per direction
+  gcm := fAesGcm[true] as TAesGcmAbstract;
+  gcm.Encrypt(nil, nil, 0);                        // reset
+  gcm.AesGcmAad(@fSession, SizeOf(fSession));      // AAD session
+  gcm.Encrypt(pointer(Frame), p, n);               // no padding
+  FastAssignNew(Frame, p);                         // set result before ETunnel
+  if not gcm.AesGcmFinal(PAesBlock(p + n)^) then
+    ETunnel.RaiseUtf8('%.EncryptGcm: finalization failed', [self]);
+end; // caller will append fSession as trailer
+
+function TTunnelLocal.DecryptGcm(
+  Frame: pointer; FrameLen: PtrInt): RawByteString;
+var
+  n: PtrInt;
+  gcm: TAesGcmAbstract;
+begin
+  result := '';
+  n := FrameLen - SizeOf(TAesBlock);
+  if (Frame = nil) or
+     (n <= 0) then
+  begin
+    ETunnel.RaiseUtf8('%.DecryptGcm: invalid frame length=%', [self, FrameLen]);
+  end;
+  FastNewRawByteString(result, n);
+  gcm := fAesGcm[false] as TAesGcmAbstract;
+  gcm.IV := fAesIV[false];
+  GCM_IncIV(fAesIV[false]);                    // genuine IV per direction
+  gcm.Decrypt(nil, nil, 0);                    // reset
+  gcm.AesGcmAad(@fSession, SizeOf(fSession));  // AAD session
+  gcm.Decrypt(Frame, pointer(result), n);      // no padding
+  if not gcm.AesGcmFinal(PAesBlock(PAnsiChar(Frame) + n)^) then
+    FillZero(result);
+end;
+
+procedure TTunnelLocal.SendData(const Data: RawByteString);
+var
+  frame: RawByteString;
+  flush, more: boolean;
+begin
+  if (self = nil) or (Data = '') then
+    exit;
+  // TCP reads are 64KB, but direct KVM payloads may be much larger (16MB)
+  if (length(Data) > MAX_TUNNEL_DIRECT_DATA_BYTES) or
+     ((fThread <> nil) and
+      (length(Data) > MAX_TUNNEL_TCP_DATA_BYTES)) then
+  ETunnel.RaiseUtf8('%.SendData: oversized plaintext=%', [self, length(Data)]);
+  fSendSafe.Lock;
+  try
+    if not fReady or (fClosed in fFlags) then
+      exit;
+    if fSendQueue.Count >= MAX_TUNNEL_PENDING_FRAMES then
+      ETunnel.RaiseUtf8('%.SendData: pending frame overflow', [self]);
+    frame := Data;
+    if fAesGcm[true] <> nil then
+      EncryptGcm(frame)
+    else
+      SetLength(frame, length(frame) + TRAIL_SIZE);
+    PTunnelSession(@PByteArray(frame)[length(frame) - TRAIL_SIZE])^ := fSession;
+    inc(fBytesOut, length(Data));
+    fSendQueue.Push(frame);
+    flush := not fSending;
+    if flush then
+      fSending := true;
+  finally
+    fSendSafe.UnLock;
+  end;
+  if not flush then
+    exit;
+  // Drain outside the lock: a synchronous in-process relay may reenter
+  // SendData() from a receiving callback, which then only queues its frame
+  repeat
+    fSendSafe.Lock;
+    try
+      more := fSendQueue.Pop(frame);
+      if not more then
+        fSending := false;
+    finally
+      fSendSafe.UnLock;
+    end;
+    if not more then
+      break;
+    try
+      SendFrame(frame);
+    except
+      fSendSafe.Lock;
+      try
+        fSending := false;
+      finally
+        fSendSafe.UnLock;
+      end;
+      ClosePort; // lost frame would desynchronize implicit AES-GCM IVs
+      raise;
+    end;
+  until false;
+end;
+
+procedure TTunnelLocal.SendFrame(const Frame: RawByteString);
+begin
+  // mostly called from TTunnelLocalThread.DoExecute
+  if (self = nil) or
+     not Assigned(fTransmit) then
+    exit;
+  fSafe.Lock;
+  try
+    if fClosed in fFlags then
+      exit;
+    inc(fFramesOut);
+  finally
+    fSafe.UnLock;
+  end;
+  fTransmit.TunnelSend(Frame); // outside of the lock
+end;
+
 procedure TunnelHandshakeCrc(const Handshake: TTunnelLocalHandshake;
   const appsecret: RawUtf8; out crc: THash128);
 var
   sha3: TSha3;
 begin
-  sha3.Init(SHAKE_128); // 128-bit digital signature of Handshake.Ecdh+Info
+  sha3.Init(SHAKE_128);      // 128-bit digital signature of Handshake.Ecdh+Info
+  sha3.Update('Handshake'#0); // padding
   if appsecret = '' then
     sha3.Update('AB15C52F754F49CB9B23CF88735E39C8') // some default secret
   else
@@ -1179,7 +1458,8 @@ begin
     result := OpenInternal(Sess, Transmit, TransmitOptions, TimeOutMS, AppSecret,
       sock, port, bound, InfoNameValue, SignCert, VerifyCert);
   except
-    sock.ShutdownAndClose(true); // only needed for failures before OpenInternal
+    sock.ShutdownAndClose({rdwr=}true); // manual cleanup of the socket handle
+    sock := nil;
     raise;
   end;
 end;
@@ -1209,28 +1489,48 @@ begin
     result := OpenInternal(Sess, Transmit, TransmitOptions, TimeOutMS, AppSecret,
       sock, LocalPort, {SocketBound=}false, InfoNameValue, SignCert, VerifyCert);
   except
-    sock.ShutdownAndClose(true); // caller no longer owns Socket
+    sock.ShutdownAndClose({rdwr=}true); // manual cleanup of the socket handle
+    sock := nil;
     raise;
   end;
 end;
 
+function TTunnelLocal.OpenDirect(Sess: TTunnelSession;
+  const Transmit, LocalTransmit: ITunnelTransmit;
+  TransmitOptions: TTunnelOptions; TimeOutMS: integer;
+  const AppSecret: RawUtf8; const InfoNameValue: array of const;
+  const SignCert, VerifyCert: ICryptCert): boolean;
+var
+  sock: TNetSocket;
+begin
+  if (fPort <> 0) or (fLocalTransmit <> nil) or
+     (fThread <> nil) or (fHandshake = nil) or
+     not Assigned(Transmit) or not Assigned(LocalTransmit) then
+    ETunnel.RaiseUtf8('%.OpenDirect invalid call', [self]);
+  sock := nil;
+  OpenInternal(Sess, Transmit, TransmitOptions, TimeOutMS, AppSecret,
+    sock, 0, {SocketBound=}false, InfoNameValue, SignCert, VerifyCert,
+    LocalTransmit);
+  result := fReady;
+end;
+
 function TTunnelLocal.OpenInternal(Sess: TTunnelSession;
   const Transmit: ITunnelTransmit; TransmitOptions: TTunnelOptions;
-  TimeOutMS: integer; const AppSecret: RawUtf8; Sock: TNetSocket;
+  TimeOutMS: integer; const AppSecret: RawUtf8; var Sock: TNetSocket;
   LocalPort: TNetPort; SocketBound: boolean;
   const InfoNameValue: array of const;
-  const SignCert, VerifyCert: ICryptCert): TNetPort;
+  const SignCert, VerifyCert: ICryptCert;
+  const LocalTransmit: ITunnelTransmit): TNetPort;
 var
   l, li: PtrInt;
   frame, remote, info: RawByteString;
   infoaes: TAesCtr;
   rem: PTunnelLocalHandshake absolute remote;
   loc: TTunnelLocalHandshake;
-  key, iv: THash256Rec;
+  key, keyrec, keysnd, iv: THash256Rec;
   hmac, hmac2: THmacSha256;
-  hqueue: TSynQueue;
-  thread: TTunnelLocalThread;
   log: ISynLog;
+  adapter: TTunnelSocketTransmit;
 const // port is asymmetrical so not included to the KDF - nor the crc
   KDF_SIZE = SizeOf(loc.Info) - (SizeOf(loc.Info.port) + SizeOf(loc.Info.crc));
   SUFFIX_SIZE = TRAIL_SIZE + SizeOf(word);
@@ -1243,27 +1543,38 @@ begin
   fVerifyCert := VerifyCert;
   fOptions := TransmitOptions - [toClientSigned, toServerSigned];
   IncludeOptionsFromCert; // adjust from fSignCert/fVerifyCert
+  if (toEncrypt in fOptions) and
+     (AppSecret = '') and
+     not (toEcdhe in fOptions) then
+    ETunnel.RaiseUtf8('%.Open: encrypted tunnel requires AppSecret or ECDHE', [self]);
   if fLogClass <> nil then
     fLogClass.EnterLocal(log, 'Open(%,[%])', [Int64(Sess), ToText(fOptions)], self);
   fTransmit := Transmit;
   fPort := 0;
-  fFlags := [];
-  if SocketBound then
-    include(fFlags, fSocketBound);
+  fReady := false;
+  fSafe.Lock;
+  try
+    if fClosed in fFlags then
+      ETunnel.RaiseUtf8('%.Open: already closed', [self]);
+    fFlags := [];
+    if SocketBound then
+      include(fFlags, fSocketBound);
+  finally
+    fSafe.UnLock;
+  end;
   result := LocalPort;
   // initial single round trip handshake
-  thread := nil;
   infoaes := nil;
   try
     // header with optional ECDHE
-    loc.Info.magic   := tlmVersion1;
+    loc.Info.magic   := tlmVersion2; // AES-GCM
     loc.Info.options := fOptions;
-    loc.Info.session := fSession; // is typically an increasing sequence number
+    loc.Info.session := fSession;    // typically an increasing sequence number
     loc.Info.port    := result;
-    Random128(@loc.Ecdh.rnd);     // unpredictable
+    Random128(@loc.Ecdh.rnd);        // unpredictable
     if toEcdhe in fOptions then
     begin
-      if IsZero(fEcdhe.pub) then  // ephemeral key was not specified at Create
+      if IsZero(fEcdhe.pub) then     // no ephemeral key specified at Create
       begin
         if Assigned(log) then
           log.Log(sllTrace, 'Open: generate ECHDE key', self);
@@ -1276,7 +1587,6 @@ begin
       SharedRandom.Fill(@loc.Ecdh.pub, SizeOf(loc.Ecdh.pub)); // some padding
     TunnelHandshakeCrc(loc, AppSecret, loc.Info.crc);
     FastSetRawByteString(frame, @loc, SizeOf(loc));
-    FrameSign(frame); // optional digital signature
     // append (and potentially encrypt) the info JSON payload
     info := JsonEncode(InfoNameValue);
     if toEncrypted * fOptions <> [] then // toEncrypt or toEcdhe
@@ -1285,55 +1595,79 @@ begin
         hmac.Init('705FC9676148405B91A66FFE7C3B54AA') // some minimal key
       else
         hmac.Init(AppSecret);
+      hmac.Update('Info'#0);
       hmac.Update(@loc.Info, KDF_SIZE); // no replay (sequential session)
       hmac2 := hmac; // use hmac2 to compute info KDF
       hmac2.Done(key.b);
-      infoaes := TAesCtr.Create(key.Lo, 128, @key.Hi); // simple encryption
+      infoaes := TAesCtr.Create(key.Lo, 128, @key.Hi); // simple obfuscation
       info := infoaes.EncryptPkcs7(info, {ivatbeg=}false);
       infoaes.IV := key.Hi; // use the same IV for decoding "remote" info below
     end;
     li := length(info);
     if li > 65535 then
-      ETunnel.RaiseUtf8('Open: too much info (len=%)', [li]);
-    // actually send the frame ending with its session ID
-    Append(frame, [info, 'lisess']); // li:W sess:U32 = SUFFIX_SIZE
+      ETunnel.RaiseUtf8('%.Open: too much info (len=%)', [self, li]);
+    // sign the whole handshake INCLUDING the JSON ciphertext
+    Append(frame, info);
+    FrameSign(frame); // optional digital signature over handshake + JSON
+    // append the unsigned length/session trailer
+    Append(frame, 'lisess'); // li:W sess:U32 = SUFFIX_SIZE
     l := length(frame);
     PWord(@PByteArray(frame)^[l - SUFFIX_SIZE])^ := li;
     PTunnelSession(@PByteArray(frame)^[l - TRAIL_SIZE])^ := fSession;
-    inc(fFramesOut);
-    fTransmit.TunnelSend(frame);
+    SendFrame(frame);
     if Assigned(log) then
       log.Log(sllTrace, 'Open: sent % - wait for answer', [length(frame)], self);
     // this method will wait until both sides sent a valid signed header
     if not fHandshake.WaitPop(TimeOutMS, nil, remote) then
-      ETunnel.RaiseUtf8('Open: handshake %ms timeout on port %', [TimeOutMS, result]);
+      ETunnel.RaiseUtf8('%.Open: handshake %ms timeout on port %',
+        [self, TimeOutMS, result]);
     if Assigned(log) then
       log.Log(sllTrace, 'Open: received len=%', [length(remote)], self);
+    // ensure a valid minimum frame size before accessing its content
+    if length(remote) < SizeOf(loc) + SUFFIX_SIZE then
+      ETunnel.RaiseUtf8('%.Open: wrong handshake size=% on port %',
+        [self, length(remote), result]);
     // ensure the returned frame is for this session
     if FrameSession(remote) <> fSession then
-      ETunnel.RaiseUtf8('Open: wrong handshake trailer on port %', [result]);
-    // extract (and potentially decrypt) the associated JSON info payload
+      ETunnel.RaiseUtf8('%.Open: wrong handshake trailer on port %',
+        [self, result]);
+    // extract the JSON size from the trailing unsigned word
+    // frame layout:
+    // [handshake][JSON][signature][JSON size:W][session:U32]
     l := length(remote) - SUFFIX_SIZE;
-    li := PWord(@PByteArray(remote)^[l])^;
-    FastSetRawByteString(info, @PByteArray(remote)^[l - li], li);
+    li := PWord(@PByteArray(remote)^[l])^; // JSON size
+    // ensure JSON is fully inside the received frame
+    if li > l - SizeOf(loc) then
+      ETunnel.RaiseUtf8('%.Open: wrong handshake JSON size=% on port %',
+        [self, li, result]);
+    // verify the signature over BOTH the handshake and JSON ciphertext
+    // l is the end of the signature (excluding the trailing suffix)
+    // SizeOf(loc) + li is the signed payload length
+    if not FrameVerify(pointer(remote), l, SizeOf(loc) + li) then
+      ETunnel.RaiseUtf8('%.Open: handshake failed on port %', [self, result]);
+    // validate the authenticated handshake header
+    if not CompareMemSmall(@rem.Info, @loc.Info, KDF_SIZE) then
+      ETunnel.RaiseUtf8('%.Open: unexpected handshake on port %', [self, result]);
+    TunnelHandshakeCrc(rem^, AppSecret, key.Lo);
+    if not IsEqual(rem^.Info.crc, key.Lo) then
+      ETunnel.RaiseUtf8('%.Open: invalid handshake signature on port %',
+        [self, result]);
+    if IsEqual(loc.Info.crc, rem^.Info.crc) then
+      ETunnel.RaiseUtf8('%.Open: identical handshake CRCs on port %',
+        [self, result]);
+    // extract and decrypt JSON only AFTER signature verification
+    FastSetRawByteString(info, @PByteArray(remote)^[SizeOf(loc)], li);
     if infoaes <> nil then
       info := infoaes.DecryptPkcs7(info, {ivatbeg=}false);
     if fInfo.InitJsonInPlace(pointer(info), JSON_FAST) = nil then
-      ETunnel.RaiseUtf8('Open: invalid JSON info on port %', [result]);
-    // check the digital signature, maybe using the certificate
-    dec(l, li);
-    if l < SizeOf(loc) then // may have a signature trailer
-      ETunnel.RaiseUtf8('Open: wrong handshake size=% on port %', [l, result]);
-    if not CompareMemSmall(@rem.Info, @loc.Info, KDF_SIZE) then
-      ETunnel.RaiseUtf8('Open: unexpected handshake on port %', [result]);
-    TunnelHandshakeCrc(rem^, AppSecret, key.Lo);
-    if not IsEqual(rem^.Info.crc, key.Lo) then
-      ETunnel.RaiseUtf8('Open: invalid handshake signature on port %', [result]);
-    if not FrameVerify(pointer(remote), l, SizeOf(loc)) then
-      ETunnel.RaiseUtf8('Open: handshake failed on port %', [result]);
+      ETunnel.RaiseUtf8('%.Open: invalid JSON info on port %', [self, result]);
+    FillZero(info);
     fRemotePort := rem^.Info.port;
     // optional encryption - maybe with ECDHE ephemeral keys
     FillZero(key.b);
+    FillZero(keyrec.b);
+    FillZero(keysnd.b);
+    FillZero(iv.b);
     if toEncrypted * fOptions <> [] then // toEncrypt or toEcdhe
     begin
       // hmac has been pre-computed above with loc.Info and AppSecret
@@ -1347,37 +1681,61 @@ begin
             [self, result]);
         hmac.Update(key.b); // prime256v1 shared secret
       end;
-      hmac2 := hmac;     // two labeled hmacs - see NIST SP 800-108
+      hmac2 := hmac;              // several labeled hmacs - see NIST SP 800-108
       hmac.Update('AES key'#0);
-      hmac.Done(key.b);   // AES-128-CTR key
+      hmac.Update(loc.Info.crc);  // AES-128-GCM receive key
+      hmac.Done(keyrec.b);
+      hmac := hmac2;
+      hmac.Update('AES key'#0);
+      hmac.Update(rem^.Info.crc); // AES-128-GCM send key
+      hmac.Done(keysnd.b);
+      if IsEqual(keyrec.Lo, keysnd.Lo) then
+        ETunnel.RaiseUtf8('%.Open: identical directional AES keys on port %',
+          [self, result]);
       hmac2.Update('IV'#1);
-      hmac2.Done(iv.b);     // AES-128-CTR iv
+      hmac2.Done(iv.b);           // same initial AES-128-GCM iv
     end;
-    // launch the background processing thread
-    fPort := result;
+    // GCM now belongs to the session, independently of its local endpoint
+    if toEncrypted * fOptions <> [] then
+    begin
+      fAesGcm[false] := TAesFast[mGcm].Create(keyrec.Lo, 128, @iv.Lo);
+      fAesGcm[true] := TAesFast[mGcm].Create(keysnd.Lo, 128, @iv.Lo);
+      fAesIv[false] := iv.Lo;
+      fAesIv[true] := iv.Lo;
+    end;
+    fPort := result; // zero is intentional for a direct endpoint
     TimeOutMS := (TimeOutMS shr 10) + 5; // minimal coherent accept time
-    thread := TTunnelLocalThread.Create(
-      self, fTransmit, key.Lo, iv.Lo, Sock, TimeOutMS);
-    SleepHiRes(100, thread.fStarted);
-    if Assigned(log) then
-      log.Log(sllTrace, 'Open: started=% %',
-        [BOOL_STR[thread.fStarted], thread], self);
-    fStartTicks := GetUptimeSec; // wall clock
-    hqueue := fHandshake;
-    fSendSafe.Lock; // re-entrant for TunnelSend()
+    fSafe.Lock;
     try
-      fThread := thread;   // starts the normal tunnelling phase
-      fHandshake := nil;   // ends the handshaking phase
-      while hqueue.Pop(frame) do
+      if fClosed in fFlags then
+        ETunnel.RaiseUtf8('%.Open: closed during handshake', [self]);
+      if fLocalTransmit <> nil then
+        ETunnel.RaiseUtf8('%.Open: already connected', [self]);
+      if Assigned(LocalTransmit) then
+        fLocalTransmit := LocalTransmit
+      else
       begin
-        if Assigned(log) then
-          log.Log(sllDebug, 'Open: delayed frame len=%', [length(frame)], self);
-        TunnelSend(frame); // paranoid: redirect to this instance
+        adapter := TTunnelSocketTransmit.Create(self, Sock, TimeOutMS);
+        fLocalTransmit := adapter; // adapter now owns the thread
+        fThread := adapter.Thread; // keep the public Thread property
+        Sock := nil; // socket ownership transferred
       end;
+      fReady := true;
+      if fThread <> nil then
+        fThread.Start;
     finally
-      fSendSafe.UnLock;
-      hqueue.Free;
+      fSafe.UnLock;
     end;
+    if fThread <> nil then
+    begin
+      SleepHiRes(100, fThread.fStarted);
+      if Assigned(log) then
+        log.Log(LOG_TRACEERROR[not fThread.fStarted], 'Open: started=% %',
+          [BOOL_STR[fThread.fStarted], fThread], self);
+    end;
+    fStartTicks := GetUptimeSec; // wall clock
+    if not SocketBound then      // if not already drained
+      DrainHandshakeQueue;
     // now everything is running and we can prepare the fixed info
     fInfo.AddNameValuesToObject([
       'remotePort', fRemotePort,
@@ -1393,14 +1751,49 @@ begin
     on E: Exception do
     begin
       fLogClass.Add.Log(sllWarning, 'OpenInternal % [%] for thread=% sock=%',
-        [PClass(E)^, E.Message, thread, pointer(Sock)], self);
-      sock.ShutdownAndClose(true); // any error would abort and return 0
+        [PClass(E)^, E.Message, fThread, pointer(Sock)], self);
+      fReady := false;
+      if fLocalTransmit <> nil then
+        ClosePort
+      else if Sock <> nil then
+      begin
+        Sock.ShutdownAndClose({rdwr=}true); // socket handle cleanup
+        Sock := nil; // any error would abort and return 0
+      end;
       result := 0;
     end;
   end;
   infoaes.Free;
   FillZero(key.b);
+  FillZero(keyrec.b);
+  FillZero(keysnd.b);
   FillZero(iv.b);
+end;
+
+procedure TTunnelLocal.DrainHandshakeQueue;
+var
+  frame: RawByteString;
+  needclose: boolean;
+begin
+  repeat
+    fSafe.Lock; // protect handshake phase
+    try
+      needclose := fClosed in fFlags;
+      if needclose or
+         not fHandshake.Pop(frame) then
+      begin
+        FreeAndNil(fHandshake); // eventually ends the handshaking phase
+        break;
+      end;
+    finally
+      fSafe.UnLock;
+    end;
+    // process any frame received during the handshake outside of the lock
+    fLogClass.Add.Log(sllDebug, 'Open: delayed frame len=%', [length(frame)], self);
+    RelayFrame(frame);
+  until false;
+  if needclose then
+    ClosePort; // outside of fSafe.Lock
 end;
 
 procedure TTunnelLocal.AfterHandshake;
@@ -1425,8 +1818,7 @@ end;
 function TTunnelLocal.Encrypted: boolean;
 begin
   result := (self <> nil) and
-            (fThread <> nil) and
-            (fThread.fAes[false] <> nil);
+            (fAesGcm[false] <> nil);
 end;
 
 procedure TTunnelLocal.OnTunnelInfo(var Info: TDocVariantData);
@@ -1439,12 +1831,12 @@ var
   dv: TDocVariantData absolute result;
 begin
   VarClear(result);
-  if fPort = 0 then
+  if not fReady then
     exit;
   dv.InitFast(fInfo.Count + 7, dvObject);
   dv.AddFrom(fInfo);         // fixed values
   dv.AddNameValuesToObject([ // evolving values
-    'elapsed',   GetElapsed,
+    'elapsed',   Int64(GetElapsed),
     'bytesIn',   fBytesIn,
     'bytesOut',  fBytesOut,
     'framesIn',  fFramesIn,

@@ -95,6 +95,16 @@ Efficient Read/Write `TClientDataSet` for SQL, ORM and JSON Process
 - Fill a read-only `TClientDataset` from `TOrmTable`/`TOrmTableJson` data
 - Delphi writable `TSqlDBClientDataSet` inheriting from `TClientDataSet`
 
+### mormot.db.sql.duckdb
+
+Direct DuckDB Client Access using `mormot.db.raw.duckdb.pas` C API Wrapper
+- `TSqlDBDuckDBConnectionProperties`: one shared duckdb_database instance
+- `TSqlDBDuckDBConnection`: one duckdb_connection per (thread) connection
+- `TSqlDBDuckDBStatement`: prepared statements and chunk-based row access
+- `TSqlDBQuackConnectionProperties`: native client of a DuckDB Quack server
+- `TSqlDBQuackConnection`: one HTTP keep-alive socket per (thread) connection
+- `TSqlDBQuackStatement`: remote execution and chunk-based row access
+
 ### mormot.db.nosql.bson
 
 Efficient BSON Support for MongoDB Clients

@@ -214,8 +214,8 @@ type
 // e.g. on Windows, you need to run also the function on cLocalHost, and on
 // POSIX it seems to require a specific broadcast per interface network mask
 // otherwise only a single interface is broadcasted
-// - is useful only for low-level forensic tools: to find out which LDAP
-// client ot use, rather call CldapGetLdapController/CldapMyLdapController
+// - is useful only for low-level forensic tools: to properly locate a LDAP
+// server, rather call CldapGetLdapController/CldapMyLdapController
 function CldapBroadcast(var Servers: TCldapServers; TimeOutMS: integer = 100;
   const Address: RawUtf8 = cBroadcast; const Port: RawUtf8 = LDAP_PORT): integer;
 
@@ -5862,9 +5862,17 @@ begin
   fTargetPort := LDAP_PORT;
   fKerberosDN := '';
   fTls := false;
-  if not u.From(uri, LDAP_PORT) then
+  if not u.From(uri) then
     exit;
-  if u.Scheme <> '' then
+  if u.Scheme = '' then
+  begin
+    // no scheme:// means LDAP - force LDAPS on address:636
+    if u.Port = LDAP_TLS_PORT then
+      fTls := true
+    else if u.Port = '80' then // no port and no scheme
+      u.Port := LDAP_PORT;
+  end
+  else
     case u.UriScheme of
       usLdap:
         fTls := false;
@@ -5872,15 +5880,9 @@ begin
         fTls := true;
     else
       exit; // unexpected scheme://
-    end
-  else if u.Port = LDAP_TLS_PORT then
-    fTls := true; // no scheme:// means LDAP - force LDAPS on address:636
+    end;
   fTargetHost := u.Server;
   fTargetPort := u.Port;
-  if u.Address = '' then
-    exit;
-  if u.Address[1] = '/' then
-    delete(u.Address, 1, 1);
   fKerberosDN := u.Address;
 end;
 
@@ -8529,13 +8531,14 @@ begin
   InvalidateSecContext(client);
   try
     try
-      if (aFullUserName = nil)
-         {$ifdef OSWINDOWS} and (fGroupSid = nil) {$endif} then
+      {$ifdef OSPOSIX} // this 'onlypass' single pass trick is GSSAPI only
+      if aFullUserName = nil then
         // simple aUser/aPassword credential check needs no server side
         // - see as reference mag_auth_basic() in NGINX's mod_auth_gssapi.c
         result := ClientSspiAuthWithPassword(client, 'onlypass',
                     aUser, aPassword, fKerberosSpn, dataout)
       else
+      {$endif OSPOSIX}
       begin
         // more user information currently requires a ServerSspiAuth() context
         InvalidateSecContext(server);

@@ -180,12 +180,13 @@ end;
 
 ### Cryptography (mormot.crypt.*)
 
-**10 units** for cryptographic operations:
+**11 units** for cryptographic operations:
 
 | Unit | Purpose |
 |------|---------|
 | `mormot.crypt.core` | AES, SHA-2, SHA-3, HMAC, PBKDF2 |
-| `mormot.crypt.secure` | High-level factories, password hashing |
+| `mormot.crypt.secure` | Authentication, password hashing, PEM/DER encoding |
+| `mormot.crypt.factory` | High-level `ICrypt*` / `TCrypt*` factories |
 | `mormot.crypt.ecc` | Elliptic Curve Cryptography |
 | `mormot.crypt.ecc256r1` | secp256r1 curve implementation |
 | `mormot.crypt.rsa` | RSA encryption/signatures |
@@ -199,7 +200,8 @@ end;
 
 ```pascal
 uses
-  mormot.crypt.secure;
+  mormot.crypt.secure,
+  mormot.crypt.factory;
 
 // High-level factories (recommended)
 var
@@ -220,7 +222,7 @@ end;
 
 ## 3.5. Layer 2: Networking (mormot.net.*)
 
-**19 units** for network communication:
+**22 units** for network communication:
 
 ### Socket & HTTP
 
@@ -229,8 +231,11 @@ end;
 | `mormot.net.sock` | Cross-platform socket abstraction |
 | `mormot.net.http` | HTTP protocol state machine |
 | `mormot.net.client` | HTTP clients (Socket, WinHTTP, curl) |
-| `mormot.net.server` | HTTP servers (threaded, http.sys) |
+| `mormot.net.server` | HTTP servers (threaded) |
+| `mormot.net.server.win` | HTTP and WebSockets servers over Windows http.sys |
+| `mormot.net.peercache` | Local peer-to-peer HTTP cache |
 | `mormot.net.async` | Event-driven async I/O |
+| `mormot.net.proxy` | HTTP server with proxy and cache |
 
 ### WebSockets
 

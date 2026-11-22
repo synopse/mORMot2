@@ -1,0 +1,10 @@
+# Local compiled executable link or binary, not shipped in source tree
+/jop
+/jop.bin
+# All generated results live beside their numbered run.sh
+*/generated-*
+# Recursive batch output uses the source's nested relative path
+09-batch/site-a.yaml
+09-batch/sub/site-b.yaml
+# Optional Python verifier caches
+__pycache__/

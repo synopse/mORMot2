@@ -15,6 +15,8 @@ program mab;
   - if some .exe/.dll file name is specified (you can use wild chars), will
   process all matching .exe/.dll files with associated debug information, and
   will create the .mab files, then embedd the .mab content to the .exe/.dll
+  - embedding would invalidate an Authenticode signature, so a signed .exe/.dll
+  is rejected with an error: run this tool first, then sign the executable
 
   *****************************************************************************
 }

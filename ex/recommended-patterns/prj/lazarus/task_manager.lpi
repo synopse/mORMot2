@@ -25,6 +25,7 @@
           </Target>
           <SearchPaths>
             <IncludeFiles Value="$(ProjOutDir)"/>
+            <OtherUnitFiles Value="..\..\src;..\..\src\app\tasks\interface;..\..\src\app\tags\interface;..\..\src\dom\tasks;..\..\src\dom\tags;..\..\src\infra\tasks;..\..\src\infra\tags;..\..\src\app\tasks\implementation;..\..\src\app\tags\implementation;..\..\src\serv\app;..\..\tests\tasks;..\..\tests\tags"/>
             <UnitOutputDirectory Value="..\..\bin\units\lazarus-$(TargetCPU)-$(TargetOS)"/>
           </SearchPaths>
           <Parsing>
@@ -67,6 +68,7 @@
           </Target>
           <SearchPaths>
             <IncludeFiles Value="$(ProjOutDir)"/>
+            <OtherUnitFiles Value="..\..\src;..\..\src\app\tasks\interface;..\..\src\app\tags\interface;..\..\src\dom\tasks;..\..\src\dom\tags;..\..\src\infra\tasks;..\..\src\infra\tags;..\..\src\app\tasks\implementation;..\..\src\app\tags\implementation;..\..\src\serv\app;..\..\tests\tasks;..\..\tests\tags"/>
             <UnitOutputDirectory Value="..\..\bin\units\lazarus-$(TargetCPU)-$(TargetOS)"/>
           </SearchPaths>
           <Parsing>
@@ -111,15 +113,107 @@
         <PackageName Value="mormot2"/>
       </Item1>
     </RequiredPackages>
-    <Units Count="2">
+    <Units Count="25">
       <Unit0>
         <Filename Value="..\delphi\task_manager.dpr"/>
         <IsPartOfProject Value="True"/>
       </Unit0>
       <Unit1>
-        <Filename Value="..\..\src\serv\app\ServAppTaskManager.pas"/>
+        <Filename Value="..\..\src\shared_types.pas"/>
         <IsPartOfProject Value="True"/>
       </Unit1>
+      <Unit2>
+        <Filename Value="..\..\src\app_config.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit2>
+      <Unit3>
+        <Filename Value="..\..\src\app_settings.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit3>
+      <Unit4>
+        <Filename Value="..\..\src\dom\tasks\task.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit4>
+      <Unit5>
+        <Filename Value="..\..\src\dom\tasks\task_repository.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit5>
+      <Unit6>
+        <Filename Value="..\..\src\app\tasks\interface\task_query.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit6>
+      <Unit7>
+        <Filename Value="..\..\src\app\tasks\interface\task_command.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit7>
+      <Unit8>
+        <Filename Value="..\..\src\app\tasks\interface\task_dtos.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit8>
+      <Unit9>
+        <Filename Value="..\..\src\app\tasks\implementation\task_mappers.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit9>
+      <Unit10>
+        <Filename Value="..\..\src\app\tasks\implementation\task_query_impl.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit10>
+      <Unit11>
+        <Filename Value="..\..\src\app\tasks\implementation\task_command_impl.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit11>
+      <Unit12>
+        <Filename Value="..\..\src\infra\tasks\task_repository_orm.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit12>
+      <Unit13>
+        <Filename Value="..\..\src\dom\tags\tag.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit13>
+      <Unit14>
+        <Filename Value="..\..\src\dom\tags\tag_repository.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit14>
+      <Unit15>
+        <Filename Value="..\..\src\app\tags\interface\tag_query.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit15>
+      <Unit16>
+        <Filename Value="..\..\src\app\tags\interface\tag_command.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit16>
+      <Unit17>
+        <Filename Value="..\..\src\app\tags\interface\tag_dtos.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit17>
+      <Unit18>
+        <Filename Value="..\..\src\app\tags\implementation\tag_mappers.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit18>
+      <Unit19>
+        <Filename Value="..\..\src\app\tags\implementation\tag_query_impl.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit19>
+      <Unit20>
+        <Filename Value="..\..\src\app\tags\implementation\tag_command_impl.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit20>
+      <Unit21>
+        <Filename Value="..\..\src\infra\tags\tag_repository_orm.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit21>
+      <Unit22>
+        <Filename Value="..\..\tests\tasks\task_tests.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit22>
+      <Unit23>
+        <Filename Value="..\..\tests\tags\tag_tests.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit23>
+      <Unit24>
+        <Filename Value="..\..\src\serv\app\ServAppTaskManager.pas"/>
+        <IsPartOfProject Value="True"/>
+      </Unit24>
     </Units>
   </ProjectOptions>
   <CompilerOptions>
@@ -130,6 +224,7 @@
     </Target>
     <SearchPaths>
       <IncludeFiles Value="$(ProjOutDir)"/>
+      <OtherUnitFiles Value="..\..\src;..\..\src\app\tasks\interface;..\..\src\app\tags\interface;..\..\src\dom\tasks;..\..\src\dom\tags;..\..\src\infra\tasks;..\..\src\infra\tags;..\..\src\app\tasks\implementation;..\..\src\app\tags\implementation;..\..\src\serv\app;..\..\tests\tasks;..\..\tests\tags"/>
       <UnitOutputDirectory Value="..\..\bin\units\lazarus-$(TargetCPU)-$(TargetOS)"/>
     </SearchPaths>
     <Parsing>

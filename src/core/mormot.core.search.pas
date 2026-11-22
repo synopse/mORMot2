@@ -187,8 +187,10 @@ type
     // - will first call Init() to initialize the internal array
     // - then parse the incoming JSON object, storing all its field values
     // as RawUtf8, and returning TRUE if the supplied content is correct
+    function InitFromJson(const Json: RawUtf8; aCaseSensitive: boolean = false): boolean;
+    /// reset content, then add all fields from an JSON object
     // - warning: the supplied JSON buffer will be decoded and modified in-place
-    function InitFromJson(Json: PUtf8Char; aCaseSensitive: boolean = false): boolean;
+    function InitFromJsonBuffer(Json: PUtf8Char; aCaseSensitive: boolean): boolean;
     /// reset content, then add all name, value pairs
     // - will first call Init(false) to initialize the internal array
     procedure InitFromNamesValues(const Names, Values: array of RawUtf8);
@@ -2353,7 +2355,7 @@ begin
     Add(Names[i], Values[i]);
 end;
 
-function TSynNameValue.InitFromJson(Json: PUtf8Char; aCaseSensitive: boolean): boolean;
+function TSynNameValue.InitFromJsonBuffer(Json: PUtf8Char; aCaseSensitive: boolean): boolean;
 var
   N: PUtf8Char;
   nam, val: RawUtf8;
@@ -2388,6 +2390,14 @@ begin
     Add(nam, val);
   until info.EndOfObject = '}';
   result := true;
+end;
+
+function TSynNameValue.InitFromJson(const Json: RawUtf8; aCaseSensitive: boolean): boolean;
+var
+  tmp: TSynTempBuffer; // local copy for in-place process
+begin
+  result := InitFromJsonBuffer(tmp.Init(json), aCaseSensitive);
+  tmp.Done;
 end;
 
 function TSynNameValue.Find(const aName: RawUtf8): PtrInt;
@@ -2767,7 +2777,8 @@ begin
   if fTimeoutSeconds = 0 then
     exit;
   tix := GetTickSec;
-  if fTimeoutTix > tix then
+  if (fTimeoutTix <> 0) and
+     (tix >= fTimeoutTix) then
     Reset;
   fTimeoutTix := tix + fTimeoutSeconds;
 end;
@@ -3093,7 +3104,9 @@ begin
   end;
   if r <> n then
     DynArrayFakeLength(result, r);
-  if not (ffoSortByDate in Options) then
+  if not (ffoSortByDate in Options) and
+     not ((ffoSortByName in Options) and
+          (ffoIncludeFolder in Options)) then
     exit;
   da.Init(TypeInfo(TFindFilesDynArray), result);
   FindFilesSort(da, Options);
@@ -3113,7 +3126,12 @@ begin
 end;
 {$else}
 begin
-  FileNamesU(Directory, Mask, Options, IgnoreFileName, result);
+  if (ffoSortByName in Options) and
+     (ffoIncludeFolder in Options) then
+    result := FindFilesDynArrayToFileNames(
+      FindFiles(Directory, Mask, IgnoreFileName, Options))
+  else
+   FileNamesU(Directory, Mask, Options, IgnoreFileName, result);
 end;
 {$endif UNICODE}
 

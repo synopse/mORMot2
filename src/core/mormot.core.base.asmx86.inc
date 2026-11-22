@@ -620,7 +620,7 @@ asm
         cmp     eax, 100
         jb      @2
         mov     ecx, eax
-        mov     edx, DIV100_INV
+        mov     edx, DIV100_INV // val div 100 = (QWord(val)*DIV100_INV) shr 37
         mul     edx
         shr     edx, 5          // now edx=eax div 100
         mov     eax, edx
@@ -667,9 +667,9 @@ asm
         cmp     eax, 100
         jb      @2
         mov     ecx, eax
-        mov     edx, DIV100_INV
+        mov     edx, DIV100_INV // val div 100 = (QWord(val)*DIV100_INV) shr 37
         mul     edx
-        shr     edx, 5 // now edx=eax div 100
+        shr     edx, 5          // now edx=eax div 100
         mov     eax, edx
         imul    edx, -200
         movzx   edx, word ptr [TwoDigitLookup + ecx * 2 + edx]
@@ -698,9 +698,9 @@ asm
         // eax=Y, edx=P
         push    edx
         mov     ecx, eax
-        mov     edx, DIV100_INV
+        mov     edx, DIV100_INV // Y div 100 = (QWord(Y) * DIV100_INV) shr 37
         mul     edx
-        shr     edx, 5 // now edx=Y div 100
+        shr     edx, 5          // now edx=Y div 100
         movzx   eax, word ptr [TwoDigitLookup + edx * 2]
         imul    edx, -200
         movzx   edx, word ptr [TwoDigitLookup + ecx * 2 + edx]
@@ -2140,10 +2140,18 @@ end; // the x64 asm returns the very same value - no further optimization needed
 function SynLZdecompress1(src: PAnsiChar; size: integer; dst: PAnsiChar): integer;
 {$ifdef FPC}nostackframe; assembler;{$endif}
 asm
+        //   [esp]      = returned uncompressed size
+        //   [esp+04H]  = compressed input end (src_end)
+        //   [esp+08H]  = remaining control-word bits
+        //   [esp+0CH]  = match length
+        //   [esp+10H]  = literal run length
+        //   [esp+1CH]  = TOffsets[0..4095] (16KB)
+        // registers: ebx=src, esi=dst, ebp=last_hashed, edi=shifted CW
         push    ebp
         push    ebx
         push    esi
         push    edi
+        // touch successive pages for Win32 stack guard growth
         push    eax
         add     esp, -4092
         push    eax
@@ -2153,82 +2161,114 @@ asm
         push    eax
         add     esp, -4092
         push    eax
-        add     esp, -24
-        mov     esi, ecx
-        mov     ebx, eax
+        add     esp, -24            // total 16412 bytes
+        mov     esi, ecx            // dst
+        mov     ebx, eax            // src
         add     edx, eax
-        mov     [esp+8H], esi
-        mov     [esp+10H], edx
+        mov     [esp+04H], edx      // src_end
         movzx   eax, word ptr [ebx]
-        mov     [esp], eax
-        or      eax,eax
-        je      @@0917
+        mov     [esp], eax          // result
+        test    eax, eax
+        jz      @done
         add     ebx, 2
-        mov     eax, [esp]
-        test    ah, 80H
-        jz      @@0907
-        and     eax, 7FFFH
+        test    eax, $8000
+        jz      @size
+        and     eax, $7fff
         movzx   edx, word ptr [ebx]
         shl     edx, 15
         or      eax, edx
         mov     [esp], eax
         add     ebx, 2
-@@0907: lea     ebp, [esi - 1]
-@@0908: mov     ecx, [ebx]
+@size:  lea     ebp, [esi - 1]
+        mov     dword ptr [esp + 08H], 0 // bits
+        xor     edi, edi
+        {$ifdef FPC} align 16 {$else} {$ifdef ASMALIGN} .align 16 {$endif}{$endif}
+@main:  cmp     ebx, [esp + 04H]   // src_end
+        jae     @done
+        cmp     dword ptr [esp + 08H], 0
+        jne     @token
+        mov     edi, [ebx]         // next 32 control bits
         add     ebx, 4
-        mov     [esp+14H], ecx
-        mov     edi, 1             // edi=CWbit
-        cmp     ebx, [esp+10H]
-        jnc     @@0917
-@@0909: mov     ecx, [esp+14H]
-@@090A: test    ecx, edi
-        jnz     @@0911
-        mov     al, [ebx]
-        inc     ebx
-        mov     [esi], al
-        inc     esi
-        cmp     ebx, [esp+10H]
-        lea     eax, [esi-3]
-        jnc     @@0917
-        cmp     eax, ebp
-        jbe     @@0910
-        inc     ebp
+        mov     dword ptr [esp + 08H], 32
+        cmp     ebx, [esp+04H]
+        jae     @done
+@token: test    edi, 1
+        jnz     @match
+        // consecutive zero control bits = literal run (max 32)
+        mov     ecx, [esp + 08H]
+        test    edi, edi
+        jz      @litcnt            // all remaining bits are literals
+        bsf     ecx, edi           // guaranteed nonzero
+@litcnt:mov     edx, [esp + 04H]   // src_end
+        sub     edx, ebx           // compressed bytes remaining
+        cmp     ecx, edx
+        cmova   ecx, edx           // cap last (partial) control word
+        mov     [esp + 10H], ecx   // save run
+        cmp     ecx, 4
+        jb      @litb
+        // final dword first, then backwards by dwords
+        mov     eax, [ebx + ecx - 4]
+        mov     [esi + ecx - 4], eax
+        lea     edx, [ecx - 1]
+        shr     edx, 2
+        jz      @litok
+        {$ifdef FPC} align 16 {$else} {$ifdef ASMALIGN} .align 16 {$endif}{$endif}
+@lit4:  dec     edx
+        mov     eax, [ebx + edx * 4]
+        mov     [esi + edx * 4], eax
+        jnz     @lit4
+        jmp     @litok
+@litb:  dec     ecx
+        mov     al, [ebx + ecx]
+        mov     [esi + ecx], al
+        jnz     @litb
+@litok: mov     ecx, [esp + 10H]
+        add     ebx, ecx
+        add     esi, ecx
+        sub     dword ptr [esp + 08H], ecx
+        shr     edi, cl            // 32-bit shift wraps; bits=0 reloads CW
+        jmp     @main
+@match: // synchronize preceding literals before reading hash offset
+        lea     ecx, [esi - 3]
+        cmp     ebp, ecx
+        jae     @read
+        {$ifdef FPC} align 16 {$else} {$ifdef ASMALIGN} .align 16 {$endif}{$endif}
+@hash1: inc     ebp
         mov     eax, [ebp]
         mov     edx, eax
         shr     eax, 12
-        xor     eax, edx
-        and     eax, 0FFFH
-        mov     [esp+1CH + eax * 4], ebp
-@@0910: add     edi, edi
-        jnz     @@090A
-        jmp     @@0908
-@@0911: movzx   edx, word ptr [ebx]
+        xor     edx, eax
+        and     edx, 4095
+        mov     [esp + 1CH + edx * 4], ebp
+        cmp     ebp, ecx
+        jb      @hash1
+@read:  movzx   edx, word ptr [ebx]
         add     ebx, 2
         mov     eax, edx
-        and     edx, 0FH
-        add     edx, 2
-        shr     eax, 4
-        cmp     edx,2
-        jnz     @@0912
-        movzx   edx, byte ptr [ebx]
+        shr     edx, 4             // offset hash index
+        and     eax, 15            // match length nibble
+        add     eax, 2
+        cmp     eax, 2
+        jne     @short
+        movzx   eax, byte ptr [ebx]
         inc     ebx
-        add     edx, 18
-@@0912: mov     eax, [esp+1CH + eax * 4]
+        add     eax, 18
+@short: mov     [esp + 0CH], eax   // match length
+        mov     eax, [esp + 1CH + edx * 4] // source offset
         mov     ecx, esi
-        mov     [esp+18H], edx
-        sub     ecx, eax
-        // inlined optimized move()
+        sub     ecx, eax           // dst - match source
+        mov     edx, [esp + 0CH]
         cmp     ecx, edx
-        jl      @@ovlap   // overlapping content requires per-byte copy
+        jb      @ovlap             // overlapping match: forward byte copy
+        // retain existing i386 fast match paths, including pre-SSE2 CPUs
         cmp     edx, 32
         ja      @large
         sub     edx, 8
         jg      @9_32
 {$ifdef HASNOSSE2}
-        // slowest x87 FPU code on very old CPU with no SSE2 support
         mov     ecx, [eax]
-        mov     eax, [eax + 4]     // always copy 8 bytes for 0..8
-        mov     [esi], ecx         // safe since src_endmatch := src_end-(6+5)
+        mov     eax, [eax + 4]     // same 8-byte speculative copy as MoveFast()
+        mov     [esi], ecx
         mov     [esi + 4], eax
         jmp     @movend
 @9_32:  fild    qword ptr [eax + edx]
@@ -2244,11 +2284,10 @@ asm
 @16:    fistp   qword ptr [esi]
         fistp   qword ptr [esi + edx]
         jmp     @movend
-        nop
 @large: push    esi
         fild    qword ptr [eax]
-        lea     eax, [eax + edx - 8]
-        lea     edx, [esi + edx - 8]
+        lea     eax, [eax + edx-8]
+        lea     edx, [esi + edx-8]
         fild    qword ptr [eax]
         push    edx
         neg     edx
@@ -2262,8 +2301,7 @@ asm
         fistp   qword ptr [esi]
         pop     esi
         fistp   qword ptr [esi]
-{$else} // inlined SSE2 move
-        movq    xmm0, qword ptr [eax]
+{$else} movq    xmm0, qword ptr [eax]
         movq    qword ptr [esi], xmm0
         jmp     @movend
 @9_32:  movq    xmm0, qword ptr [eax + edx]
@@ -2281,8 +2319,8 @@ asm
         jmp     @movend
 @large: push    esi
         movups  xmm2, dqword ptr [eax]
-        lea     eax, [eax + edx - 16]
-        lea     edx, [esi + edx - 16]
+        lea     eax, [eax + edx-16]
+        lea     edx, [esi + edx-16]
         movups  xmm1, dqword ptr [eax]
         push    edx
         neg     edx
@@ -2297,37 +2335,39 @@ asm
         pop     esi
         movups  dqword ptr [esi], xmm2
 {$endif HASNOSSE2}
-@movend:cmp     esi, ebp
-        jbe     @@0916
-@@0915: inc     ebp
-        mov     edx, [ebp]
-        mov     eax, edx
-        shr     edx, 12
-        xor     eax, edx
-        and     eax, 0FFFH
-        mov     [esp+1CH + eax * 4], ebp
-        cmp     esi, ebp
-        ja      @@0915
-@@0916: add     esi, [esp+18H]
-        cmp     ebx, [esp+10H]
-        jnc     @@0917
-        add     edi, edi
-        lea     ebp, [esi - 1]
-        jz      @@0908
-        jmp     @@0909
-@@ovlap:push    ebx
+        jmp     @movend
+@ovlap: // forward byte copy is necessary for repeated sequences
+        push    ebx
         push    esi
         lea     ebx, [eax + edx]
         add     esi, edx
         neg     edx
-@s:     mov     al, [ebx + edx]
+@by:    mov     al, [ebx + edx]
         mov     [esi + edx], al
         inc     edx
-        jnz     @s
+        jnz     @by
         pop     esi
         pop     ebx
-        jmp     @movend
-@@0917: mov     eax, [esp]
+@movend:cmp     ebx, [esp + 04H]   // src_end
+        jae     @done              // final token: don't hash any further
+        cmp     ebp, esi
+        jae     @finish
+        {$ifdef FPC} align 16 {$else} {$ifdef ASMALIGN} .align 16 {$endif}{$endif}
+@hash2: inc     ebp
+        mov     eax, [ebp]
+        mov     edx, eax
+        shr     eax, 12
+        xor     edx, eax
+        and     edx, 4095
+        mov     [esp + 1CH + edx * 4], ebp
+        cmp     ebp, esi
+        jb      @hash2
+@finish:add     esi, [esp + 0CH]   // match length
+        lea     ebp, [esi - 1]
+        shr     edi, 1
+        dec     dword ptr [esp + 08H]
+        jmp     @main
+@done:  mov     eax, [esp]         // result
         add     esp, 16412
         pop     edi
         pop     esi
@@ -2362,7 +2402,7 @@ asm
         add     esp, -32
         mov     esi, eax // esi=src
         mov     edi, ecx // edi=dst
-        mov     [esp+08H], ecx
+        mov     [esp + 08H], ecx
         mov     eax, edx
         cmp     eax, 32768
         jl      @@0889
@@ -2380,44 +2420,44 @@ asm
         jz      @@0890
         add     edi, 2
 @@0891: lea     eax, [edx + esi]
-        mov     [esp+18H], edi
-        mov     [esp+0CH], eax
+        mov     [esp + 18H], edi
+        mov     [esp + 0CH], eax
         sub     eax, 11
-        mov     [esp+4], eax
+        mov     [esp + 4], eax
         xor     eax, eax
         mov     [edi], eax
-        lea     edi, [esp+24H] // reset 16KB offsets lookup table using ERMS
+        lea     edi, [esp + 24H] // reset 16KB offsets lookup table using ERMS
         mov     ecx, 4096
         cld
         rep stosd
-        mov     edi, [esp+18H]
+        mov     edi, [esp + 18H]
         add     edi, 4
         mov     ebx, 1 // ebx=1 shl CWbit
         // main loop:
-        cmp     esi, [esp+4]
+        cmp     esi, [esp + 4]
         ja      @@0900
 @@0892: mov     edx, [esi]
         mov     eax, edx
         shr     edx, 12
         xor     edx, eax
         and     edx, 0FFFH
-        mov     ebp, [esp+24H + edx * 4]
-        mov     ecx, [esp+4024H + edx * 4]
-        mov     [esp+24H + edx * 4], esi
+        mov     ebp, [esp + 24H + edx * 4]
+        mov     ecx, [esp + 4024H + edx * 4]
+        mov     [esp + 24H + edx * 4], esi
         xor     ecx, eax
         test    ecx, 0FFFFFFH
-        mov     [esp+4024H + edx * 4], eax
+        mov     [esp + 4024H + edx * 4], eax
         jnz     @@0897
         mov     eax, esi
         or      ebp, ebp
         jz      @@0897
         sub     eax, ebp
-        mov     ecx, [esp+18H]
+        mov     ecx, [esp + 18H]
         cmp     eax, 2
         jle     @@0897
         add     esi, 2
         or      dword ptr [ecx], ebx
-        mov     ecx, [esp+0CH]
+        mov     ecx, [esp + 0CH]
         add     ebp, 2
         mov     eax, 1
         sub     ecx, esi
@@ -2468,16 +2508,16 @@ asm
         inc     edi
 @@0898: add     ebx, ebx
         jz      @@0899
-        cmp     esi, [esp+4]
+        cmp     esi, [esp + 4]
         jbe     @@0892
         jmp     @@0900
-@@0899: mov     [esp+18H], edi
+@@0899: mov     [esp + 18H], edi
         mov     [edi], ebx
         inc     ebx
         add     edi, 4
-        cmp     esi, [esp+4]
+        cmp     esi, [esp + 4]
         jbe     @@0892
-@@0900: cmp     esi, [esp+0CH]
+@@0900: cmp     esi, [esp + 0CH]
         jnc     @@0903
 @@0901: mov     al, [esi]
         mov     [edi], al
@@ -2485,16 +2525,16 @@ asm
         inc     edi
         add     ebx, ebx
         jz      @@0902
-        cmp     esi, [esp+0CH]
+        cmp     esi, [esp + 0CH]
         jc      @@0901
         jmp     @@0903
 @@0902: mov     [edi], ebx
         inc     ebx
         add     edi, 4
-        cmp     esi, [esp+0CH]
+        cmp     esi, [esp + 0CH]
         jc      @@0901
 @@0903: mov     eax, edi
-        sub     eax, [esp+08H]
+        sub     eax, [esp + 08H]
 @@0904: add     esp, 32804
         pop     edi
         pop     esi
@@ -2584,6 +2624,16 @@ asm // see https://software.intel.com/en-us/blogs/2011/04/14/is-avx-enabled
         db  $0f, $01, $d0 // XGETBV reads XCR0 into EDX:EAX
         and     eax, 6    // check OS enabled both XMM (bit 1) and YMM (bit 2)
         cmp     al, 6
+        sete    al
+end;
+
+function IsZmmOSEnabled: boolean;
+{$ifdef FPC}nostackframe; assembler;{$endif}
+asm // AVX-512 requires the OS to save opmask and ZMM registers
+        xor     ecx, ecx  // get control register XCR0 = XFEATURE_ENABLED_MASK
+        db  $0f, $01, $d0 // XGETBV reads XCR0 into EDX:EAX
+        and     eax, $e6  // XMM+YMM (bits 1-2) + opmask/ZMM_Hi256/Hi16_ZMM (5-7)
+        cmp     al, $e6
         sete    al
 end;
 
@@ -2787,7 +2837,7 @@ asm
         mov     dword ptr [edx].TDiv100Rec.M, eax
         mov     ecx, edx
         mov     edx, eax
-        mov     eax, DIV100_INV
+        mov     eax, DIV100_INV // Y div 100 = (QWord(Y) * DIV100_INV) shr 37
         mul     edx
         shr     edx, 5
         mov     dword ptr [ecx].TDiv100Rec.D, edx
@@ -2795,8 +2845,8 @@ asm
         sub     dword ptr [ecx].TDiv100Rec.M, eax
 end;
 
-// those functions are intrinsics with FPC :)
-
+{$ifndef HASBITINTRINSICS}
+// those functions are intrinsics with FPC and since Delphi 10.4
 function BSRdword(c: cardinal): cardinal;
 asm
         bsr     eax, eax
@@ -2805,16 +2855,25 @@ asm
 @nz:
 end;
 
-function BSRqword(const q: qword): cardinal;
-var
-  c: cardinal; // CPU32 and inlining friendly
-begin
-  c := q shr 32;
-  if c = 0  then
-    result := BsrDword(cardinal(q)) // search in lowest 32-bit
-  else
-    result := BsrDword(c) or 32;   // search in highest 32-bit
+function BSRqword(const q: QWord): cardinal;
+asm
+        lea     edx, q          // pointer passed on stack with Delphi i386 ABI
+        bsr     eax, [edx + 4]  // high DWORD
+        jnz     @high
+        bsr     eax, [edx]      // low DWORD
+        jnz     @done
+        mov     eax, 255
+        jmp     @done
+@high:  add     eax, 32
+@done:
 end;
+
+function CountTrailingZeros32(c: cardinal): PtrUInt;
+asm
+        // called internally from SynLZdecompress1pas on oldest Delphi
+        bsf     eax, eax
+end;
+{$endif HASBITINTRINSICS}
 
 {$ifndef ISDELPHIXE2}
 function ReturnAddress: pointer;

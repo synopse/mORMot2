@@ -2,7 +2,7 @@
 
 The `mget` command-line tool can retrieve files using HTTP or HTTPS, similar to the well-known homonymous GNU WGet tool, but with some unique features, like optional hash computation or peer-to-peer cache downloading. 
 
-It is based on the `THttpClientSocket.WGet()` process from `mormot.net.client`, and optional peer-to-peer cache process as implemented by `THttpPeerCache` from `mormot.net.server`. So everything you get with this tool is also directly available from you own projects using our framework.
+It is based on the `THttpClientSocket.WGet()` process from `mormot.net.client`, and optional peer-to-peer cache process as implemented by `THttpPeerCache` from `mormot.net.peercache`. So everything you get with this tool is also directly available from you own projects using our framework.
 
 Tested on Windows, Linux, and MacOS.
 

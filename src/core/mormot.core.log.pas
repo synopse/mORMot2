@@ -69,7 +69,7 @@ type
 
   /// a debugger symbol, as decoded by TDebugFile from a .map/.dbg/.mab file
   // - may refer to a global variable, function or method name and address
-  TDebugSymbol = packed record
+  TDebugSymbol = record
     /// symbol identifier
     Name: RawUtf8;
     /// relative virtual address where this symbol starts
@@ -87,7 +87,7 @@ type
   // - as decoded by TDebugFile from a .map/.dbg/.mab file
   // - may refer to the main .pas file, a nested .inc file, or source locations
   // generated for compiler features such as inlined routines or generics
-  TDebugBlock = packed record
+  TDebugBlock = record
     /// identifier and address range of this source block
     // - Name is the main Pascal unit identifier, e.g. 'mormot.core.base'
     Symbol: TDebugSymbol;
@@ -195,6 +195,8 @@ type
     // - the executable name must be specified, because it's impossible to
     // write to the executable of a running process
     // - this method will work for .exe and for .dll (or .ocx)
+    // - raise ESynLogException if the file has an Authenticode signature,
+    // which would be invalidated: embed the .mab first, then sign
     procedure SaveToExe(const aExeName: TFileName;
       Scope: TDebugFileScope = []);
     /// save all debugging information as JSON content
@@ -1206,7 +1208,7 @@ type
 
   /// thread-specific internal threadvar definition used for fast process
   // - consumes 484/512 bytes + 256+64 per thread on CPU32/CPU64
-  TSynLogThreadInfo = packed record
+  TSynLogThreadInfo = {$ifdef CPUINTEL} packed {$endif} record
     /// number of recursive calls currently stored in Recursion[]
     // - nothing logged above MAX_SYNLOGRECURSION (53) to keep this record small
     RecursionCount: byte;
@@ -1373,7 +1375,7 @@ type
     // in a situation where no other logging may occur from this thread any more
     // - it will release all thread-specific resource used by this TSynLog
     // - called e.g. by TRest.EndCurrentThread, via TSynLogFamily.OnThreadEnded
-    class procedure NotifyThreadEnded; {$ifdef HASINLINE} static; {$endif}
+    class procedure NotifyThreadEnded;
     /// handle generic method enter / auto-leave tracing
     // - returning a ISynLog interface will allow you to have an automated
     // sllLeave log created when the method is left (thanks to the hidden
@@ -1447,7 +1449,6 @@ type
     // - expects/requires the ISynLog to be a void (=nil) variable on stack
     // - slightly more efficient - especially on FPC - than plain Enter()
     // - optionally return the TSynLog instance (or nil) for direct usage
-    // - optionally return the TSynLog instance (or nil) for direct call
     // - typical usage is the following, very close to TSynLog.Enter:
     // ! var logger: ISynLog;
     // ! begin
@@ -2393,9 +2394,11 @@ var
   threadflags: ^TSynLogThreadInfoFlags;
 {$endif NOEXCEPTIONINTERCEPT}
 begin
+  {$ifndef DELPHIPOSIX}
   if skip < 0 then
     skip := 0;
   inc(skip); // ignore this very function
+  {$endif DELPHIPOSIX}
   {$ifndef NOEXCEPTIONINTERCEPT}
   // the manual stack walk makes speculative reads: intercepted exceptions
   // should not reach the logs during the process
@@ -2684,7 +2687,6 @@ type
     numoptable: array[1..255] of byte; // start at index 1 -> no THash2048
     function LoadSections: boolean;
     procedure ReadInit(aBase, aLimit: Int64);
-    function ReadLeb128: Int64;
     function ReadAddress(addr_size: PtrInt; ctx: PUtf8Char): cardinal;
     procedure SkipAttr(form: PtrUInt; const header64: TDwarfDebugInfoHeader64);
     procedure ReadAbbrevTable(file_offset, file_size: QWord);
@@ -2790,30 +2792,6 @@ begin
   if aBase + aLimit > Int64(Map.Size) then
     Read.ErrorOverflow;
   Read.Init(Map.Buffer + aBase, aLimit);
-end;
-
-function TDwarfReader.ReadLeb128: Int64;
-var
-  shift: byte;
-  data: PtrInt;
-  val: Int64;
-begin // LEB-128 encoding does not match our FromVarInt64 sign extension
-  data := Read.NextByte;
-  if data <= 127 then
-    // optimize the most common case of -64..+63 range
-    exit((not ((data and (Int64(1) shl 6)) - 1)) or data);
-  result := 0;
-  shift := 0;
-  repeat
-    val := data and $7f;
-    result := result or (val shl shift);
-    inc(shift, 7);
-    if data <= 127 then
-      break;
-    data := Read.NextByte;
-  until false;
-  // extend sign from current shifted bits
-  result := (not ((result and (Int64(1) shl (shift - 1))) - 1)) or result;
 end;
 
 function TDwarfReader.ReadAddress(addr_size: PtrInt; ctx: PUtf8Char): cardinal;
@@ -3155,8 +3133,8 @@ begin
       DW_LNS_ADVANCE_PC:
         inc(state.address, Read.VarUInt32 * header64.minimum_instruction_length);
       DW_LNS_ADVANCE_LINE:
-        // use ReadLeb128 < 0 to decrease state.line when needed
-        state.line := Int64(state.line) + ReadLeb128;
+        // LEB128 negative values would decrease state.line when needed
+        state.line := Int64(state.line) + Read.VarLeb64;
       DW_LNS_SET_FILE:
         state.fileid := Read.VarUInt32;
       DW_LNS_NEGATE_STMT:
@@ -4131,6 +4109,32 @@ begin
     FileSetDateFrom(aFileName, fExeFile);
 end;
 
+function IsPeSigned(P: PAnsiChar; Len: PtrUInt): boolean;
+var
+  pe: PtrUInt;
+  sec: PCardinalArray;
+begin
+  // check IMAGE_DIRECTORY_ENTRY_SECURITY of a PE32/PE32+ executable buffer
+  result := false;
+  if (Len < 1024) or
+     (PWord(P)^ <> $5a4d) then // 'MZ'
+    exit;
+  pe := PCardinal(P + $3c)^; // DOS header e_lfanew
+  if (pe > Len - $b0) or
+     (PCardinal(P + pe)^ <> $00004550) then // 'PE'#0#0
+    exit;
+  case PWord(P + pe + 24)^ of // optional header Magic
+    $010b:
+      sec := pointer(P + pe + $98); // PE32
+    $020b:
+      sec := pointer(P + pe + $a8); // PE32+
+  else
+    exit;
+  end;
+  result := (sec[0] <> 0) and // file offset of the certificate table
+            (sec[1] <> 0);    // its size
+end;
+
 procedure TDebugFile.SaveToExe(const aExeName: TFileName; Scope: TDebugFileScope);
 var
   exe, mab: TMemoryStream;
@@ -4150,6 +4154,11 @@ begin
       exesize := exe.Size;
       if exesize < 16 then
         exit;
+      // the Authenticode digest covers any data before the certificate table,
+      // which should be at the end of the file: appending would break it
+      if IsPeSigned(exe.Memory, exesize) then
+        ESynLogException.RaiseUtf8('%.SaveToExe: % is digitally signed ' +
+          '- embed the debug info before signing', [self, aExeName]);
       exesize := AlgoSynLZ.StreamComputeLen(exe.Memory, exesize, MAGIC_MAB);
       exe.Size := exesize + mabsize; // trim and reserve space for .mab
       MoveFast(mab.Memory^, PAnsiChar(exe.Memory)[exesize], mabsize); // append
@@ -4236,6 +4245,18 @@ begin
     until L > R;
 end;
 
+function IsWeakSymbol(s: PDebugSymbol): boolean;
+begin
+  result := (s <> nil) and
+            (FindPropName(['LogExcept', 'SynLogException', 'ThreadProc',
+              'SynLogVectoredHandler', 'SynRaiseProc'
+              {$ifdef ISDELPHI} , 'SynRtlUnwind',  '@HandleAnyException',
+              '@HandleOnException', '@RaiseExcept', '@RaiseAgain',
+              '@RaiseAtExcept', '@InternalRaiseAtExcept', 'ThreadWrapper'
+              {$ifdef CPUX86} , 'RawStackTrace' {$endif}
+              {$endif ISDELPHI} ], s^.Name) >= 0);
+end;
+
 function TDebugFile.AddLog(W: TTextWriter; aPointer: PtrUInt; NoHex: boolean): boolean;
 var
   rva: TDebugAddress;
@@ -4261,13 +4282,7 @@ begin
   if rva = 0 then
     exit;
   s := FindSymbol(rva);
-  if (s <> nil) and
-     (FindPropName(['LogExcept', 'SynLogException', 'ThreadProc',
-       'ESynException.RaiseUtf8'
-       {$ifdef ISDELPHI} , 'SynRtlUnwind',  '@HandleAnyException',
-       '@HandleOnException', '@InternalRaiseAtExcept', '@RaiseAtExcept',
-       'ThreadWrapper' {$ifdef CPUX86} , 'RawStackTrace' {$endif}
-       {$endif ISDELPHI} ], s^.Name) >= 0) then
+  if IsWeakSymbol(s) then
     exit; // only meaningful entries
   result := true;
   if not NoHex then
@@ -4313,6 +4328,11 @@ begin
   if (s = nil) and
      (l = nil) then
      exit;
+  if IsWeakSymbol(s) or
+     ((l <> nil) and
+      (FindPropName(['mormot.core.log.pas', 'mormot.core.test.pas'],
+         l^.FileName) >= 0)) then
+    exit; // don't pollute the output ShortString with internal redirections
   AppendShortCharSafe(' ', aInfo); // always prepend a space
   if l <> nil then
   begin
@@ -5477,7 +5497,7 @@ begin
   result := pointer(Self);
   if result = nil then
     exit;
-  // inlined Rtti.Find(ClassType)
+  // inlined Rtti.Find(ClassType) - no need to check Rtti.RegisterSafe.IsLocked
   {$ifdef NOPATCHVMT}
   result := LastFamily;
   if (result <> nil) and
@@ -5513,7 +5533,7 @@ begin
   result := nil;
   if self = nil then
     exit;
-  {$ifdef NOPATCHVMT}
+  {$ifdef NOPATCHVMT} // no need to check Rtti.RegisterSafe.IsLocked
   lf := LastFamily;
   if (lf = nil) or
      (lf.SynLogClass <> self) then
@@ -6798,7 +6818,7 @@ begin
     end;
     {$ifdef OSWINDOWS}
     w.AddShorter(' Wow64=');
-    w.AddB(byte(WindowsSpecs));
+    w.AddU(word(WindowsSpecs));
     {$else}
     w.AddShorter(' Wow64=0');
     {$endif OSWINDOWS}
@@ -7481,7 +7501,7 @@ begin
     if DefaultSynLogExceptionToStr(log.fWriter, Ctxt, {addinfo=}true) then
       goto fin;
 adr:// regular exception context log with its stack trace
-    log.fWriter.AddDirect(' ', '['); // [#1 Main]
+    log.fWriter.AddShort(' ['); // [#1 Main] with safe AddDirect() calls
     n := nfo^.ThreadNumber;
     if n <> 0 then
     begin
@@ -7493,9 +7513,14 @@ adr:// regular exception context log with its stack trace
       log.fWriter.AddDirect(' ');
       log.fWriter.AddShort(thrdnam^); // fThreadContext^.ThreadName may be ''
     end;
-    log.fWriter.AddShorter('] at ');
-    log.fWriter.AddPointer(Ctxt.EAddr);
-    log.fWriter.AddDirect(' ');
+    if Ctxt.EAddr = 0 then            // may happen e.g. with Delphi LLVM
+      log.fWriter.AddDirect(']', ' ')
+    else
+    begin
+      log.fWriter.AddShorter('] at ');
+      log.fWriter.AddPointer(Ctxt.EAddr);
+      log.fWriter.AddDirect(' ');
+    end;
     try
       DebugFileCurrent.AddLog(log.fWriter, Ctxt.EAddr, {nohex=}true);
       for i := 0 to framescount - 1 do // append pre-computed stack trace
@@ -8163,7 +8188,7 @@ begin
       else
         mormot.core.text.HexToBin(f, @fIntelCPU, SizeOf(fIntelCPU));
       end;
-    fWindowsSpecs := TWindowsSpecs(byte(GetInteger(pointer(aWow64))));
+    fWindowsSpecs := TWindowsSpecs(word(GetInteger(pointer(aWow64))));
     fWow64 := wsWow64 in fWindowsSpecs;
     SetInt64(PBeg, fFreq);
     while (PBeg < PEnd) and
@@ -9165,8 +9190,7 @@ begin
   destbuffer^ := '<';
   destbuffer := AppendUInt32ToBuffer(destbuffer + 1,
     ord(severity) + ord(facility) shl 3);
-  PInteger(destbuffer)^ :=
-    ord('>') + ord('1') shl 8 + ord(' ') shl 16; // VERSION=1
+  PInteger(destbuffer)^ := ord('>') + ord('1') shl 8 + ord(' ') shl 16; // VERSION=1
   inc(destbuffer, 3);
   FromGlobalTime(st, {local=}false);
   DateToIso8601PChar(destbuffer, true, st.Year, st.Month, st.Day);
@@ -9195,7 +9219,7 @@ begin
     exit; // nothing to send
   if not IsAnsiCompatible(P, len) then
   begin
-    PInteger(destbuffer)^ := BOM_UTF8; // weird enough behavior on POSIX :(
+    PInteger(destbuffer)^ := BOM_UTF8; // weird enough behavior for POSIX :(
     inc(destbuffer, 3);
   end;
   MoveFast(P^, destbuffer^, len);
@@ -9304,6 +9328,7 @@ begin
   GetEnumTrimmedNames(TypeInfo(TAppLogLevel), @_LogAppText);
   SetThreadName := _SetThreadName;
   GetCurrentThreadName := _GetCurrentThreadName;
+  NotifyThreadEnded := TSynLog.NotifyThreadEnded;
   SetCurrentThreadName('MainThread');
   GetExecutableLocation := _GetExecutableLocation; // use FindLocationShort()
   LogCompressAlgo := AlgoSynLZ; // very fast and efficient on logs

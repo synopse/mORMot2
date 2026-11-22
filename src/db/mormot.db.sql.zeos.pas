@@ -108,6 +108,7 @@ uses
   mormot.core.data,
   mormot.core.perf,
   mormot.core.rtti,
+  mormot.core.json,
   mormot.core.log,
   mormot.db.core,
   mormot.db.sql;
@@ -918,11 +919,16 @@ var
 begin
   SynDBLog.EnterLocal(log, self, 'StartTransaction');
   inherited StartTransaction;
-  {$ifdef ZEOS73UP}
-  fDatabase.StartTransaction; //returns the txn level
-  {$else}
-  fDatabase.SetAutoCommit(false);
-  {$endif ZEOS73UP}
+  try
+    {$ifdef ZEOS73UP}
+    fDatabase.StartTransaction; //returns the txn level
+    {$else}
+    fDatabase.SetAutoCommit(false);
+    {$endif ZEOS73UP}
+  except
+    dec(fTransactionCount); // no transaction was actually started
+    raise;
+  end;
 end;
 
 procedure TSqlDBZeosConnection.Commit;
@@ -1028,7 +1034,7 @@ begin
           begin
             // array binding of ftInt64..ftBlob values from fParams[p].VArray[]
             for j := 0 to fParamsArrayCount - 1 do
-              fNullArray[p][j] := VArray[j] = 'null';
+              fNullArray[p][j] := IsNullJson(VArray[j]);
             n := ndx[VType];
             case VType of
               ftInt64:

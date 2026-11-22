@@ -7,6 +7,13 @@ interface
 
 {$I ..\src\mormot.defines.inc}
 
+{$ifdef OSWINDOWS}
+{$ifdef USE_OPENSSL}
+  {$define SCHANNEL_VERIFY}
+{$endif USE_OPENSSL}
+{$endif OSWINDOWS}
+
+
 uses
   sysutils,
   classes,
@@ -31,6 +38,7 @@ uses
   mormot.core.zip,
   mormot.crypt.core,
   mormot.crypt.secure,
+  mormot.crypt.factory,
   mormot.net.tftp.client,
   mormot.net.tftp.server,
   {$ifdef OSPOSIX}
@@ -41,10 +49,22 @@ uses
   {$ifdef USEWININET}
   mormot.lib.winhttp,
   {$endif USEWININET}
+  {$ifdef SCHANNEL_VERIFY}
+  mormot.lib.sspi,
+  mormot.lib.openssl11,
+  mormot.crypt.openssl,
+  mormot.crypt.win,
+  {$endif SCHANNEL_VERIFY}
   mormot.net.client,
   mormot.net.server,
+  {$ifdef USEHTTPSYS}
+  mormot.net.server.win,
+  {$endif USEHTTPSYS}
+  mormot.net.peercache,
   mormot.net.async,
+  mormot.net.proxy,
   mormot.net.ws.core,
+  mormot.net.ws.async,
   mormot.net.openapi,
   mormot.net.ldap,
   mormot.net.dns,
@@ -65,6 +85,7 @@ type
   /// this test case will validate several low-level protocols
   TNetworkProtocols = class(TSynTestCase)
   protected
+    safe: TLightLock;
     TempDir: TFileName;
     // for DNSAndLDAP
     synopsednsip: RawUtf8;
@@ -74,11 +95,20 @@ type
     peercachedirect: THttpPeerCache;
     // for _TUriTree
     reqone, reqtwo: RawUtf8;
-    request: integer;
     reqthree: boolean;
     reqfour: Int64;
     // for FileRange
-    rangefile: TFileName;
+    rangefile, rangesmall: TFileName;
+    // for HttpProxyServer
+    proxysmall, proxybig, proxyfresh: RawByteString;
+    proxyfreshmod: RawUtf8;
+    proxyget, proxyhead, proxyevent: integer;
+    // for HttpFastCgi
+    fcgibig: RawByteString;
+    fcgirequests: integer;
+    // for HttpAsyncClient
+    asyncstates: TOnHttpClientStates;
+    asyncstatus: integer;
     // for OutStream
     outdata: RawByteString;
     outkept: TRawByteStringStream; // supplied with aOwned=false
@@ -89,6 +119,14 @@ type
     bodyseq: integer;
     bodyeventlen: Int64;
     bodyconsumer: TThread; // is a TPipeConsumerThread (declared below)
+    // for AsyncShutdown
+    shutdownsrv: THttpAsyncServer;
+    shutdownslow, shutdownrequests: integer;
+    // for AcceptPending (not on IOCP)
+    acceptblocked, acceptreleased: integer;
+    // for WinIocpUnsubscribe
+    iocpclosed: integer;
+    iocpstop: boolean;
     // for _TTunnelLocal
     tunnelappsec: RawUtf8;
     tunneloptions: TTunnelOptions;
@@ -101,7 +139,9 @@ type
     procedure TunnelDeferred(const agent: ITunnelAgent;
       const console: ITunnelConsole);
     function TunnelBackgroundOpen(l: TTunnelLocal; s: TTunnelSession;
-     const r: ITunnelTransmit; const sc, vc: ICryptCert): TLoggedWorkThread;
+      const r: ITunnelTransmit; const sc, vc: ICryptCert;
+      const kvm: ITunnelTransmit = nil): TLoggedWorkThread;
+    procedure TunnelDirect;
     procedure CheckBlocks(const log: ISynLog; const sent, recv: RawByteString;
       num: integer);
     procedure TunnelTest(const clientcert, servercert: ICryptCert; packets: integer = 100);
@@ -121,15 +161,13 @@ type
     function DoBodyDownload(const aUrl, aMethod, aInHeaders, aInContentType,
       aRemoteIP: RawUtf8; aContentLength: Int64): TStream;
     function DoBodyRequest(Ctxt: THttpServerRequestAbstract): cardinal;
-    // several methods used by _TUriTree
+    // event used by AsyncShutdown
+    function DoShutdownRequest(Ctxt: THttpServerRequestAbstract): cardinal;
+    // callback used by _TUriTree
     function DoRequest_(Ctxt: THttpServerRequestAbstract): cardinal;
-    function DoRequest0(Ctxt: THttpServerRequestAbstract): cardinal;
-    function DoRequest1(Ctxt: THttpServerRequestAbstract): cardinal;
-    function DoRequest2(Ctxt: THttpServerRequestAbstract): cardinal;
-    function DoRequest3(Ctxt: THttpServerRequestAbstract): cardinal;
-    function DoRequest4(Ctxt: THttpServerRequestAbstract): cardinal;
     // this is the main method called by RtspOverHttp[BufferedWrite]
-    procedure DoRtspOverHttp(options: TAsyncConnectionsOptions);
+    procedure DoRtspOverHttp(options: TAsyncConnectionsOptions;
+      const aRtspPort, aHttpPort: RawUtf8);
     // helper invoked from OpenAPI to verify YAML dispatch
     procedure OpenApiYamlDispatch;
     /// validate mormot.net.tftp.server using libcurl (so only POSIX by now)
@@ -142,15 +180,69 @@ type
     {$endif OSPOSIX}
     /// validate THttpServerGeneric.OnBodyDownload streamed body upload
     procedure DoHttpBodyDownload(Sender: TObject);
+    /// validate THttpAsyncServer "Expect: 100-continue" interim response
+    procedure DoHttpExpect100(Sender: TObject);
+    function DoExpectRequest(Ctxt: THttpServerRequestAbstract): cardinal;
+    function DoExpectDownload(const aUrl, aMethod, aInHeaders, aInContentType,
+      aRemoteIP: RawUtf8; aContentLength: Int64): TStream;
     /// validate 'Range:' file responses, especially against invalid offsets
     procedure DoHttpFileRange(Sender: TObject);
     /// validate THttpServerRequestAbstract.SetOutStream streamed body download
     procedure DoHttpOutStream(Sender: TObject);
+    /// validate TWebSocketAsyncServer.WebSocketBroadcast with closing peers
+    procedure DoTWebSocketAsyncServer(Sender: TObject);
+    /// validate that THttpAsyncServer shutdown does close all its connections
+    procedure DoHttpAsyncShutdown(Sender: TObject);
+    {$ifndef USE_WINIOCP} // IOCP has no pending queue at accept()
+    /// validate that accept() only counts the events still pending
+    procedure DoHttpAcceptPending(Sender: TObject);
+    function DoAcceptPendingRequest(Ctxt: THttpServerRequestAbstract): cardinal;
+    {$endif USE_WINIOCP}
+    /// regressions #743 and #750: early async replies and failed sends
+    procedure DoHttpAsyncResponses(Sender: TObject);
+    /// validate that hsoHeadersUnfiltered applies to kept-alive requests
+    procedure DoHttpKeepAliveOptions(Sender: TObject);
+    function DoKeepAliveOptionsRequest(Ctxt: THttpServerRequestAbstract): cardinal;
+    /// validate that THttpAsyncServer rejects an endless header or chunk line
+    procedure DoHttpLongLine(Sender: TObject);
+    /// validate that THttpAsyncServer streams a big body by ReadMaxBytes blocks
+    procedure DoHttpReadMaxBytes(Sender: TObject);
+    procedure DoHttpAsyncClient(Sender: TObject);
+    function DoHttpAsyncClientOrigin(Ctxt: THttpServerRequestAbstract): cardinal;
+    function DoHttpAsyncClientState(Sender: TObject; State: TOnHttpClientState;
+      Connection: THttpAsyncClientConnection): TPollAsyncSocketOnReadWrite;
+    function DoReadMaxBytesRequest(Ctxt: THttpServerRequestAbstract): cardinal;
+    function DoReadMaxBytesDownload(const aUrl, aMethod, aInHeaders,
+      aInContentType, aRemoteIP: RawUtf8; aContentLength: Int64): TStream;
+    /// validate THttpProxyServer local folder, remote URI and event sources
+    procedure DoHttpProxyServer(Sender: TObject);
+    procedure DoHttpFastCgi(Sender: TObject);
+    procedure DoFastCgiApp(Sender: TObject);
+    function DoProxyOriginRequest(Ctxt: THttpServerRequestAbstract): cardinal;
+    function DoProxyEventRequest(Ctxt: THttpServerRequestAbstract;
+      const Uri: TUriMatchName; Met: TUriRouterMethod;
+      ProxyUrl: THttpProxyUrl): cardinal;
+    /// validate clean start/shutdown of several DHCP servers
+    procedure DoDhcpServerShutdown(Sender: TObject);
+    /// validate that TCrtSocket.Close won't touch a handle closed by Abort
+    procedure CrtSocketAbort;
+    procedure CrtSocketAbortRecv(Sender: TObject);
+    {$ifdef OSWINDOWS}
+    /// validate that TWinIocp won't call closesocket() twice on Unsubscribe
+    procedure DoWinIocpUnsubscribe(Sender: TObject);
+    procedure WinIocpWorker(Sender: TObject);
+    procedure WinIocpLog(Level: TSynLogLevel; const Format: RawUtf8;
+      const Args: array of const; Instance: TObject = nil);
+    {$endif OSWINDOWS}
   published
     {$ifdef USEWININET}
+    {$ifdef USEHTTPSYS}
     /// validate lazy initialization of the http.sys WebSocket API
     procedure _HttpApiWebSocketServer;
+    {$endif USEHTTPSYS}
     {$endif USEWININET}
+    /// asynchronously start slow tests in background threads on /multithread
+    procedure SlowTests;
     /// Engine.IO and Socket.IO regression tests
     procedure _SocketIO;
     /// validate DNS and LDAP clients (and NTP/SNTP)
@@ -175,6 +267,11 @@ type
     procedure IPAddresses;
     /// validate mormot.net.openapi unit
     procedure OpenAPI;
+    {$ifdef SCHANNEL_VERIFY}
+    /// validate SChannel mTLS HTTPS server using a plain OpenSSL client
+    // - override the main NewNetTls so can't be run in the background
+    procedure _SChannel;
+    {$endif SCHANNEL_VERIFY}
   end;
 
 
@@ -184,6 +281,111 @@ var
   TftpConnectionStarted: integer;
   TftpConnectionDestroyed: integer;
   TftpOwnerAccessed: integer;
+
+var
+  FakeTlsSocketClosed: integer;
+  FakeTlsDestroyed: integer;
+  FakeTlsReceiving: integer;
+
+type
+  // minimal INetTls to track how TCrtSocket.Close releases its TLS layer
+  TFakeNetTls = class(TInterfacedObject, INetTls)
+  protected
+    fSocket: TNetSocket;
+  public
+    destructor Destroy; override;
+    procedure AfterConnection(Socket: TNetSocket; var Context: TNetTlsContext;
+      const ServerAddress: RawUtf8);
+    procedure AfterBind(Socket: TNetSocket; var Context: TNetTlsContext;
+      const ServerAddress: RawUtf8);
+    procedure AfterAccept(Socket: TNetSocket; const BoundContext: TNetTlsContext;
+      LastError, CipherName: PRawUtf8);
+    function GetCipherName: RawUtf8;
+    function GetRawTls: pointer;
+    function GetRawCert(SignHashName: PRawUtf8): RawByteString;
+    function Receive(Buffer: pointer; var Length: integer): TNetResult;
+    function ReceivePending: integer;
+    function Send(Buffer: pointer; var Length: integer): TNetResult;
+    function ReleaseBuffers: PtrInt;
+    procedure SocketClosed;
+  end;
+
+  // to inject a TFakeNetTls instance with no TLS handshake
+  TFakeTlsCrtSocket = class(TCrtSocket)
+  public
+    procedure SetFakeTls;
+  end;
+
+destructor TFakeNetTls.Destroy;
+begin
+  LockedInc32(@FakeTlsDestroyed);
+  inherited Destroy;
+end;
+
+procedure TFakeNetTls.AfterConnection(Socket: TNetSocket;
+  var Context: TNetTlsContext; const ServerAddress: RawUtf8);
+begin
+end;
+
+procedure TFakeNetTls.AfterBind(Socket: TNetSocket;
+  var Context: TNetTlsContext; const ServerAddress: RawUtf8);
+begin
+end;
+
+procedure TFakeNetTls.AfterAccept(Socket: TNetSocket;
+  const BoundContext: TNetTlsContext; LastError, CipherName: PRawUtf8);
+begin
+end;
+
+function TFakeNetTls.GetCipherName: RawUtf8;
+begin
+  result := '';
+end;
+
+function TFakeNetTls.GetRawTls: pointer;
+begin
+  result := nil;
+end;
+
+function TFakeNetTls.GetRawCert(SignHashName: PRawUtf8): RawByteString;
+begin
+  result := '';
+end;
+
+function TFakeNetTls.Receive(Buffer: pointer; var Length: integer): TNetResult;
+begin
+  LockedInc32(@FakeTlsReceiving);
+  result := fSocket.Recv(Buffer, Length); // plain blocking recv()
+end;
+
+function TFakeNetTls.ReceivePending: integer;
+begin
+  result := 0;
+end;
+
+function TFakeNetTls.Send(Buffer: pointer; var Length: integer): TNetResult;
+begin
+  result := nrNotImplemented;
+end;
+
+function TFakeNetTls.ReleaseBuffers: PtrInt;
+begin
+  result := 0;
+end;
+
+procedure TFakeNetTls.SocketClosed;
+begin
+  LockedInc32(@FakeTlsSocketClosed);
+end;
+
+procedure TFakeTlsCrtSocket.SetFakeTls;
+var
+  tls: TFakeNetTls;
+begin
+  tls := TFakeNetTls.Create;
+  tls.fSocket := fSock;
+  fSecure := tls;
+end;
 
 type
   TSlowTftpConnection = class(TTftpConnectionThread)
@@ -199,6 +401,7 @@ type
     procedure TerminateAndWaitFinished(TimeOutMs: integer = 5000); override;
   end;
 
+  {$ifdef USEHTTPSYS}
   {$ifdef USEWININET}
   TWebSocketApiInitializeThread = class(TThreadAbstract)
   protected
@@ -212,22 +415,23 @@ type
       read fError;
   end;
   {$endif USEWININET}
+  {$endif USEHTTPSYS}
 
 procedure TSlowTftpConnection.DoExecute;
 begin
-  InterlockedIncrement(TftpConnectionStarted);
+  LockedInc32(@TftpConnectionStarted);
   while not Terminated do
     SleepHiRes(1);
   // remain alive past the deliberately short server timeout, then access owner
   SleepHiRes(100);
   if fOwner.MaxRetry >= 0 then
-    InterlockedIncrement(TftpOwnerAccessed);
+    LockedInc32(@TftpOwnerAccessed);
 end;
 
 destructor TSlowTftpConnection.Destroy;
 begin
   inherited Destroy;
-  InterlockedIncrement(TftpConnectionDestroyed);
+  LockedInc32(@TftpConnectionDestroyed);
 end;
 
 procedure TTestTftpServer.AddTestConnection(
@@ -243,6 +447,7 @@ begin
   inherited TerminateAndWaitFinished(1);
 end;
 
+{$ifdef USEHTTPSYS}
 {$ifdef USEWININET}
 constructor TWebSocketApiInitializeThread.Create(Ready, Start: PCardinal);
 begin
@@ -279,7 +484,7 @@ begin
     end;
   except
     on E: Exception do
-      fError := StringToUtf8(E.ClassName + ': ' + E.Message);
+      Make([E, ': ', E.Message], fError);
   end;
 end;
 
@@ -314,12 +519,13 @@ var
     finally
       ResetSystemEnv(CHILD_ENV);
     end;
-    CheckEqual(exitcode, 0, RawUtf8(output));
-    Check(PosEx('All tests passed successfully', RawUtf8(output)) <> 0,
-      Utf8ToString(ChildMode + ' WebSocket API test did not complete'));
+    CheckEqual(exitcode, 0, output);
+    CheckUtf8(PosEx('All tests passed successfully', output) <> 0,
+      ChildMode + ' WebSocket API test did not complete');
   end;
 
 begin
+  exit;
   if (OSVersion < wEight) or // websocket.dll is only available since Windows 8
      (wsWine in WindowsSpecs) then // Wine only implements some minimal stubs
     exit;
@@ -327,7 +533,7 @@ begin
   if (mode <> CHILD_CONSTRUCTOR) and
      (mode <> CHILD_PARALLEL) then
   begin
-    // Each path needs a fresh process because the API state is process-global.
+    // each path needs a fresh process because the API state is process-global
     cmd := QuoteFileName(Executable.ProgramFileName) +
       ' /test TNetworkProtocols._HttpApiWebSocketServer /noenter';
     RunChild(CHILD_CONSTRUCTOR);
@@ -340,7 +546,7 @@ begin
     'websocket.dll should initially be loaded lazily');
   if mode = CHILD_CONSTRUCTOR then
   begin
-    // Regression for #418: server creation itself is the very first API use.
+    // regression for #418: server creation itself is the very first API use
     server := THttpApiWebSocketServer.Create;
     try
       Check(WebSocketApi.WebSocketEnabled,
@@ -366,7 +572,7 @@ begin
       'WinHTTP initialization should preserve the server WebSocket API');
     exit;
   end;
-  // Exercise concurrent first use: no thread may observe a partially bound API.
+  // Exercise concurrent first use: no thread may observe a partially bound API
   ready := 0;
   start := 0;
   FillCharFast(threads, SizeOf(threads), 0);
@@ -407,6 +613,7 @@ begin
     'WinHTTP initialization should preserve the parallel WebSocket API');
 end;
 {$endif USEWININET}
+{$endif USEHTTPSYS}
 
 procedure TNetworkProtocols.Setup;
 begin
@@ -457,6 +664,31 @@ begin
   CheckEqual(TftpOwnerAccessed, 1, 'owner access after terminate');
 end;
 
+procedure TNetworkProtocols.SlowTests;
+begin
+  // start some slow tests in background if /multithread is enabled
+  Run(DoHttpProxyServer, self, 'HttpProxyServer', true, false);
+  Run(DoHttpFastCgi, self, 'HttpFastCgi', true, false);
+  Run(DoHttpBodyDownload, self, 'HttpBodyDownload', true, false);
+  Run(DoHttpExpect100, self, 'HttpExpect100', true, false);
+  Run(DoHttpFileRange, self, 'HttpFileRange', true, false);
+  Run(DoHttpOutStream, self, 'HttpOutStream', true, false);
+  Run(DoTFTPServer, self, 'TFTPServer', true, false);
+  Run(DoTWebSocketAsyncServer, self, 'WSBroadcast', true, false);
+  Run(DoHttpAsyncShutdown, self, 'HttpAsyncShutdown', true, false);
+  Run(DoHttpAsyncResponses, self, 'HttpAsyncResponses', true, false);
+  Run(DoHttpKeepAliveOptions, self, 'HttpKeepAliveOptions', true, false);
+  Run(DoHttpLongLine, self, 'HttpLongLine', true, false);
+  Run(DoHttpReadMaxBytes, self, 'HttpReadMaxBytes', true, false);
+  {$ifdef OSPOSIX}
+  Run(DoHttpAsyncClient, self, 'HttpAsyncClient', true, false); // not on IOCP yet
+  Run(DoUnixDomainSocket, self, 'UnixDomainSocket', true, false);
+  Run(DoHttpAcceptPending, self, 'HttpAcceptPending', true, false);
+  {$else}
+  Run(DoWinIocpUnsubscribe, self, 'WinIocpUnsubscribe', true, false);
+  {$endif OSPOSIX}
+end;
+
 procedure TNetworkProtocols._SocketIO;
 var
   m: TSocketIOMessage;
@@ -464,14 +696,6 @@ var
   d: TDocVariantData;
   ws: TSha1Digest;
 begin
-  // start some slow tests in background if /multithread is enabled
-  Run(DoHttpBodyDownload, self, 'HttpBodyDownload', true, false);
-  Run(DoHttpFileRange, self, 'HttpFileRange', true, false);
-  Run(DoHttpOutStream, self, 'HttpOutStream', true, false);
-  Run(DoTFTPServer, self, 'TFTPServer', true, false);
-  {$ifdef OSPOSIX}
-  Run(DoUnixDomainSocket, self, 'UnixDomainSocket', true, false);
-  {$endif OSPOSIX}
   // from https://datatracker.ietf.org/doc/html/rfc6455#section-1.3
   ComputeChallenge('dGhlIHNhbXBsZSBub25jZQ==', ws);
   CheckEqual(Sha1DigestToString(ws), 'b37a4f2cc0624f1690f64606cf385945b2bec4ea');
@@ -900,7 +1124,7 @@ begin
             test.Check(false);
             exit;
           end;
-          stream.Sock.SetLinger(0); // otherwise shutdown takes 40ms with epoll
+          stream.Sock.SetLinger(-1); // otherwise shutdown takes 40ms with epoll
           test.Check(get.SockConnected);
           test.Check(post.SockConnected);
         end;
@@ -954,11 +1178,12 @@ begin
     end;
   except
     on E: Exception do
-      test.Check(false, E.ClassName);
+      test.FailedRaised(E);
   end;
 end;
 
-procedure TNetworkProtocols.DoRtspOverHttp(options: TAsyncConnectionsOptions);
+procedure TNetworkProtocols.DoRtspOverHttp(options: TAsyncConnectionsOptions;
+  const aRtspPort, aHttpPort: RawUtf8);
 var
   N: integer;
   proxy: TRtspOverHttpServer;
@@ -969,7 +1194,7 @@ begin
   N := 100;
   {$endif OSDARWIN}
   proxy := TRtspOverHttpServer.Create(
-    '127.0.0.1', '3999', '3998', TSynLog, nil, nil, options, {threads=}1);
+    '127.0.0.1', aRtspPort, aHttpPort, TSynLog, nil, nil, options, {threads=}1);
     // threads=1 is the safest & fastest - but you may set 16 for testing
   try
     proxy.WaitStarted(10);
@@ -985,53 +1210,725 @@ const
 
 procedure TNetworkProtocols.RTSPOverHTTP;
 begin
-  RunWait;
-  DoRtspOverHttp(ASYNC_OPTION);
+  //RunWait; // let the Tunnel stuff close down
+  DoRtspOverHttp(ASYNC_OPTION, '3997', '3996');
 end;
 
 procedure TNetworkProtocols.RTSPOverHTTPBufferedWrite;
 begin
-  DoRtspOverHttp(ASYNC_OPTION + [acoWritePollOnly]);
+  DoRtspOverHttp(ASYNC_OPTION + [acoWritePollOnly], '3999', '3998');
 end;
+
+type
+  TWebSocketBroadcastTask = class
+  public
+    Server: TWebSocketAsyncServer;
+    Connected, Done: TSynEvent;
+    Sent: integer;
+    ConnHandle: TConnectionAsyncHandle; // set by WebSocketConnect
+    constructor Create(aServer: TWebSocketAsyncServer);
+    destructor Destroy; override;
+    procedure Broadcast(Sender: TObject);
+    procedure WebSocketConnect(Sender: TWebSocketAsyncConnection);
+  end;
+
+constructor TWebSocketBroadcastTask.Create(
+  aServer: TWebSocketAsyncServer);
+begin
+  inherited Create;
+  Server := aServer;
+  Connected := TSynEvent.Create;
+  Done := TSynEvent.Create;
+end;
+
+destructor TWebSocketBroadcastTask.Destroy;
+begin
+  Done.Free;
+  Connected.Free;
+  inherited Destroy;
+end;
+
+procedure TWebSocketBroadcastTask.Broadcast(Sender: TObject);
+var
+  frame: TWebSocketFrame;
+begin
+  frame.opcode := focText;
+  frame.content := [];
+  frame.tix := 0;
+  frame.payload := '{"ping":1}';
+  Sent := Server.WebSocketBroadcast(frame, nil, {timeout=}0);
+  TSynLog.Add.Log(sllTrace, 'Broadcast: sent=%', [Sent], self);
+  Done.SetEvent;
+end;
+
+procedure TWebSocketBroadcastTask.WebSocketConnect(
+  Sender: TWebSocketAsyncConnection);
+begin
+  // DoConnect() is called after the 101 response has been written,
+  // fProcess has been created, ProcessStart() called and state set to wpsRun
+  ConnHandle := Sender.Handle;
+  Connected.SetEvent;
+  // each broadcast is synchronized with an actual WebSocket upgrade
+end;
+
+procedure TNetworkProtocols.DoTWebSocketAsyncServer(Sender: TObject);
+var
+  server: TWebSocketAsyncServerRest;
+  bcast: TWebSocketBroadcastTask;
+  client: TCrtSocket;
+  i: PtrInt;
+  endtix: cardinal;
+  sent: integer; // not PtrInt
+  wedged: boolean;
+  status, line: RawUtf8;
+
+  function Broadcast(const msg: RawUtf8): boolean;
+  begin
+    bcast.Connected.ResetEvent;
+    bcast.Sent := -1;
+    RunTask(bcast.Broadcast, msg);
+    result := CheckUtf8(bcast.Done.WaitFor(5000), '% timeout', [msg]);
+    if not result then
+      // a task stuck in WebSocketBroadcast() may still reference both
+      // bcast and server, so don't attempt to free them below
+      wedged := true;
+  end;
+
+begin
+  wedged := false;
+  sent := 0;
+  server := TWebSocketAsyncServerRest.Create(
+    '8897', nil, nil, 'wsbcast', 2, '', '', {ajax=}true, [], TSynLog);
+  server.WaitStarted(10);
+  bcast := TWebSocketBroadcastTask.Create(server);
+  server.OnWebSocketConnect := bcast.WebSocketConnect;
+  try
+    // first check that broadcasting with no WebSocket connection is harmless
+    Broadcast('WebSocket broadcast empty');
+    CheckEqual(bcast.Sent, 0, 'broadcast without client');
+    for i := 1 to 50 do
+    begin
+      TSynLog.Add.Log(sllTrace, 'WebSocketAsyncServer: client #%', [i], self);
+      client := TCrtSocket.Open('127.0.0.1', '8897', nlTcp, 5000);
+      try
+        client.SockSend([ // SockSend() appends the final CRLF
+          'GET / HTTP/1.1'#13#10'Host: 127.0.0.1'#13#10,
+          'Upgrade: websocket'#13#10'Connection: Upgrade'#13#10,
+          'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ=='#13#10,
+          'Sec-WebSocket-Version: 13'#13#10,
+          'Sec-WebSocket-Protocol: synopsejson'#13#10]);
+        client.SockSendFlush;
+        // a deadlocked server would not answer any new connection
+        try
+          client.SockRecvLn(status);
+        except
+          on E: ENetSock do
+          begin
+            wedged := E.LastError = nrTimeout;
+            StringToUtf8(E.Message, status);
+          end;
+        end;
+        if not CheckUtf8(IdemPChar(pointer(status), 'HTTP/1.1 101'),
+            'upgrade %', [status]) then
+          break;
+        // Consume the whole HTTP upgrade response. Reading only the status
+        // line would make SockReceivePending() below see the remaining HTTP
+        // headers instead of the WebSocket frame.
+        repeat
+          client.SockRecvLn(line);
+        until line = '';
+        // The HTTP response may reach us just before the server executes
+        // DoConnect(), so explicitly wait until fProcess is fully initialized.
+        if not Check(bcast.Connected.WaitFor(5000), 'websocket connected') then
+          break;
+        // On slow systems (e.g. RPi), the first read may finish the WebSocket
+        // upgrade before the connection is registered.
+        endtix := GetTickSec + 5;
+        while (server.Async.ConnectionFind(bcast.ConnHandle) = nil) and
+              (GetTickSec <= endtix) do
+          SleepHiRes(1);
+        if not Check(server.Async.ConnectionFind(bcast.ConnHandle) <> nil,
+            'websocket registered') then
+          break;
+        // Run one broadcast from the shared test thread pool now that this
+        // connection is known to be a fully initialized WebSocket.
+        // From the second iteration onward, the preceding client has just
+        // been reset, so this broadcast may also exercise SendDirect() on
+        // that stale/reset connection.
+        Broadcast('WebSocket broadcast');
+        if not Check(bcast.Sent > 0, 'broadcast sent') then
+          break;
+        inc(sent, bcast.Sent);
+        // Now that all HTTP headers have been consumed, pending input really
+        // is the WebSocket frame emitted by the task above.
+        if not Check(client.SockReceivePending(1000) = cspDataAvailable,
+            'broadcast received') then
+          break;
+        // Leave the WebSocket frame unread and force a RST. The next
+        // WebSocketBroadcast() should survive an eventual failed Write().
+        client.Sock.SetLinger(0); // 0 = abortive close (TCP RST)
+      finally
+        client.Free;
+      end;
+      if wedged then
+        break;
+    end;
+    if not wedged then
+      // The last client has no following upgrade to trigger another broadcast.
+      // Explicitly broadcast once more immediately after its RST so that the
+      // final reset peer gets the same deadlock regression coverage.
+      Broadcast('WebSocket broadcast after reset');
+    CheckUtf8(sent >= 50, 'sent=%', [sent]);
+  finally
+    server.OnWebSocketConnect := nil;
+    if not wedged then
+    begin
+      // no background task can reference bcast/server now
+      server.Free;
+      bcast.Free;
+    end;
+    // Intentionally leak these objects on the regression failure path:
+    // a task blocked inside WebSocketBroadcast() still references both.
+    // Trying to destroy the server here could reproduce the same deadlock
+    // on the test thread and prevent the test suite from reporting it.
+  end;
+end;
+
+// Regression tests for #743 and #750: early async replies and reset peers.
+type
+  THttpAsyncResponseRegression = class
+  public
+    Server: THttpAsyncServer;
+    Worker: TLoggedWorkThread;
+    ReadStarted, AnswerStarted, ReleaseRead, ReleaseAnswer, AnswerDone: TSynEvent;
+    Handle: TConnectionAsyncHandle;
+    DelayMS: integer;
+    ResetPeer: boolean;
+    BigBody, RequestError, AnswerError: RawUtf8;
+    constructor Create;
+    destructor Destroy; override;
+    procedure Reset;
+    function OnRequest(Ctxt: THttpServerRequestAbstract): cardinal;
+    procedure Answer(Sender: TObject);
+  end;
+
+constructor THttpAsyncResponseRegression.Create;
+begin
+  inherited Create;
+  ReadStarted := TSynEvent.Create;
+  AnswerStarted := TSynEvent.Create;
+  ReleaseRead := TSynEvent.Create;
+  ReleaseAnswer := TSynEvent.Create;
+  AnswerDone := TSynEvent.Create;
+end;
+
+destructor THttpAsyncResponseRegression.Destroy;
+begin
+  // The caller has joined and freed Worker before destroying this context.
+  AnswerDone.Free;
+  ReleaseAnswer.Free;
+  ReleaseRead.Free;
+  AnswerStarted.Free;
+  ReadStarted.Free;
+  inherited Destroy;
+end;
+
+procedure THttpAsyncResponseRegression.Reset;
+begin
+  ReadStarted.ResetEvent;
+  AnswerStarted.ResetEvent;
+  ReleaseRead.ResetEvent;
+  ReleaseAnswer.ResetEvent;
+  AnswerDone.ResetEvent;
+  RequestError := '';
+  AnswerError := '';
+end;
+
+procedure THttpAsyncResponseRegression.Answer(Sender: TObject);
+begin
+  try
+    AnswerStarted.SetEvent;
+    if ResetPeer and
+       not ReleaseAnswer.WaitFor(5000) then
+      raise Exception.Create('reset was not signaled to answer worker');
+    if ResetPeer then
+      Server.AsyncResponse(Handle, BigBody, BINARY_CONTENT_TYPE)
+    else
+      Server.AsyncResponse(Handle, 'early', TEXT_CONTENT_TYPE);
+  except
+    on E: Exception do
+      StringToUtf8(E.Message, AnswerError);
+  end;
+  AnswerDone.SetEvent;
+end;
+
+function THttpAsyncResponseRegression.OnRequest(
+  Ctxt: THttpServerRequestAbstract): cardinal;
+begin
+  result := HTTP_SUCCESS;
+  if Ctxt.Url = '/alive' then
+  begin
+    Ctxt.OutContent := 'alive';
+    exit;
+  end;
+  Handle := (Ctxt as THttpServerRequest).AsyncHandle;
+  Worker := TLoggedWorkThread.Create(TSynLog, 'async-response-regression',
+    self, Answer, {suspended=}false, {ManualWaitForAndFree=}true);
+  // The read lock is still held throughout this handler. Make sure the
+  // answering worker was actually scheduled before holding it for > 40ms.
+  if not AnswerStarted.WaitFor(5000) then
+    RequestError := 'answer worker did not start';
+  ReadStarted.SetEvent;
+  if ResetPeer and
+     not ReleaseRead.WaitFor(5000) then
+    RequestError := 'client reset was not signaled to handler';
+  SleepHiRes(DelayMS);
+  result := HTTP_ASYNCRESPONSE;
+end;
+
+procedure TNetworkProtocols.DoHttpAsyncResponses(Sender: TObject);
+const
+  RESET_ROUNDS = 24;
+var
+  srv: THttpAsyncServer;
+  ctx: THttpAsyncResponseRegression;
+  raw: TCrtSocket;
+  i, tested: integer;
+  wedged: boolean;
+
+  function ReadOk(const uri, expected: RawUtf8): boolean;
+  var
+    client: TCrtSocket;
+    line, status, body: RawUtf8;
+    len: integer;
+  begin
+    result := false;
+    client := TCrtSocket.Open('127.0.0.1', srv.SockPort, nlTcp, 5000);
+    try
+      try
+        client.CreateSockIn;
+        client.SockSend(['GET ', uri, ' HTTP/1.1'#13#10,
+          'Host: 127.0.0.1'#13#10, 'Connection: close'#13#10]);
+        client.SockSendFlush;
+        if not Check(client.SockReceivePending(3000) = cspDataAvailable,
+            'async response pending') then
+          exit;
+        client.SockRecvLn(status);
+        if not CheckUtf8(PosEx(' 200 ', status) > 0,
+            '% status %', [uri, status]) then
+          exit;
+        len := -1;
+        repeat
+          client.SockRecvLn(line);
+          if IdemPChar(pointer(line), 'CONTENT-LENGTH:') then
+            len := Utf8ToInteger(TrimU(copy(line, 16, 20)), -1);
+        until line = '';
+        CheckEqual(len, length(expected), 'async content length');
+        if len <> length(expected) then
+          exit;
+        body := client.SockInRead(len);
+        CheckEqual(body, expected, 'async content');
+        result := body = expected;
+      except
+        on E: ENetSock do
+          CheckUtf8(false, '% network error: %', [uri, E.Message]);
+      end;
+    finally
+      client.Free;
+    end;
+  end;
+
+  function JoinWorker(const stage: RawUtf8): boolean;
+  begin
+    result := CheckUtf8(ctx.AnswerDone.WaitFor(8000),
+      '% response worker timeout', [stage]);
+    if not result then
+    begin
+      wedged := true; // do not free objects referenced by a stuck worker
+      exit;
+    end;
+    ctx.Worker.WaitFor;
+    FreeAndNil(ctx.Worker);
+    CheckUtf8(ctx.RequestError = '', '% handler: %', [stage, ctx.RequestError]);
+    CheckUtf8(ctx.AnswerError = '', '% answer: %', [stage, ctx.AnswerError]);
+  end;
+
+begin
+  TSynLog.Family.ExceptionIgnore.Add(ENetSock); // expected after TCP RST
+  ctx := THttpAsyncResponseRegression.Create;
+  srv := nil;
+  wedged := false;
+  try
+    srv := THttpAsyncServer.Create('8878', nil, nil, 'asyncissues', 1);
+    ctx.Server := srv;
+    srv.OnRequest := ctx.OnRequest;
+    srv.WaitStarted(10);
+
+    // #743: the answer is produced before OnRequest has released its read
+    // lock. The previous 40ms single attempt lost it without any HTTP reply.
+    ctx.Reset;
+    ctx.ResetPeer := false;
+    ctx.DelayMS := 150;
+    ReadOk('/early', 'early');
+    if not JoinWorker('#743') then
+      exit;
+
+    // #750: repeat large AsyncResponse writes after an abortive client close.
+    // A single server read thread remains in OnRequest while RST is sent,
+    // keeping the connection available for the response worker to race with
+    // the failed send. Check that later, unrelated connections still work.
+    ctx.BigBody := RawUtf8OfChar('x', 4 shl 20);
+    tested := 0;
+    for i := 1 to RESET_ROUNDS do
+    begin
+      ctx.Reset;
+      ctx.ResetPeer := true;
+      ctx.DelayMS := 5;
+      raw := TCrtSocket.Open('127.0.0.1', srv.SockPort, nlTcp, 5000);
+      try
+        raw.SockSend(['GET /reset HTTP/1.1'#13#10,
+          'Host: 127.0.0.1'#13#10]);
+        raw.SockSendFlush;
+        if not Check(ctx.ReadStarted.WaitFor(5000),
+            '#750 handler entered') then
+        begin
+          wedged := true;
+          break;
+        end;
+        raw.Sock.SetLinger(0); // abortive close: send TCP RST
+      finally
+        raw.Free;
+        ctx.ReleaseRead.SetEvent;
+        ctx.ReleaseAnswer.SetEvent;
+      end;
+      if not JoinWorker('#750') then
+        break;
+      // let the 100ms GC grace period elapse once, not per reset
+      if i = RESET_ROUNDS div 2 then
+        SleepHiRes(120);
+      if not ReadOk('/alive', 'alive') then
+        break;
+      inc(tested);
+    end;
+    CheckEqual(tested, RESET_ROUNDS, '#750 reset rounds');
+  finally
+    ctx.ReleaseRead.SetEvent;
+    ctx.ReleaseAnswer.SetEvent;
+    if not wedged and
+       (ctx.Worker <> nil) then
+      if ctx.AnswerDone.WaitFor(8000) then
+      begin
+        ctx.Worker.WaitFor;
+        FreeAndNil(ctx.Worker);
+      end
+      else
+        wedged := true;
+    if not wedged then
+    begin
+      srv.Free;
+      ctx.Free;
+    end;
+    // On a genuine deadlock, leaking the server and its worker is safer than
+    // freeing objects still used by that worker (as in WSBroadcast above).
+  end;
+end;
+
+function TNetworkProtocols.DoShutdownRequest(
+  Ctxt: THttpServerRequestAbstract): cardinal;
+begin
+  LockedInc32(@shutdownrequests);
+  if Ctxt.Url = '/large' then
+    Ctxt.OutContent := RawUtf8(StringOfChar('x', 16 shl 20))
+  else if Ctxt.Url = '/slow' then
+  begin
+    // keep the only processing thread busy until the server is shut down
+    LockedInc32(@shutdownslow);
+    repeat
+      SleepHiRes(1);
+    until shutdownsrv.Async.Terminated;
+  end;
+  result := HTTP_SUCCESS;
+end;
+
+procedure TNetworkProtocols.DoHttpAsyncShutdown(Sender: TObject);
+const
+  URI: array[0..7] of RawUtf8 = (
+    '/idle', '/headers', '/body', '/large', '/slow',
+    '/pending', '/pending2', '/pending3');
+var
+  srv: THttpAsyncServer;
+  i, mode, round, first, threads: PtrInt;
+  endtix: Int64;
+  fast: TCrtSocket;
+  client: array[0 .. high(URI)] of TCrtSocket;
+
+  function ClosedByServer(sock: TNetSocket): boolean;
+  var
+    tmp: TBuffer8K;
+    len: integer;
+    deadline: Int64;
+  begin
+    result := false;
+    sock.MakeAsync;
+    deadline := GetTickCount64 + 2000; // total deadline, also for large responses
+    repeat
+      if sock.WaitFor(10, [neRead, neError]) <> [] then
+      begin
+        len := SizeOf(tmp); // ignore any response still buffered before shutdown
+        if not (sock.Recv(@tmp, len) in [nrOk, nrRetry]) then
+        begin
+          result := true;
+          exit;
+        end;
+      end;
+    until GetTickCount64 >= deadline;
+  end;
+
+begin
+  // repeat on the same port, exercising both single-reader and queued workers
+  for mode := 0 to 2 do
+    for round := 1 to 2 do
+    begin
+      FillCharFast(client, SizeOf(client), 0);
+      shutdownslow := 0;
+      shutdownrequests := 0;
+      // keep exactly one request worker so /slow blocks further requests
+      threads := 1;
+      {$ifndef USE_WINIOCP}
+      if mode <> 0 then
+        threads := 2; // one polling thread and one request worker
+      {$endif USE_WINIOCP}
+      first := 0;
+      if mode = 2 then
+        // no-track: test initial queued/processing requests, not idle subscribers
+        first := 4;
+      srv := THttpAsyncServer.Create('8898', nil, nil, 'shutdown', threads);
+      try
+        shutdownsrv := srv;
+        if mode = 2 then
+          srv.Async.Options := srv.Async.Options + [acoNoConnectionTrack];
+        srv.OnRequest := DoShutdownRequest;
+        srv.WaitStarted(10);
+        // HTTP/1.0 responses completed without needing asynchronous writes
+        for i := 1 to 16 do
+        begin
+          fast := TCrtSocket.Open('127.0.0.1', srv.SockPort, nlTcp, 5000);
+          try
+            fast.SockSend(['GET /fast HTTP/1.0'#13#10'Host: localhost'#13#10]);
+            fast.SockSendFlush;
+            Check(ClosedByServer(fast.Sock), 'fast closed');
+          finally
+            fast.Free;
+          end;
+        end;
+        CheckEqual(shutdownrequests, 16, 'fast requests');
+        {$ifndef USE_WINIOCP}
+        if mode = 1 then
+          CheckEqual(srv.Async.ConnectionHigh, 0, 'fast requests not registered');
+        {$endif USE_WINIOCP}
+        for i := first to high(client) do
+        begin
+          client[i] := TCrtSocket.Open('127.0.0.1', srv.SockPort, nlTcp, 5000);
+          case i of
+            1: client[i].SndLow('GET /headers HTTP/1.1'#13#10'Host:');
+            2: client[i].SndLow('POST /body HTTP/1.1'#13#10 +
+                 'Host: localhost'#13#10'Content-Length: 100'#13#10#13#10'x');
+          else
+            begin
+              client[i].SockSend(['GET ', URI[i], ' HTTP/1.1'#13#10,
+                'Host: 127.0.0.1'#13#10]);
+              client[i].SockSendFlush;
+            end;
+          end;
+          endtix := GetTickCount64 + 5000; // a fresh deadline for each state
+          case i of
+            0:
+              Check(neRead in client[i].Sock.WaitFor(5000, [neRead, neError]),
+                'idle response');
+            {$ifndef USE_WINIOCP}
+            1, 2:
+              begin
+                while (srv.Async.Sockets.PollRead.Count < i + 1) and
+                      (GetTickCount64 < endtix) do
+                  SleepHiRes(1);
+                Check(srv.Async.Sockets.PollRead.Count >= i + 1,
+                  'partial request subscribed');
+              end;
+            3:
+              begin
+                while (srv.Async.Sockets.PollWrite.Count = 0) and
+                      (GetTickCount64 < endtix) do
+                  SleepHiRes(1);
+                Check(srv.Async.Sockets.PollWrite.Count > 0,
+                  'large response subscribed');
+              end;
+            {$else}
+            3:
+              Check(neRead in client[i].Sock.WaitFor(5000, [neRead, neError]),
+                'large response started');
+            {$endif USE_WINIOCP}
+            4:
+              begin
+                while (shutdownslow = 0) and
+                      (GetTickCount64 < endtix) do
+                  SleepHiRes(1);
+                CheckEqual(shutdownslow, 1, 'slow request entered');
+              end;
+          end;
+        end;
+        endtix := GetTickCount64 + 5000;
+        while (srv.Async.Accepted < 16 + length(client) - first) and
+              (GetTickCount64 < endtix) do
+          SleepHiRes(1);
+        CheckEqual(srv.Async.Accepted, 16 + length(client) - first, 'accepted');
+        {$ifndef USE_WINIOCP}
+        if threads = 2 then
+        begin
+          while (srv.Async.Sockets.PollRead.Pending < 3) and
+                (GetTickCount64 < endtix) do
+            SleepHiRes(1);
+          Check(srv.Async.Sockets.PollRead.Pending >= 3, 'queued');
+        end;
+        {$endif USE_WINIOCP}
+        if first = 0 then
+          CheckEqual(shutdownrequests, 19, 'idle large slow only')
+        else
+          CheckEqual(shutdownrequests, 17, 'slow only');
+        // explicitly exercise repeated Shutdown as well as the destructor
+        srv.Shutdown; // stop HTTP keep-alive before terminating its workers
+        srv.Async.Shutdown;
+        srv.Async.Shutdown;
+        FreeAndNil(srv);
+        for i := first to high(client) do
+          CheckUtf8(ClosedByServer(client[i].Sock), 'closed % mode=% round=%',
+            [URI[i], mode, round]);
+      finally
+        srv.Free;
+        shutdownsrv := nil;
+        for i := 0 to high(client) do
+          client[i].Free;
+      end;
+    end;
+end;
+
+{$ifndef USE_WINIOCP}
+
+function TNetworkProtocols.DoAcceptPendingRequest(
+  Ctxt: THttpServerRequestAbstract): cardinal;
+var
+  n: integer;
+  endtix: Int64;
+begin
+  if Ctxt.Url = '/block' then
+  begin
+    // keep the only request worker busy until the test releases this request
+    n := InterlockedIncrement(acceptblocked);
+    endtix := GetTickCount64 + 10000;
+    while (acceptreleased < n) and
+          (GetTickCount64 < endtix) do
+      SleepHiRes(1);
+  end;
+  Ctxt.OutContent := 'ok';
+  Ctxt.OutContentType := TEXT_CONTENT_TYPE;
+  result := HTTP_SUCCESS;
+end;
+
+procedure TNetworkProtocols.DoHttpAcceptPending(Sender: TObject);
+const
+  URI: array[0..5] of RawUtf8 = (
+    '/block', '/block', '/one', '/two', '/three', '/new');
+var
+  srv: THttpAsyncServer;
+  client: array[0 .. high(URI)] of TCrtSocket;
+  i: PtrInt;
+  endtix: Int64;
+  line: RawUtf8;
+
+  procedure Request(n: PtrInt);
+  begin
+    client[n] := TCrtSocket.Open('127.0.0.1', srv.SockPort, nlTcp, 5000);
+    client[n].SockSend(['GET ', URI[n], ' HTTP/1.1'#13#10'Host: localhost'#13#10]);
+    client[n].SockSendFlush;
+  end;
+
+  procedure WaitFor(var value: integer; expected: integer);
+  begin
+    endtix := GetTickCount64 + 5000;
+    while (value < expected) and
+          (GetTickCount64 < endtix) do
+      SleepHiRes(1);
+  end;
+
+begin
+  acceptblocked := 0;
+  acceptreleased := 0;
+  FillCharFast(client, SizeOf(client), 0);
+  // one polling thread and one request worker, with no keep alive
+  srv := THttpAsyncServer.Create('8874', nil, nil, 'acceptpending', 2, 0);
+  try
+    srv.OnRequest := DoAcceptPendingRequest;
+    srv.HttpQueueLength := 3; // up to 3 accepted connections waiting for a read
+    srv.WaitStarted(10);
+    // the worker takes the first request, then is blocked
+    Request(0);
+    WaitFor(acceptblocked, 1);
+    CheckEqual(acceptblocked, 1, 'first blocked');
+    // four more connections are queued, then the worker takes one of them
+    for i := 1 to 4 do
+      Request(i);
+    endtix := GetTickCount64 + 5000;
+    while (srv.Async.Sockets.PollRead.Pending < 4) and
+          (GetTickCount64 < endtix) do
+      SleepHiRes(1);
+    CheckEqual(srv.Async.Sockets.PollRead.Pending, 4, 'queued');
+    acceptreleased := 1;
+    WaitFor(acceptblocked, 2);
+    CheckEqual(acceptblocked, 2, 'second blocked');
+    // the queue array has 4 events, but only 3 are still pending
+    CheckEqual(srv.Async.Sockets.PollRead.PendingCount, 4, 'count');
+    CheckEqual(srv.Async.Sockets.PollRead.PendingIndex, 1, 'index');
+    CheckEqual(srv.Async.Sockets.PollRead.Pending, 3, 'pending');
+    // so a new connection is not above HttpQueueLength, and should be accepted
+    Request(5);
+    endtix := GetTickCount64 + 2000;
+    while (srv.Async.Accepted < 6) and
+          (GetTickCount64 < endtix) do
+      SleepHiRes(1);
+    CheckEqual(srv.Async.Accepted, 6, 'accepted with 3 pending');
+    // all requests, including the new one, are eventually answered
+    acceptreleased := 2;
+    for i := 0 to high(client) do
+    begin
+      line := '';
+      try
+        client[i].CreateSockIn;
+        client[i].SockRecvLn(line);
+      except
+        line := ''; // closed by the server
+      end;
+      CheckUtf8(IdemPChar(pointer(line), 'HTTP/1.1 200'), '% answered: %',
+        [URI[i], line]);
+    end;
+  finally
+    acceptreleased := 2;
+    srv.Free;
+    for i := 0 to high(client) do
+      client[i].Free;
+  end;
+end;
+
+{$endif USE_WINIOCP}
 
 function TNetworkProtocols.DoRequest_(Ctxt: THttpServerRequestAbstract): cardinal;
 begin
+  // echo the route-specific opaque value, including nil for /plaintext
+  Ctxt.OutContent := Int32ToUtf8(PtrInt(Ctxt.RouteOpaque));
   reqone := Ctxt['one'];
   Ctxt.RouteUtf8('two', reqtwo);
   reqthree := Ctxt.RouteEquals('three', '3');
   if not Ctxt.RouteInt64('four', reqfour) then
     reqfour := -1;
   result := HTTP_SUCCESS;
-end;
-
-function TNetworkProtocols.DoRequest0(Ctxt: THttpServerRequestAbstract): cardinal;
-begin
-  result := DoRequest_(Ctxt);
-  request := 0;
-end;
-
-function TNetworkProtocols.DoRequest1(Ctxt: THttpServerRequestAbstract): cardinal;
-begin
-  result := DoRequest_(Ctxt);
-  request := 1;
-end;
-
-function TNetworkProtocols.DoRequest2(Ctxt: THttpServerRequestAbstract): cardinal;
-begin
-  result := DoRequest_(Ctxt);
-  request := 2;
-end;
-
-function TNetworkProtocols.DoRequest3(Ctxt: THttpServerRequestAbstract): cardinal;
-begin
-  result := DoRequest_(Ctxt);
-  request := 3;
-end;
-
-function TNetworkProtocols.DoRequest4(Ctxt: THttpServerRequestAbstract): cardinal;
-begin
-  result := DoRequest_(Ctxt);
-  request := 4;
 end;
 
 const
@@ -1053,7 +1950,7 @@ var
     exp4: Int64 = -1; expstatus: integer = HTTP_SUCCESS;
     const met: RawUtf8 = 'GET');
   begin
-    request := -1;
+    ctxt.OutContent := ''; // distinguish no callback from a nil opaque value
     reqone := '';
     reqtwo := '';
     reqthree := false;
@@ -1160,39 +2057,39 @@ begin
     Call('/', '', '', false, -1, 0);
     router.Get('/plaintext', DoRequest_);
     router.Get('/plaintext', DoRequest_);
-    CheckEqual(request, -1);
+    CheckEqual(ctxt.OutContent, '');
     Call('/plaintext', '', '');
     Call('/', '', '', false, -1, 0);
     //writeln(router.Tree[urmGet].ToText);
-    router.Get('/', DoRequest0);
+    router.Get('/', DoRequest_, pointer(1));
     Call('/plaintext', '', '');
-    CheckEqual(request, -1);
+    CheckEqual(ctxt.OutContent, '0');
     Call('/', '', '', false);
-    CheckEqual(request, 0);
-    router.Get('/do/<one>/pic/<two>', DoRequest0);
-    router.Get('/do/<one>', DoRequest1);
-    router.Get('/do/<one>/pic', DoRequest2);
-    router.Get('/do/<one>/pic/<two>/', DoRequest3);
-    router.Get('/da/<one>/<two>/<three>/<four>/', DoRequest4);
+    CheckEqual(ctxt.OutContent, '1');
+    router.Get('/do/<one>/pic/<two>', DoRequest_, pointer(1));
+    router.Get('/do/<one>', DoRequest_, pointer(2));
+    router.Get('/do/<one>/pic', DoRequest_, pointer(3));
+    router.Get('/do/<one>/pic/<two>/', DoRequest_, pointer(4));
+    router.Get('/da/<one>/<two>/<three>/<four>/', DoRequest_, pointer(5));
     //writeln(router.Tree[urmGet].ToText);
     Call('/do/a', 'a', '');
-    CheckEqual(request, 1);
+    CheckEqual(ctxt.OutContent, '2');
     Call('/do/123', '123', '');
-    CheckEqual(request, 1);
+    CheckEqual(ctxt.OutContent, '2');
     Call('/do/toto/pic', 'toto', '');
-    CheckEqual(request, 2);
+    CheckEqual(ctxt.OutContent, '3');
     Call('/do/toto/pic/titi/', 'toto', 'titi');
-    CheckEqual(request, 3);
+    CheckEqual(ctxt.OutContent, '4');
     Call('/do/toto/pic/titi', 'toto', 'titi');
-    CheckEqual(request, 0);
+    CheckEqual(ctxt.OutContent, '1');
     Call('/do/toto/pic/titi/', 'toto', 'titi');
-    CheckEqual(request, 3);
+    CheckEqual(ctxt.OutContent, '4');
     Call('/da/1/2/3/4', '', '', false, -1, 0);
-    CheckEqual(request, -1);
+    CheckEqual(ctxt.OutContent, '');
     Call('/da/1/2/3/4/', '1', '2', true, 4);
-    CheckEqual(request, 4);
+    CheckEqual(ctxt.OutContent, '5');
     Call('/da/a1/b2/3/47456/', 'a1', 'b2', true, 47456);
-    CheckEqual(request, 4);
+    CheckEqual(ctxt.OutContent, '5');
     Compute('/static', '/static');
     Compute('/static2', '/static2');
     Compute('/', '/');
@@ -1335,7 +2232,7 @@ begin
     end;
   except
     on E: Exception do
-      Check(false, E.Message);
+      FailedRaised(E);
   end;
   // retry reverse lookup DNS after some time
   if synopsednsip <> '' then
@@ -1490,8 +2387,55 @@ begin
   Check(not IsDnsName('1..2.3.4'));
   Check(IsDnsName('.'));
   Check(not IsDnsName('..'));
-  Check(not IsDnsName('..'));
-  // validate DNS client with some known values
+  Check(not IsDnsName('...'));
+  // RFC 6066 DNS host name validation
+  Check(not IsDnsHostName(nil));
+  Check(not IsDnsHostName(''));
+  Check(IsDnsHostName('a'));
+  Check(IsDnsHostName('ab'));
+  Check(IsDnsHostName('localhost'));
+  Check(IsDnsHostName('example.com'));
+  Check(IsDnsHostName('www.example.com'));
+  Check(IsDnsHostName('a-b.example.com'));
+  Check(IsDnsHostName('123.example.com'));
+  Check(IsDnsHostName('1a.example.com'));
+  Check(IsDnsHostName('xn--mnchen-3ya.de'));
+  // SNI does not accept IP literals
+  Check(not IsDnsHostName('1.2.3.4'));
+  Check(not IsDnsHostName('127.0.0.1'));
+  Check(not IsDnsHostName('255.255.255.255'));
+  Check(not IsDnsHostName('::1'));
+  Check(not IsDnsHostName('2001:db8::1'));
+  // but purely numeric DNS labels are legal if it isn't an IPv4 literal
+  Check(IsDnsHostName('123'));
+  Check(IsDnsHostName('1.2.3.4.5'));
+  Check(IsDnsHostName('999.2.3.4'));
+  // invalid label separators / endings
+  Check(not IsDnsHostName('.example.com'));
+  Check(not IsDnsHostName('example.com.'));
+  Check(not IsDnsHostName('example..com'));
+  Check(not IsDnsHostName('..'));
+  Check(not IsDnsHostName('a..b'));
+  // '-' is allowed only inside a label
+  Check(not IsDnsHostName('-example.com'));
+  Check(not IsDnsHostName('example-.com'));
+  Check(not IsDnsHostName('a.-example.com'));
+  Check(not IsDnsHostName('a.example-.com'));
+  Check(IsDnsHostName('a-b.c-d'));
+  // '_' is valid for DNS service names, but not host names / SNI
+  Check(IsDnsName('_sip._tcp.example.com'));
+  Check(IsDnsName('_acme-challenge.example.com'));
+  Check(IsDnsName('my_server'));
+  Check(not IsDnsHostName('_sip._tcp.example.com'));
+  Check(not IsDnsHostName('_acme-challenge.example.com'));
+  Check(not IsDnsHostName('my_server'));
+  // relaxed host-name characters are not DNS host-name characters
+  Check(not IsDnsHostName('nas$'));
+  Check(not IsDnsHostName('db~backup'));
+  Check(not IsDnsHostName('test+lab'));
+  Check(not IsDnsHostName('a b'));
+  Check(not IsDnsHostName('a/b'));
+  Check(not IsDnsHostName('user@example.com'));
   CheckEqual(ord(drrOPT), 41);
   CheckEqual(ord(drrHTTPS), 65);
   CheckEqual(ord(drrSPF), 99);
@@ -1904,6 +2848,19 @@ begin
     l.TargetUri := 'ad.synopse.info';
     CheckEqual(l.TargetUri, 'ldap://ad.synopse.info');
     CheckEqual(l.KerberosDN, '');
+    l.TargetUri := 'ldaps://dc.test.local/test.local';
+    CheckEqual(l.TargetPort, LDAP_TLS_PORT, 'ldaps:');
+    Check(l.Tls);
+    CheckEqual(l.KerberosDN, 'test.local');
+    l.TargetUri := 'ldaps://dc.test.local:389/test.local';
+    CheckEqual(l.TargetPort, LDAP_PORT, 'explicit port');
+    Check(l.Tls);
+    l.TargetUri := 'dc.test.local/test.local';
+    CheckEqual(l.TargetPort, LDAP_PORT, 'no scheme');
+    Check(not l.Tls);
+    l.TargetUri := 'dc.test.local:1234/test.local';
+    CheckEqual(l.TargetPort, '1234', 'no scheme with port');
+    Check(not l.Tls);
   finally
     l.Free;
   end;
@@ -2032,7 +2989,7 @@ begin
             //writeln(one.SearchResult.Dump);
           except
             on E: Exception do
-              Check(false, E.Message);
+              FailedRaised(E);
           end;
         finally
           one.Free;
@@ -2068,6 +3025,81 @@ begin
         end;
       end;
     end;
+end;
+
+
+procedure TNetworkProtocols.DoDhcpServerShutdown;
+var
+  mac: TMacAddress;
+  settings: TDhcpServerSettings;
+  scope: TDhcpScopeSettings;
+  server: TDhcpServer;
+  probe: TNetSocket;
+  addr: TNetAddr;
+  port: RawUtf8;
+  i, n: integer;
+
+  function PortCanBind: boolean;
+  var
+    s: TNetSocket;
+  begin
+    result := NewSocket(mac.IP, port, nlUdp,
+                {bind=}true, 100, 100, 100, 0, s) = nrOk;
+    if s <> nil then
+      s.ShutdownAndClose(false);
+  end;
+
+begin
+  if not GetMainMacAddress(mac, [mafRequireBroadcast]) then
+  begin
+    AddConsole('DHCP socket test skipped: no suitable interface');
+    exit;
+  end;
+  // Ask the OS to select an available port.
+  probe := nil;
+  Check(NewSocket(cAnyHost, '0', nlUdp, {bind=}true, 100, 100, 100, 0,
+    probe, @addr) = nrOk, 'ephemeral UDP bind');
+  if probe = nil then
+    exit;
+  port := UInt32ToUtf8(addr.Port);
+  probe.ShutdownAndClose(false);
+  settings := TDhcpServerSettings.Create;
+  try
+    scope := settings.AddScope;
+    if not scope.From(mac) then
+    begin
+      AddConsole('DHCP socket test skipped: no scope from interface');
+      exit;
+    end;
+    scope.ServerPort := addr.Port;
+    if fOwner.MultiThread then
+      n := 4   // quick test
+    else
+      n := 16; // default full pressure
+    for i := 1 to n do
+    begin
+      server := TDhcpServer.Create;
+      try
+        server.Setup(settings);
+        server.Bind(mac.IP);
+        // Ensure the server actually owns the port.
+        Check(not PortCanBind, 'UDP port must be occupied');
+        // Exercise explicit and implicit shutdown.
+        if i and 1 = 0 then
+        begin
+          server.Shutdown;
+          Check(PortCanBind, 'UDP port reusable after Shutdown');
+          // Shutdown must also be idempotent.
+          server.Shutdown;
+        end;
+      finally
+        server.Free;
+      end;
+      Check(PortCanBind, 'UDP port reusable after Free');
+    end;
+  finally
+    settings.Free;
+  end;
 end;
 
 const
@@ -2202,6 +3234,7 @@ var
   end;
 
 begin
+  Run(DoDhcpServerShutdown, self, 'DHCPShutdown', true, false);
   rnd := ThreadRandom; // use the TLecuyer of this thread
   // validate some DHCP protocol definitions
   CheckEqual(ord(dmtTls), 18, 'dmt');
@@ -3313,6 +4346,34 @@ begin
     d.ClientFlush(f);
     Check(server.ComputeResponse(d) > 0, 'bad opt54');
     Check(d.SendType = dmtAck, 'bad opt54 type');
+    // no relay: FindScope uses ciaddr of a configured client, then RecvIp4 as
+    // the bound server IP which received the frame - not the client source IP
+    settings.AddScope(TDhcpScopeSettings.Create).SubnetMask := '10.0.0.1/24';
+    server.Setup(settings);
+    d.ClientFlush(d.ClientNew(dmtDiscover, macs[1520]));
+    d.RecvIp4 := ToIP4('10.0.0.1'); // received on the 2nd server interface
+    Check(server.ComputeResponse(d) > 0, 'scope recvip4');
+    ip4 := d.Send.yiaddr;
+    Check(server.Scope[1].Subnet.Match(ip4), 'scope recvip4 subnet');
+    d.ClientFlush(d.ClientNew(dmtRequest, macs[1520])); // RENEWING unicast
+    d.Recv.ciaddr := ip4;
+    d.RecvIp4 := ToIP4('192.168.0.1'); // routed to the 1st server interface
+    Check(server.ComputeResponse(d) > 0, 'scope ciaddr');
+    Check(d.SendType = dmtAck, 'scope ciaddr type');
+    CheckEqual(d.Send.yiaddr, ip4, 'scope ciaddr ip');
+    // no giaddr: DISCOVER ignores ciaddr and uses the receiving interface
+    d.ClientFlush(d.ClientNew(dmtDiscover, macs[1521]));
+    d.Recv.ciaddr := ToIP4('192.168.0.50');
+    d.RecvIp4 := ToIP4('10.0.0.1');
+    Check(server.ComputeResponse(d) > 0, 'scope discover');
+    Check(server.Scope[1].Subnet.Match(d.Send.yiaddr), 'scope discover subnet');
+    // no giaddr: RELEASE uses ciaddr even when received on another interface
+    d.ClientFlush(d.ClientNew(dmtRelease, macs[1520]));
+    d.Recv.ciaddr := ip4;
+    d.RecvIp4 := ToIP4('192.168.0.1');
+    CheckEqual(server.ComputeResponse(d), 0, 'scope release');
+    CheckEqual(server.Scope[1].Metrics.Current[dsmRelease], 1, 'scope release ciaddr count');
+    CheckEqual(server.Scope[0].Metrics.Current[dsmRelease], 0, 'scope release recvip4 count');
   finally
     server.Free;
     settings.Free;
@@ -3324,7 +4385,7 @@ type
    public
      local: TTunnelLocal;
      session: TTunnelSession;
-     remote: ITunnelTransmit;
+     remote, kvm: ITunnelTransmit;
      signcert, verifcert: ICryptCert;
    end;
 
@@ -3336,8 +4397,29 @@ type
      address: RawUtf8;
    end;
 
+   // Minimal in-process KVM endpoint: receives decrypted binary frames.
+   TTunnelKvmReceiver = class(TInterfacedObject, ITunnelTransmit)
+   public
+     Frames: integer;
+     LastFrame: RawByteString;
+     procedure TunnelSend(const Frame: RawByteString);
+     function TunnelInfo: variant;
+   end;
+
+procedure TTunnelKvmReceiver.TunnelSend(const Frame: RawByteString);
+begin
+  inc(Frames);
+  LastFrame := Frame;
+end;
+
+function TTunnelKvmReceiver.TunnelInfo: variant;
+begin
+  VarClear(result);
+end;
+
 function TNetworkProtocols.TunnelBackgroundOpen(l: TTunnelLocal; s: TTunnelSession;
-  const r: ITunnelTransmit; const sc, vc: ICryptCert): TLoggedWorkThread;
+  const r: ITunnelTransmit; const sc, vc: ICryptCert;
+  const kvm: ITunnelTransmit): TLoggedWorkThread;
 var
   context: TTunnelExecute;
   name: RawUtf8;
@@ -3346,6 +4428,7 @@ begin
   context.local := l;
   context.session := s;
   context.remote := r;
+  context.kvm := kvm;
   context.signcert := sc;
   context.verifcert := vc;
   inc(tunnelsequence);
@@ -3365,13 +4448,24 @@ begin
   try
     check(exec.local <> nil);
     check(exec.session <> 0);
-    with exec do
-      port := local.Open(session, remote, tunneloptions, 1000, tunnelappsec,
-        cLocalHost, ['remoteHost', Executable.Host], signcert, verifcert);
-    check(port <> 0);
-    checkEqual(port, exec.local.Port);
-    check(exec.local.Port <> 0);
-    check(exec.local.RemotePort <> 0);
+    if exec.kvm <> nil then
+    begin
+      with exec do
+        Check(local.OpenDirect(session, remote, kvm, tunneloptions, 1000,
+          tunnelappsec, ['side', 'kvm'], signcert, verifcert), 'direct server');
+      Check(exec.local.Thread = nil, 'direct worker thread');
+      CheckEqual(exec.local.Port, 0);
+    end
+    else
+    begin
+      with exec do
+        port := local.Open(session, remote, tunneloptions, 1000, tunnelappsec,
+          cLocalHost, ['remoteHost', Executable.Host], signcert, verifcert);
+      check(port <> 0);
+      checkEqual(port, exec.local.Port);
+      check(exec.local.Port <> 0);
+      check(exec.local.RemotePort <> 0);
+    end;
   finally
     exec.Free; // always free transient call parameters
   end;
@@ -3432,15 +4526,39 @@ end;
 
 procedure TNetworkProtocols.TunnelSocket(const log: ISynLog;
   clientinstance, serverinstance: TTunnelLocal; packets: integer);
+
+  procedure DebugSendAll(dest: TNetSocket; const sent: RawUtf8; id: integer);
+  var
+    nr: TNetResult;
+  begin
+    nr := dest.SendAll(pointer(sent), length(sent));
+    if nr <> nrOk then
+      TSynLog.Add.Log(sllFail,
+        'SendAll%=% CLIENT: thread=% processing=% flags=% port=% remote=% ' +
+        'SERVER: thread=% processing=% flags=% port=% remote=%',
+        [id, _NR[nr],
+         clientinstance.Thread,
+         clientinstance.Thread.Processing,
+         ToText(clientinstance.Flags),
+         clientinstance.Port,
+         clientinstance.RemotePort,
+         serverinstance.Thread,
+         serverinstance.Thread.Processing,
+         ToText(serverinstance.Flags),
+         serverinstance.Port,
+         serverinstance.RemotePort], self);
+    CheckUtf8(nr = nrOk, 'SendAll%=%', [id, _NR[nr]]);
+  end;
+
 var
   i: integer;
   nr: TNetResult;
-  clientsock, serversock: TNetSocket;
   local, remote: TNetPort;
-  closed: PBoolean;
+  clientsock, serversock: TNetSocket;
   sent, sent2: RawUtf8;
   received, received2: RawByteString;
   nfo: variant;
+  endtix: cardinal;
   rnd: PLecuyer;
 begin
   rnd := ThreadRandom; // use the TLecuyer of this thread
@@ -3475,18 +4593,15 @@ begin
       PByteArray(sent)[length(sent) shr 1] := 0;
       rnd.FillAscii(rnd.Next(200) + 1, sent2);
       PByteArray(sent2)[length(sent2) shr 1] := ord('"');
-      nr := clientsock.SendAll(pointer(sent), length(sent));
-      CheckUtf8(nr = nrOk, 'SendAll1=%', [_NR[nr]]);
+      DebugSendAll(clientsock, sent, 1);
       nr := serversock.RecvWait(1000, received);
       CheckUtf8(nr = nrOk, 'RecvWait1=%', [_NR[nr]]);
       CheckBlocks(log, sent, received, 1);
       if CheckFailed(clientinstance.Thread.Processing, 'no client process') or
          CheckFailed(serverinstance.Thread.Processing, 'no server process') then
         break; // don't try any further
-      nr := clientsock.SendAll(pointer(sent2), length(sent2));
-      CheckUtf8(nr = nrOk, 'SendAll2=%', [_NR[nr]]);
-      nr := serversock.SendAll(pointer(sent), length(sent));
-      CheckUtf8(nr = nrOk, 'SendAll3=%', [_NR[nr]]);
+      DebugSendAll(clientsock, sent2, 2);
+      DebugSendAll(serversock, sent, 3);
       nr := clientsock.RecvWait(1000, received);
       CheckUtf8(nr = nrOk, 'RecvWait2=%', [_NR[nr]]);
       nr := serversock.RecvWait(1000, received2);
@@ -3519,8 +4634,82 @@ begin
     serversock.ShutdownAndClose(true);
   end;
   clientinstance.ClosePort;
-  closed := @serverinstance.Closed; // trick to access this propery by value
-  SleepHiRes(1000, closed^);
+  endtix := GetTickSec + 2;
+  while (GetTickSec < endtix) and
+        not (fClosed in serverinstance.Flags) do
+    Sleep(1);
+end;
+
+procedure TNetworkProtocols.TunnelDirect;
+var
+  log: ISynLog;
+  sess: TTunnelSession;
+  client, server: TTunnelLocal;
+  clientwire, serverwire: ITunnelLocal;
+  clientlocal, serverlocal: ITunnelTransmit;
+  clientkvm, serverkvm: TTunnelKvmReceiver;
+  worker: TLoggedWorkThread;
+  data: RawByteString;
+  i: integer;
+begin
+  TSynLogTestLog.EnterLocal(log, 'TunnelDirect [%]', [ToText(tunneloptions)], self);
+  client := TTunnelLocalClient.Create(TSynLog);
+  server := TTunnelLocalServer.Create(TSynLog);
+  clientwire := client;
+  serverwire := server;
+  clientkvm := TTunnelKvmReceiver.Create;
+  serverkvm := TTunnelKvmReceiver.Create;
+  clientlocal := clientkvm;
+  serverlocal := serverkvm;
+  repeat
+    sess := ThreadRandom.Next31;
+  until sess <> 0;
+  tunnelappsec := 'mORMot KVM in-process regression';
+  try
+    // The two cryptographic roles still exchange a reciprocal handshake.
+    worker := TunnelBackgroundOpen(server, sess, clientwire,
+      nil, nil, serverlocal);
+    try
+      Check(client.OpenDirect(sess, serverwire, clientlocal, tunneloptions,
+        1000, tunnelappsec, ['side', 'viewer']), 'direct client');
+      Check(worker.WaitFinished(5000), 'direct handshake');
+    finally
+      worker.Free;
+    end;
+    CheckEqual(client.Port, 0);
+    CheckEqual(server.Port, 0);
+    CheckEqual(client.RemotePort, 0);
+    CheckEqual(server.RemotePort, 0);
+    Check(client.Thread = nil, 'no client TCP thread');
+    Check(server.Thread = nil, 'no server TCP thread');
+    Check(client.Encrypted = (toEncrypted * tunneloptions <> []), 'cDirectEncrypted');
+    Check(server.Encrypted = (toEncrypted * tunneloptions <> []), 'sDirectEncrypted');
+    // Binary KVM video and input messages, delivered with no TCP port.
+    for i := 1 to 8 do
+    begin
+      data := HexToBin('766964656F0080FF'); // 'video'#0#128#255
+      client.SendData(data);
+      CheckEqual(serverkvm.Frames, i);
+      CheckBlocks(log, data, serverkvm.LastFrame, 1);
+      data := HexToBin('6B657900011B');; // 'key'#0#1#27
+      server.SendData(data);
+      CheckEqual(clientkvm.Frames, i);
+      CheckBlocks(log, data, clientkvm.LastFrame, 2);
+    end;
+    CheckEqual(client.BytesOut, server.BytesIn);
+    CheckEqual(server.BytesOut, client.BytesIn);
+    client.ClosePort;
+    Check(fClosed in server.Flags, 'direct closure propagated');
+    client.SendData('ignored after close');
+    CheckEqual(serverkvm.Frames, 8);
+  finally
+    // Break the interface cycle introduced by this in-memory relay.
+    client.ClosePort;
+    client.RawTransmit := nil;
+    server.RawTransmit := nil;
+    clientwire := nil;
+    serverwire := nil;
+  end;
 end;
 
 procedure TNetworkProtocols.TunnelTest(const clientcert, servercert: ICryptCert;
@@ -3534,7 +4723,6 @@ var
   worker: TLoggedWorkThread;
   rnd: PLecuyer;
 begin
-  rnd := ThreadRandom; // use the TLecuyer of this thread
   // setup the two instances with the specified options and certificates
   TSynLogTestLog.EnterLocal(log, 'TunnelTest [%]', [ToText(tunneloptions)], self);
   clientinstance := TTunnelLocalClient.Create(TSynLog);
@@ -3544,6 +4732,7 @@ begin
   clienttunnel := clientinstance;
   servertunnel := serverinstance;
   // perform handshaking
+  rnd := ThreadRandom; // use the TLecuyer of this thread
   repeat
     sess := rnd.Next31;
   until sess <> 0;
@@ -3903,12 +5092,15 @@ begin
   //TSynLog.Family.Level := LOG_VERBOSE; // for convenient LUTI debugging
   // plain tunnelling
   TunnelTest(nil, nil);
+  TunnelDirect;
   // symmetric secret encrypted tunnelling
   tunneloptions := [toEncrypt];
   TunnelTest(nil, nil);
+  TunnelDirect;
   // ECDHE encrypted tunnelling
   tunneloptions := [toEcdhe];
   TunnelTest(nil, nil);
+  TunnelDirect;
   // tunnelling with mutual authentication
   tunneloptions := [];
   clientcert := Cert('syn-es256').Generate([cuDigitalSignature]);
@@ -4015,6 +5207,9 @@ end;
 procedure TNetworkProtocols.IPAddresses;
 var
   i, n, n2: PtrInt;
+  srv, cli: TNetSocket;
+  addr, frame, remote: TNetAddr;
+  ifindex, sendindex: integer;
   s: ShortString;
   txt, uri: RawUtf8;
   ip: TNetIP6;
@@ -4064,6 +5259,33 @@ begin
   CheckEqual(SizeOf(TNetIP4), 4);
   CheckEqual(SizeOf(TNetIP6), 16);
   CheckEqual(SizeOf(TNetAddr), SOCKADDR_SIZE);
+  // validate the receiving interface of UDP frames
+  Check(NewSocket(cLocalhost, '0', nlUdp, {bind=}true,
+    100, 100, 100, 0, srv, @addr) = nrOk, 'udp bind');
+  Check(srv.GetName(addr) = nrOk, 'udp port');
+  {$ifdef HAS_IP_PKTINFO}
+  Check(srv.SetPacketInfo(true) = nrOk, 'pktinfo');
+  {$else}
+  Check(srv.SetPacketInfo(true) = nrNotImplemented, 'pktinfo');
+  {$endif HAS_IP_PKTINFO}
+  cli := addr.NewSocket(nlUdp);
+  sendindex := 0; // first with no interface, then through the loopback
+  for i := 1 to 2 do
+  begin
+    Check(cli.SendToIf(@addr, SizeOf(addr), addr, sendindex) = nrOk, 'sendto');
+    FillCharFast(frame, SizeOf(frame), 0);
+    CheckEqual(srv.RecvFromIf(@frame, SizeOf(frame), remote, ifindex),
+      SizeOf(addr), 'recvfrom');
+    Check(CompareMem(@frame, @addr, SizeOf(addr)), 'udp frame');
+    {$ifdef HAS_IP_PKTINFO}
+    Check(ifindex > 0, 'ifindex');
+    {$else}
+    CheckEqual(ifindex, 0, 'ifindex');
+    {$endif HAS_IP_PKTINFO}
+    sendindex := ifindex;
+  end;
+  cli.ShutdownAndClose({rdwr=}false);
+  srv.ShutdownAndClose({rdwr=}true);
   FillZero(ip.b);
   Check(IsZero(ip.b));
   IP4Short(@ip, s);
@@ -4388,6 +5610,7 @@ begin
     peercachedirect := hpc;
     Check(hpc.State = [], 'hpcState1');
     localserver.OnRequest := OnPeerCacheRequest; // return the URL
+    localserver.WaitStarted; // ensure :8889 is bound
     hpc.OnDirectOptions := OnPeerCacheDirect;
     try
       // validate all resources
@@ -4491,10 +5714,10 @@ begin
     end;
   finally
     WaitNotProcessing('hpcStateFinal');
+    localserver.Free;
     peercachedirect := nil;
     hpc.Settings.Free;
     hpc.Free;
-    localserver.Free;
   end;
 end;
 
@@ -4537,7 +5760,8 @@ var
   res: THttpPeerCryptMessageDecode;
   i, n, alter: integer;
   tmp: THttpPeerCacheMessageEncoded;
-  dUri, dBearer, dTok, params: RawUtf8;
+  dUri, dBearer, dTok, params, err: RawUtf8;
+  mac: TMacAddress;
   decoded: TUri;
   timer: TPrecisionTimer;
 begin
@@ -4594,6 +5818,19 @@ begin
     hps.Port := 8008; // don't use default 8099
     hps.Options := [pcoHttpDirect, pcoCacheTempNoCheckSize,
       pcoVerboseLog, pcoHttpReprDigest {}, pcoSelfSignedHttps{}];
+    {$ifdef OSWINDOWS}
+    if wsPrism in WindowsSpecs then
+    begin
+      hps.Options := hps.Options - [pcoSelfSignedHttps];
+      AddConsole('Peer cache: HTTP instead of HTTPS on PRISM');
+    end;
+    {$endif OSWINDOWS}
+    err := hps.GuessInterface(mac);
+    if err <> '' then
+    begin
+      AddConsole('Skipped: %', [err]);
+      exit;
+    end;
     try
       hpc := THttpPeerCacheHook.Create(hps, 'secret'{,THttpAsyncServer});
       try
@@ -4742,6 +5979,29 @@ var
   ms: TRawByteStringStream;
   req: THttpServerRequest;
 
+  procedure CheckBadLocation(const Location: RawUtf8);
+  begin
+    s := '/unchanged';
+    CheckUtf8(not U.FromLocation(s, 'a', '80', false, Location), Location);
+    CheckEqual(s, '/unchanged', Location);
+    Check(U.UriScheme = usUndefined);
+    CheckEqual(U.Server, '');
+    CheckEqual(U.Address, '');
+  end;
+
+  procedure CheckLocation(const Base, Location, Expected: RawUtf8);
+  begin
+    s := Base;
+    CheckUtf8(U.FromLocation(s, 'a', '80', false, Location), Location);
+    CheckEqual(s, Expected, Location);
+    CheckEqual(U.Address, copy(Expected, 2, MaxInt), Location);
+    CheckEqual(U.URI, 'http://a' + Expected, Location);
+    // detect an embedded #0 or damaged trailing terminator
+    CheckEqual(StrLen(pointer(s)), length(s), Location);
+    CheckEqual(PByteArray(s)[length(s)], 0, Location);
+    CheckEqual(StrLen(pointer(U.Address)), length(U.Address), Location);
+  end;
+
   procedure Check4;
   begin
     CheckEqual(NameTextBufferPair(hc.Cookies, 0), 'name');
@@ -4824,6 +6084,19 @@ begin
   Check(U.UriScheme = usHttps);
   CheckEqual(U.Address, 'tata/tutu:tete');
   CheckEqual(U.Uri, 'https://toto.com:123/tata/tutu:tete');
+  Check(not U.From('http://'));
+  Check(not U.From('https://'));
+  Check(not U.From('http:/'));
+  Check(not U.From('https:/'));
+  Check(not U.From('x:/'));
+  Check(not U.From('server:/path'));
+  Check(not U.From('server:'));
+  Check(not U.From('http\://'));
+  Check(not U.From('http://server:/path'));
+  Check(U.From('server'));
+  Check(U.From('server/path'));
+  Check(U.From('server:80/path'));
+  Check(U.From('https://server/path'));
   Check(U.From('http://user:password@server:port/address'));
   Check(not U.Https);
   CheckEqual(U.Uri, 'http://server:port/address');
@@ -4835,6 +6108,11 @@ begin
   CheckEqual(U.Uri, 'https://server:port/address');
   CheckEqual(U.User, 'user');
   CheckEqual(U.Password, '');
+  Check(not U.From(''));
+  Check(U.UriScheme = usUndefined);
+  CheckEqual(U.Server, '');
+  CheckEqual(U.Port, '');
+  CheckEqual(U.Address, '');
   Check(U.From('toto.com/tata/tutu:tete'));
   Check(U.UriScheme = usHttp);
   CheckEqual(U.Uri, 'http://toto.com/tata/tutu:tete');
@@ -4926,7 +6204,123 @@ begin
   CheckEqual(U.PortInt, 0);
   CheckEqual(U.Address, 'url/path');
   CheckEqual(U.Uri, 'http://unix:/path/to/socket.sock:/url/path');
+  Check(U.From('https://cdn.example#fragment'));
+  CheckEqual(U.Server, 'cdn.example');
+  CheckEqual(U.Address, '#fragment');
+  CheckEqual(U.URI, 'https://cdn.example/#fragment');
+  Check(U.From('https://cdn.example?x=1#fragment'));
+  CheckEqual(U.Server, 'cdn.example');
+  CheckEqual(U.Address, '?x=1#fragment');
+  Check(U.From('https://cdn.example:8443#fragment'));
+  CheckEqual(U.Server, 'cdn.example');
+  CheckEqual(U.Port, '8443');
+  CheckEqual(U.Address, '#fragment');
+  Check(U.From('https://cdn.example:8443?x=1'));
+  CheckEqual(U.Port, '8443');
+  CheckEqual(U.Address, '?x=1');
+  Check(U.From('https://cdn.example?email=a@b'));
+  CheckEqual(U.Server, 'cdn.example');
+  CheckEqual(U.User, '');
+  CheckEqual(U.Password, '');
+  CheckEqual(U.Address, '?email=a@b');
+  Check(U.From('https://cdn.example/file?email=a@b'));
+  CheckEqual(U.Server, 'cdn.example');
+  CheckEqual(U.User, '');
+  Check(U.From('https://user:pass@cdn.example?email=a@b'));
+  CheckEqual(U.Server, 'cdn.example');
+  CheckEqual(U.User, 'user');
+  CheckEqual(U.Password, 'pass');
+  Check(U.From('  https://cdn.example  '));
+  CheckEqual(U.Server, 'cdn.example');
+  CheckEqual(U.URI, 'https://cdn.example/');
+  s := 'https://good.example'#0'evil.example';
+  Check(not U.From(s));
+  Check(U.UriScheme = usUndefined);
+  CheckEqual(U.Server, '');
+  CheckEqual(U.Port, '');
+  CheckEqual(U.Address, '');
+  Check(U.From('http://proxy.example'));
+  Check(U.Same('proxy.example', '80', false));
+  Check(U.Same('PROXY.EXAMPLE', '80', false));
+  Check(not U.Same('proxy.example', '8080', false));
+  Check(not U.Same('proxy.example', '80', true));
+  Check(U.From('https://proxy.example'));
+  Check(U.Same('proxy.example', '443', true));
+  Check(not U.Same('proxy.example', '80', true));
+  Check(U.From('http://proxy.example:3128'));
+  Check(not U.Https, 'httpU');
+  Check(not U.Same('proxy.example', '80', U.Https));
+  Check(U.Same('proxy.example', '3128', U.Https));
+  CheckEqual(U.Port, '3128');
+  CheckEqual(U.PortInt, 3128);
+  Check(U.From('ws://server/path'));
+  Check(U.UriScheme = usWs);
+  Check(not U.Https);
+  CheckEqual(U.Port, '80');
+  CheckEqual(U.PortInt, 80);
+  CheckEqual(U.Address, 'path');
+  CheckEqual(U.URI, 'ws://server/path');
+   Check(U.From('wss://server/chat'));
+  Check(U.UriScheme = usWss);
+  Check(U.Https);
+  CheckEqual(U.Port, '443');
+  CheckEqual(U.PortInt, 443);
+  CheckEqual(U.Address, 'chat');
+  CheckEqual(U.URI, 'wss://server/chat');
+  Check(U.From('ws://server:8080/chat?x=1'));
+  CheckEqual(U.URI({NormalizeToHttp=}true),
+    'http://server:8080/chat?x=1');
+  Check(U.From('wss://server:8443/chat?x=1'));
+  CheckEqual(U.URI({NormalizeToHttp=}true),
+    'https://server:8443/chat?x=1');
+  Check(U.From('ws://server:80/chat'));
+  CheckEqual(U.URI(true), 'http://server/chat');
+  Check(U.From('wss://server:443/chat'));
+  CheckEqual(U.URI(true), 'https://server/chat');
+  Check(U.FromScheme(usWs, 'server', '', '/chat'));
+  CheckEqual(U.Port, '80');
+  CheckEqual(U.Address, 'chat');
+  CheckEqual(U.URI, 'ws://server/chat');
+  CheckEqual(U.URI(true), 'http://server/chat');
+  Check(U.FromScheme(usWss, 'server', '8443', '/chat?x=1'));
+  Check(U.Https);
+  CheckEqual(U.Port, '8443');
+  CheckEqual(U.Address, 'chat?x=1');
+  CheckEqual(U.URI, 'wss://server:8443/chat?x=1');
+  CheckEqual(U.URI(true), 'https://server:8443/chat?x=1');
+  Check(U.FromScheme(usWs, 'server', '', '//chat'));
+  CheckEqual(U.Address, '/chat');
+  CheckEqual(U.URI, 'ws://server//chat');
+  Check(U.From('http://user:pass@proxy.example:3128/path'));
+  CheckEqual(U.User, 'user');
+  CheckEqual(U.Password, 'pass');
+  CheckEqual(U.Server, 'proxy.example');
+  CheckEqual(U.Port, '3128');
+  CheckEqual(U.URI, 'http://proxy.example:3128/path');
+  Check(not U.From('http://server:')); // malformed port: documents
+  CheckEqual(U.Server, ''); // invalid
+  Check(not U.From('http://server:   '));
+  CheckEqual(U.Server, '');
+  Check(not U.From('http://server:?x=1'));
+  CheckEqual(U.Server, '');
+  Check(not U.From('http://[::1]garbage'));
+  CheckEqual(U.Server, '');
+  Check(not U.From('http://user:pass@server:'));
+  CheckEqual(U.Server, '');
   // TUri may be used to create an URI from some parameters
+  U.Clear;
+  U.Server := 'server';
+  U.Port := '8080';
+  Check(U.UriScheme = usUndefined);
+  Check(U.UriScheme in HTTP_SCHEME);
+  CheckEqual(U.URI, 'http://server:8080/');
+  U.Clear;
+  U.Server := 'server';
+  U.Port := '8443';
+  U.Https := true;
+  Check(U.UriScheme = usUndefined);
+  Check(U.UriScheme in HTTP_SCHEME);
+  CheckEqual(U.URI, 'https://server:8443/');
   U.Clear;
   U.Server := '127.0.0.1';
   U.Port := '991';
@@ -4943,6 +6337,278 @@ begin
   CheckEqual(U.Uri, 'https://127.0.0.1/endpoint');
   U.Port := '444';
   CheckEqual(U.Uri, 'https://127.0.0.1:444/endpoint');
+  // validate TUri.FromLocation
+  s := '/repository/file';
+  Check(U.FromLocation(s, 'origin.example', '443', true,
+    '//cdn.example/path/file'));
+  CheckEqual(s, '/path/file');
+  Check(U.Https);
+  CheckEqual(U.Server, 'cdn.example');
+  CheckEqual(U.Port, '443');
+  CheckEqual(U.URI, 'https://cdn.example/path/file');
+  s := '/repository/file';
+  Check(U.FromLocation(s, 'origin.example', '443', true,
+    'https://cdn.example:8443/a/../file?download=1#fragment'));
+  CheckEqual(s, '/file?download=1');
+  Check(U.Https);
+  CheckEqual(U.Server, 'cdn.example');
+  CheckEqual(U.Port, '8443');
+  CheckEqual(U.URI, 'https://cdn.example:8443/file?download=1');
+  s := '/repository/file';
+  Check(U.FromLocation(s, 'origin.example', '443', true,
+    'https://user:password@cdn.example/file'));
+  CheckEqual(s, '/file');
+  CheckEqual(U.Server, 'cdn.example');
+  CheckEqual(U.User, 'user');
+  CheckEqual(U.Password, 'password');
+  s := '/repository/file';
+  Check(not U.FromLocation(s, 'origin.example', '443', true,
+    'ftp://cdn.example/file'));
+  CheckEqual(s, '/repository/file');
+  s := '/repository/file';
+  Check(not U.FromLocation(s, 'origin.example', '443', true, ''));
+  CheckEqual(s, '/repository/file');
+  s := '/old/path/file';
+  Check(U.FromLocation(s, 'origin.test', '443', true,
+    '//cdn.test/new/file'));
+  CheckEqual(s, '/new/file');
+  CheckEqual(U.Server, 'cdn.test');
+  Check(U.Https);
+  CheckEqual(U.Uri, 'https://cdn.test/new/file');
+  s := '/old/file';
+  Check(U.FromLocation(s, 'origin.test', '443', true,
+    'https://user:pass@cdn.test/file'));
+  CheckEqual(s, '/file');
+  CheckEqual(U.User, 'user');
+  CheckEqual(U.Password, 'pass');
+  s := '/old';
+  Check(U.FromLocation(s, 'origin.example', '443', true,
+    'https://cdn.example'));
+  CheckEqual(s, '/');
+  CheckEqual(U.Server, 'cdn.example');
+  CheckEqual(U.URI, 'https://cdn.example/');
+  s := '/old';
+  Check(U.FromLocation(s, 'origin.example', '443', true,
+    'https://cdn.example?x=1'));
+  CheckEqual(s, '/?x=1');
+  CheckEqual(U.URI, 'https://cdn.example/?x=1');
+  s := '/old';
+  Check(U.FromLocation(s, 'origin.example', '443', true,
+    '//cdn.example'));
+  CheckEqual(s, '/');
+  CheckEqual(U.Server, 'cdn.example');
+  CheckEqual(U.URI, 'https://cdn.example/');
+  s := '/old';
+  Check(U.FromLocation(s, 'origin.example', '443', true,
+    '//cdn.example?x=1'));
+  CheckEqual(s, '/?x=1');
+  CheckEqual(U.URI, 'https://cdn.example/?x=1');
+  s := '/old';
+  Check(U.FromLocation(s, 'origin.example', '443', true,
+    'https://cdn.example#fragment'));
+  CheckEqual(s, '/');
+  CheckEqual(U.Server, 'cdn.example');
+  CheckEqual(U.URI, 'https://cdn.example/');
+  s := '/old';
+  Check(U.FromLocation(s, 'origin.example', '443', true,
+    '//cdn.example#fragment'));
+  CheckEqual(s, '/');
+  CheckEqual(U.Server, 'cdn.example');
+  CheckEqual(U.URI, 'https://cdn.example/');
+  Check(U.From('https://stale.example/path'));
+  CheckEqual(U.Server, 'stale.example');
+  s := '/old';
+  Check(U.FromLocation(s, 'a', '80', false, 'HTTP://example.com/file'));
+  CheckEqual(s, '/file');
+  CheckEqual(U.Server, 'example.com');
+  s := '/old';
+  Check(U.FromLocation(s, 'a', '80', false, 'HtTpS://example.com/file'));
+  CheckEqual(s, '/file');
+  Check(U.Https);
+  s := '/old';
+  Check(U.FromLocation(s, 'a', '80', false, 'https://a/new'));
+  CheckEqual(s, '/new');
+  Check(U.Https);
+  CheckEqual(U.Server, 'a');
+  CheckEqual(U.Port, '443');
+  CheckEqual(U.URI, 'https://a/new');
+  s := '/old';
+  Check(U.FromLocation(s, 'a', '80', false, 'HtTpS://a/new'));
+  CheckEqual(s, '/new');
+  Check(U.Https);
+  CheckEqual(U.Server, 'a');
+  CheckEqual(U.Port, '443');
+  CheckEqual(U.URI, 'https://a/new');
+  s := '/a/b';
+  Check(U.FromLocation(s, 'origin', '8443', true, 'g'));
+  CheckEqual(s, '/a/g');
+  CheckEqual(U.Port, '8443');
+  s := '/old';
+  Check(U.FromLocation(s, 'origin', '8443', true, '//cdn/new'));
+  CheckEqual(s, '/new');
+  Check(U.Https);
+  CheckEqual(U.Port, '443');
+  s := '/old';
+  Check(U.FromLocation(s, 'origin', '443', true,
+    '//user:pass@cdn/new'));
+  CheckEqual(U.User, 'user');
+  CheckEqual(U.Password, 'pass');
+  s := '/old';
+  Check(U.FromLocation(s, 'origin', '443', true,
+    'https://cdn?email=a@b'));
+  CheckEqual(U.User, '');
+  CheckEqual(U.Server, 'cdn');
+  CheckEqual(s, '/?email=a@b');
+  CheckBadLocation('/good'#0'evil');
+  CheckBadLocation('');
+  CheckBadLocation('x:');
+  CheckBadLocation('x:/');
+  CheckBadLocation('x://');
+  CheckBadLocation('x://server');
+  CheckBadLocation('http:');
+  CheckBadLocation('http:/');
+  CheckBadLocation('http://');
+  CheckBadLocation('ftp://server/file');
+  CheckBadLocation('mailto:user@example.com');
+  CheckBadLocation('//');
+  CheckBadLocation('///');
+  CheckBadLocation('c:d/e');
+  CheckBadLocation('x:y');
+  CheckBadLocation('1x:y');
+  CheckBadLocation('+x:y');
+  CheckBadLocation('.x:y');
+  CheckBadLocation('1x://server');
+  CheckBadLocation('http\://server');
+  CheckLocation('', 'g', '/g');
+  CheckLocation('', '?x', '/?x');
+  CheckLocation('/a/b', 'x/y:z', '/a/x/y:z');
+  CheckLocation('/a/b', './x:y', '/a/x:y');
+  CheckLocation('/old', 'http://a/new',  '/new');
+  CheckLocation('/old', 'HTTP://a/new',  '/new');
+  CheckLocation('/old', 'http://a',  '/');
+  CheckLocation('/old', 'http://a?x', '/?x');
+  CheckLocation('/old', 'http://a#f', '/');
+  CheckLocation('/old', '//a/new',   '/new');
+  CheckLocation('/old', '//a',       '/');
+  CheckLocation('/old', '//a?x',     '/?x');
+  CheckLocation('/old', '//a#f',     '/');
+  CheckLocation('/a/b', 'c/d:e',     '/a/c/d:e');
+  CheckLocation('/a/b', '/c:d',      '/c:d');
+  CheckLocation('/a/b', '?x=a:b',    '/a/b?x=a:b');
+  CheckLocation('/a/b', 'c?x=a:b',   '/a/c?x=a:b');
+  CheckLocation('/a/b', '#a:b',      '/a/b');
+  CheckLocation('/a/b', 'c/d:e',  '/a/c/d:e');
+  CheckLocation('/a/b', './c:d',   '/a/c:d');
+  CheckLocation('/a/b', '../c:d',  '/c:d');
+  CheckLocation('/a/b', '/c:d',    '/c:d');
+  CheckLocation('/a/b', '?x=c:d',  '/a/b?x=c:d');
+  CheckLocation('/a/b', 'c?x=d:e', '/a/c?x=d:e');
+  CheckLocation('/a/b', '1x/y:z', '/a/1x/y:z');
+  CheckLocation('/a/b', '+x/y:z', '/a/+x/y:z');
+  CheckLocation('/b/c/d;p?q', 'g',       '/b/c/g');
+  CheckLocation('/b/c/d;p?q', './g',     '/b/c/g');
+  CheckLocation('/b/c/d;p?q', '../g',    '/b/g');
+  CheckLocation('/b/c/d;p?q', '../../g', '/g');
+  CheckLocation('/b/c/d;p?q', '/g',      '/g');
+  CheckLocation('/b/c/d;p?q', '?y',      '/b/c/d;p?y');
+  CheckLocation('/b/c/d;p?q', '#s',      '/b/c/d;p?q');
+  CheckLocation('/b/c/d;p?q', 'g?y#s',   '/b/c/g?y');
+  CheckLocation('/b/c/d;p?q', 'g/./h',   '/b/c/g/h');
+  CheckLocation('/b/c/d;p?q', 'g/../h',  '/b/c/h');
+  CheckLocation('/b/c/d;p?q', '../../../g', '/g');
+  CheckLocation('/b/c/d;p?q', 'g?y/../x', '/b/c/g?y/../x');
+  CheckLocation('/b/c/d;p?q', 'g/.',      '/b/c/g/');
+  CheckLocation('/b/c/d;p?q', '%2e%2e/g', '/b/c/%2e%2e/g');
+  CheckLocation('/b/c/d;p?q', '?',        '/b/c/d;p?');
+  CheckLocation('/', 'g',                    '/g');
+  CheckLocation('/', './g',                  '/g');
+  CheckLocation('/', '../g',                 '/g');
+  CheckLocation('/b/c/d;p?q', '.',           '/b/c/');
+  CheckLocation('/b/c/d;p?q', './',          '/b/c/');
+  CheckLocation('/b/c/d;p?q', '..',          '/b/');
+  CheckLocation('/b/c/d;p?q', '../',         '/b/');
+  CheckLocation('/b/c/d;p?q', '../..',       '/');
+  CheckLocation('/b/c/d;p?q', '../../',      '/');
+  CheckLocation('/b/c/d;p?q', '../../../../g', '/g');
+  CheckLocation('/b/c/d;p?q', '/./g',        '/g');
+  CheckLocation('/b/c/d;p?q', '/../g',       '/g');
+  CheckLocation('/b/c/d;p?q', '/a/b/../../g','/g');
+  CheckLocation('/b/c/d;p?q', 'g/.',         '/b/c/g/');
+  CheckLocation('/b/c/d;p?q', 'g/..',        '/b/c/');
+  CheckLocation('/b/c/d;p?q', 'g/../',       '/b/c/');
+  CheckLocation('/b/c/d;p?q', 'g/../h/',     '/b/c/h/');
+  CheckLocation('/b/c/d;p?q', '?',           '/b/c/d;p?');
+  CheckLocation('/b/c/d;p?q', '?y',          '/b/c/d;p?y');
+  CheckLocation('/b/c/d;p?q', '?y#frag',     '/b/c/d;p?y');
+  CheckLocation('/b/c/d;p?q', 'g?',          '/b/c/g?');
+  CheckLocation('/b/c/d;p?q', 'g?x?y',       '/b/c/g?x?y');
+  CheckLocation('/b/c/d;p?q', 'g?y/../x',    '/b/c/g?y/../x');
+  CheckLocation('/b/c/d;p?q', '#s',          '/b/c/d;p?q');
+  CheckLocation('/b/c/d;p?q', '#',           '/b/c/d;p?q');
+  CheckLocation('/b/c/d;p?q', 'g#s',         '/b/c/g');
+  CheckLocation('/b/c/d;p?q', 'g#s?y',       '/b/c/g');
+  CheckLocation('/b/c/d;p?q', 'g?y#s',       '/b/c/g?y');
+  CheckLocation('/b/c/d;p?q', '%2e/g',       '/b/c/%2e/g');
+  CheckLocation('/b/c/d;p?q', '%2e%2e/g',    '/b/c/%2e%2e/g');
+  CheckLocation('/b/c/d;p?q', 'g/%2e%2e/h',  '/b/c/g/%2e%2e/h');
+  CheckLocation('/b/c/d;p?q', 'g;x=1/../h',  '/b/c/h');
+  CheckLocation('/b/c/d;p?q', './g:h',       '/b/c/g:h');
+  CheckLocation('/b/c/d;p?q', 'g//h',        '/b/c/g//h');
+  CheckLocation('/b/c/d;p?q', '/g//h',       '/g//h');
+  CheckLocation('/a/../b?q', '?x', '/a/../b?x');
+  CheckLocation('/a/../b?q', '#fragment', '/a/../b?q');
+  CheckLocation('/a/../b?q', './c',  '/c');
+  CheckLocation('/a/../b?q', '../c', '/c');
+  CheckLocation('/a/../b?q', 'c',    '/c');
+  // validate TUri.FromScheme wrapper
+  Check(U.FromScheme(usHttp, 'server'));
+  Check(U.UriScheme = usHttp);
+  CheckEqual(U.Scheme, 'http');
+  CheckEqual(U.URI, 'http://server/');
+  Check(U.SameUri('http://server'));
+  Check(U.FromScheme(usHttps, 'server'));
+  Check(U.UriScheme = usHttps);
+  CheckEqual(U.Scheme, 'https');
+  Check(U.Https);
+  CheckEqual(U.URI, 'https://server/');
+  Check(U.SameUri('https://server'));
+  Check(U.FromScheme(usWs, 'server'));
+  CheckEqual(U.Scheme, 'ws');
+  CheckEqual(U.URI, 'ws://server/');
+  Check(U.FromScheme(usWss, 'server'));
+  CheckEqual(U.Scheme, 'wss');
+  CheckEqual(U.URI, 'wss://server/');
+  Check(U.FromScheme(usFtp, 'server'));
+  CheckEqual(U.Scheme, 'ftp');
+  CheckEqual(U.URI, 'ftp://server/');
+  Check(U.FromScheme(usLdaps, 'server'));
+  CheckEqual(U.Scheme, 'ldaps');
+  CheckEqual(U.URI, 'ldaps://server/');
+  // validate ProxyByPassMatch() and NoProxyMatch()
+  Check(not ProxyByPassMatch('', '*'));
+  Check(not ProxyByPassMatch('example.com', ''));
+  Check(ProxyByPassMatch('example.com', 'example.com'));
+  Check(ProxyByPassMatch('EXAMPLE.COM', 'example.com'));
+  Check(ProxyByPassMatch('www.example.com', '*.example.com'));
+  Check(ProxyByPassMatch('some-foo-server', '*FOO*'));
+  Check(ProxyByPassMatch('abcXYZdef', 'a*d*f'));
+  Check(ProxyByPassMatch('10.20.30.40', 'localhost; 10.*; *.local'));
+  Check(ProxyByPassMatch('server', '<local>'));
+  Check(not ProxyByPassMatch('server.local', '<local>'));
+  Check(not ProxyByPassMatch('example.org', '*.example.com; 10.*'));
+  Check(not NoProxyMatch('', '*'));
+  Check(not NoProxyMatch('example.com', ''));
+  Check(NoProxyMatch('example.com', '*'));
+  Check(NoProxyMatch('example.com', 'example.com'));
+  Check(NoProxyMatch('EXAMPLE.COM', 'example.com'));
+  Check(NoProxyMatch('www.example.com', 'example.com'));
+  Check(NoProxyMatch('www.example.com', '.example.com'));
+  Check(NoProxyMatch('foo.www.example.com', 'other.com, example.com'));
+  Check(not NoProxyMatch('notexample.com', 'example.com'));
+  Check(not NoProxyMatch('example.org', 'example.com, localhost'));
+  Check(NoProxyMatch('localhost', 'example.com, localhost'));
+  Check(NoProxyMatch('192.168.1.10', '192.168.1.10'));
+  Check(not NoProxyMatch('192.168.1.10', '168.1.10'));
   // validate THttpCookies and CookieFromHeaders()
   hc.ParseServer('');
   CheckEqual(length(hc.Cookies), 0);
@@ -4989,6 +6655,10 @@ begin
   CheckEqual(CookieFromHeaders(HDR4, 'name 1'), 'value1');
   CheckEqual(CookieFromHeaders(HDR4, 'name 2'), 'value 2');
   CheckEqual(CookieFromHeaders(HDR4, 'name3'), 'value3');
+  hc.ParseServer('Cookie: other=1; __Secure-probe=abc'#13#10);
+  CheckEqual(hc.GetCookie('probe'), 'abc');
+  CheckEqual(CookieFromHeaders(
+    'Cookie: other=1; __Secure-probe=abc'#13#10, 'probe'), 'abc');
   // validate HttpRequestLength() and HttpRequestHash()
   h := HttpRequestLength(
     'Content-Length: 100'#13#10'content-range: bytes 100-199/3083'#13#10, @l);
@@ -5129,7 +6799,221 @@ begin
     ctx.ContentStream := nil;
     ms.Free;
   end;
+  CrtSocketAbort;
 end;
+
+procedure TNetworkProtocols.CrtSocketAbortRecv(Sender: TObject);
+var
+  buf: array[0..15] of byte;
+  len: integer;
+begin
+  len := SizeOf(buf);
+  // blocking recv() released by Abort, then TrySockRecv() calls Close at once
+  Check(not TCrtSocket(Sender).TrySockRecv(@buf, len), 'aborted recv');
+end;
+
+procedure TNetworkProtocols.CrtSocketAbort;
+var
+  srv, cli: TCrtSocket;
+  {$ifdef OSWINDOWS}
+  other: array[0..15] of TCrtSocket;
+  abortedsock: TNetSocket;
+  addr: TNetAddr;
+  reused: boolean;
+  {$endif OSWINDOWS}
+  i: PtrInt;
+  th: TLoggedWorkThread;
+begin
+  srv := TCrtSocket.Bind('127.0.0.1:0'); // ephemeral port
+  try
+    // 1. sequential Abort + Close, with a new socket opened in-between
+    FakeTlsSocketClosed := 0;
+    FakeTlsDestroyed := 0;
+    {$ifdef OSWINDOWS}
+    FillCharFast(other, SizeOf(other), 0);
+    {$endif OSWINDOWS}
+    cli := TFakeTlsCrtSocket.Open('127.0.0.1', srv.Port, nlTcp, 5000);
+    try
+      TFakeTlsCrtSocket(cli).SetFakeTls;
+      {$ifdef OSWINDOWS}
+      abortedsock := cli.Sock;
+      {$endif OSWINDOWS}
+      cli.Abort; // as THttpServerResp.Shutdown from THttpServer.Destroy
+      Check(cli.Aborted, 'aborted');
+      {$ifdef OSWINDOWS}
+      // Abort did closesocket(): Windows will eventually reuse this handle
+      for i := 0 to high(other) do
+      begin
+        other[i] := TCrtSocket.Open('127.0.0.1', srv.Port, nlTcp, 5000);
+        reused := other[i].Sock = abortedsock;
+        if reused then
+          break;
+      end;
+      {$endif OSWINDOWS}
+      cli.Close; // as THttpServerResp.Execute cleanup
+      CheckEqual(FakeTlsDestroyed, 1, 'tls released');
+      {$ifdef OSWINDOWS}
+      CheckEqual(FakeTlsSocketClosed, 1, 'no close_notify after Abort');
+      if reused then
+        Check(other[i].Sock.GetName(addr) = nrOk, 'reused handle not closed')
+      else
+        AddConsole('CrtSocketAbort: handle not reused');
+      {$else}
+      CheckEqual(FakeTlsSocketClosed, 0, 'POSIX Abort does not close');
+      {$endif OSWINDOWS}
+    finally
+      cli.Free;
+      {$ifdef OSWINDOWS}
+      for i := 0 to high(other) do
+        other[i].Free;
+      {$endif OSWINDOWS}
+    end;
+    // 2. Abort releasing a blocking recv() in another thread
+    FakeTlsSocketClosed := 0;
+    FakeTlsDestroyed := 0;
+    FakeTlsReceiving := 0;
+    cli := TFakeTlsCrtSocket.Open('127.0.0.1', srv.Port, nlTcp, 5000);
+    try
+      TFakeTlsCrtSocket(cli).SetFakeTls;
+      th := TLoggedWorkThread.Create(TSynLog, 'abortrecv', cli,
+        CrtSocketAbortRecv, {suspended=}false, {ManualWaitForAndFree=}true);
+      try
+        i := 0;
+        while (FakeTlsReceiving = 0) and
+              (i < 500) do
+        begin
+          SleepHiRes(10); // wait for the thread to enter Receive()
+          inc(i);
+        end;
+        CheckEqual(FakeTlsReceiving, 1, 'recv entered');
+        SleepHiRes(50); // let the thread actually block in recv()
+        cli.Abort;
+        th.WaitFor;
+      finally
+        th.Free;
+      end;
+      // TrySockRecv() did call Close within the thread, not cli.Free below
+      CheckEqual(FakeTlsDestroyed, 1, 'recv tls released');
+      {$ifdef OSWINDOWS}
+      CheckEqual(FakeTlsSocketClosed, 1, 'recv no close_notify after Abort');
+      {$endif OSWINDOWS}
+    finally
+      cli.Free;
+    end;
+  finally
+    srv.Free;
+  end;
+end;
+
+{$ifdef OSWINDOWS}
+
+procedure TNetworkProtocols.WinIocpLog(Level: TSynLogLevel;
+  const Format: RawUtf8; const Args: array of const; Instance: TObject);
+begin
+  if PosEx('unsub closesocket=', Format) > 0 then
+    LockedInc32(@iocpclosed); // one logged close from FinishNext()
+  //TSynLogTestLog.Add.Log(Level, Format, Args, Instance);
+end;
+
+procedure TNetworkProtocols.WinIocpWorker(Sender: TObject);
+var
+  ev: TWinIocpEvent;
+  bytes: cardinal;
+  iocp: TWinIocp;
+  sub: PWinIocpSubscription;
+begin
+  iocp := TWinIocp(Sender);
+  while not iocpstop do
+  begin
+    sub := iocp.GetNext(50, ev, bytes);
+    if sub <> nil then
+      iocp.FinishNext(sub);
+  end;
+end;
+
+procedure TNetworkProtocols.DoWinIocpUnsubscribe(Sender: TObject);
+const
+  LOOPS = 1000;
+  WORKERS = 4;
+var
+  srv: TCrtSocket;
+  iocp: TWinIocp;
+  th: array[0 .. WORKERS - 1] of TLoggedWorkThread;
+  kept: array of TNetSocket;
+  cli, acc, next: TNetSocket;
+  sub: PWinIocpSubscription;
+  addr: TNetAddr;
+  i, n, alive: PtrInt;
+begin
+  srv := TCrtSocket.Bind('127.0.0.1:0'); // ephemeral port
+  try
+    iocpclosed := 0;
+    iocpstop := false;
+    FillCharFast(th, SizeOf(th), 0);
+    iocp := TWinIocp.Create(WORKERS, [wioUnsubscribeShutdownSocket]);
+    try
+      iocp.OnLog := WinIocpLog;
+      for i := 0 to high(th) do
+        th[i] := TLoggedWorkThread.Create(TSynLog, 'iocp', iocp,
+          WinIocpWorker, {suspended=}false, {ManualWaitForAndFree=}true);
+      SetLength(kept, LOOPS);
+      n := 0;
+      for i := 0 to LOOPS - 1 do
+      begin
+        fOwner.DoLog(sllDebug, 'WinIocpUnsubscribe #%', [i]);
+        if (NewSocket(cLocalHost, srv.Port, nlTcp, {bind=}false,
+              0, 1000, 1000, 0, cli) <> nrOk) or
+           (srv.Sock.Accept(acc, addr, {async=}false) <> nrOk) then
+          break;
+        // as mormot.net.async: a 'next' wieRecv is pending after ProcessRead,
+        // then the server closes the connection and Unsubscribe() posts its
+        // own 'unsub' wieRecv on the very same subscription
+        sub := iocp.Subscribe(acc, 1);
+        iocp.PrepareNext('next', sub, wieRecv);
+        iocp.Unsubscribe(sub);
+        cli.Close; // both wieRecv complete, maybe on two threads at once
+        // a new connection may reuse the handle: it should never be closed
+        if (NewSocket(cLocalHost, srv.Port, nlTcp, {bind=}false,
+              0, 1000, 1000, 0, next) <> nrOk) or
+           (srv.Sock.Accept(kept[n], addr, {async=}false) <> nrOk) then
+          break;
+        inc(n);
+        next.Close;
+      end;
+      CheckEqual(n, LOOPS, 'connections');
+      i := 0;
+      while (iocpclosed < n) and
+            (i < 500) do
+      begin
+        SleepHiRes(10); // wait for all closesocket() in GetNext()
+        inc(i);
+      end;
+      SleepHiRes(100); // a second closesocket() would happen now
+      alive := 0;
+      for i := 0 to n - 1 do
+        if kept[i].GetName(addr) = nrOk then
+        begin
+          inc(alive);
+          kept[i].Close;
+        end;
+      CheckEqual(iocpclosed, n, 'one closesocket per connection');
+      CheckEqual(alive, n, 'no other connection closed');
+    finally
+      iocpstop := true;
+      for i := 0 to high(th) do
+        if th[i] <> nil then
+        begin
+          th[i].WaitFor;
+          th[i].Free;
+        end;
+      iocp.Free;
+    end;
+  finally
+    srv.Free;
+  end;
+end;
+
+{$endif OSWINDOWS}
 
 var
   // how many TCountedStringStream have been released, to validate that
@@ -5353,7 +7237,7 @@ begin
     else
       result := TFileStreamEx.Create(bodyfile, fmCreate or fmShareRead);
   end;
-  inc(bodystreamed); // increment last: the tests poll on this counter
+  LockedInc32(@bodystreamed); // increment last: the tests poll on this counter
 end;
 
 function TNetworkProtocols.DoBodyRequest(Ctxt: THttpServerRequestAbstract): cardinal;
@@ -5411,7 +7295,7 @@ begin
     CheckEqual(Ctxt.InContentType, STATICFILE_CONTENT_TYPE, 'static typ');
     Check(FindNameValue(Ctxt.InHeaders, 'CONTENT-TYPE:', ct), 'headers typ');
     CheckEqual(ct, bodytype, 'original typ');
-    fn := Utf8ToString(Ctxt.InContent); // as ProcessStaticFile does
+    Utf8ToFileName(Ctxt.InContent, fn); // as ProcessStaticFile does
     Check(fn = bodyfile, 'spool name');
     Check(FileExists(fn), 'spool exists');
     if Ctxt.Url = '/mp' then
@@ -5463,8 +7347,12 @@ end;
 function TNetworkProtocols.DoRangeRequest(
   Ctxt: THttpServerRequestAbstract): cardinal;
 begin
-  result := Ctxt.SetOutFile(rangefile, {Handle304NotModified=}false,
-    BINARY_CONTENT_TYPE);
+  if Ctxt.Url = '/small' then
+    result := Ctxt.SetOutFile(rangesmall, {Handle304NotModified=}false,
+      BINARY_CONTENT_TYPE)
+  else
+    result := Ctxt.SetOutFile(rangefile, {Handle304NotModified=}false,
+      BINARY_CONTENT_TYPE);
 end;
 
 procedure TNetworkProtocols.DoHttpFileRange(Sender: TObject);
@@ -5477,10 +7365,12 @@ var
   hosthead: RawUtf8;
 
   procedure RawRange(const range, expected, context: RawUtf8;
-    expectedlength: Int64 = -1);
+    expectedlength: Int64 = -1; const expectedcontentrange: RawUtf8 = '';
+    const url: RawUtf8 = '/file');
   var
     raw: TCrtSocket;
-    cmd, len: RawUtf8;
+    cmd, len, contentrange: RawUtf8;
+    contentranges: integer;
   begin
     // THttpClientSocket.RangeStart is an Int64, so such an offset needs to be
     // sent from a raw socket - with a timeout, so that a regression of the
@@ -5488,7 +7378,7 @@ var
     raw := TCrtSocket.Open('127.0.0.1', srv.SockPort, nlTcp, 5000);
     try
       raw.CreateSockIn; // needed for proper SockRecvLn() below
-      raw.SockSend('GET /file HTTP/1.1');
+      raw.SockSend(['GET ', url, ' HTTP/1.1']);
       raw.SockSend(hosthead);
       raw.SockSend(['Range: bytes=', range]);
       raw.SockSend('Connection: close');
@@ -5497,18 +7387,35 @@ var
       cmd := '';
       raw.SockRecvLn(cmd);
       CheckUtf8(PosEx(expected, cmd) > 0, '% [%] got %', [context, range, cmd]);
-      if expectedlength < 0 then
+      if (expectedlength < 0) and
+         (expectedcontentrange = '') then
         exit;
-      // the announced body size should never exceed the actual file content
       len := '';
+      contentrange := '';
+      contentranges := 0;
       repeat
         cmd := '';
         raw.SockRecvLn(cmd);
         if IdemPChar(pointer(cmd), 'CONTENT-LENGTH: ') then
-          len := copy(cmd, 17, 30);
+          len := copy(cmd, 17, 30)
+        else if IdemPChar(pointer(cmd), 'CONTENT-RANGE: ') then
+        begin
+          contentrange := copy(cmd, 16, 100);
+          inc(contentranges);
+        end;
       until cmd = ''; // end of response headers
-      CheckUtf8(GetInt64(pointer(len)) = expectedlength,
-        '% [%] length=% expected=%', [context, range, len, expectedlength]);
+      // the announced body size should never exceed the actual file content
+      if expectedlength >= 0 then
+        CheckUtf8(GetInt64(pointer(len)) = expectedlength,
+          '% [%] length=% expected=%', [context, range, len, expectedlength]);
+      if expectedcontentrange <> '' then
+      begin
+        CheckUtf8(contentrange = expectedcontentrange,
+          '% [%] content-range=% expected=%',
+          [context, range, contentrange, expectedcontentrange]);
+        CheckUtf8(contentranges = 1, '% [%] % content-range headers',
+          [context, range, contentranges]);
+      end;
     finally
       raw.Free;
     end;
@@ -5526,6 +7433,9 @@ begin
   check(DirectoryExists(TempDir), 'tempdir5');
   rangefile := TempDir + 'range';
   Check(FileFromString(data, rangefile), 'range file');
+  // a file smaller than the error page which a 416 sends instead of it
+  rangesmall := TempDir + 'rangesmall';
+  Check(FileFromString('x', rangesmall), 'range small file');
   try
     for fam := 0 to 1 do
     begin
@@ -5544,6 +7454,13 @@ begin
         RawRange('99999999999999999999999999-', ' 416 ', 'above qword');
         // a plain out-of-range offset was already rejected, and still is
         RawRange('4194304-', ' 416 ', 'above size');
+        // RFC 9110 #15.5.17: a 416 SHOULD tell the current representation size
+        RawRange('4194304-', ' 416 ', 'above size range', -1,
+          'bytes */' + Int64ToUtf8(3 shl 20));
+        // the range should not be validated again against the error page:
+        // a 1 byte file would have its 'bytes=1-' range accepted by the HTML
+        // error body, with a second and wrong Content-Range: header
+        RawRange('1-', ' 416 ', 'small file', -1, 'bytes */1', '/small');
         // a huge END offset is valid: it should be truncated to the actual
         // file size, and not overflow the RangeOffset + RangeLength check
         RawRange('100-18446744073709551615', ' 206 ', 'huge end',
@@ -5569,6 +7486,7 @@ begin
     end;
   finally
     Check(DeleteFile(rangefile), 'range file deleted');
+    Check(DeleteFile(rangesmall), 'range small file deleted');
   end;
 end;
 
@@ -5803,6 +7721,8 @@ begin
           clt.RangeStart := 4 shl 20; // above the 3MB content
           clt.RangeEnd := (4 shl 20) + 10;
           CheckEqual(clt.Get('/ram'), HTTP_RANGENOTSATISFIABLE, 'range 416');
+          CheckEqual(clt.HeaderGetValue('CONTENT-RANGE'),
+            'bytes */' + Int64ToUtf8(length(outdata)), 'range 416 size');
           clt.RangeStart := 0; // Range: is only auto-reset on a 2xx status
           clt.RangeEnd := 0;
           WaitFreed(3, 'range 416 freed'); // 3 requests, 3 owned streams so far
@@ -5900,6 +7820,8 @@ begin
         CheckEqual(crc32cHash(body), crc32cHash(outdata), 'failrange body');
         status := RawGet('/failrange', '100-199', headers, @body);
         CheckUtf8(PosEx(' 416 ', status) > 0, 'failrange range %', [status]);
+        CheckEqual(HeaderValue(headers, 'CONTENT-RANGE:'),
+          'bytes */' + Int64ToUtf8(length(outdata)), 'failrange size');
         // the same stream with the hosNoRange option: no range is even tried,
         // so it is served sequentially with an 'Accept-Ranges: none' header
         status := RawGet('/norange', '', headers, @body);
@@ -5928,6 +7850,421 @@ begin
   end;
 end;
 
+function TNetworkProtocols.DoExpectRequest(
+  Ctxt: THttpServerRequestAbstract): cardinal;
+var
+  data: RawByteString;
+begin
+  // echo the length and hash of the body, received either in memory or
+  // through the stream supplied by DoExpectDownload
+  if Ctxt.InContentStream <> nil then
+  begin
+    SetLength(data, Ctxt.InContentStream.Size);
+    Ctxt.InContentStream.Position := 0;
+    Ctxt.InContentStream.ReadBuffer(pointer(data)^, length(data));
+  end
+  else
+    data := Ctxt.InContent;
+  Ctxt.OutContent := Make(['ok ', length(data), ' ',
+    CardinalToHexShort(crc32cHash(data))]);
+  Ctxt.OutContentType := TEXT_CONTENT_TYPE;
+  result := HTTP_SUCCESS;
+end;
+
+function TNetworkProtocols.DoExpectDownload(const aUrl, aMethod, aInHeaders,
+  aInContentType, aRemoteIP: RawUtf8; aContentLength: Int64): TStream;
+begin
+  if aUrl = '/stream' then
+    result := TRawByteStringStream.Create // the body is written to this stream
+  else
+    result := nil; // in-memory Content fallback
+end;
+
+procedure TNetworkProtocols.DoHttpExpect100(Sender: TObject);
+var
+  srv: THttpAsyncServer;
+  raw: TCrtSocket;
+  body: RawByteString;
+  hosthead, ok, cmd: RawUtf8;
+  i, clen: integer;
+
+  procedure Post(const url: RawUtf8; expect, waitfor100: boolean);
+  var
+    received100: boolean;
+  begin
+    // send the headers, optionally wait for the interim response, then send
+    // the body and read the final response - all on the same connection
+    raw.SockSend(['POST ', url, ' HTTP/1.1']);
+    raw.SockSend(hosthead);
+    raw.SockSend(['Content-Length: ', length(body)]);
+    raw.SockSend('Content-Type: application/dummy');
+    if expect then
+      raw.SockSend('Expect: 100-continue');
+    raw.SockSendCRLF; // void line: end of headers
+    raw.SockSendFlush;
+    received100 := false;
+    if expect and waitfor100 then
+    begin
+      // RFC 9110 10.1.1: the 100 interim response lets the client send the body
+      cmd := '';
+      raw.SockRecvLn(cmd);
+      CheckUtf8(IdemPChar(pointer(cmd), 'HTTP/1.1 100 '),
+        '% 100 %', [url, cmd]);
+      cmd := '';
+      raw.SockRecvLn(cmd); // void line ending the interim response
+      CheckEqual(cmd, '', '100 void line');
+      received100 := true;
+    end;
+    raw.SockSendFlush(body);
+    cmd := '';
+    raw.SockRecvLn(cmd);
+    if expect and not received100 then
+    begin
+      // the client did not wait: the interim response is still sent first
+      CheckUtf8(IdemPChar(pointer(cmd), 'HTTP/1.1 100 '),
+        '% early 100 %', [url, cmd]);
+      cmd := '';
+      raw.SockRecvLn(cmd);
+      CheckEqual(cmd, '', 'early 100 void line');
+      cmd := '';
+      raw.SockRecvLn(cmd);
+    end;
+    CheckUtf8(PosEx(' 200 ', cmd) > 0, '% final %', [url, cmd]);
+    clen := 0;
+    repeat
+      cmd := '';
+      raw.SockRecvLn(cmd);
+      if IdemPChar(pointer(cmd), 'CONTENT-LENGTH:') then
+        clen := Utf8ToInteger(TrimU(copy(cmd, 16, 20)), 0);
+    until cmd = '';
+    // SockInRead() and not SockRecv(), since the headers were read via SockIn
+    CheckEqual(raw.SockInRead(clen), ok, url);
+  end;
+
+begin
+  body := RandomWinAnsi(200 shl 10); // 200KB, i.e. way above the socket buffer
+  CheckEqual(length(body), 200 shl 10);
+  Make(['ok ', length(body), ' ', CardinalToHexShort(crc32cHash(body))], ok);
+  for i := 0 to 1 do
+  begin
+    // validate both immediate and polled writes of the interim response
+    if i = 0 then
+      srv := THttpAsyncServer.Create('8899', nil, nil, 'expect100', 2)
+    else
+      srv := THttpAsyncServer.Create('8890', nil, nil, 'expect100poll', 2);
+    try
+      if i = 1 then
+        srv.Async.Sockets.Options :=
+          srv.Async.Sockets.Options + [paoWritePollOnly];
+      srv.OnBodyDownload := DoExpectDownload;
+      srv.OnRequest := DoExpectRequest;
+      srv.WaitStarted(10);
+      Join(['Host: 127.0.0.1:', srv.SockPort], hosthead);
+      raw := TCrtSocket.Open('127.0.0.1', srv.SockPort, nlTcp, 5000);
+      try
+        raw.CreateSockIn; // needed for proper SockRecvLn() below
+        // in-memory body, then a body supplied as a stream, then again in
+        // memory: three Expect: requests on the same kept-alive connection
+        Post('/mem', true, true);
+        Post('/stream', true, true);
+        Post('/mem', true, true);
+        // a client sending the body without waiting for the interim response
+        Post('/mem', true, false);
+        // a request without Expect: is not affected
+        Post('/mem', false, false);
+      finally
+        raw.Free;
+      end;
+    finally
+      srv.Free;
+    end;
+  end;
+end;
+
+function TNetworkProtocols.DoKeepAliveOptionsRequest(
+  Ctxt: THttpServerRequestAbstract): cardinal;
+begin
+  // Content-Length: is only kept in InHeaders with hsoHeadersUnfiltered
+  // - the connection ID tells whether the requests did share a connection
+  if FindNameValue(pointer(Ctxt.InHeaders), 'CONTENT-LENGTH:') <> nil then
+    Ctxt.OutContent := Make(['unfiltered ', Ctxt.ConnectionID])
+  else
+    Ctxt.OutContent := Make(['filtered ', Ctxt.ConnectionID]);
+  Ctxt.OutContentType := TEXT_CONTENT_TYPE;
+  result := HTTP_SUCCESS;
+end;
+
+procedure TNetworkProtocols.DoHttpKeepAliveOptions(Sender: TObject);
+var
+  srv: THttpServerSocketGeneric;
+  clt: THttpClientSocket;
+  fam, i: integer;
+  first: RawUtf8;
+begin
+  for fam := 0 to 1 do
+  begin
+    // the request options computed from the server options should apply to
+    // every request of a connection, not only to its first one
+    if fam = 0 then
+      srv := THttpServer.Create('8885', nil, nil, 'keepopt', 2, 30000,
+        [hsoHeadersUnfiltered])
+    else
+      srv := THttpAsyncServer.Create('8886', nil, nil, 'keepopt', 2, 30000,
+        [hsoHeadersUnfiltered]);
+    try
+      srv.OnRequest := DoKeepAliveOptionsRequest;
+      srv.WaitStarted(10);
+      clt := THttpClientSocket.Open('127.0.0.1', srv.SockPort);
+      try
+        for i := 1 to 3 do // three requests on the same kept-alive connection
+        begin
+          CheckEqual(clt.Post('/opt', 'body', TEXT_CONTENT_TYPE, 30000), HTTP_SUCCESS,
+            'keepopt status');
+          CheckUtf8(IdemPChar(pointer(clt.Content), 'UNFILTERED '),
+            'keepopt fam=% #%: %', [fam, i, clt.Content]);
+          if i = 1 then
+            first := clt.Content
+          else
+            CheckEqual(clt.Content, first, 'keepopt same connection');
+        end;
+      finally
+        clt.Free;
+      end;
+    finally
+      srv.Free;
+    end;
+  end;
+end;
+
+procedure TNetworkProtocols.DoHttpLongLine(Sender: TObject);
+var
+  srv: THttpAsyncServer;
+  raw: TCrtSocket;
+  hosthead, cmd: RawUtf8;
+  chunked: boolean;
+begin
+  TSynLog.Family.ExceptionIgnore.Add(ENetSock);
+  srv := THttpAsyncServer.Create('8887', nil, nil, 'longline', 2);
+  try
+    srv.OnRequest := DoExpectRequest; // never reached
+    srv.WaitStarted(10);
+    Join(['Host: 127.0.0.1:', srv.SockPort], hosthead);
+    for chunked := false to true do
+    begin
+      // a line with no #13 yet should be rejected once over
+      // MaxHttpHeaderLineSize - not buffered until its #13 arrives, if ever:
+      // the server would wait with no response, until our 5 seconds timeout
+      raw := TCrtSocket.Open('127.0.0.1', srv.SockPort, nlTcp, 5000);
+      try
+        raw.CreateSockIn; // needed for proper SockRecvLn() below
+        raw.SockSend('POST /mem HTTP/1.1');
+        raw.SockSend(hosthead);
+        if chunked then
+        begin
+          // an endless chunk size line, e.g. with a chunk extension
+          raw.SockSend('Transfer-Encoding: chunked'#13#10);
+          raw.SockSendFlush;
+          raw.SndLow('1;x=');
+        end
+        else
+        begin
+          // an endless header line
+          raw.SockSendFlush;
+          raw.SndLow('X-Long: ');
+        end;
+        raw.SndLow(RawUtf8OfChar('a', MaxHttpHeaderLineSize * 2));
+        cmd := '';
+        try
+          raw.SockRecvLn(cmd);
+        except
+          on ENetSock do
+            cmd := ''; // timeout: no response at all
+        end;
+        CheckUtf8(PosEx(' 400 ', cmd) > 0, 'longline chunked=% %',
+          [ord(chunked), cmd]);
+      finally
+        raw.Free;
+      end;
+    end;
+  finally
+    srv.Free;
+  end;
+end;
+
+type
+  // a stream which does not store anything, but tracks its biggest Write(),
+  // i.e. the biggest input processed at once by THttpAsyncServerConnection
+  TMaxWriteStream = class(TFakeWriterStream)
+  public
+    MaxWrite: integer;
+    function Write(const Buffer; Count: Longint): Longint; override;
+  end;
+
+function TMaxWriteStream.Write(const Buffer; Count: Longint): Longint;
+begin
+  if Count > MaxWrite then
+    MaxWrite := Count;
+  result := inherited Write(Buffer, Count);
+end;
+
+function TNetworkProtocols.DoReadMaxBytesDownload(const aUrl, aMethod,
+  aInHeaders, aInContentType, aRemoteIP: RawUtf8; aContentLength: Int64): TStream;
+begin
+  result := TMaxWriteStream.Create; // owned and released by the server
+end;
+
+function TNetworkProtocols.DoReadMaxBytesRequest(
+  Ctxt: THttpServerRequestAbstract): cardinal;
+begin
+  // return the received body size, and its biggest block
+  if Ctxt.InContentStream is TMaxWriteStream then
+    Ctxt.OutContent := Make([Ctxt.InContentStream.Size, ' ',
+      TMaxWriteStream(Ctxt.InContentStream).MaxWrite])
+  else
+    Ctxt.OutContent := 'no stream';
+  Ctxt.OutContentType := TEXT_CONTENT_TYPE;
+  result := HTTP_SUCCESS;
+end;
+
+function TNetworkProtocols.DoHttpAsyncClientOrigin(
+  Ctxt: THttpServerRequestAbstract): cardinal;
+begin
+  Ctxt.OutContent := 'async client';
+  Ctxt.OutContentType := TEXT_CONTENT_TYPE;
+  result := HTTP_SUCCESS;
+end;
+
+function TNetworkProtocols.DoHttpAsyncClientState(Sender: TObject;
+  State: TOnHttpClientState; Connection: THttpAsyncClientConnection): TPollAsyncSocketOnReadWrite;
+begin
+  // called from the threads of the THttpAsyncServer
+  safe.Lock;
+  if State in [hcsFinished, hcsFailed] then
+    asyncstatus := Connection.ResponseStatus;
+  include(asyncstates, State); // last, since the test thread waits for it
+  safe.UnLock;
+  result := soContinue;
+end;
+
+procedure TNetworkProtocols.DoHttpAsyncClient(Sender: TObject);
+var
+  origin: THttpServer;
+  async: THttpAsyncServer;
+  uri: TUri;
+  i: integer;
+  st: TOnHttpClientStates;
+
+  procedure SetSt;
+  var
+    endtix: Int64;
+  begin
+    endtix := GetTickCount64 + 5000;
+    repeat
+      safe.Lock;
+      st := asyncstates;
+      safe.UnLock;
+      if [hcsFinished, hcsFailed] * st <> [] then
+        break;
+      SleepHiRes(1);
+    until GetTickCount64 > endtix;
+  end;
+
+begin
+  // THttpAsyncServer.Clients.StartRequest() to a THttpServer on the same host
+  origin := THttpServer.Create('8876', nil, nil, 'origin', 2);
+  async := THttpAsyncServer.Create('8877', nil, nil, 'async', 2);
+  try
+    origin.OnRequest := DoHttpAsyncClientOrigin;
+    origin.WaitStarted;
+    async.WaitStarted;
+    for i := 1 to 3 do
+    begin
+      st := [];
+      asyncstates := [];
+      asyncstatus := 0;
+      CheckUtf8(uri.From('http://127.0.0.1:8876/x'), 'uri');
+      Check(async.Clients.StartRequest(self, uri, 'GET', '', '', nil,
+        DoHttpAsyncClientState) = nrOk, 'start');
+      SetSt;
+      Check(hcsBeforeSendHeaders in st, 'request sent');
+      Check(hcsHeadersReceived in st, 'headers received');
+      Check(hcsFinished in st, 'finished');
+      Check(not (hcsFailed in st), 'not failed');
+      CheckEqual(asyncstatus, HTTP_SUCCESS, 'status');
+    end;
+    // nobody listens on this port: the request should be notified as failed
+    st := [];
+    asyncstates := [];
+    CheckUtf8(uri.From('http://127.0.0.1:8875/x'), 'uri');
+    if async.Clients.StartRequest(self, uri, 'GET', '', '', nil,
+         DoHttpAsyncClientState) = nrOk then
+    begin
+      SetSt;
+      Check(hcsFailed in st, 'refused is failed');
+      Check(not (hcsFinished in st), 'refused is not finished');
+    end;
+  finally
+    async.Free;
+    origin.Free;
+  end;
+end;
+
+procedure TNetworkProtocols.DoHttpReadMaxBytes(Sender: TObject);
+const
+  BODYMB = 16; // well above ReadMaxBytes
+var
+  srv: THttpAsyncServer;
+  raw: TCrtSocket;
+  block: RawByteString;
+  cmd, answer, left, right: RawUtf8;
+  clen, i, maxbytes: integer;
+  size, maxwrite: Int64;
+begin
+  srv := THttpAsyncServer.Create('8884', nil, nil, 'readmax', 2);
+  try
+    srv.OnBodyDownload := DoReadMaxBytesDownload;
+    srv.OnRequest := DoReadMaxBytesRequest;
+    srv.WaitStarted(10);
+    maxbytes := srv.Async.Sockets.ReadMaxBytes;
+    Check(maxbytes > 0, 'ReadMaxBytes');
+    raw := TCrtSocket.Open('127.0.0.1', srv.SockPort, nlTcp, 5000);
+    try
+      raw.CreateSockIn; // needed for proper SockRecvLn() below
+      raw.SockSend('POST /readmax HTTP/1.1');
+      raw.SockSend(['Host: 127.0.0.1:', srv.SockPort]);
+      raw.SockSend(['Content-Length: ', BODYMB shl 20]);
+      raw.SockSendCRLF; // void line: end of headers
+      raw.SockSendFlush;
+      // send the body as fast as possible: the server should not retrieve
+      // more than ReadMaxBytes before streaming it to TMaxWriteStream
+      block := RawUtf8OfChar('x', 1 shl 20);
+      for i := 1 to BODYMB do
+        raw.SndLow(block);
+      cmd := '';
+      raw.SockRecvLn(cmd);
+      CheckUtf8(PosEx(' 200 ', cmd) > 0, 'readmax %', [cmd]);
+      clen := 0;
+      repeat
+        cmd := '';
+        raw.SockRecvLn(cmd);
+        if IdemPChar(pointer(cmd), 'CONTENT-LENGTH:') then
+          clen := Utf8ToInteger(TrimU(copy(cmd, 16, 20)), 0);
+      until cmd = '';
+      answer := raw.SockInRead(clen);
+      Split(answer, ' ', left, right);
+      size := GetInt64(pointer(left));
+      maxwrite := GetInt64(pointer(right));
+      CheckEqual(size, BODYMB shl 20, 'readmax size');
+      CheckUtf8((maxwrite > 0) and
+                (maxwrite <= maxbytes), 'readmax max=% > %', [maxwrite, maxbytes]);
+    finally
+      raw.Free;
+    end;
+  finally
+    srv.Free;
+  end;
+end;
+
 procedure TNetworkProtocols.DoHttpBodyDownload(Sender: TObject);
 var
   srv: THttpServerSocketGeneric;
@@ -5942,14 +8279,14 @@ var
   mpssize: Int64;
 begin
   TSynLog.Family.ExceptionIgnore.AddSeveral([
-    EWriteError, EHttpSocketOverflow, ENetSock]);
+    EWriteError, ESizeOverflow, ENetSock]);
   try
     body8mb := RandomWinAnsi(8 shl 20); // 8MB of data, way above any socket buf
     CheckEqual(length(body8mb), 8 shl 20);
     mptext := RandomIdentifier(20000);  // 20000 bytes of content
     CheckEqual(length(mptext), 20000);
     Check(MultiPartFormDataAddField('field', mptext, mpa), 'mp add');
-    Check(MultiPartFormDataEncode(mpa, mpct, RawUtf8(mp)), 'mp encode');
+    Check(MultiPartFormDataEncode(mpa, mpct, mp), 'mp encode');
     for fam := 0 to 1 do
     begin
       // validate both socket server families with the very same steps
@@ -6239,6 +8576,52 @@ begin
           if status <> 0 then
             WaitDeleted(bodyfile, 'chunked limit');
         end;
+        // the same limit should apply to a chunked body buffered in memory,
+        // i.e. when OnBodyDownload returns nil (/mem) or is not set at all:
+        // ContentMaxSize was only set for a stream, so the body grew up to
+        // MaxHttpInMemSize whatever MaximumAllowedContentLength said
+        bodytype := 'application/dummy';
+        for n := 0 to 3 do
+        begin
+          if n = 2 then
+            srv.OnBodyDownload := nil; // no event at all
+          status := n and 1; // 0 = 39999 = over the limit, 1 = 40000 = within
+          srv.MaximumAllowedContentLength := 39999 + status;
+          raw := TCrtSocket.Open('127.0.0.1', srv.SockPort);
+          try
+            raw.CreateSockIn; // needed for proper SockRecvLn() below
+            raw.SockSend('POST /mem HTTP/1.1');
+            raw.SockSend(hosthead);
+            raw.SockSend('Transfer-Encoding: chunked');
+            raw.SockSend('Content-Type: application/dummy'#13#10); // last header
+            raw.SockSend('4e20');
+            raw.SockSend(mptext);
+            raw.SockSend('4e20');
+            raw.SockSend(mptext);
+            raw.SockSend('0');
+            raw.SockSendCRLF; // final void line
+            cmd := '';
+            try
+              raw.SockSendFlush;
+              raw.SockRecvLn(cmd);
+            except
+              on ENetSock do
+                cmd := ''; // rejected and closed before we did send it all
+            end;
+            if status = 0 then
+            begin
+              // without the limit, the body was accepted and answered 200
+              CheckUtf8(PosEx(' 200 ', cmd) = 0, 'mem chunked limit % %', [n, cmd]);
+              if cmd <> '' then
+                CheckUtf8(PosEx(' 413 ', cmd) > 0, 'mem chunked 413 % %', [n, cmd]);
+            end
+            else
+              CheckUtf8(PosEx(' 200 ', cmd) > 0, 'mem chunked in limit % %', [n, cmd]);
+          finally
+            raw.Free;
+          end;
+        end;
+        srv.OnBodyDownload := DoBodyDownload;
         srv.MaximumAllowedContentLength := 100000;
         raw := TCrtSocket.Open('127.0.0.1', srv.SockPort);
         try
@@ -6319,7 +8702,1021 @@ begin
     end;
   finally
     TSynLog.Family.ExceptionIgnore.RemoveSeveral([
-      EWriteError, EHttpSocketOverflow, ENetSock]);
+      EWriteError, ESizeOverflow, ENetSock]);
+  end;
+end;
+
+function TNetworkProtocols.DoProxyOriginRequest(
+  Ctxt: THttpServerRequestAbstract): cardinal;
+begin
+  // a minimal origin server, publishing resources with their own validator
+  if IsHead(Ctxt.Method) then
+    LockedInc32(@proxyhead)
+  else
+    LockedInc32(@proxyget);
+  result := HTTP_SUCCESS;
+  Ctxt.OutContentType := BINARY_CONTENT_TYPE;
+  if Ctxt.Url = '/files/small.txt' then
+  begin
+    Ctxt.OutContent := proxysmall;
+    Ctxt.OutCustomHeaders := 'Last-Modified: Wed, 21 Oct 2015 07:28:00 GMT';
+  end
+  else if Ctxt.Url = '/files/big.bin' then
+  begin
+    Ctxt.OutContent := proxybig;
+    Ctxt.OutCustomHeaders := 'ETag: "big-1"';
+  end
+  else if Ctxt.Url = '/files/fresh.txt' then
+  begin
+    Ctxt.OutContent := proxyfresh;
+    Ctxt.OutCustomHeaders := proxyfreshmod;
+  end
+  else if Ctxt.Url = '/files/error' then
+    result := HTTP_SERVERERROR
+  else
+    result := HTTP_NOTFOUND;
+end;
+
+function TNetworkProtocols.DoProxyEventRequest(Ctxt: THttpServerRequestAbstract;
+  const Uri: TUriMatchName; Met: TUriRouterMethod;
+  ProxyUrl: THttpProxyUrl): cardinal;
+var
+  path: RawUtf8;
+begin
+  LockedInc32(@proxyevent);
+  FastSetString(path, Uri.Path.Text, Uri.Path.Len);
+  Ctxt.OutContent := Join([Ctxt.Method, ' ', path]);
+  Ctxt.OutContentType := TEXT_CONTENT_TYPE;
+  result := HTTP_SUCCESS;
+end;
+
+procedure TNetworkProtocols.DoHttpProxyServer(Sender: TObject);
+const
+  HELLO: RawUtf8 = 'hello proxy';
+  INNER: RawUtf8 = 'inner file';
+  ORIGIN = 'http://127.0.0.1:8882/files/';
+var
+  srv: THttpServer; // the origin server
+  settings: THttpProxyServerSettings;
+  url: THttpProxyUrlSettings;
+  proxy: THttpProxyServer;
+  clt: THttpClientSocket;
+  raw: TCrtSocket;
+  root, cache, cachefresh, cacheslow: TFileName;
+  local, first: RawByteString;
+  validator, line: RawUtf8;
+  len: integer;
+  files: TFindFilesDynArray;
+  gets, i: integer;
+  endtix: Int64;
+  found: boolean;
+
+  procedure Expect(const method, uri: RawUtf8; expected: integer;
+    const header: RawUtf8 = ''; const body: RawByteString = '');
+  var
+    status: integer;
+    mime: RawUtf8;
+  begin
+    if body <> '' then
+      mime := TEXT_CONTENT_TYPE;
+    status := clt.Request(uri, method, 10000, header, body, mime);
+    CheckUtf8(status = expected, '% % returned % but expected %',
+      [method, uri, status, expected]);
+  end;
+
+begin
+  // prepare the origin resources and the local folder to be served
+  proxysmall := RandomWinAnsi(1000);      // below HttpDirectGetKB = blocking GET
+  proxybig := RandomWinAnsi(300 shl 10);  // above = progressive background GET
+  proxyfresh := 'version one';
+  proxyfreshmod := 'Last-Modified: Wed, 21 Oct 2015 07:28:00 GMT';
+  proxyget := 0;
+  proxyhead := 0;
+  proxyevent := 0;
+  check(DirectoryExists(TempDir), 'tempdir proxy');
+  root := EnsureDirectoryExists(TempDir + 'proxyroot');
+  cache := TempDir + 'proxycache';
+  cachefresh := TempDir + 'proxyfresh';
+  cacheslow := TempDir + 'proxyslow';
+  DirectoryDeleteAll(cache);      // from any previous run
+  DirectoryDeleteAll(cachefresh);
+  DirectoryDeleteAll(cacheslow);
+  local := RandomWinAnsi(100 shl 10);     // above MemCache.MaxSizeKB
+  Check(FileFromString('outside', TempDir + 'proxyoutside.txt'), 'outside file');
+  Check(FileFromString(HELLO, root + 'hello.txt'), 'hello file');
+  Check(FileFromString(local, root + 'local.bin'), 'local file');
+  Check(FileFromString('secret', root + 'hidden.secret'), 'secret file');
+  Check(FileFromString(INNER,
+    EnsureDirectoryExists(root + 'sub') + 'inner.txt'), 'inner file');
+  proxy := nil;
+  clt := nil;
+  srv := THttpServer.Create('8882', nil, nil, 'proxyorigin', 2);
+  settings := THttpProxyServerSettings.Create;
+  try
+    srv.OnRequest := DoProxyOriginRequest;
+    srv.WaitStarted(10);
+    // define one URI of each kind of source
+    settings.Server.Port := '8883';
+    settings.Server.ThreadCount := 2;
+    settings.DiskCache.Path := cache;
+    url := settings.AddFolder(root, 'static');
+    url.Options := [hpoPublishMd5, hpoPublishSha256];
+    url.RejectCsv := '*.secret';
+    url := settings.AddFolder(root, 'flat');
+    url.Options := [hpoNoSubFolder, hpoNoFolderHtmlIndex];
+    settings.AddProxy(ORIGIN, 'remote');
+    settings.AddProxy('http://127.0.0.1:8882/files', 'noslash');
+    url := settings.AddProxy(ORIGIN, 'slow');
+    if fOwner.MultiThread then
+      url.HttpLimitPerSecond := 1024 shl 10 // big.bin download at 1MB/s
+    else
+      url.HttpLimitPerSecond := 200 shl 10; // big.bin download takes 1.5 second
+    url.DiskCache.Path := cacheslow;
+    url := settings.AddProxy(ORIGIN, 'fresh');
+    url.HttpHeadCacheSec := 0; // always ask the origin for its validator
+    url.DiskCache.Path := cachefresh;
+    url := settings.AddEvent(DoProxyEventRequest, 'event');
+    url.Methods := [urmGet, urmPost];
+    proxy := THttpProxyServer.Create(settings);
+    proxy.Start;
+    //settings.Server.Options := settings.Server.Options + [psoLogVerbose];
+    clt := THttpClientSocket.Open('127.0.0.1', '8883');
+    // local folder: a small file is returned, then from the memory cache
+    Expect('GET', '/static/hello.txt', HTTP_SUCCESS);
+    CheckEqual(clt.Content, HELLO, 'static');
+    Expect('GET', '/static/hello.txt', HTTP_SUCCESS);
+    CheckEqual(clt.Content, HELLO, 'static again');
+    validator := clt.HeaderGetValue('ETAG');
+    if validator <> '' then
+      validator := 'If-None-Match: ' + validator
+    else
+    begin
+      validator := clt.HeaderGetValue('LAST-MODIFIED');
+      if validator <> '' then
+        validator := 'If-Modified-Since: ' + validator;
+    end;
+    if not CheckFailed(validator <> '', 'static has no validator') then
+    begin
+      Expect('GET', '/static/hello.txt', HTTP_NOTMODIFIED, validator);
+      CheckEqual(clt.Content, '', 'static 304 has no body');
+    end;
+    Expect('HEAD', '/static/hello.txt', HTTP_SUCCESS);
+    CheckEqual(clt.Content, '', 'static head has no body');
+    CheckEqual(clt.ContentLength, length(HELLO), 'static head length');
+    // local folder: a file above MemCache.MaxSizeKB, and a file in a sub-folder
+    Expect('GET', '/static/local.bin', HTTP_SUCCESS);
+    CheckEqual(length(clt.Content), length(local), 'static big length');
+    CheckEqual(crc32cHash(clt.Content), crc32cHash(local), 'static big');
+    Expect('GET', '/static/sub/inner.txt', HTTP_SUCCESS);
+    CheckEqual(clt.Content, INNER, 'static sub');
+    // local folder: HTML index, unknown, rejected and unsafe resources
+    Expect('GET', '/static/', HTTP_SUCCESS);
+    Check(PosEx('hello.txt', clt.Content) > 0, 'static index file');
+    Check(PosEx('sub', clt.Content) > 0, 'static index folder');
+    Expect('GET', '/static/missing.txt', HTTP_NOTFOUND);
+    Expect('GET', '/static/hidden.secret', HTTP_FORBIDDEN);
+    Check(PosEx('secret', clt.Content) = 0, 'static rejected content');
+    // local folder: a query string is ignored, as with a remote URI
+    Expect('GET', '/static/hello.txt?v=2', HTTP_SUCCESS);
+    CheckEqual(clt.Content, HELLO, 'static query');
+    Expect('GET', '/static/sub/inner.txt?v=2', HTTP_SUCCESS);
+    CheckEqual(clt.Content, INNER, 'static sub query');
+    Expect('GET', '/static/hidden.secret?v=2', HTTP_FORBIDDEN);
+    Expect('GET', '/static/..%2Fproxyoutside.txt', HTTP_FORBIDDEN);
+    Check(PosEx('outside', clt.Content) = 0, 'static outside content');
+    Expect('GET', '/static/sub/..%2F..%2Fproxyoutside.txt', HTTP_FORBIDDEN);
+    Check(PosEx('outside', clt.Content) = 0, 'static sub outside content');
+    // local folder: published hashes
+    Expect('GET', '/static/hello.txt.sha256', HTTP_SUCCESS);
+    CheckEqual(LowerCase(TrimU(clt.Content)), Sha256(HELLO), 'static sha256');
+    Expect('GET', '/static/hello.txt.md5', HTTP_SUCCESS);
+    CheckEqual(LowerCase(TrimU(clt.Content)), Md5(HELLO), 'static md5');
+    Expect('GET', '/flat/hello.txt.sha256', HTTP_NOTFOUND); // not published
+    // local folder: hpoNoSubFolder and hpoNoFolderHtmlIndex
+    Expect('GET', '/flat/hello.txt', HTTP_SUCCESS);
+    CheckEqual(clt.Content, HELLO, 'flat');
+    Expect('GET', '/flat/sub/inner.txt', HTTP_FORBIDDEN);
+    Expect('GET', '/flat/', HTTP_NOTFOUND);
+    // remote URI: a small resource is retrieved once, then served from cache
+    gets := proxyget;
+    Expect('GET', '/remote/small.txt', HTTP_SUCCESS);
+    CheckEqual(clt.Content, proxysmall, 'remote small');
+    Check(clt.HeaderGetValue('X-PROXY-NAME') <> '', 'remote proxy name');
+    CheckEqual(proxyget, gets + 1, 'remote small get');
+    Expect('GET', '/remote/small.txt', HTTP_SUCCESS);
+    CheckEqual(clt.Content, proxysmall, 'remote small again');
+    CheckEqual(proxyget, gets + 1, 'remote small cached');
+    Expect('HEAD', '/remote/small.txt', HTTP_SUCCESS);
+    CheckEqual(clt.Content, '', 'remote head has no body');
+    CheckEqual(clt.ContentLength, length(proxysmall), 'remote head length');
+    CheckEqual(proxyget, gets + 1, 'remote head cached');
+    // remote URI: a big resource is progressively returned during its download
+    gets := proxyget;
+    Expect('HEAD', '/remote/big.bin', HTTP_SUCCESS);
+    CheckEqual(clt.Content, '', 'remote big head has no body');
+    CheckEqual(clt.ContentLength, length(proxybig), 'remote big head length');
+    CheckEqual(proxyget, gets, 'remote big head makes no get');
+    Expect('GET', '/remote/big.bin', HTTP_SUCCESS);
+    CheckEqual(length(clt.Content), length(proxybig), 'remote big length');
+    CheckEqual(crc32cHash(clt.Content), crc32cHash(proxybig), 'remote big');
+    CheckEqual(proxyget, gets + 1, 'remote big get');
+    endtix := GetTickCount64 + 5000;
+    repeat
+      found := false;
+      files := FindFiles(cache);
+      for i := 0 to high(files) do
+        if files[i].Size = length(proxybig) then
+          found := true;
+      if found then
+        break;
+      SleepHiRes(10);
+    until GetTickCount64 > endtix;
+    Check(found, 'remote big in disk cache');
+    Expect('GET', '/remote/big.bin', HTTP_SUCCESS);
+    CheckEqual(crc32cHash(clt.Content), crc32cHash(proxybig), 'remote big again');
+    CheckEqual(proxyget, gets + 1, 'remote big cached');
+    // remote URI: the origin ETag is validated when it has no Last-Modified
+    validator := clt.HeaderGetValue('ETAG');
+    CheckEqual(validator, '"big-1"', 'remote big etag');
+    Expect('GET', '/remote/big.bin', HTTP_NOTMODIFIED,
+      'If-None-Match: ' + validator);
+    CheckEqual(proxyget, gets + 1, 'remote big 304 from cache');
+    // remote URI: origin errors are returned to the client
+    Expect('GET', '/remote/missing', HTTP_NOTFOUND);
+    Expect('GET', '/remote/error', HTTP_SERVERERROR);
+    // remote URI: a Source with no trailing / is the very same origin folder
+    Expect('GET', '/noslash/small.txt', HTTP_SUCCESS);
+    CheckEqual(clt.Content, proxysmall, 'remote source with no trailing /');
+    // remote URI: two clients share a single download of the same resource
+    gets := proxyget;
+    raw := TCrtSocket.Open('127.0.0.1', '8883', nlTcp, 10000);
+    try
+      raw.CreateSockIn; // needed for proper SockRecvLn() below
+      raw.SockSend('GET /slow/big.bin HTTP/1.1');
+      raw.SockSend('Host: 127.0.0.1:8883');
+      raw.SockSendCRLF; // void line: end of headers
+      raw.SockSendFlush;
+      // wait for the background download of this first client to be started
+      endtix := GetTickCount64 + 5000;
+      while (proxyget = gets) and
+            (GetTickCount64 < endtix) do
+        SleepHiRes(1);
+      CheckEqual(proxyget, gets + 1, 'slow first get');
+      // the second client is served from the very same partial file
+      Expect('GET', '/slow/big.bin', HTTP_SUCCESS);
+      CheckEqual(length(clt.Content), length(proxybig), 'slow second length');
+      CheckEqual(crc32cHash(clt.Content), crc32cHash(proxybig), 'slow second');
+      CheckEqual(proxyget, gets + 1, 'slow single get');
+      // the first client has received the whole content
+      raw.SockRecvLn(line);
+      CheckUtf8(PosEx(' 200 ', line) > 0, 'slow first status %', [line]);
+      len := -1;
+      repeat
+        line := '';
+        raw.SockRecvLn(line);
+        if IdemPChar(pointer(line), 'CONTENT-LENGTH: ') then
+          len := GetInteger(PUtf8Char(pointer(line)) + 16);
+      until line = ''; // end of response headers
+      CheckEqual(len, length(proxybig), 'slow first length');
+      if len = length(proxybig) then
+      begin
+        first := raw.SockInRead(len);
+        CheckEqual(crc32cHash(first), crc32cHash(proxybig), 'slow first');
+      end;
+    finally
+      raw.Free;
+    end;
+    // remote URI: with no HEAD cache, a new validator means a new content
+    Expect('GET', '/fresh/fresh.txt', HTTP_SUCCESS);
+    CheckEqual(clt.Content, 'version one', 'fresh one');
+    gets := proxyget;
+    Expect('GET', '/fresh/fresh.txt', HTTP_SUCCESS);
+    CheckEqual(clt.Content, 'version one', 'fresh one again');
+    CheckEqual(proxyget, gets, 'fresh one cached');
+    proxyfresh := 'version two';
+    proxyfreshmod := 'Last-Modified: Thu, 22 Oct 2015 07:28:00 GMT';
+    Expect('GET', '/fresh/fresh.txt', HTTP_SUCCESS);
+    CheckEqual(clt.Content, 'version two', 'fresh two');
+    // local folder: URI-encoded name, folder with no ending '/', and range
+    Check(FileFromString('with space', root + 'hello world.txt'), 'space file');
+    Expect('GET', '/static/hello%20world.txt', HTTP_SUCCESS);
+    CheckEqual(clt.Content, 'with space', 'static encoded name');
+    Expect('GET', '/static', HTTP_SUCCESS);
+    Check(PosEx('hello.txt', clt.Content) > 0, 'static index with no slash');
+    Expect('GET', '/static/local.bin', HTTP_PARTIALCONTENT, 'Range: bytes=10-109');
+    Check(EqualBuf(clt.Content, copy(local, 11, 100)), 'static range');
+    // remote URI: range and conditional requests on a cached resource
+    Expect('GET', '/remote/big.bin', HTTP_PARTIALCONTENT, 'Range: bytes=10-109');
+    Check(EqualBuf(clt.Content, copy(proxybig, 11, 100)), 'remote range');
+    Expect('GET', '/remote/small.txt', HTTP_SUCCESS);
+    validator := clt.HeaderGetValue('LAST-MODIFIED');
+    if not CheckFailed(validator <> '', 'remote has no last-modified') then
+      Expect('GET', '/remote/small.txt', HTTP_NOTMODIFIED,
+        'If-Modified-Since: ' + validator);
+    // event: the callback receives the path below its URI prefix
+    Expect('GET', '/event/some/path', HTTP_SUCCESS);
+    CheckEqual(clt.Content, 'GET some/path', 'event get');
+    Expect('POST', '/event/post', HTTP_SUCCESS, '', 'body');
+    CheckEqual(clt.Content, 'POST post', 'event post');
+    CheckEqual(proxyevent, 2, 'event calls');
+    // methods which are not part of Settings.Methods are never executed
+    Expect('PUT', '/event/put', HTTP_NOTFOUND, '', 'body');
+    Expect('POST', '/static/hello.txt', HTTP_NOTFOUND, '', 'body');
+    Expect('POST', '/remote/small.txt', HTTP_NOTFOUND, '', 'body');
+    CheckEqual(proxyevent, 2, 'event not called');
+    // shutdown while a throttled progressive download is still active
+    FreeAndNil(clt);
+    proxy.Stop; // complete existing workers before clearing disk cache
+    DirectoryDeleteAll(cacheslow); // force a fresh /slow/big.bin download
+    EnsureDirectoryExists(cacheslow);
+    proxy.Start;
+    gets := proxyget;
+    raw := TCrtSocket.Open('127.0.0.1', '8883', nlTcp, 10000);
+    try
+      raw.SockSend('GET /slow/big.bin HTTP/1.1');
+      raw.SockSend('Host: 127.0.0.1:8883');
+      raw.SockSendCRLF;
+      raw.SockSendFlush;
+      endtix := GetTickCount64 + 5000;
+      while (proxyget = gets) and
+            (GetTickCount64 < endtix) do
+        SleepHiRes(1);
+      CheckEqual(proxyget, gets + 1, 'slow get before stop');
+      proxy.Stop; // must join BackgroundGet before freeing fUrl/fPartials
+    finally
+      raw.Free;
+    end;
+    // restart with the same settings, without leaks or dangling workers
+    proxy.Start;
+    clt := THttpClientSocket.Open('127.0.0.1', '8883');
+    Expect('GET', '/static/hello.txt', HTTP_SUCCESS);
+    CheckEqual(clt.Content, HELLO, 'restarted static');
+    // a cached resource is still served when its origin is not reachable
+    Expect('GET', '/remote/big.bin', HTTP_SUCCESS); // refresh the HEAD cache
+    FreeAndNil(srv);
+    Expect('GET', '/remote/big.bin', HTTP_SUCCESS);
+    CheckEqual(crc32cHash(clt.Content), crc32cHash(proxybig), 'origin down');
+  finally
+    clt.Free;
+    proxy.Free;
+    settings.Free;
+    srv.Free;
+  end;
+end;
+
+procedure TNetworkProtocols.DoFastCgiApp(Sender: TObject);
+var
+  srv, cli, slow: TCrtSocket;
+  h: TFastCgiHeader;
+  content, params, stdin: RawByteString;
+  script, text: RawUtf8;
+  resp: TSynTempAdder;
+  len, stdinrecs, appstatus, protstatus: integer;
+  pad: array[byte] of byte;
+  endreq: array[0..15] of byte;
+  log: TSynLog;
+  ilog: ISynLog;
+
+  function Param(const name: RawUtf8): RawUtf8;
+  var
+    p, e: PAnsiChar;
+    nl, vl: cardinal;
+
+    function NextLen: cardinal;
+    begin
+      if ord(p^) < 128 then
+      begin
+        result := ord(p^);
+        inc(p);
+      end
+      else
+      begin
+        result := bswap32(PCardinal(p)^) and $7fffffff;
+        inc(p, 4);
+      end;
+    end;
+
+  begin
+    result := '<none>';
+    p := pointer(params);
+    e := p + length(params);
+    while p < e do
+    begin
+      nl := NextLen;
+      vl := NextLen;
+      if (nl = cardinal(length(name))) and
+         CompareMem(p, pointer(name), nl) then
+      begin
+        FastSetString(result, p + nl, vl);
+        exit;
+      end;
+      inc(p, nl + vl);
+    end;
+  end;
+
+begin
+  // a minimal FastCGI responder application, with one request per connection
+  srv := Sender as TCrtSocket;
+  slow := nil;
+  try
+    log := TSynLogTestLog.EnterLocal(ilog, self, 'DoFastCgiApp');
+    repeat
+      log.Log(sllTrace, 'before AcceptIncoming', self);
+      cli := srv.AcceptIncoming(nil, {async=}false);
+      if cli = nil then
+        break; // the listening socket has been closed
+      cli.Sock.SetLinger(-1); // disable blocking SO_LINGER especially on Windows
+      resp.Init;
+      try
+        log.Log(sllTrace, 'AcceptIncoming=%', [cli], self);
+        try
+          // read the whole request
+          params := '';
+          stdin := '';
+          stdinrecs := 0;
+          repeat
+            cli.SockRecv(@h, SizeOf(h));
+            len := bswap16(h.ContentLen);
+            FastNewRawByteString(content, len);
+            if len <> 0 then
+              cli.SockRecv(pointer(content), len);
+            if h.PaddingLen <> 0 then
+              cli.SockRecv(@pad, h.PaddingLen);
+            case h.RecType of
+              frtParams:
+                Append(params, content);
+              frtStdIn:
+                if len = 0 then
+                  break // a void record ends the request
+                else
+                begin
+                  Append(stdin, content);
+                  inc(stdinrecs);
+                end;
+            end;
+          until false;
+          LockedInc32(@fcgirequests);
+          // compute the response from the script name
+          script := Param('SCRIPT_NAME');
+          appstatus := 0;
+          protstatus := 0;
+          if script = '/slow/x.php' then
+          begin
+            slow.Free;
+            slow := cli; // never answer: closed when this application ends
+            cli := nil;
+            continue;
+          end
+          else if script = '/app/close.php' then
+            continue // close with no response at all
+          else if script = '/app/proto.php' then
+            protstatus := 1 // FCGI_CANT_MPX_CONN with no output
+          else if script = '/app/lf.php' then
+            text := 'Status: 201 Created'#10'Content-Type: text/x-lf'#10 +
+                    'X-Lf: yes'#10#10'lf body'
+          else if script = '/app/redir.php' then
+            text := 'Location: /other'#13#10#13#10
+          else if script = '/app/nohead.php' then
+            text := 'no header at all'
+          else if script = '/app/eof.php' then
+          begin
+            // the whole FastCGI stream is ?total bytes: 28 bytes of headers,
+            // then the body, one stdout record and the void one (2 x 8 bytes)
+            // and the end request record (16 bytes)
+            text := 'Content-Type: text/plain'#13#10#13#10;
+            Append(text, RawUtf8OfChar('x',
+              GetInteger(pointer(Param('QUERY_STRING'))) - 28 - 32));
+          end
+          else if script = '/app/big.php' then
+          begin
+            text := 'Content-Type: application/octet-stream'#13#10#13#10;
+            Append(text, pointer(fcgibig), length(fcgibig)); // no conversion
+          end
+          else
+          begin
+            if script = '/app/exit.php' then
+              appstatus := 3
+            else if script = '/app/stderr.php' then
+              FastCgiAppendStream(resp, frtStdErr, 'warning', 7);
+            Join(['Status: 200 OK'#13#10'Content-Type: text/plain'#13#10 +
+                  'X-App: one'#13#10'Set-Cookie: a=b'#13#10#13#10,
+                  Param('REQUEST_METHOD'), '|', Param('SCRIPT_FILENAME'), '|',
+                  Param('PATH_INFO'), '|', Param('QUERY_STRING'), '|',
+                  Param('HTTP_X_TEST'), '|', Param('HTTP_PROXY'), '|',
+                  Param('HTTP_BAD_NAME'), '|', Param('CONTENT_LENGTH'), '|',
+                  Param('CONTENT_TYPE'), '|',
+                  UInt32ToUtf8(stdinrecs), '|',
+                  CardinalToHexShort(crc32cHash(stdin)), '|',
+                  UInt32ToUtf8(length(Param('HTTP_X_LONG'))), '|',
+                  Param('DOCUMENT_ROOT'), '|', Param('REQUEST_URI'), '|',
+                  Param('SERVER_PORT'), '|', Param('GATEWAY_INTERFACE'), '|',
+                  Param('HTTP_HOST'), '|', Param('HTTP_USER_AGENT'), '|',
+                  Param('HTTP_X_TEST_2'), '|', Param('SCRIPT_NAME')], text);
+          end;
+          if protstatus = 0 then
+            FastCgiAppendStream(resp, frtStdOut, pointer(text), length(text));
+          FillCharFast(endreq, SizeOf(endreq), 0);
+          endreq[0] := FCGI_VERSION_1;
+          endreq[1] := ord(frtEndRequest);
+          endreq[3] := 1;  // RequestID = 1
+          endreq[5] := 8;  // ContentLen = 8
+          endreq[11] := appstatus;
+          endreq[12] := protstatus;
+          resp.Add(@endreq, SizeOf(endreq));
+          log.Log(sllTrace, 'SendLow=%', [resp.Size], self);
+          cli.SndLow(resp.Buffer, resp.Size);
+        except
+          // e.g. on connection closed by the client: accept the next one
+        end;
+      finally
+        resp.Store.Done;
+        cli.Free;
+        log.Log(sllTrace, 'after cli.Free', self);
+      end;
+    until false;
+  finally
+    slow.Free;
+  end;
+end;
+
+procedure TNetworkProtocols.DoHttpFastCgi(Sender: TObject);
+var
+  app, raw: TCrtSocket;
+  th: TLoggedWorkThread;
+  settings, settings2: THttpProxyServerSettings;
+  url: THttpProxyUrlSettings;
+  proxy, proxy2: THttpProxyServer;
+  clt: THttpClientSocket;
+  buf, par: TSynTempAdder;
+  resp: TFastCgiResponse;
+  front: TFileName;
+  s, ctype, headers, frontroot, frontsrc: RawUtf8;
+  body, bin: RawByteString;
+  status, i, n: integer;
+  start: Int64;
+
+  procedure Expect(const method, uri: RawUtf8; expected: integer;
+    const header: RawUtf8 = ''; const content: RawByteString = '');
+  var
+    status: integer;
+    mime: RawUtf8;
+  begin
+    if content <> '' then
+      mime := 'application/x-test';
+    status := clt.Request(uri, method, 10000, header, content, mime);
+    CheckUtf8(status = expected, '% % returned % but expected %',
+      [method, uri, status, expected]);
+  end;
+
+  function Field(index: integer): RawUtf8;
+  begin
+    result := GetCsvItem(pointer(clt.Content), index, '|');
+  end;
+
+  procedure ParseOutput(const output: RawUtf8; expected: boolean);
+  begin
+    ctype := '';
+    FastSetRawByteString(body, pointer(output), length(output));
+    CheckUtf8(FastCgiParseOutput(body, status, ctype, headers) = expected,
+      'output %', [output]);
+  end;
+
+begin
+  // FastCGI name/value pairs: lengths up to 127 use a single byte
+  CheckEqual(SizeOf(TFastCgiHeader), 8, 'header');
+  buf.Init;
+  s := RawUtf8OfChar('n', 127);
+  FastCgiAppendParam(buf, s, s);
+  CheckEqual(buf.Size, 2 + 127 * 2, '127');
+  Check(PWord(buf.Buffer)^ = $7f7f, '127 as bytes');
+  buf.Size := 0;
+  s := RawUtf8OfChar('n', 128);
+  FastCgiAppendParam(buf, s, s);
+  CheckEqual(buf.Size, 8 + 128 * 2, '128');
+  Check(PCardinal(buf.Buffer)^ = $80000080, '128 name as 31-bit');
+  Check(PCardinalArray(buf.Buffer)^[1] = $80000080, '128 value as 31-bit');
+  // FastCGI streams: records of 65535 bytes at most, then a void record
+  buf.Size := 0;
+  FastCgiAppendStream(buf, frtStdIn, nil, 0);
+  CheckEqual(buf.Size, 8, 'void stream');
+  bin := RandomWinAnsi(65536);
+  buf.Size := 0;
+  FastCgiAppendStream(buf, frtStdIn, pointer(bin), 65535);
+  CheckEqual(buf.Size, 8 + 65535 + 8, '65535 as one record');
+  Check(PFastCgiHeader(buf.Buffer)^.ContentLen = $ffff, '65535 len');
+  buf.Size := 0;
+  FastCgiAppendStream(buf, frtStdIn, pointer(bin), 65536);
+  CheckEqual(buf.Size, 8 + 65535 + 8 + 1 + 8, '65536 as two records');
+  // a whole request: begin, params stream, stdin stream
+  par.Init;
+  FastCgiAppendParam(par, 'A', 'b');
+  buf.Size := 0;
+  FastCgiAppendRequest(buf, par.Buffer, par.Size, 'body');
+  par.Store.Done;
+  CheckEqual(buf.Size, (8 + 8) + (8 + 4 + 8) + (8 + 4 + 8), 'request');
+  Check(PFastCgiHeader(buf.Buffer)^.RecType = frtBeginRequest, 'begin');
+  Check(PFastCgiHeader(buf.Buffer)^.RequestID = $0100, 'request id 1');
+  Check(CompareMem(PAnsiChar(buf.Buffer) + 8, PAnsiChar(#0#1#0#0#0#0#0#0), 8),
+    'responder role with no flag');
+  // decode a response sent byte by byte, with padding and an unknown record
+  buf.Size := 0;
+  buf.AddHex('010600010005030068656C6C6F000000'); // stdout 'hello' + padding
+  buf.AddHex('010B0001000200003F3F');             // unknowntype '??'
+  buf.AddHex('0107000100030000657272');           // stderr 'err'
+  buf.AddHex('0106000100000000');                 // endofstdout
+  buf.AddHex('01030001000800000102030400000000'); // endrequest
+  buf.AddShort('trailing');                       // never consumed
+  resp.Init;
+  s := '';
+  n := 0;
+  for i := 0 to buf.Size - 1 do
+  begin
+    Append(s, PAnsiChar(buf.Buffer) + i, 1);
+    status := resp.Parse(pointer(s), length(s));
+    if not CheckFailed(status >= 0, 'parse') then
+    begin
+      delete(s, 1, status);
+      inc(n, status);
+    end;
+  end;
+  Check(resp.Done, 'done');
+  CheckEqual(n, buf.Size - 8, 'whole records consumed');
+  buf.Store.Done;
+  CheckEqual(resp.Output, 'hello', 'stdout');
+  CheckEqual(resp.Error, 'err', 'stderr');
+  Check(resp.AppStatus = $01020304, 'app status');
+  CheckEqual(resp.ProtocolStatus, 0, 'protocol status');
+  resp.Init;
+  CheckEqual(resp.Parse(#2#6#0#1#0#0#0#0, 8), -1, 'unknown version');
+  resp.Init;
+  CheckEqual(resp.Parse(#1#3#0#1#0#4#0#0#0#0#0#0, 12), -1, 'short end request');
+  resp.Init;
+  CheckEqual(resp.Parse(#1#6#0#1#0#5#0#0'hel', 11), 0, 'incomplete record');
+  Check(not resp.Done, 'not done');
+  // CGI output: headers ended by LF or CRLF, then the body
+  ParseOutput('Content-Type: text/plain'#13#10'X-One: 1'#13#10#13#10'body', true);
+  CheckEqual(status, HTTP_SUCCESS, 'default status');
+  CheckEqual(ctype, 'text/plain', 'crlf type');
+  CheckEqual(headers, 'X-One: 1', 'crlf headers');
+  CheckEqual(body, 'body', 'crlf body');
+  ParseOutput('Status: 404 Not Found'#10'content-type:text/html'#10 +
+    'X-One: 1'#10'X-Two: 2'#10'Content-Length: 99'#10#10'b'#10#10'c', true);
+  CheckEqual(status, HTTP_NOTFOUND, 'lf status');
+  CheckEqual(ctype, 'text/html', 'lf type');
+  CheckEqual(headers, 'X-One: 1'#13#10'X-Two: 2', 'lf headers');
+  CheckEqual(body, 'b'#10#10'c', 'lf body');
+  ParseOutput('Location: /other'#13#10#13#10, true);
+  CheckEqual(status, HTTP_FOUND, 'location status');
+  CheckEqual(headers, 'Location: /other', 'location header');
+  CheckEqual(body, '', 'location body');
+  ParseOutput('Status: 301'#10'Location: /moved'#10#10, true);
+  CheckEqual(status, HTTP_MOVEDPERMANENTLY, 'explicit status');
+  ParseOutput(#10'only a body', true);
+  CheckEqual(body, 'only a body', 'no header');
+  ParseOutput('', false);
+  ParseOutput('Content-Type: text/plain'#13#10'body', false); // no void line
+  ParseOutput('not a header'#10#10'body', false);
+  ParseOutput(': no name'#10#10'body', false);
+  ParseOutput('Status: 99'#10#10'body', false);
+  ParseOutput('Status: 600'#10#10'body', false);
+  // end-to-end: a FastCGI application behind a THttpProxyServer
+  fcgibig := RandomWinAnsi(200 shl 10); // sent back as several records
+  fcgirequests := 0;
+  clt := nil;
+  proxy := nil;
+  th := nil;
+  settings := THttpProxyServerSettings.Create;
+  app := TCrtSocket.Bind('127.0.0.1:8880');
+  try
+    th := TLoggedWorkThread.Create(TSynLog, 'fcgiapp', app,
+      DoFastCgiApp, {suspended=}false, {ManualWaitForAndFree=}true);
+    settings.Server.Port := '8881';
+    settings.Server.ThreadCount := 2;
+    settings.AddFastCgi('fcgi://127.0.0.1:8880/var/www', 'app');
+    url := settings.AddFastCgi('fcgi://127.0.0.1:8880/var/www', 'slow');
+    url.FastCgiTimeoutSec := 1;
+    url := settings.AddFastCgi('fcgi://127.0.0.1:8880/var/www', 'getonly');
+    url.Methods := [urmGet];
+    // WSGI uses the same FastCGI backend, with virtual SCRIPT_NAME/PATH_INFO.
+    url := settings.AddFastCgi('fcgi://127.0.0.1:8880', 'api');
+    url.SetOptions([hpoFastCgiWsgi]);
+    // front controller: a real folder, with static files and index scripts
+    front := EnsureDirectoryExists(TempDir + 'fcgifront');
+    frontroot := StringReplaceChars(
+      StringToUtf8(ExcludeTrailingPathDelimiter(front)), '\', '/');
+    if frontroot[1] = '/' then
+      frontsrc := 'fcgi://127.0.0.1:8880' + frontroot
+    else
+      frontsrc := 'fcgi://127.0.0.1:8880/' + frontroot; // e.g. 'c:/...'
+    Check(FileFromString('robots', front + 'robots.txt'), 'robots');
+    Check(FileFromString('icon', front + 'favicon.ico'), 'favicon');
+    Check(FileFromString('<?php', front + 'index.php'), 'index');
+    Check(FileFromString('js',
+      EnsureDirectoryExists(front + 'assets') + 'app.js'), 'js');
+    Check(FileFromString('<?php',
+      EnsureDirectoryExists(front + 'blog') + 'index.php'), 'blog index');
+    EnsureDirectoryExists(front + 'sub'); // a folder with no index script
+    settings.AddFastCgi(frontsrc, 'front').FastCgiIndex := 'index.php';
+    proxy := THttpProxyServer.Create(settings);
+    proxy.Start;
+    clt := THttpClientSocket.Open('127.0.0.1', '8881');
+    clt.OnLog := TSynLogTestLog.DoLog;
+    // the CGI variables, with the script located before the PATH_INFO
+    Expect('GET', '/app/echo.php/extra/info?x=1&y=2', HTTP_SUCCESS,
+      'X-Test: hello'#13#10'Proxy: evil'#13#10'Bad_Name: v'#13#10'x-test-2:two');
+    CheckEqual(Field(0), 'GET', 'method');
+    CheckEqual(Field(1), '/var/www/echo.php', 'script filename');
+    CheckEqual(Field(2), '/extra/info', 'path info');
+    CheckEqual(Field(3), 'x=1&y=2', 'query string');
+    CheckEqual(Field(4), 'hello', 'header');
+    CheckEqual(Field(5), '<none>', 'no HTTP_PROXY');
+    CheckEqual(Field(6), '<none>', 'no header with underscore');
+    CheckEqual(Field(7), '<none>', 'no content length');
+    CheckEqual(Field(9), '0', 'no stdin record');
+    CheckEqual(Field(12), '/var/www', 'document root');
+    CheckEqual(Field(13), '/app/echo.php/extra/info?x=1&y=2', 'request uri');
+    CheckEqual(Field(14), '8881', 'server port');
+    CheckEqual(Field(15), 'CGI/1.1', 'gateway');
+    CheckEqual(Field(16), '127.0.0.1:8881', 'host header');
+    Check(Field(17) <> '<none>', 'user agent');
+    CheckEqual(Field(18), 'two', 'header name in upper case with no space');
+    CheckEqual(Field(19), '/app/echo.php', 'script name');
+    CheckEqual(clt.ContentType, 'text/plain', 'content type');
+    CheckEqual(clt.HeaderGetValue('X-APP'), 'one', 'custom header');
+    CheckEqual(clt.HeaderGetValue('SET-COOKIE'), 'a=b', 'cookie');
+    Expect('GET', '/app/sub/echo.php', HTTP_SUCCESS);
+    CheckEqual(Field(1), '/var/www/sub/echo.php', 'sub folder');
+    CheckEqual(Field(2), '<none>', 'no path info');
+    CheckEqual(Field(3), '', 'void query string');
+    Expect('HEAD', '/app/echo.php', HTTP_SUCCESS);
+    CheckEqual(clt.Content, '', 'head has no body');
+    // header value lengths around the 127 / 128 encoding limit
+    Expect('GET', '/app/echo.php', HTTP_SUCCESS,
+      'X-Long: ' + RawUtf8OfChar('v', 127));
+    CheckEqual(Field(11), '127', '127 bytes value');
+    Expect('GET', '/app/echo.php', HTTP_SUCCESS,
+      'X-Long: ' + RawUtf8OfChar('v', 128));
+    CheckEqual(Field(11), '128', '128 bytes value');
+    // request body: void, then around the 65535 bytes record limit
+    Expect('POST', '/app/echo.php', HTTP_SUCCESS);
+    CheckEqual(Field(0), 'POST', 'post');
+    CheckEqual(Field(7), '<none>', 'void body length');
+    CheckEqual(Field(9), '0', 'void body record');
+    SetLength(bin, 65535);
+    Expect('POST', '/app/echo.php', HTTP_SUCCESS, '', bin);
+    CheckEqual(Field(7), '65535', '65535 length');
+    CheckEqual(Field(8), 'application/x-test', 'body type');
+    CheckEqual(Field(9), '1', '65535 as one record');
+    CheckEqual(Field(10), CardinalToHexShort(crc32cHash(bin)), '65535 body');
+    bin := RandomWinAnsi(65536);
+    Expect('PUT', '/app/echo.php', HTTP_SUCCESS, '', bin);
+    CheckEqual(Field(0), 'PUT', 'put');
+    CheckEqual(Field(7), '65536', '65536 length');
+    CheckEqual(Field(9), '2', '65536 as two records');
+    CheckEqual(Field(10), CardinalToHexShort(crc32cHash(bin)), '65536 body');
+    // CGI headers ended by LF, explicit status, redirection
+    Expect('GET', '/app/lf.php', HTTP_CREATED);
+    CheckEqual(clt.Content, 'lf body', 'lf body');
+    CheckEqual(clt.ContentType, 'text/x-lf', 'lf type');
+    CheckEqual(clt.HeaderGetValue('X-LF'), 'yes', 'lf header');
+    Expect('GET', '/app/redir.php', HTTP_FOUND);
+    CheckEqual(clt.HeaderGetValue('LOCATION'), '/other', 'location');
+    // a response sent as several records
+    Expect('GET', '/app/big.php', HTTP_SUCCESS);
+    CheckEqual(length(clt.Content), length(fcgibig), 'big length');
+    CheckEqual(crc32cHash(clt.Content), crc32cHash(fcgibig), 'big');
+    // a response which fills exactly the 32KB reading buffer of the proxy
+    // just before the application closes the connection - see #804
+    for i := 1 to 3 do
+    begin
+      Expect('GET', '/app/eof.php?32768', HTTP_SUCCESS);
+      CheckEqual(length(clt.Content), 32768 - 28 - 32, 'eof 32KB');
+      Expect('GET', '/app/eof.php?65536', HTTP_SUCCESS);
+      CheckEqual(length(clt.Content), 65536 - 28 - 32, 'eof 64KB');
+    end;
+    // the output is sent back whatever the application exit code or stderr is
+    Expect('GET', '/app/exit.php', HTTP_SUCCESS);
+    CheckEqual(Field(0), 'GET', 'exit code');
+    Expect('GET', '/app/stderr.php', HTTP_SUCCESS);
+    CheckEqual(Field(0), 'GET', 'stderr');
+    // invalid responses from the application
+    Expect('GET', '/app/proto.php', HTTP_BADGATEWAY);
+    Expect('GET', '/app/nohead.php', HTTP_BADGATEWAY);
+    Expect('GET', '/app/close.php', HTTP_BADGATEWAY);
+    // new incoming connections, once the closed FastCGI connections reached
+    // the second generation of their GC: should be answered as usual
+    for i := 1 to 3 do
+      Expect('GET', '/app/echo.php', HTTP_SUCCESS);
+    // the server main thread may idle up to 500ms, then its GC keeps the closed
+    // instances 100ms in the first generation
+    SleepHiRes(1000);
+    for i := 1 to 5 do
+    begin
+      raw := TCrtSocket.Open('127.0.0.1', '8881', nlTcp, 5000);
+      try
+        raw.SockSend('GET /app/echo.php HTTP/1.0');
+        raw.SockSendCRLF;
+        raw.SockSendFlush;
+        s := '';
+        try
+          raw.CreateSockIn;
+          raw.SockRecvLn(s);
+        except
+          s := ''; // closed with no response
+        end;
+        CheckUtf8(PosEx(' 200 ', s) > 0, 'new connection %: %', [i, s]);
+      finally
+        raw.Free;
+      end;
+    end;
+    // no script or unsafe path: the application is not even called
+    n := fcgirequests;
+    Expect('GET', '/app/noscript', HTTP_NOTFOUND);
+    Expect('GET', '/app/', HTTP_NOTFOUND);
+    Expect('GET', '/app/a%2F..%2F..%2Fecho.php', HTTP_NOTFOUND);
+    Expect('GET', '/app/..%2Fecho.php', HTTP_NOTFOUND);
+    Expect('GET', '/app/echo.php/..', HTTP_NOTFOUND);
+    Expect('GET', '/app/echo.php/a%3Ab', HTTP_NOTFOUND);
+    Expect('GET', '/app/sub%5Cecho.php', HTTP_NOTFOUND);
+    Expect('GET', '/app/%2Fecho.php', HTTP_NOTFOUND);
+    Expect('GET', '/app/echo.php%00.txt', HTTP_NOTFOUND);
+    Expect('POST', '/getonly/echo.php', HTTP_NOTFOUND, '', 'body');
+    CheckEqual(fcgirequests, n, 'application not called');
+    Expect('GET', '/getonly/echo.php', HTTP_SUCCESS);
+    CheckEqual(Field(1), '/var/www/echo.php', 'get only');
+    // dots are fine within a name, and the path is URI-decoded
+    Expect('GET', '/app/a..b/..c.php/d', HTTP_SUCCESS);
+    CheckEqual(Field(1), '/var/www/a..b', 'dots in name');
+    CheckEqual(Field(2), '/..c.php/d', 'dots in path info');
+    Expect('GET', '/app/my%20echo.php/x%2By+z', HTTP_SUCCESS);
+    CheckEqual(Field(1), '/var/www/my echo.php', 'decoded script');
+    CheckEqual(Field(2), '/x+y+z', 'decoded path info');
+    // WSGI mapping: no physical script is needed and PHP mode is unchanged
+    Expect('GET', '/api', HTTP_SUCCESS);
+    CheckEqual(Field(19), '/api', 'wsgi root script name');
+    CheckEqual(Field(2), '', 'wsgi root path info');
+    CheckEqual(Field(1), '<none>', 'wsgi no script filename');
+    CheckEqual(Field(12), '<none>', 'wsgi no document root');
+    Expect('GET', '/api/', HTTP_SUCCESS);
+    CheckEqual(Field(19), '/api', 'wsgi slash script name');
+    CheckEqual(Field(2), '/', 'wsgi slash path info');
+    Expect('GET', '/api/users/42?full=1&active=1', HTTP_SUCCESS,
+      'X-Test: wsgi');
+    CheckEqual(Field(0), 'GET', 'wsgi method');
+    CheckEqual(Field(1), '<none>', 'wsgi no physical script');
+    CheckEqual(Field(2), '/users/42', 'wsgi route path info');
+    CheckEqual(Field(3), 'full=1&active=1', 'wsgi query');
+    CheckEqual(Field(4), 'wsgi', 'wsgi custom header');
+    CheckEqual(Field(13), '/api/users/42?full=1&active=1', 'wsgi request uri');
+    CheckEqual(Field(19), '/api', 'wsgi mounted script name');
+    Expect('GET', '/api/route.py/next', HTTP_SUCCESS);
+    CheckEqual(Field(1), '<none>', 'wsgi route is not a file');
+    CheckEqual(Field(2), '/route.py/next', 'wsgi dot in route');
+    Expect('GET', '/api/a%20b/x%2By+z', HTTP_SUCCESS);
+    CheckEqual(Field(2), '/a b/x+y+z', 'wsgi decoded path');
+    bin := 'hello wsgi';
+    Expect('POST', '/api/submit?mode=json', HTTP_SUCCESS, '', bin);
+    CheckEqual(Field(0), 'POST', 'wsgi post method');
+    CheckEqual(Field(2), '/submit', 'wsgi post path');
+    CheckEqual(Field(3), 'mode=json', 'wsgi post query');
+    CheckEqual(Field(7), '10', 'wsgi post length');
+    CheckEqual(Field(8), 'application/x-test', 'wsgi post content type');
+    CheckEqual(Field(9), '1', 'wsgi post stdin records');
+    CheckEqual(Field(10), CardinalToHexShort(crc32cHash(bin)),
+      'wsgi post stdin content');
+    n := fcgirequests;
+    Expect('GET', '/api/a%00b', HTTP_NOTFOUND);
+    CheckEqual(fcgirequests, n, 'wsgi NUL must not reach the application');
+    Expect('GET', '/app/echo.php', HTTP_SUCCESS);
+    CheckEqual(Field(1), '/var/www/echo.php', 'php script mapping unchanged');
+    // front controller: existing files are returned with no application call
+    n := fcgirequests;
+    Expect('GET', '/front/robots.txt', HTTP_SUCCESS);
+    CheckEqual(clt.Content, 'robots', 'static file');
+    Expect('HEAD', '/front/robots.txt', HTTP_SUCCESS);
+    CheckEqual(clt.Content, '', 'static head');
+    Expect('GET', '/front/assets/app.js', HTTP_SUCCESS);
+    CheckEqual(clt.Content, 'js', 'static file in a sub folder');
+    Expect('POST', '/front/robots.txt', HTTP_NOTALLOWED, '', 'body');
+    Expect('GET', '/front/%2e%2e/fcgifront/robots.txt', HTTP_NOTFOUND);
+    Expect('GET', '/front/a%2F..%2F..%2Findex.php', HTTP_NOTFOUND);
+    Expect('GET', '/front/index.php%00.txt', HTTP_NOTFOUND);
+    CheckEqual(fcgirequests, n, 'static or unsafe: application not called');
+    // front controller: a script path is sent as usual, never as a file
+    Expect('GET', '/front/index.php', HTTP_SUCCESS);
+    CheckEqual(Field(0), 'GET', 'script is not returned as a file');
+    CheckEqual(Field(19), '/front/index.php', 'front index script');
+    Expect('GET', '/front/info.php/extra', HTTP_SUCCESS);
+    CheckEqual(Field(19), '/front/info.php', 'front script');
+    CheckEqual(Field(2), '/extra', 'front script path info');
+    Expect('GET', '/front/lib.v2/x.php', HTTP_SUCCESS);
+    CheckEqual(Field(19), '/front/lib.v2/x.php', 'script in a dotted folder');
+    Expect('GET', '/front/INDEX.PHP', HTTP_SUCCESS);
+    CheckEqual(Field(19), '/front/INDEX.PHP', 'case insensitive extension');
+    // front controller: any other path is sent to the index script
+    Expect('GET', '/front/page?x=1', HTTP_SUCCESS);
+    CheckEqual(Field(19), '/front/index.php', 'front script name');
+    CheckEqual(Field(1), frontroot + '/index.php', 'front script filename');
+    CheckEqual(Field(2), '<none>', 'front no path info');
+    CheckEqual(Field(3), 'x=1', 'front query string');
+    CheckEqual(Field(13), '/front/page?x=1', 'front request uri');
+    Expect('GET', '/front/user/john.doe', HTTP_SUCCESS);
+    CheckEqual(Field(19), '/front/index.php', 'dot in a route');
+    Expect('POST', '/front/form', HTTP_SUCCESS, '', 'posted');
+    CheckEqual(Field(0), 'POST', 'front post');
+    CheckEqual(Field(19), '/front/index.php', 'front post script');
+    Expect('GET', '/front/blog/', HTTP_SUCCESS);
+    CheckEqual(Field(19), '/front/blog/index.php', 'folder index script');
+    Expect('GET', '/front/sub/', HTTP_SUCCESS);
+    CheckEqual(Field(19), '/front/index.php', 'folder with no index script');
+    Expect('GET', '/front/sub', HTTP_SUCCESS);
+    CheckEqual(Field(19), '/front/index.php', 'folder name as a route');
+    Expect('GET', '/front/', HTTP_SUCCESS);
+    CheckEqual(Field(19), '/front/index.php', 'front root');
+    Expect('GET', '/front', HTTP_SUCCESS);
+    CheckEqual(Field(19), '/front/index.php', 'front root with no slash');
+    // front controller at the root: the application has its own favicon.ico
+    settings2 := THttpProxyServerSettings.Create;
+    try
+      settings2.Server.Port := '8879'; // not used by any other test
+      settings2.Server.ThreadCount := 2;
+      settings2.AddFastCgi(frontsrc, '').FastCgiIndex := 'index.php';
+      proxy2 := THttpProxyServer.Create(settings2);
+      try
+        proxy2.Start;
+        FreeAndNil(clt);
+        clt := THttpClientSocket.Open('127.0.0.1', '8879');
+        n := fcgirequests;
+        Expect('GET', '/favicon.ico', HTTP_SUCCESS);
+        CheckEqual(clt.Content, 'icon', 'application favicon');
+        Expect('GET', '/robots.txt', HTTP_SUCCESS);
+        CheckEqual(clt.Content, 'robots', 'static file at the root');
+        CheckEqual(fcgirequests, n, 'root static files');
+        Expect('GET', '/', HTTP_SUCCESS);
+        CheckEqual(Field(19), '/index.php', 'root index script');
+        Expect('GET', '/page?id=3', HTTP_SUCCESS);
+        CheckEqual(Field(19), '/index.php', 'root front controller');
+        CheckEqual(Field(13), '/page?id=3', 'root request uri');
+        FreeAndNil(clt);
+      finally
+        proxy2.Free;
+      end;
+    finally
+      settings2.Free;
+    end;
+    clt := THttpClientSocket.Open('127.0.0.1', '8881');
+    if not fOwner.MultiThread then
+    begin
+      // an application which never answers (not validated in --multithread path)
+      start := GetTickCount64;
+      Expect('GET', '/slow/x.php', HTTP_GATEWAYTIMEOUT);
+      Check(GetTickCount64 - start >= 900, 'timeout delay');
+      Expect('GET', '/app/echo.php', HTTP_SUCCESS); // the other requests still work
+      CheckEqual(Field(0), 'GET', 'after timeout');
+      // stop the proxy while a request is still waiting for its application
+      FreeAndNil(clt);
+      n := fcgirequests;
+      raw := TCrtSocket.Open('127.0.0.1', '8881', nlTcp, 10000);
+      try
+        raw.SockSend('GET /slow/x.php HTTP/1.1');
+        raw.SockSend('Host: 127.0.0.1:8881');
+        raw.SockSendCRLF;
+        raw.SockSendFlush;
+        start := GetTickCount64 + 5000;
+        while (fcgirequests = n) and
+              (GetTickCount64 < start) do
+          SleepHiRes(1);
+        CheckEqual(fcgirequests, n + 1, 'pending request');
+        proxy.Stop;
+      finally
+        raw.Free;
+      end;
+    end
+    else
+    begin
+      FreeAndNil(clt);
+      proxy.Stop;
+    end;
+    // restart with the same settings
+    proxy.Start;
+    clt := THttpClientSocket.Open('127.0.0.1', '8881');
+    Expect('GET', '/app/echo.php', HTTP_SUCCESS);
+    CheckEqual(Field(0), 'GET', 'restarted');
+    // an application which is not reachable any more
+    app.Close;
+    th.WaitFor;
+    Expect('GET', '/app/echo.php', HTTP_BADGATEWAY);
+  finally
+    clt.Free;
+    proxy.Free;
+    settings.Free;
+    app.Close;
+    if th <> nil then
+    begin
+      th.WaitFor;
+      th.Free;
+    end;
+    app.Free;
   end;
 end;
 
@@ -6385,7 +9782,7 @@ procedure TNetworkProtocols.DoUnixDomainSocket(Sender: TObject);
 var
   fn: TFileName;
   un: RawUtf8;
-  sock: TCrtSocket;
+  sock, client: TCrtSocket;
 begin
   // regression test for Unix domain socket server bind and stale file cleanup
   // - on Delphi POSIX, the FpUnlink() called to remove a stale .socket file
@@ -6417,6 +9814,22 @@ begin
     sock.Free;
   end;
   Check(not FileExists(fn), 'stale file cleaned on close');
+  // 3. a client closing its connection must not delete the server .socket file
+  sock := TCrtSocket.Bind(un);
+  try
+    // a plain path with explicit nlUnix, so that Close sees the actual file
+    client := TCrtSocket.Open(StringToUtf8(fn), '', nlUnix);
+    try
+      Check(client.SockIsDefined, 'unix client');
+      Check(client.SocketLayer = nlUnix, 'client nlUnix');
+    finally
+      client.Free;
+    end;
+    Check(FileExists(fn), 'client close kept the server socket file');
+  finally
+    sock.Free;
+  end;
+  Check(not FileExists(fn), 'server close removed its socket file');
 end;
 
 procedure TNetworkProtocols.DoTFTPServer(Sender: TObject);
@@ -6491,37 +9904,45 @@ begin
       CheckEqual(srv.RedirectUri('http/backgrd', httpuri, 4096), 1);
       Check(srv.RedirectUri('http/cache/new', httpuri) < 0, 'dup3');
       Check(srv.RedirectUri('http/backgrd/new', httpuri) < 0, 'dup4');
-      tftpuri := Join(['tftp://127.0.0.1:6969/http/cache/', uri]);
-      rd := '';
-      res := CurlPerform(tftpuri, rd);
-      Check(res = crOK, 'http cached over tftp');
-      if res = crOk then
-        CheckEqual(rd, orig, 'http cache');
-      tftpuri := Join(['tftp://127.0.0.1:6969/http/backgrd/sub/', uri]);
-      rd := '';
-      res := CurlPerform(tftpuri, rd);
-      Check(res = crOK, 'http background over tftp');
-      if res = crOk then
-        CheckEqual(rd, orig, 'http background');
-      // wrong resource location with no RedirectUri() confusion
-      tftpuri := Join(['tftp://127.0.0.1:6969/http/cachewrong/uri']);
-      rd := '';
-      res := CurlPerform(tftpuri, rd, {timeout=}5000);
-      Check(res = crTFtpNotFound, 'tftp not found');
-      // redirect root to HTTP
-      rd := '';
-      res := CurlPerform('tftp://127.0.0.1:6969/pxelinux.0', rd, 100000);
-      Check(res = crTFtpNotFound, 'http background over tftp');
-      CheckEqual(srv.RedirectUri('/', httpuri), 2);
-      rd := '';
-      res := CurlPerform('tftp://127.0.0.1:6969/pxelinux.0', rd, 100000);
-      Check(res = crOK, 'http background over tftp');
-      if res = crOk then
-        CheckEqual(rd, orig, 'http root');
-      // final checks and global performance benchmark
-      CheckEqual(srv.ConnectionTotal, 5, 'srv.ConnectionTotal');
-      NotifyTestSpeed('TFTP request', srv.ConnectionTotal,
-        length(orig) * srv.ConnectionTotal, @timer);
+      // curl < 8.17 has known TFTP issues with retransmitted RRQ/server TID
+      // which araise especially on ARM64 + KVM
+      {$ifdef CPUX64}
+      if curl.info.version_num >= $080000 then
+      {$else}
+      if curl.info.version_num >= $081100 then
+      {$endif CPUX64}
+      begin
+        tftpuri := Join(['tftp://127.0.0.1:6969/http/cache/', uri]);
+        rd := '';
+        res := CurlPerform(tftpuri, rd);
+        if CheckUtf8(res = crOK, 'http cached over tftp %', [ToText(res)^]) then
+          CheckEqual(rd, orig, 'http cache');
+        tftpuri := Join(['tftp://127.0.0.1:6969/http/backgrd/sub/', uri]);
+        rd := '';
+        res := CurlPerform(tftpuri, rd);
+        if CheckUtf8(res = crOK, 'http background over tftp %', [ToText(res)^]) then
+          CheckEqual(rd, orig, 'http background');
+        // wrong resource location with no RedirectUri() confusion
+        tftpuri := Join(['tftp://127.0.0.1:6969/http/cachewrong/uri']);
+        rd := '';
+        res := CurlPerform(tftpuri, rd, {timeout=}5000);
+        Check(res = crTFtpNotFound, 'tftp not found');
+        // redirect root to HTTP
+        rd := '';
+        res := CurlPerform('tftp://127.0.0.1:6969/pxelinux.0', rd, 100000);
+        Check(res = crTFtpNotFound, 'http background over tftp');
+        CheckEqual(srv.RedirectUri('/', httpuri), 2);
+        rd := '';
+        res := CurlPerform('tftp://127.0.0.1:6969/pxelinux.0', rd, 100000);
+        Check(res = crOK, 'http background over tftp');
+        if res = crOk then
+          CheckEqual(rd, orig, 'http root');
+        // final checks and global performance benchmark
+        CheckUtf8(srv.ConnectionTotal >= 5, // additional RRQs/retries happen
+          'srv.ConnectionTotal=%', [srv.ConnectionTotal]);
+        NotifyTestSpeed('TFTP %', [curl.info.version],
+          srv.ConnectionTotal, length(orig) * 5, @timer);
+      end;
       srv.TerminateAndWaitFinished(1000);
     finally
       srv.Free;
@@ -6538,6 +9959,581 @@ begin
   DoTFTPShutdown; // no real TFTP client is needed
 end;
 {$endif OSPOSIX}
+
+{$ifdef SCHANNEL_VERIFY}
+
+type
+  TSChannelTestTrust = (
+    sttFile, sttRaw, sttDefault, sttSystem);
+
+  TSChannelTestFlags = set of (
+   stfExpected, stfCallbacks, stfRejectEach, stfDisableTls13, stfOneWayTls,
+   stfOpenSslServer, stfEachInvalid, stfHugeContent, stfKeyUpdate,
+   stfSchannelClient);
+
+  TRunCase = class
+  public
+    Test: TSynTestCase;
+    Port: RawUtf8;
+    Trust: TSChannelTestTrust;
+    Server, Authority, Client: ICryptCert;
+    Flags: TSChannelTestFlags;
+    fEachCount: integer;
+    fEachUseful: integer;
+    fEachInvalid: integer;
+    fAfterCount: integer;
+    fAfterUseful: integer;
+    fHugeHash: cardinal;
+    fHugeLength: integer;
+    fClientError: RawUtf8;
+    fClientKeyReady: boolean;
+    Body: RawByteString;
+    ExpectedHash: cardinal;
+    class procedure DoRunCase(Sender: TObject);
+    procedure Execute;
+    function OnEachCertificate(Socket: TNetSocket;
+      Context: PNetTlsContext; WasOk: boolean; TLS, Peer: pointer): boolean;
+    procedure OnAfterCertificate(Socket: TNetSocket;
+      Context: PNetTlsContext; TLS, Peer: pointer);
+    function DoHugeRequest(Ctxt: THttpServerRequestAbstract): cardinal;
+    function TlsClient(const Port: RawUtf8;
+      const Certificate: ICryptCert): boolean;
+  end;
+
+function TRunCase.OnEachCertificate(Socket: TNetSocket;
+  Context: PNetTlsContext; WasOk: boolean; TLS, Peer: pointer): boolean;
+begin
+  LockedInc32(@fEachCount);
+  if not WasOk then
+    LockedInc32(@fEachInvalid);
+  if (Socket <> nil) and
+     (Context <> nil) and
+     (TLS <> nil) and
+     (Peer <> nil) and
+     (Context^.PeerCert = Peer) and
+     (Context^.PeerIssuer <> '') and
+     (Context^.PeerSubject <> '') and
+     (Context^.PeerInfo <> '') then
+    LockedInc32(@fEachUseful);
+  result := not (stfRejectEach in Flags);
+end;
+
+procedure TRunCase.OnAfterCertificate(Socket: TNetSocket;
+  Context: PNetTlsContext; TLS, Peer: pointer);
+begin
+  LockedInc32(@fAfterCount);
+  if (Socket <> nil) and
+     (Context <> nil) and
+     (TLS <> nil) and
+     (Peer <> nil) and
+     (Context^.PeerCert = Peer) and
+     (Context^.PeerIssuer <> '') and
+     (Context^.PeerSubject <> '') and
+     (Context^.PeerInfo <> '') and
+     (Context^.CipherName <> '') then
+    LockedInc32(@fAfterUseful);
+end;
+
+function TRunCase.DoHugeRequest(Ctxt: THttpServerRequestAbstract): cardinal;
+begin
+  result := HTTP_SUCCESS;
+  if Ctxt.Url <> '/huge' then
+  begin
+    Ctxt.OutContent := 'ok';
+    exit;
+  end;
+  fHugeLength := length(Ctxt.InContent);
+  fHugeHash := crc32cHash(Ctxt.InContent);
+  Ctxt.OutContent := Make(['ok ', fHugeLength, ' ', CardinalToHexShort(fHugeHash)]);
+end;
+
+function TRunCase.TlsClient(const Port: RawUtf8;
+  const Certificate: ICryptCert): boolean;
+var
+  socket: TNetSocket;
+  secure: INetTls;
+  tls: TNetTlsContext;
+  clientCng: ICryptCertCng;
+  provider: TWinCertKeyProviderInfo;
+  providerHandle: NCRYPT_PROV_HANDLE;
+  importedKey: NCRYPT_KEY_HANDLE;
+  providerName, keyName: SynUnicode;
+  keyfile: TFileName;
+  request, reply: RawByteString;
+  len, pos: integer;
+  updated: boolean;
+  ssl: PSSL;
+  net: TNetResult;
+  log: ISynLog;
+begin
+  TSynLog.EnterLocal(log, 'TlsClient %', [Port], self);
+  result := false;
+  fClientError := '';
+  fClientKeyReady := false;
+  socket := nil;
+  keyfile := '';
+  try
+    if NewTcpClientSocket('127.0.0.1', Port, 5000, socket) <> nrOK then
+      raise ESynException.Create('unable to connect the focused mTLS client');
+    InitNetTlsContext(tls);
+    tls.IgnoreCertificateErrors := true; // the test server identity is private
+    tls.DisableTls13 := stfDisableTls13 in Flags;
+    if stfSchannelClient in Flags then
+    begin
+      if Certificate <> nil then
+      begin
+        // Use the production ICryptCertCng factory, not a test-only KSP owner.
+        clientCng := TCryptCertCng.LoadPkcs12(
+          Certificate.Save(cccCertWithPrivateKey, '3des=mtls-test', ccfBinary),
+          'mtls-test', TSynLog, {ForSchannel=}true);
+        if clientCng = nil then
+          raise ESynException.Create('Schannel client CNG PFX import failed');
+        if not WinCertCtxtKeyProvider(clientCng.WinContext, provider) or
+           (provider.ProviderType <> 0) or // LoadPKCS12() is CNG-only
+           (provider.Provider = '') or
+           (provider.Container = '') then
+          raise ESynException.Create('Schannel client needs a persisted CNG key');
+        fClientKeyReady := true;
+        tls.CertificateRaw := clientCng.WinContext;
+      end;
+      secure := NewSChannelNetTls;
+    end
+    else
+    begin
+      if Certificate <> nil then
+      begin
+        tls.CertificateBin := Certificate.Save(cccCertOnly, '', ccfPem);
+        keyfile := MakeString([Test.WorkDir, 'schannel-mtls-client-', Port, '.pem']);
+        if not FileFromString(
+            Certificate.Save(cccPrivateKeyOnly, '', ccfPem), keyfile) then
+          raise ESynException.Create('unable to save the focused mTLS client key');
+        tls.PrivateKeyFile := StringToUtf8(keyfile);
+      end;
+      secure := NewOpenSslNetTls;
+    end;
+    secure.AfterConnection(socket, tls, 'localhost');
+    if stfHugeContent in Flags then
+      request := Make([
+        'POST /huge HTTP/1.1'#13#10 +
+        'Host: localhost'#13#10 +
+        'Content-Type: application/octet-stream'#13#10 +
+        'Content-Length: ', length(Body), #13#10 +
+        'Connection: close'#13#10#13#10])
+    else
+      request := 'GET / HTTP/1.0'#13#10'Host: localhost'#13#10#13#10;
+    if Assigned(log) then
+      log.Log(sllDebug, 'TlsClient: Afterconnection cipher=% request=%',
+        [tls.CipherName, request], self);
+    len := length(request);
+    net := secure.Send(pointer(request), len);
+    if (net <> nrOK) or
+       (len <> length(request)) then
+      raise ESynException.Create('mTLS client could not send HTTP headers');
+    if stfHugeContent in Flags then
+    begin
+      updated := false;
+      pos := 1;
+      while pos <= length(Body) do
+      begin
+        len := MinPtrInt(32749, length(Body) - pos + 1);     // per 32KB chunk
+        net := secure.Send(@PByteArray(Body)[pos - 1], len);
+        if net = nrRetry then
+          continue;
+        if net <> nrOK then
+          raise ESynException.CreateUtf8(
+            'huge TLS send failed % at %', [ToText(net)^, pos]);
+        if len <= 0 then // typical Send() len = 16384
+          raise ESynException.Create('huge TLS send made no progress');
+        inc(pos, len);
+        if (stfKeyUpdate in Flags) and
+           not updated and
+           (pos > length(body) shr 1) then
+        begin
+          ssl := secure.GetRawTls;
+          if Test.Check(ssl <> nil, 'OpenSSL raw TLS') then
+            Test.CheckEqual(
+              SSL_key_update(ssl, SSL_KEY_UPDATE_REQUESTED), OPENSSLSUCCESS,
+              'SSL_key_update');
+          updated := true;
+        end;
+      end;
+      Test.Check((stfKeyUpdate in Flags) = updated, 'missing SSL_key_update');
+    end;
+    SetLength(reply, 4096);
+    len := length(reply);
+    net := secure.Receive(pointer(reply), len);
+    SetLength(reply, len);
+    result := (net = nrOK) and
+              (PosEx('HTTP/', reply) = 1);
+    if Assigned(log) then
+      log.Log(sllDebug, 'TlsClient Receive: reply=%', [reply], self);
+    if not result then
+      fClientError := FormatUtf8('mTLS server closed the connection (% %)',
+        [ToText(net)^, tls.LastError])
+    else if stfHugeContent in Flags then
+    begin
+      Test.CheckEqual(fHugeLength, length(Body), 'SChannel huge length');
+      Test.CheckEqual(fHugeHash, ExpectedHash, 'SChannel huge hash');
+    end;
+  except
+    on E: Exception do
+      Make([E, ': ', E.Message], fClientError);
+  end;
+  secure := nil; // release Schannel credentials before deleting CNG keys
+  tls.CertificateRaw := nil;
+  clientCng := nil; // deletes test-owned persisted CNG keys
+  if fClientKeyReady then
+  begin
+    // Verify that releasing ICryptCertCng removed its temporary named key.
+    providerName := Utf8ToSynUnicode(provider.Provider);
+    keyName := Utf8ToSynUnicode(provider.Container);
+    providerHandle := nil;
+    if Test.Check(NCrypt.OpenStorageProvider(providerHandle,
+         pointer(providerName), 0) = NO_ERROR, 'open CNG cleanup provider') then
+    try
+      importedKey := nil;
+      if NCrypt.OpenKey(providerHandle, importedKey, pointer(keyName), 0,
+           provider.Flags and NCRYPT_MACHINE_KEY_FLAG) = NO_ERROR then
+      begin
+        NCrypt.FreeObject(NCRYPT_HANDLE(importedKey));
+        Test.Check(false, 'Schannel client PFX key was not deleted');
+      end;
+    finally
+      NCrypt.FreeObject(NCRYPT_HANDLE(providerHandle));
+    end;
+  end;
+  if socket <> nil then
+    socket.ShutdownAndClose(false);
+  if keyfile <> '' then
+    DeleteFile(keyfile);
+end;
+
+class procedure TRunCase.DoRunCase(Sender: TObject);
+var
+  runcase: TRunCase;
+begin
+  try
+    runcase := nil;
+    try
+      runcase := Sender as TRunCase;
+      runcase.Execute;
+    except
+      on E: Exception do
+      begin
+        TSynLog.Add.Log(sllDebug, 'Execute raised %', [E.ClassType]);
+        if Assigned(runcase) then
+          runcase.Test.CheckUtf8(PClass(E)^ = ENetSock, 'Raised %', [E]);
+      end;
+    end;
+  finally
+    Sender.Free;
+  end;
+end;
+
+procedure TRunCase.Execute;
+var
+  http: THttpServerSocketGeneric;
+  tls: TNetTlsContext;
+  cafile, keyfile: TFileName;
+  der: RawByteString;
+  raw: PCCERT_CONTEXT;
+  connected: boolean;
+  log: ISynLog;
+begin
+  TSynLog.EnterLocal(log, 'Execute %', [Port], self);
+  cafile := '';
+  keyfile := '';
+  raw := nil;
+  InitNetTlsContext(tls);
+  if not (stfOpenSslServer in Flags) then
+  begin
+    tls.CertificateBin := Server.Save(
+      cccCertWithPrivateKey, '3des=mtls-test', ccfBinary);
+    tls.PrivatePassword := 'mtls-test';
+  end
+  else
+  begin
+    tls.CertificateBin := Server.Save(cccCertOnly, '', ccfPem);
+    keyfile := MakeString([Test.WorkDir, 'openssl-mtls-server-', Port, '.pem']);
+    Test.Check(FileFromString(
+      Server.Save(cccPrivateKeyOnly, '', ccfPem), keyfile));
+    tls.PrivateKeyFile := StringToUtf8(keyfile);
+  end;
+  tls.ClientCertificateAuthentication := not (stfOneWayTls in Flags);
+  tls.IgnoreCertificateErrors := true; // must not disable server mTLS checks
+  tls.DisableTls13 := stfDisableTls13 in Flags;
+  tls.WithPeerInfo := true;
+  if stfCallbacks in Flags then
+  begin
+    tls.OnEachPeerVerify    := OnEachCertificate;
+    tls.OnAfterPeerValidate := OnAfterCertificate;
+  end;
+  case Trust of
+    sttDefault:
+      ; // no explicit CA to use normal Windows trust
+    sttFile:
+      begin
+        cafile := MakeString([Test.WorkDir, 'schannel-mtls-ca-', Port, '.pem']);
+        Test.Check(FileFromString(
+          Authority.Save(cccCertOnly, '', ccfPem), cafile));
+        tls.CACertificatesFile := StringToUtf8(cafile);
+      end;
+    sttRaw:
+      begin
+        der := Authority.Save(cccCertOnly, '', ccfBinary);
+        raw := CertCreateCertificateContext(X509_ASN_ENCODING,
+          pointer(der), length(der));
+        Test.Check(raw <> nil);
+        SetLength(tls.CACertificatesRaw, 1);
+        tls.CACertificatesRaw[0] := raw;
+      end;
+    sttSystem:
+      tls.CASystemStores := [scsRoot];
+  end;
+  http := THttpAsyncServer.Create(Port, nil, nil, Join(['mtls-', Port]),
+    {threads=}1, 5000, [hsoEnableTls], TSynLog);
+  try
+    if Trust = sttRaw then
+    begin
+      Test.CheckEqual(length(tls.CACertificatesRaw), 1,
+        'CACertificatesRaw length before WaitStarted');
+      Test.Check(tls.CACertificatesRaw[0] = raw,
+        'CACertificatesRaw pointer before WaitStarted');
+      Test.Check(tls.CACertificatesFile = '',
+        'unexpected CACertificatesFile');
+      Test.Check(tls.CASystemStores = [],
+        'unexpected CASystemStores');
+    end;
+    if stfHugeContent in Flags then
+    begin
+      http.OnRequest := DoHugeRequest;
+      // otherwise the default maximum body size may interfere
+      http.MaximumAllowedContentLength := length(Body) * 2;
+    end;
+    http.WaitStarted(10, @tls);
+    // AfterBind owns independent references/copies of all custom trust input.
+    if raw <> nil then
+    begin
+      CertFreeCertificateContext(raw);
+      raw := nil;
+    end;
+    if cafile <> '' then
+      DeleteFile(cafile);
+    if keyfile <> '' then
+      DeleteFile(keyfile);
+    connected := TlsClient(Port, Client);
+    // Reject a false-positive negative test caused by client setup failure.
+    if (stfSchannelClient in Flags) and
+       (Client <> nil) then
+    begin
+      Test.Check(fClientKeyReady, 'Schannel client PFX was not imported');
+      Test.CheckUtf8(PosEx('SEC_E_NO_CREDENTIALS', fClientError) = 0,
+        'Schannel rejected the imported CNG key: %', [fClientError]);
+    end;
+    if Assigned(log) then
+      log.Log(sllDebug, 'Execute: connected=% fEachCount=% fAfterCount=% ' +
+        'fAfterUseful=% fEachCount=% fEachInvalid=%',
+        [ord(connected), fEachCount, fAfterCount,
+         fAfterUseful, fEachCount, fEachInvalid], self);
+    Test.CheckUtf8(connected = (stfExpected in Flags), 'connected=% expected=% [%]',
+      [ord(connected), ord(stfExpected in Flags), fClientError]);
+    if (stfCallbacks in Flags) and
+       not (stfRejectEach in Flags) then
+    begin
+      Test.Check(fEachCount > 0, 'eachcount1');
+      Test.CheckEqual(fEachUseful, fEachCount);
+      Test.CheckEqual(fAfterCount, 1);
+      Test.CheckEqual(fAfterUseful, 1);
+    end
+    else if stfRejectEach in Flags then
+    begin
+      Test.Check(fEachCount > 0, 'eachcount2');
+      Test.CheckEqual(fAfterCount, 0);
+    end;
+    if stfEachInvalid in Flags then
+      Test.Check(fEachInvalid > 0, 'EachInvalid');
+  finally
+    http.Free;
+    if raw <> nil then
+      CertFreeCertificateContext(raw);
+    if cafile <> '' then
+      DeleteFile(cafile);
+    if keyfile <> '' then
+      DeleteFile(keyfile);
+  end;
+end;
+
+procedure TNetworkProtocols._SChannel;
+var
+  body: RawByteString; // reuse the same 16MB random content
+  expectedHash: cardinal;
+
+  procedure RunCase(const Port: RawUtf8; Trust: TSChannelTestTrust;
+    const Server, Authority, Client: ICryptCert; Flags: TSChannelTestFlags = []);
+  var
+    c: TRunCase;
+  begin
+    c := TRunCase.Create;
+    c.Test := self;
+    c.Port := Port;
+    c.Trust := Trust;
+    c.Server := Server;
+    c.Authority := Authority;
+    c.Client := Client;
+    c.Flags := Flags;
+    c.Body := body;
+    c.ExpectedHash := expectedHash;
+    Run(TRunCase.DoRunCase, c, Port);
+  end;
+
+var
+  previous: TNewNetTls;
+  algo: TCryptCertAlgo;
+  store: TWinCertStore;
+  ca, unknownca: ICryptCert;
+  server, valid, unknown, expired, wrongusage: ICryptCert;
+begin
+  if OSVersion < wSeven then // no TLS 1.2 available before Windows Seven
+  begin
+    AddConsole('Deprecated system: skipping SChannel mTLS');
+    exit;
+  end;
+  if not OpenSslIsAvailable then
+  begin
+    AddConsole('OpenSSL unavailable: skipping SChannel mTLS integration test');
+    exit;
+  end;
+  // P-256 key generation is much faster than RSA-2048 and is supported by
+  // both the OpenSSL test client and the CNG-backed SChannel server
+  algo := CryptCertOpenSsl[caaES256]; // CryptCertX509[] makes error
+  if algo = nil then
+  begin
+    Check(false, 'OpenSSL X.509 ECDSA P-256 support unavailable');
+    exit;
+  end;
+  ca := algo.Generate([cuCA, cuKeyCertSign], 'mORMot SChannel test CA');
+  unknownca  := algo.Generate([cuCA, cuKeyCertSign], 'mORMot unknown test CA');
+  server     := algo.Generate([cuTlsServer], 'localhost', ca);
+  valid      := algo.Generate([cuTlsClient], 'valid client', ca);
+  unknown    := algo.Generate([cuTlsClient], 'unknown client', unknownca);
+  expired    := algo.Generate([cuTlsClient], 'expired client', ca, -2, -10);
+  wrongusage := algo.Generate([cuTlsServer], 'wrong usage client', ca);
+  Check(ca <> nil, 'ca');
+  Check(unknownca <> nil, 'unknownca');
+  Check(server <> nil, 'server');
+  Check(valid <> nil, 'valid');
+  Check(unknown <> nil, 'unknown');
+  Check(expired <> nil, 'expired');
+  Check(wrongusage <> nil, 'wrongusage');
+  RandomByteString(16 shl 20 + 7777, body); // 16 MB seems fair enough
+  expectedHash := crc32cHash(body);
+  // -------- first pass using SChannel on server side
+  previous := NewNetTls;
+  NewNetTls := NewSChannelNetTls; // server under test; client is explicit OpenSSL
+  try
+    // accept a valid client certificate from the configured CA
+    RunCase('18991', sttFile, server, ca, valid,
+      [stfExpected, stfCallbacks]);
+    // reject a client providing no certificate
+    RunCase('18992', sttFile, server, ca, nil);
+    // reject a client certificate issued by an unknown CA
+    RunCase('18993', sttFile, server, ca, unknown);
+    // reject an expired client certificate
+    RunCase('18994', sttFile, server, ca, expired);
+    // reject a certificate without the TLS client usage
+    RunCase('18995', sttFile, server, ca, wrongusage);
+    // accept a valid client using a raw PCCERT_CONTEXT trust anchor
+    RunCase('18996', sttRaw, server, ca, valid,
+      [stfExpected]);
+    // reject the private CA when using default Windows trust
+    RunCase('18997', sttDefault, server, ca, valid);
+    // let OnEachPeerVerify reject an otherwise valid client
+    RunCase('18998', sttFile, server, ca, valid,
+      [stfCallbacks, stfRejectEach]);
+    // let OnEachPeerVerify override an expired-certificate error
+    RunCase('18999', sttFile, server, ca, expired,
+      [stfExpected, stfCallbacks, stfEachInvalid]);
+    // accept a valid client over TLS 1.2 with TLS 1.3 disabled
+    RunCase('19000', sttFile, server, ca, valid,
+      [stfExpected, stfDisableTls13]);
+    // prove that the unknown client is valid when its issuing CA is trusted
+    RunCase('19001', sttFile, server, unknownca, unknown,
+      [stfExpected]);
+    // existing one-way SChannel HTTPS behavior must remain unchanged
+    RunCase('19002', sttFile, server, ca, nil,
+      [stfExpected, stfOneWayTls]);
+    // validate many TLS records (huge POST) over TLS 1.2
+    RunCase('19003', sttFile, server, ca, valid,
+      [stfExpected, stfHugeContent, stfDisableTls13]);
+    // Schannel client using a persisted, automatically cleaned-up PFX key
+    RunCase('19006', sttFile, server, ca, valid,
+      [stfExpected, stfSchannelClient, stfDisableTls13]);
+    // no client certificate: server must reject the request
+    RunCase('19007', sttFile, server, ca, nil,
+      [stfSchannelClient, stfDisableTls13]);
+    // an unknown client CA must not be accepted
+    RunCase('19008', sttFile, server, ca, unknown,
+      [stfSchannelClient, stfDisableTls13]);
+    // same with TLS 1.3 where supported
+    if OSVersion >= wEleven then
+    begin
+      // validate huge POST over SChannel TLS 1.3
+      RunCase('19004', sttFile, server, ca, valid,
+        [stfExpected, stfHugeContent]);
+      // trigger TLS 1.3 renegotiation from client side
+      RunCase('19005', sttFile, server, ca, valid,
+        [stfExpected, stfHugeContent, stfKeyUpdate]);
+    end;
+    RunWait;
+    // -------- second pass using OpenSSL on server side
+    NewNetTls := NewOpenSslNetTls;
+    // accept a valid client certificate from the configured CA
+    RunCase('19010', sttFile, server, ca, valid,
+      [stfExpected, stfCallbacks, stfOpenSslServer]);
+    // CASystemStores integration test with OpenSSL
+    store := TWinCertStore.Create(scsRoot);
+    try
+      if store.Next then
+        RunCase('19011', sttSystem, server, ca, valid,
+          [stfOpenSslServer])
+      else
+        AddConsole('empty current-user ROOT store: skip 19011');
+    finally
+      store.Free;
+    end;
+    // missing client certificate must be rejected by OpenSSL
+    RunCase('19012', sttFile, server, ca, nil,
+      [stfOpenSslServer]);
+    // an OpenSSL callback must be able to reject an otherwise valid certificate
+    RunCase('19013', sttFile, server, ca, valid,
+      [stfCallbacks, stfRejectEach, stfOpenSslServer]);
+    // an OpenSSL callback may override an expired-certificate error
+    RunCase('19014', sttFile, server, ca, expired,
+      [stfExpected, stfCallbacks, stfOpenSslServer, stfEachInvalid]);
+    // existing one-way OpenSSL HTTPS behavior must remain unchanged
+    RunCase('19015', sttFile, server, ca, nil,
+      [stfExpected, stfOneWayTls, stfOpenSslServer]);
+    // validate huge POST over OpenSSL
+    RunCase('19016', sttFile, server, ca, valid,
+      [stfExpected, stfHugeContent]);
+    // trigger TLS 1.3 renegotiation from client side
+    RunCase('19017', sttFile, server, ca, valid,
+      [stfExpected, stfHugeContent, stfKeyUpdate]);
+    // Schannel client interoperability with an OpenSSL mTLS server
+    RunCase('19018', sttFile, server, ca, valid,
+      [stfExpected, stfOpenSslServer, stfSchannelClient, stfDisableTls13]);
+    RunCase('19019', sttFile, server, ca, nil,
+      [stfOpenSslServer, stfSchannelClient, stfDisableTls13]);
+    RunCase('19020', sttFile, server, ca, unknown,
+      [stfOpenSslServer, stfSchannelClient, stfDisableTls13]);
+    RunWait;
+  finally
+    NewNetTls := previous;
+  end;
+end;
+
+{$endif SCHANNEL_VERIFY}
+
 
 
 end.

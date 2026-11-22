@@ -1,0 +1,13 @@
+# Human-edited configuration: same structure as the slide examples
+{
+  server: {
+    host: localhost
+    port: 8080
+    tls: true
+  }
+  paths: ["/srv/data", "/var/log/jop"]
+  limits: {
+    retry: 3
+    timeout: 30
+  }
+}

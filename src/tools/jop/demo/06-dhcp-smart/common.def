@@ -1,0 +1,6 @@
+$$
+# Local shared definitions for two scopes
+lease = 3600
+dns = 192.168.50.1
+gateway = 192.168.50.1
+$$

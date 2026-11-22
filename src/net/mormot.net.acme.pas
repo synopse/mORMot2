@@ -44,6 +44,7 @@ uses
   mormot.crypt.core,
   mormot.crypt.jwt,
   mormot.crypt.secure,
+  mormot.crypt.factory,
   mormot.lib.openssl11, // for per-domain-name PSSL_CTX certificates
   mormot.net.sock,
   mormot.net.http,
@@ -1611,8 +1612,9 @@ begin
       Request.SockSend('HTTP/1.0 404 Not Found')
   else
   begin
-    // redirect GET or POST on port 80 to port 443 using 301 or 308 response
-    if HttpMethodWithNoBody(Request.Http.CommandMethod) then
+    // redirect HTTP to HTTPS using 301 for GET/HEAD, or preserve method with 308
+    if IsGet(Request.Http.CommandMethod) or
+       IsHead(Request.Http.CommandMethod) then
       Request.SockSend('HTTP/1.0 301 Moved Permanently')
     else
       Request.SockSend('HTTP/1.0 308 Permanent Redirect');
@@ -1633,7 +1635,7 @@ begin
       // redirect to the same URI but on HTTPS host
       Request.SockSendLine([
         'Location: https://', Request.Http.Host, Request.Http.CommandUri]);
-    // 301 and 308 responses expect no body
+    // no response body for these redirects
   end;
   // finalize the headers and send the response body
   Request.SockSend([
@@ -1641,7 +1643,7 @@ begin
     'Content-Length: ', length(body), #13#10 +
     'Connection: Close'#13#10]);
   if (body <> '') and
-     HttpMethodWithNoBody(Request.Http.CommandMethod) then
+     IsHead(Request.Http.CommandMethod) then
     body := ''; // if the ACME server tries a HEAD (unlikely)
   Request.SockSendFlush(body);
   // no regular OnRequest() event: we have sent the response

@@ -865,7 +865,9 @@ type
     procedure AddStrings(const Text: RawUtf8; count: PtrInt); overload;
     /// append a ShortString - and ensure has space for 255 chars (including Text)
     procedure AddShort(const Text: ShortString); overload;
-    /// append a ShortString - or at least a small buffer typically < 256 chars
+    /// append a ShortString - or at least a small buffer < 256 chars
+    // - security warning: the caller should ensure TextLen is <= 255 bytes (in
+    // fact < fTempBufSize - 16) - otherwise, use AddNoJsonEscape()
     procedure AddShort(Text: PUtf8Char; TextLen: PtrInt); overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// append a TShort8 - Text should be not '', and up to 8 chars long
@@ -5292,7 +5294,7 @@ begin
     if i = HighValues then
       break;
     if Sep <> '' then
-      AddShort(pointer(Sep), PStrLen(PtruInt(Sep) - _STRLEN)^);
+      AddNoJsonEscape(pointer(Sep), PStrLen(PtruInt(Sep) - _STRLEN)^);
     if Reverse then
       dec(i)
     else
@@ -7678,14 +7680,14 @@ type
 const
   ROUNDER = $80000000;
 
-{$ifdef ASMINTEL} // our faster version using 128-bit x86_64 multiplication
+{$ifdef ASMINTELARM} // our faster version using 128-bit x86_64 multiplication
 
 procedure d2a_diy_fp_multiply(var x, y: TDIY_FP; normalize: boolean;
   out result: TDIY_FP); {$ifdef HASINLINE}inline;{$endif}
 var
   p: THash128Rec;
 begin
-  mul64x64(x.f, y.f, p); // fast x86_64 / i386 asm
+  mul64x64(x.f, y.f, p); // fast x86_64 / i386 / armv7 / aarch64 asm
   if (p.c1 and ROUNDER) <>  0 then
     inc(p.h);
   result.f := p.h;
@@ -7722,7 +7724,7 @@ begin
     end;
 end;
 
-{$endif ASMINTEL}
+{$endif ASMINTELARM}
 
 const
   // alpha =-61; gamma = 0
@@ -7830,7 +7832,7 @@ begin
 end;
 
 type
-  TSplitFloat = packed record
+  TSplitFloat = record
     case byte of
       0: (f: double);
       1: (b: array[0..7] of byte);
@@ -8859,9 +8861,9 @@ begin // used e.g. by FastVarDataComp() for diverse non-complex VType
   VariantToTempUtf8(PVariant(A)^, at, flags);
   VariantToTempUtf8(PVariant(B)^, bt, flags);
   if caseInsensitive then
-    result := StrIComp(at.Text, bt.Text)
+    result := mormot.core.unicode.StrIComp(at.Text, bt.Text)
   else
-    result := StrComp(at.Text, bt.Text);
+    result := mormot.core.base.StrComp(at.Text, bt.Text);
   TempUtf8Done(at);
   TempUtf8Done(bt);
 end;
@@ -10833,6 +10835,7 @@ begin
     Head := GotoNextLine(p + plen);
     // parse each line pairs
     repeat
+      p := GotoNextNotSpace(p);
       if IdemPChar(p, '__SECURE-') then
         inc(p, 9); // e.g. if rsoCookieSecure is in Server.Options
       new.NameLen := GetNextItemTrimedLineBuffer(p, '=', new.NameStart);
@@ -10892,6 +10895,7 @@ begin // same logic than THttpCookies.ParseServer above
         break;
       Headers := GotoNextLine(p + plen);
       repeat
+        p := GotoNextNotSpace(p);
         if IdemPChar(p, '__SECURE-') then
           inc(p, 9);
         l := GetNextItemTrimedLineBuffer(p, '=', n);
