@@ -2113,14 +2113,17 @@ type
 // is defined for TPollSocketEpoll.FollowEpoll = true
 
 constructor TPollSocketEpoll.Create(aOwner: TPollSockets);
+{$ifdef OSLINUX}
 var
   e: TEPoll_Event;
   err: integer;
+{$endif OSLINUX}
 begin
   inherited Create(aOwner);
   fEPFD := epoll_create(10000); // since 2.6.8 size is ignored
   if fEPFD <= 0 then
     exit;
+  {$ifdef OSLINUX} // Delphi Android defines OSANDROID but not OSLINUX
   // keep the wakeup fd readable after termination: all concurrent waiters
   // must be released, not just the first one (level-triggered epoll)
   fWakeFD := LinuxEventFD({nonblocking=}true, {semaphore=}false);
@@ -2137,6 +2140,7 @@ begin
     FileClose(fWakeFD);
     fWakeFD := 0; // unsupported: keep the legacy timeout behavior
   end;
+  {$endif OSLINUX}
 end;
 
 destructor TPollSocketEpoll.Destroy;
@@ -2157,8 +2161,10 @@ procedure TPollSocketEpoll.Terminate;
 begin
   inherited Terminate; // set fTerminated flag
   // use fWakeFD to release any pending WaitForModified()
+  {$ifdef OSLINUX}
   if fWakeFD > 0 then
     LinuxEventFDWrite(fWakeFD, 1);
+  {$endif OSLINUX}
 end;
 
 class function TPollSocketEpoll.FollowEpoll: boolean;
