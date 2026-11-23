@@ -10,7 +10,7 @@ A small JSON file with a few settings is easy to read, easy to edit, and univers
 
 At that point, plain JSON starts to show its limits.
 
-The job of **JOP ("JSON Object PreProcessor")** is not to define another JSON-like format, but to **generate better JSON**. 
+The job of **JOP ("JSON Open PreProcessor")** is not to define another JSON-like format, but to **generate better JSON**.
 
 This `README.md` file documents the `jop` tool in its initial state of 20 November 2026.
 
@@ -73,8 +73,8 @@ integers, decimal numbers, booleans and null. Zero items writes an empty root
 array when depth is positive.
 
 Defaults are depth 3 and 10 items. `--seed` accepts an unsigned 32-bit value;
-without it, the current tick count supplies the seed. A local `TLecuyer` gives
-repeatable output without changing the process random state. Transient strings
+without it, a random seed is used. A local `TLecuyer` gives
+repeatable output per seed without changing the process random state. Transient strings
 use `TShort31`, and values go straight to `TJsonWriter`. Generation writes to
 a temporary sibling and finishes with native `ReplaceFile`.
 
@@ -86,7 +86,7 @@ function JopGenerate(W: TJsonWriter; Depth, Items: integer;
 This entry point neither owns nor flushes the caller's writer. Discard partial
 output if it returns an error.
 
-### Compact JSON comparison
+### JSON data comparison
 
 ```pascal
 function JopCompareFiles(const Left, Right: TFileName; out Equal: boolean;

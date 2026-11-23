@@ -29,7 +29,7 @@ Each Tool will have its own dedicated sub-folder.
 
 ### jop
 
-[The purpose of **JOP ("JSON Object PreProcessor")**](./jop) is not to define another JSON-like format, but to **generate better JSON**. 
+[The purpose of **JOP ("JSON Open PreProcessor")**](./jop) is not to define another JSON-like format, but to **generate better JSON**.
 
 It is a command line tool to convert between flavors of JSON, YAML or XML, with optional pre-processing with simple macros substitution and include files.
 

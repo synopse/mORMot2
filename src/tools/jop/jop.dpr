@@ -145,8 +145,6 @@ var
   w: TJsonWriter;
 begin
   result := jeWrite;
-  Info := '';
-  temp := '';
   try
     try
       target := ExpandFileName(Dest);
@@ -213,9 +211,9 @@ begin
   c.ExeDescription := DESCRIPTION;
   command := jcConvert;
   offset := 0;
-  seed := Random32;
+  seed := Random32; // default
   first := '';
-  if length(c.Args) <> 0 then
+  if c.Args <> nil then
     first := c.Args[0];
   for candidate := low(candidate) to high(candidate) do
     if IdemPropNameU(first, COMMAND_NAMES[candidate]) then
@@ -346,7 +344,7 @@ begin
   if stats then
     ConsoleWrite('Bytes: % input + % included -> % output; % us; % MB/s',
       [statistics.InputBytes, statistics.IncludeBytes, statistics.OutputBytes,
-       statistics.ElapsedMicroSeconds, JopThroughput(statistics)]);
+       statistics.ElapsedMicroSeconds, TwoDigits(JopThroughput(statistics))]);
   if error <> jeSuccess then
     ErrorToConsole(error, info)
   else

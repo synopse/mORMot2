@@ -457,14 +457,14 @@ procedure JopAddStatistics(Dest: PJopStatistics; const Added: TJopStatistics);
 begin
   if Dest = nil then
     exit;
-  inc(Dest^.FilesSucceeded, Added.FilesSucceeded);
-  inc(Dest^.FilesFailed, Added.FilesFailed);
-  inc(Dest^.FilesSkipped, Added.FilesSkipped);
-  inc(Dest^.IncludeFiles, Added.IncludeFiles);
-  inc(Dest^.InsertFiles, Added.InsertFiles);
-  inc(Dest^.InputBytes, Added.InputBytes);
-  inc(Dest^.IncludeBytes, Added.IncludeBytes);
-  inc(Dest^.OutputBytes, Added.OutputBytes);
+  inc(Dest^.FilesSucceeded,      Added.FilesSucceeded);
+  inc(Dest^.FilesFailed,         Added.FilesFailed);
+  inc(Dest^.FilesSkipped,        Added.FilesSkipped);
+  inc(Dest^.IncludeFiles,        Added.IncludeFiles);
+  inc(Dest^.InsertFiles,         Added.InsertFiles);
+  inc(Dest^.InputBytes,          Added.InputBytes);
+  inc(Dest^.IncludeBytes,        Added.IncludeBytes);
+  inc(Dest^.OutputBytes,         Added.OutputBytes);
   inc(Dest^.ElapsedMicroSeconds, Added.ElapsedMicroSeconds);
 end;
 
@@ -845,6 +845,7 @@ begin
       p := GotoNextNotSpace(p);
       if p^ in ['{', '['] then
       begin
+        // parse a JSON object or array as a TDocVariant container
         if TDocVariantData(doc).InitJsonInPlace(p, docOptions) = nil then
           exit;
       end
@@ -870,7 +871,8 @@ begin
           W.AddNoJsonEscape(pointer(text), length(text));
           result := jeSuccess;
         end;
-      jfMd, jfMdPipe:
+      jfMd,
+      jfMdPipe:
         begin
           mdFormat := ttfMarkdownCsv;
           if opt.OutputFormat = jfMdPipe then
@@ -1181,9 +1183,10 @@ var
   infmt, outfmt: TJopFormat;
   allfiles, excludeoutput: boolean;
   i, j, n, c: PtrInt;
-  da: TDynArray;
+  f: ^TJopFileResult;
   started, finished: Int64;
   stats: TJopStatistics;
+  da: TDynArray;
 begin
   result := jeInvalidPath;
   Files := nil;
@@ -1231,6 +1234,7 @@ begin
       excludeoutput := JopWithinFolder(output, root) and
                        not JopSameFileName(output, root);
       SetLength(Files, length(matches));
+      f := pointer(Files);
       n := 0;
       for i := 0 to high(matches) do
       begin
@@ -1238,29 +1242,31 @@ begin
         if excludeoutput and
            JopWithinFolder(name, output) then
           continue;
-        Files[n].Source := name;
+        f.Source := name;
         infmt := Options.InputFormat;
         if infmt = jfAuto then
           JopFormatFromFileName(name, infmt);
         if not (infmt in JOP_INPUT_FORMATS) then
         begin
           if allfiles then
-            Files[n].Status := jfsSkipped
+            f.Status := jfsSkipped
           else
           begin
-            Files[n].Status := jfsFailed;
-            Files[n].Error := jeUnsupportedInput;
+            f.Status := jfsFailed;
+            f.Error := jeUnsupportedInput;
           end;
-          inc(n);
-          continue;
+        end
+        else
+        begin
+          outfmt := Options.OutputFormat;
+          if outfmt = jfAuto then
+            outfmt := JopDefaultOutput(infmt);
+          relative := copy(name, length(root) + 1, MaxInt);
+          f.Dest := ChangeFileExt(output + relative,
+            JOP_FORMAT_EXTENSIONS[outfmt]);
         end;
-        outfmt := Options.OutputFormat;
-        if outfmt = jfAuto then
-          outfmt := JopDefaultOutput(infmt);
-        relative := copy(name, length(root) + 1, MaxInt);
-        Files[n].Dest := ChangeFileExt(output + relative,
-          JOP_FORMAT_EXTENSIONS[outfmt]);
         inc(n);
+        inc(f);
       end;
       SetLength(Files, n);
       result := jeNoFiles;
@@ -1269,15 +1275,17 @@ begin
       // Include skipped sources in collision checks before writing any output.
       SetLength(names, n * 2);
       c := 0;
-      for i := 0 to n - 1 do
+      f := pointer(Files);
+      for i := 1 to n do
       begin
-        names[c] := Files[i].Source;
+        names[c] := f.Source;
         inc(c);
-        if Files[i].Dest <> '' then
+        if f.Dest <> '' then
         begin
-          names[c] := Files[i].Dest;
+          names[c] := f.Dest;
           inc(c);
         end;
+        inc(f);
       end;
       SetLength(names, c);
       da.Init(TypeInfo(TFileNameDynArray), names);
@@ -1296,28 +1304,30 @@ begin
           exit;
         end;
       result := jeSuccess;
+      f := pointer(Files);
       for i := 0 to n - 1 do
       begin
-        if Files[i].Status = jfsPending then
+        if f.Status = jfsPending then
         begin
-          Files[i].Error := JopProcessFile(Files[i].Source, Files[i].Dest,
-            Options, @stats, @Files[i].Info);
-          if Files[i].Error = jeSuccess then
+          f.Error := JopProcessFile(f.Source, f.Dest,
+            Options, @stats, @f.Info);
+          if f.Error = jeSuccess then
             if jofDryRun in Options.Flags then
-              Files[i].Status := jfsSkipped
+              f.Status := jfsSkipped
             else
-              Files[i].Status := jfsSucceeded
+              f.Status := jfsSucceeded
           else
-            Files[i].Status := jfsFailed;
+            f.Status := jfsFailed;
         end;
-        if (Files[i].Status = jfsFailed) and
+        if (f.Status = jfsFailed) and
            (result = jeSuccess) then
         begin
-          result := Files[i].Error;
-          context := Files[i].Source;
+          result := f.Error;
+          context := f.Source;
           if Info <> nil then
-            Info^ := Files[i].Info;
+            Info^ := f.Info;
         end;
+        inc(f);
       end;
     except
       on E: Exception do
