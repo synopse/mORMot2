@@ -180,6 +180,8 @@ type
     {$endif OSPOSIX}
     /// validate THttpServerGeneric.OnBodyDownload streamed body upload
     procedure DoHttpBodyDownload(Sender: TObject);
+    /// validate chunked bodies with trailer fields and pipelined requests
+    procedure DoHttpChunkTrailers(Sender: TObject);
     /// validate THttpAsyncServer "Expect: 100-continue" interim response
     procedure DoHttpExpect100(Sender: TObject);
     function DoExpectRequest(Ctxt: THttpServerRequestAbstract): cardinal;
@@ -670,6 +672,7 @@ begin
   Run(DoHttpProxyServer, self, 'HttpProxyServer', true, false);
   Run(DoHttpFastCgi, self, 'HttpFastCgi', true, false);
   Run(DoHttpBodyDownload, self, 'HttpBodyDownload', true, false);
+  Run(DoHttpChunkTrailers, self, 'HttpChunkTrailers', true, false);
   Run(DoHttpExpect100, self, 'HttpExpect100', true, false);
   Run(DoHttpFileRange, self, 'HttpFileRange', true, false);
   Run(DoHttpOutStream, self, 'HttpOutStream', true, false);
@@ -8262,6 +8265,115 @@ begin
     end;
   finally
     srv.Free;
+  end;
+end;
+
+procedure TNetworkProtocols.DoHttpChunkTrailers(Sender: TObject);
+const
+  FIRST = 'POST /first HTTP/1.1'#13#10'Host: localhost'#13#10 +
+          'Transfer-Encoding: chunked'#13#10#13#10'3'#13#10'abc';
+  LAST = #13#10'0'#13#10;
+  SECOND = 'GET /second HTTP/1.1'#13#10'Host: localhost'#13#10#13#10;
+  FIELD = 'X-One: 1'#13#10;
+  SERVERS: array[0..2] of THttpServerSocketGenericClass =
+    (THttpServer, THttpAsyncServer, THttpAsyncServer);
+var
+  ctx: THttpRequestContext;
+  st: TProcessParseLine;
+  srv: THttpServerSocketGeneric;
+  sock: THttpSocket;
+  mode, sample, reply: integer;
+  options: THttpServerOptions;
+  input, line, expected: RawUtf8;
+begin
+  FillCharFast(ctx, SizeOf(ctx), 0);
+  ctx.ResetZero;
+  ctx.State := hrsGetCommand;
+  input := FIRST + LAST + FIELD + #13#10 + SECOND;
+  st.P := UniqueRawUtf8(input); // ProcessRead replaces each consumed CR in place.
+  st.Len := length(input) - length(SECOND) - 1;
+  Check(ctx.ProcessRead(st, false) and (ctx.State = hrsGetBodyChunkedHexFirst),
+    'trailer headers');
+  if Check(not ctx.ProcessRead(st, false) and
+           (ctx.State = hrsGetBodyChunkedDataLastLine) and (st.Len = 1),
+           'trailer waits for LF') then
+  begin
+    inc(st.Len, length(SECOND) + 1);
+    Check(ctx.ProcessRead(st, false) and (ctx.State = hrsWaitProcessing),
+      'trailer complete');
+    CheckEqual(CompareBuf(SECOND, st.P, st.Len), 0, 'trailer remainder');
+    ctx.ParseHeaderFinalize;
+    Check(not ctx.HeaderHasValue('X-ONE:'), 'trailer not in headers');
+  end;
+  for mode := 0 to high(SERVERS) do
+  begin
+    options := [];
+    if mode = 2 then
+      include(options, hsoEnablePipelining);
+    srv := SERVERS[mode].Create('19281', nil, nil, 'trailers', 2, 30000, options);
+    try
+      srv.OnRequest := DoExpectRequest;
+      srv.WaitStarted(10);
+      for sample := 0 to 5 do
+      begin
+        if (mode = 2) and (sample <> 2) then
+          continue;
+        input := FIRST + LAST;
+        case sample of
+          1: input := input + FIELD;
+          2: input := input + FIELD + 'X-Two: 2'#13#10;
+          3: input := FIRST + 'bad' + LAST;
+          4, 5:
+            begin
+              line := 'X: ' + RawUtf8OfChar('a', MaxHttpHeaderLineSize div 2 - 5);
+              input := input + line + #13#10 + line;
+              if sample = 5 then
+                input := input + 'a';
+              input := input + #13#10;
+            end;
+        end;
+        input := input + #13#10;
+        if mode = 2 then
+          input := input + SECOND;
+        sock := THttpSocket.Open('127.0.0.1', srv.SockPort, nlTcp, 2000);
+        try
+          sock.CreateSockIn;
+          sock.SndLow(input);
+          for reply := 1 to 2 do
+          begin
+            if reply = 1 then
+              expected := Make(['ok 3 ', CardinalToHexShort(crc32cHash('abc'))])
+            else
+              expected := 'ok 0 00000000';
+            if sample = 3 then
+              expected := '400'
+            else if sample = 5 then
+              expected := '413';
+            try
+              if (reply = 2) and (mode <> 2) then
+                sock.SndLow(SECOND);
+              sock.SockRecvLn(line);
+              line := copy(line, 10, 3);
+              if (line = '200') and sock.GetHeader then
+              begin
+                sock.GetBody;
+                line := sock.Http.Content;
+              end;
+            except
+              on E: ENetSock do
+                line := StringToUtf8(E.Message);
+            end;
+            if not CheckUtf8(line = expected, 'trailer reply %/%/%: % <> %',
+                [mode, sample, reply, line, expected]) or (sample in [3, 5]) then
+              break;
+          end;
+        finally
+          sock.Free;
+        end;
+      end;
+    finally
+      srv.Free;
+    end;
   end;
 end;
 

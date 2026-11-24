@@ -632,6 +632,7 @@ const
      hrsGetBodyChunkedHexNext,
      hrsGetBodyChunkedData,
      hrsGetBodyChunkedDataVoidLine,
+     hrsGetBodyChunkedDataLastLine,
      hrsGetBodyContentLengthFirst,
      hrsGetBodyContentLengthNext,
      hrsConnect];
@@ -3833,15 +3834,27 @@ begin
             exit; // not enough input
         end;
       hrsGetBodyChunkedDataVoidLine:
-        if ProcessParseLine(st) then // chunks end with a void line
-          State := hrsGetBodyChunkedHexNext
+        if ProcessParseLine(st) then
+          if st.LineLen = 0 then
+            State := hrsGetBodyChunkedHexNext
+          else
+            State := hrsErrorRejected
         else if State = hrsErrorRejected then
           break // notify the rejection now, not on the next input
         else
           exit; // not enough input
       hrsGetBodyChunkedDataLastLine:
-        if ProcessParseLine(st) then // last chunk void line
-          State := hrsWaitProcessing // notice: st.Len<>0 if pipelining
+        if ProcessParseLine(st) then
+          if st.LineLen = 0 then
+            State := hrsWaitProcessing
+          else
+          begin
+            // The last chunk set fContentLeft to zero. Bound all trailer fields
+            // and their delimiters to one header line's budget on both paths.
+            inc(fContentLeft, st.LineLen + 2);
+            if fContentLeft > MaxHttpHeaderLineSize then
+              State := hrsErrorPayloadTooLarge;
+          end
         else if State = hrsErrorRejected then
           break // notify the rejection now, not on the next input
         else
@@ -4377,8 +4390,16 @@ begin
       len := ParseHex0x(chunksize, {noOx=}true); // hexa chunk length
       if len = 0 then
       begin
-        SockRecvLn; // ignore next line (normally void)
-        break;      // reached the end of input stream
+        bytes := 0;
+        repeat
+          SockRecvLn(chunk);
+          if chunk = '' then
+            break;
+          inc(bytes, length(chunk) + 2);
+          if bytes > MaxHttpHeaderLineSize then
+            ESizeOverflow.RaiseFmt(self, 'GetBody: chunk trailers', []);
+        until false;
+        break;
       end;
       if len > MaxHttpChunkSize then // allow up to 256 MB chunk
         ESizeOverflow.RaiseFmt(self, 'GetBody: chunk len=%d', [len]);
@@ -4401,7 +4422,8 @@ begin
         SockInRead(@PByteArray(Http.Content)[Http.ContentLength], len); // append
       end;
       inc(Http.ContentLength, len);
-      SockRecvLn; // ignore next #13#10
+      if SockInReadLn(@chunksize, SizeOf(chunksize)) <> 0 then
+        EHttpSocket.RaiseUtf8('%.GetBody: invalid chunk delimiter', [self]);
     until false;
   end
   else if Http.ContentLength > 0 then
