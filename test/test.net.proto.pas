@@ -1272,6 +1272,8 @@ begin
 end;
 
 procedure TNetworkProtocols.DoTWebSocketAsyncServer(Sender: TObject);
+const
+  EMPTY_PONG: array[0..1] of byte = ($8a, 0);
 var
   server: TWebSocketAsyncServerRest;
   bcast: TWebSocketBroadcastTask;
@@ -1364,6 +1366,9 @@ begin
         if not Check(client.SockReceivePending(1000) = cspDataAvailable,
             'broadcast received') then
           break;
+        if i = 1 then
+          Check(server.Async.Sockets.WriteNoClose(server.Async.ConnectionFind(
+            bcast.ConnHandle), @EMPTY_PONG, SizeOf(EMPTY_PONG), 1000), 'write pong');
         // Leave the WebSocket frame unread and force a RST. The next
         // WebSocketBroadcast() should survive an eventual failed Write().
         client.Sock.SetLinger(0); // 0 = abortive close (TCP RST)
