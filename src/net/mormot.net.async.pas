@@ -486,15 +486,20 @@ type
     function OnError(connection: TPollAsyncConnection;
       events: TPollSocketEvents): boolean; override;
     procedure OnClosed(connection: TPollAsyncConnection); override;
-    // caller (OnRead/AsyncResponse) owns closing on failure
-    function WriteNoClose(connection: TPollAsyncConnection;
-      data: pointer; datalen: integer; timeout: integer): boolean;
   public
     /// add some data to the asynchronous output buffer of a given connection
     // - this overriden method will also log the write operation if needed
     // - can be executed from an TAsyncConnection.OnRead method
     function Write(connection: TPollAsyncConnection;
       data: pointer; datalen: integer; timeout: integer = 5000): boolean; override;
+    /// add some data to the asynchronous output buffer of a given connection
+    // - won't close the connection on failure, unlike Write(): the caller owns
+    // closing, e.g. from the OnRead method of another connection
+    // - acquires the connection write lock, and may call AfterWrite() within
+    // this lock if all data could be sent immediately
+    // - returns true if the data was sent or queued
+    function WriteNoClose(connection: TPollAsyncConnection;
+      data: pointer; datalen: integer; timeout: integer): boolean;
   published
     /// how many connections have been handled by the poll, from the beginning
     property Total: integer
