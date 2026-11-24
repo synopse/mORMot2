@@ -5984,6 +5984,20 @@ var
   ms: TRawByteStringStream;
   req: THttpServerRequest;
 
+  procedure CheckResponse(Code: integer; DefaultOk, InformationalOk: boolean);
+  var
+    status: integer;
+  begin
+    ctx.CommandUri := FormatUtf8('HTTP/1.1 % Test', [Code]);
+    CheckUtf8(ctx.ParseResponse(status) = DefaultOk, ctx.CommandUri);
+    if DefaultOk then
+      CheckEqual(status, Code, ctx.CommandUri);
+    status := 0;
+    CheckUtf8(ctx.ParseResponse(status, true) = InformationalOk, ctx.CommandUri);
+    if InformationalOk then
+      CheckEqual(status, Code, ctx.CommandUri);
+  end;
+
   procedure CheckBadLocation(const Location: RawUtf8);
   begin
     s := '/unchanged';
@@ -6768,6 +6782,13 @@ begin
   Check(ctx.ValidateRange, 'huge end offset'); // RangeOffset + RangeLength would
   CheckEqual(ctx.ContentLength, 900, 'huge end tosend'); // overflow to negative
   CheckEqual(ctx.RangeLength, 1000, 'huge end total');
+  CheckResponse(99, false, false);
+  CheckResponse(100, false, true);
+  CheckResponse(101, false, true);
+  CheckResponse(103, false, true);
+  CheckResponse(200, true, true);
+  CheckResponse(599, true, true);
+  CheckResponse(600, false, false);
   // validate OutContentStreamToBuffer() for the non-streaming servers
   req := THttpServerRequest.Create(nil, 0, nil, 0, [], nil);
   try

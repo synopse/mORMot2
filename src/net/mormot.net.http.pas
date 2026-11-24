@@ -526,8 +526,11 @@ type
     function ParseCommand: boolean;
     /// parse CommandUri into result fields on client side
     // - e.g. from CommandUri = 'HTTP/1.1 200 OK'
-    // - returns 0 on parsing error, or the HTTP status (e.g. 200)
-    function ParseResponse(out RespStatus: integer): boolean;
+    // - returns true and the HTTP status (e.g. 200) within 200..599, or within
+    // 100..599 if AllowInformational is set, e.g. to forward 1xx responses
+    // - RespStatus is not meaningful when false is returned
+    function ParseResponse(out RespStatus: integer;
+      AllowInformational: boolean = false): boolean;
     /// parse a HTTP header text line into Header and fill internal properties
     // - with default HeadersUnFiltered=false, only relevant headers are retrieved:
     // use directly the ContentLength/ContentType/ServerInternalState/Upgrade
@@ -3572,7 +3575,10 @@ begin
   result := true;
 end;
 
-function THttpRequestContext.ParseResponse(out RespStatus: integer): boolean;
+function THttpRequestContext.ParseResponse(out RespStatus: integer;
+  AllowInformational: boolean): boolean;
+const
+  MinStatus: array[boolean] of integer = (200, 100);
 var
   P: PUtf8Char;
 begin
@@ -3584,7 +3590,7 @@ begin
      (P[8] = ' ') then
   begin
     RespStatus := GetCardinal(P + 9);
-    result := (RespStatus >= 200) and
+    result := (RespStatus >= MinStatus[AllowInformational]) and
               (RespStatus <= 599); // the HTTP standard requires 3 digits
   end
   else
