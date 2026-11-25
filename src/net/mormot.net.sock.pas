@@ -1513,6 +1513,7 @@ type
     fPendingIndex: PtrInt;
     fPollIndex: integer;
     fUnsubscribeShutdownSocket: boolean;
+    fUntrackedEvents: TPollSocketEvents; // posted messages without a socket tag
     fPollClass: TPollSocketClass;
     fOnLog: TSynLogProc;
     fOnGetOneIdle: TOnPollSocketsIdle;
@@ -5366,6 +5367,7 @@ function TPollSockets.GetOnePending(out notif: TPollSocketResult;
   const call: RawUtf8): boolean;
 var
   n, ndx: PtrInt;
+  events: TPollSocketEvents;
 begin
   result := false;
   if fTerminated or
@@ -5385,8 +5387,9 @@ begin
         notif := fPending.Events[ndx];
         // move forward
         inc(ndx);
-        if (byte(ResToEvents(notif)) <> 0) and // DeleteOnePending() may set 0
-           UnsetPending(ResToTag(notif)) then  // e.g. TPollAsyncReadSockets
+        events := ResToEvents(notif);
+        if (events <> []) and // DeleteOnePending() may set 0
+           ((events = fUntrackedEvents) or UnsetPending(ResToTag(notif))) then
         begin
           // there is a non-void event to return
           result := true;

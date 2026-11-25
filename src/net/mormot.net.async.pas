@@ -459,6 +459,11 @@ type
       const aRemoteIP: TNetAddr); reintroduce; virtual;
     /// reuse this instance for a new incoming connection
     procedure Recycle(const aRemoteIP: TNetAddr); virtual;
+    /// ask a read worker to process buffered input without receiving again
+    // - call while holding a connection lock on a tracked connection
+    // - an empty buffer or a connection closed before dispatch is ignored
+    // - an idle single epoll reader may wait one 100 ms poll cycle
+    function ReadAgain: boolean;
     /// read-only access to the associated connections list
     property Owner: TAsyncConnections
       read fOwner;
@@ -534,7 +539,9 @@ type
     fThreadPollingLastWakeUpTix: integer;
     fThreadPollingLastWakeUpEvents: integer;
     function GetNextRead(out notif: TPollSocketResult): boolean;
+    procedure ProcessRead(const notif: TPollSocketResult);
     {$endif USE_WINIOCP}
+    function ProcessReadAgain(handle: TConnectionAsyncHandle): boolean;
     procedure DoExecute; override;
   public
     /// initialize the thread
@@ -1021,7 +1028,7 @@ type
     fKeepAliveMaxSec: TAsyncConnectionSec; // 0 for no keep-alive (force close)
     fHeadersSec: TAsyncConnectionSec;
     fRequestFlags: THttpServerRequestFlags;
-    fPipelineState: set of (pEnabled, pWrite);
+    fPipelineState: set of (pEnabled, pWrite, pBuffered);
     fRespStatus: cardinal;
     fRequest: THttpServerRequest; // recycled between calls
     fConnectionOpaque: THttpServerConnectionOpaque; // two PtrUInt tags
@@ -1456,6 +1463,11 @@ begin
     include(TPollAsyncConnection(tag).fFlags, fReadPending);
 end;
 
+const
+  // a read-only poll never subscribes to writes: this entry carries a handle,
+  // not a socket tag, and is independent of the socket's pending flag
+  READ_AGAIN = [pseWrite];
+
 function TPollReadSockets.UnsetPending(tag: TPollSocketTag): boolean;
 begin
   result := false;
@@ -1488,6 +1500,7 @@ begin
     [wioUnsubscribeShutdownSocket {, wioLockEvent} ]);
   {$else}
   fRead := TPollReadSockets.Create;
+  fRead.fUntrackedEvents := READ_AGAIN;
   fRead.UnsubscribeShouldShutdownSocket := true;
   fWrite := TPollWriteSockets.Create;
   {$endif USE_WINIOCP}
@@ -1847,7 +1860,8 @@ begin
   begin
     // release work still owned by the queue
     res := fRead.fPending.Events[i];
-    if byte(ResToEvents(res)) = 0 then
+    if (byte(ResToEvents(res)) = 0) or
+       (ResToEvents(res) = READ_AGAIN) then
       continue;
     c := TPollAsyncConnection(ResToTag(res));
     if (c <> nil) and
@@ -1914,7 +1928,6 @@ begin
     CloseConnection(connection, 'ProcessRead terminated');
     exit;
   end;
-  connection.fReadThread := Sender;
   LockedInc32(@fProcessingRead);
   try
     pse := ResToEvents(notif);
@@ -1943,6 +1956,7 @@ begin
       if connection.TryLock({writer=}false) then
       // GetOnePending may be from several threads -> ensure locked
       begin
+        connection.fReadThread := Sender;
         // implement TLS handshake at socket level before any user-level process
         if not (fFirstRead in connection.fFlags) then
         begin
@@ -2417,6 +2431,14 @@ begin
     ThreadPollingWakeupLocked;
 end;
 
+procedure TAsyncConnectionsThread.ProcessRead(const notif: TPollSocketResult);
+begin
+  if ResToEvents(notif) <> READ_AGAIN then
+    fOwner.fSockets.ProcessRead(self, notif)
+  else if not ProcessReadAgain(ResToTag(notif)) then
+    fOwner.fSockets.fRead.AddOnePending(ResToTag(notif), READ_AGAIN, true);
+end;
+
 function TAsyncConnectionsThread.GetNextRead(
   out notif: TPollSocketResult): boolean;
 begin
@@ -2438,6 +2460,45 @@ begin
 end;
 
 {$endif USE_WINIOCP}
+
+function TAsyncConnection.ReadAgain: boolean;
+begin
+  result := not IsClosed and not fOwner.Terminated and
+            (fRegistered in fFlags) and not (acoNoConnectionTrack in fOwner.Options);
+  if not result then
+    exit;
+  {$ifdef USE_WINIOCP}
+  result := fOwner.fSockets.fIocpRecvSend.Enqueue(fIocpSub, wieCustom1, fHandle);
+  {$else}
+  fOwner.fSockets.fRead.AddOnePending(fHandle, READ_AGAIN, true);
+  if fOwner.fThreadReadPoll <> nil then
+    fOwner.ThreadPollingWakeupOne;
+  {$endif USE_WINIOCP}
+end;
+
+function TAsyncConnectionsThread.ProcessReadAgain(handle: TConnectionAsyncHandle): boolean;
+var
+  connection: TPollAsyncConnection;
+begin
+  connection := fOwner.ConnectionFindAndWaitLock(handle, false, 1);
+  result := connection <> nil;
+  if not result then
+  begin
+    result := fOwner.Terminated or (fOwner.ConnectionFind(handle) = nil);
+    exit; // still live but busy: yield this worker and retry
+  end;
+  try
+    if not connection.IsClosed and (connection.fRd.Len <> 0) then
+    begin
+      connection.fReadThread := self;
+      if connection.OnRead = soClose then
+        fOwner.fSockets.CloseConnection(connection, 'ReadAgain');
+    end;
+  except
+    fOwner.fSockets.CloseConnection(connection, 'ReadAgain exception');
+  end;
+  connection.UnLock(false);
+end;
 
 procedure TAsyncConnectionsThread.DoExecute;
 var
@@ -2468,6 +2529,10 @@ begin
         break; // Terminated
       try
         case e of
+          wieCustom1:
+            if not ProcessReadAgain(bytes) and
+               not fOwner.fSockets.fIocpRecvSend.Enqueue(sub, e, bytes) then
+              fOwner.ConnectionRemove(bytes);
           wieRecv:
             begin
               if sub^.Tag <> 0 then // not needed outside IOCP
@@ -2519,7 +2584,7 @@ begin
         atpReadSingle:
           // a single thread to rule them all: polling, reading and processing
           if read.GetOne(ms, fProcessName, notif) then
-            fOwner.fSockets.ProcessRead(self, notif);
+            ProcessRead(notif);
         atpReadPoll:
           // main thread will just fill pending events from socket polls
           // (no process because a faulty service would delay all reading)
@@ -2563,7 +2628,7 @@ begin
             LockedInc32(@fOwner.fThreadPollingAwakeCount);
             exclude(fWakeUp, wuFromSlowProcess);
             while GetNextRead(notif) do
-              fOwner.fSockets.ProcessRead(self, notif);
+              ProcessRead(notif);
             fThreadPollingLastWakeUpTix := 0; // will now need to wakeup
             LockedDec32(@fOwner.fThreadPollingAwakeCount);
             fOwner.fThreadReadPoll.fEvent.SetEvent; // atpReadPoll lock above
@@ -4688,6 +4753,8 @@ begin
 end;
 
 function THttpAsyncServerConnection.OnRead: TPollAsyncSocketOnReadWrite;
+const
+  RESPONSE_PENDING = [hrsWaitAsyncProcessing, hrsSendBody, hrsResponseDone];
 var
   st: TProcessParseLine;
   previous: THttpRequestState;
@@ -4712,7 +4779,7 @@ begin
     st.P := fRd.Buffer;
     st.Len := fRd.Len;
     // process one request (or several in case of pipelined input/output)
-    while not (fHttp.State in [hrsWaitAsyncProcessing, hrsSendBody, hrsResponseDone]) and
+    while not (fHttp.State in RESPONSE_PENDING) and
           fHttp.ProcessRead(st, {returnOnStateChange=}false) do
     begin
       // handle main steps change
@@ -4751,18 +4818,14 @@ begin
         end;
       end;
       if pWrite in fPipelineState then
-      begin
         if fWr.Len > 128 shl 10 then
           // flush when got more than 128KB of pending output
           if FlushPipelinedWrite <> soContinue then
             result := soClose;
-        if (result <> soContinue) or
-           (fHttp.State in [hrsWaitAsyncProcessing, hrsUpgraded]) then
-          break; // rejected, async or upgraded
-      end
-      else if (result <> soContinue) or
-              (fHttp.State in [hrsGetCommand, hrsWaitAsyncProcessing, hrsUpgraded]) then
-        break; // rejected, authenticated, async or upgraded
+      if (result <> soContinue) or
+         (fHttp.State = hrsUpgraded) or
+         ((fHttp.State = hrsGetCommand) and not (pEnabled in fPipelineState)) then
+        break;
       previous := fHttp.State;
     end;
     // no more available input
@@ -4795,7 +4858,12 @@ begin
        (result = soClose) then
       fRd.Reset // all input processed (usual and nominal case)
     else
+    begin
       fRd.Remove(st.P - fRd.Buffer);  // keep remaining input for next time
+      if (pEnabled in fPipelineState) and
+         (fHttp.State in RESPONSE_PENDING) then
+        include(fPipelineState, pBuffered);
+    end;
   end;
 end;
 
@@ -4866,6 +4934,12 @@ begin
   fHttp.Reset;
   HttpInit;
   result := soContinue;
+  if pBuffered in fPipelineState then
+  begin
+    exclude(fPipelineState, pBuffered);
+    if not ReadAgain then
+      result := soClose;
+  end;
 end;
 
 function THttpAsyncServerConnection.DecodeHeaders: integer;
