@@ -9,7 +9,7 @@ unit mormot.soa.codegen;
    SOA API Code and Documentation Generation
     - ORM and SOA Logic Extraction from RTTI
     - Doc/CodeGen wrapper Functions on Server Side
-    - FPC Dedicated Generators
+    - Old FPC Dedicated Generators
     - Compute Asynchronous Code from Synchronous Interface
     - Generate Code and Doc from Command-Line
 
@@ -39,6 +39,7 @@ uses
   mormot.core.json,
   mormot.core.interfaces,
   mormot.core.mustache,
+  mormot.db.core,
   mormot.orm.base,
   mormot.orm.core,
   mormot.orm.rest,
@@ -363,6 +364,8 @@ type
     fServer: TRestServer;
     fHasAnyRecord: boolean; // identify TOrmPropInfoRecordTyped
     function CustomType(rtti: TRttiCustom): TWrapperType; override;
+    procedure AfterContextSet(rtti: TRttiCustom; typ: TWrapperType;
+      var context: TDocVariantData); override;
   public
     constructor CreateFromModel(aServer: TRestServer;
       const aSourcePath: TFileName; const aDescriptions: TFileName);
@@ -498,6 +501,16 @@ end;
 function TWrapperContextRest.CustomType(rtti: TRttiCustom): TWrapperType;
 begin
   result := TYPES_ORM[GetOrmFieldType(rtti.Info)];
+end;
+
+procedure TWrapperContextRest.AfterContextSet(rtti: TRttiCustom;
+  typ: TWrapperType; var context: TDocVariantData);
+begin
+  case typ of
+    wVariant:
+      if rtti <> nil then // recognize mormot.db.core nullable types
+        context.AddOrUpdateValue('nullable', ord(NullableVariantType(rtti.Info)));
+  end;
 end;
 
 function TWrapperContextRest.Context: variant;
