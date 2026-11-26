@@ -4712,7 +4712,8 @@ begin
     st.P := fRd.Buffer;
     st.Len := fRd.Len;
     // process one request (or several in case of pipelined input/output)
-    while fHttp.ProcessRead(st, {returnOnStateChange=}false) do
+    while not (fHttp.State in [hrsWaitAsyncProcessing, hrsSendBody, hrsResponseDone]) and
+          fHttp.ProcessRead(st, {returnOnStateChange=}false) do
     begin
       // handle main steps change
       case fHttp.State of
