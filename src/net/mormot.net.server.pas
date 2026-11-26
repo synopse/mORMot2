@@ -4747,6 +4747,7 @@ constructor TSynThreadPoolTHttpServer.Create(Server: THttpServer;
   NumberOfThreads: integer);
 begin
   fServer := Server;
+  fOnThreadStart := fServer.fOnThreadStart; // so that OnThreadTerminate is called
   fOnThreadTerminate := fServer.fOnThreadTerminate;
   fBigBodySize := THREADPOOL_BIGBODYSIZE;
   fMaxBodyThreadCount := THREADPOOL_MAXWORKTHREADS;
