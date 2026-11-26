@@ -342,6 +342,8 @@ type
   /// map the output state for THttpRequestContext.ResponseFlags
   // - separated from THttpRequestHeaderFlags so that they would both be stored
   // and accessed as a single byte - which is faster than word on Intel CPUs
+  // - rfChunkedResponse is set by THttpServerRequest.BeginChunkedResponse: the
+  // body has no known length and is sent in pieces after the headers
   THttpRequestResponseFlags = set of (
     rfAcceptRange,
     rfWantRange,
@@ -350,7 +352,8 @@ type
     rfContentStreamNeedFree,
     rfContentFileNameNeedDelete,
     rfAsynchronous,
-    rfProgressiveStatic);
+    rfProgressiveStatic,
+    rfChunkedResponse);
 
   /// define THttpRequestContext.ContentFromStream() behavior, as supplied by
   // THttpServerRequestAbstract.SetOutStream()
@@ -3941,7 +3944,17 @@ begin
   if (rfAcceptRange in ResponseFlags) and
       not (hhAcceptRangeBytes in HeadCustom) then
     result^.AppendShort('Accept-Ranges: bytes'#13#10);
-  if ContentStream = nil then // <> nil e.g. for rfProgressiveStatic
+  if rfChunkedResponse in ResponseFlags then
+  begin
+    // body of unknown length, sent in pieces by the caller after these headers:
+    // HTTP/1.1 chunks it, HTTP/1.0 delimits it by closing the connection
+    ContentLength := 0;
+    if rfHttp10 in ResponseFlags then
+      include(HeaderFlags, hfConnectionClose)
+    else
+      result^.AppendShort('Transfer-Encoding: chunked'#13#10);
+  end
+  else if ContentStream = nil then // <> nil e.g. for rfProgressiveStatic
   begin
     // same logic than THttpSocket.CompressDataAndWriteHeaders below
     if (integer(CompressAcceptHeader) <> 0) and
@@ -3979,7 +3992,8 @@ begin
     result^.Append(ContentEncoding^.Name);
     result^.AppendCRLF;
   end;
-  if not (hhContentLength in HeadCustom) then
+  if not (hhContentLength in HeadCustom) and
+     not (rfChunkedResponse in ResponseFlags) then
   begin
     result^.AppendShort('Content-Length: ');
     result^.Append(ContentLength);

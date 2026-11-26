@@ -376,6 +376,17 @@ type
   /// a dynamic array of TConnectionAsyncHandle identifiers
   TConnectionAsyncHandleDynArray = array of TConnectionAsyncHandle;
 
+  /// the state of a THttpServerRequest chunked response
+  // - hcrNone is a regular response, built from OutContent once Request() returned
+  // - hcrStarted means BeginChunkedResponse sent the headers: SendChunk() may be
+  // called, and the body ends when Request() returns (or at EndChunkedResponse)
+  // - hcrEnded and hcrAborted mean the body was finished, normally or not
+  THttpServerChunkedState = (
+    hcrNone,
+    hcrStarted,
+    hcrEnded,
+    hcrAborted);
+
   /// a generic input/output structure used for HTTP server requests
   // - URL/Method/InHeaders/InContent properties are input parameters
   // - OutContent/OutContentType/OutCustomHeader are output parameters
@@ -383,6 +394,8 @@ type
   protected
     fServer: THttpServerGeneric;
     fConnectionAsyncHandle: TConnectionAsyncHandle;
+    fChunkedState: THttpServerChunkedState;
+    fChunkedSocket: TObject; // a THttpServerSocket, set by THttpServer.Process
     fErrorMessage: string;
     fTempWriter: TJsonWriter; // reused between SetOutJson() calls
     function GetFullUrl: RawUtf8; virtual;
@@ -408,6 +421,29 @@ type
     /// prepare one reusable HTTP State Machine for sending the response
     function SetupResponse(var Context: THttpRequestContext;
       CompressGz, MaxSizeAtOnce: integer): PRawByteStringBuffer;
+    /// send the response status and headers now, for a body of unknown length
+    // which is then sent in pieces by SendChunk() while Request() is running
+    // - e.g. for Server-Sent Events (text/event-stream) or progress feedback
+    // - RespStatus, OutCustomHeaders and OutContentType are used as for a
+    // regular response; any OutContent already set is sent as first chunk
+    // - HTTP/1.1 uses "Transfer-Encoding: chunked", HTTP/1.0 closes the connection
+    // at the end of the body; there is no compression of such a response
+    // - returns false if this server class does not support it (only THttpServer
+    // does by now): the response should then be filled into OutContent as usual
+    function BeginChunkedResponse: boolean; virtual;
+    /// send one piece of a body started by BeginChunkedResponse
+    // - returns false if the connection failed: the body is then aborted
+    function SendChunk(Data: pointer; Len: PtrInt): boolean; virtual;
+    /// finish a body started by BeginChunkedResponse
+    // - implicitly called with Aborted=false once Request() returned
+    // - Aborted=true closes the connection without the last chunk, which is how
+    // HTTP tells the client the body was truncated
+    procedure EndChunkedResponse(Aborted: boolean = false); virtual;
+    /// check if the client of a body started by BeginChunkedResponse is still
+    // connected, without sending anything
+    // - a stream which stays quiet for a while (e.g. waiting for an event to be
+    // sent) would otherwise find out only when its next SendChunk() fails
+    function ChunkedConnected: boolean; virtual;
     /// just a wrapper around fErrorMessage := FormatString()
     procedure SetErrorMessage(const Fmt: RawUtf8; const Args: array of const);
     /// append a "Repr-Digest:" HTTP header to the request output
@@ -442,6 +478,9 @@ type
     /// optional error message which will be used by SetupResponse
     property ErrorMessage: string
       read fErrorMessage write fErrorMessage;
+    /// the state of a response sent by BeginChunkedResponse/SendChunk
+    property ChunkedState: THttpServerChunkedState
+      read fChunkedState;
     /// for THttpApiServer, input parameter containing the caller full URL
     property FullUrl: RawUtf8
       read GetFullUrl;
@@ -2233,6 +2272,8 @@ begin
   OutContentStreamDiscard; // paranoid: SetupResponse() did hand it over
   FastAssignNew(fOutContentType);
   FastAssignNew(fOutCustomHeaders);
+  fChunkedState := hcrNone;
+  fChunkedSocket := nil;
   fAuthenticationStatus := hraNone;
   fInternalFlags := [];
   FastAssignNew(fAuthenticatedUser);
@@ -2426,6 +2467,94 @@ begin
   fOutContent := ''; // dec RefCnt to release body memory ASAP
   result := Context.CompressContentAndFinalizeHead(MaxSizeAtOnce); // set State
   // now TAsyncConnectionsSockets.Write(result) should be called
+end;
+
+function THttpServerRequest.BeginChunkedResponse: boolean;
+var
+  sock: THttpServerSocket;
+  output: PRawByteStringBuffer;
+  first: RawByteString;
+begin
+  result := false;
+  if (fChunkedState <> hcrNone) or
+     (fChunkedSocket = nil) then
+    exit; // only THttpServer.Process sets fChunkedSocket (by now)
+  sock := THttpServerSocket(fChunkedSocket);
+  first := fOutContent; // SetupResponse() would make it a Content-Length body
+  fOutContent := '';
+  include(sock.Http.ResponseFlags, rfChunkedResponse);
+  if fRespStatus = 0 then
+    fRespStatus := HTTP_SUCCESS;
+  output := SetupResponse(sock.Http, {compressgz=}-1,
+    THttpServer(fServer).fServerSendBufferSize);
+  if not sock.TrySndLow(output.Buffer, output.Len) then
+  begin
+    fChunkedState := hcrAborted;
+    sock.fKeepAliveClient := false;
+    exit;
+  end;
+  fChunkedState := hcrStarted;
+  result := true;
+  if first <> '' then
+    SendChunk(pointer(first), length(first));
+end;
+
+function THttpServerRequest.SendChunk(Data: pointer; Len: PtrInt): boolean;
+var
+  sock: THttpServerSocket;
+  tmp: TRawByteStringBuffer;
+begin
+  result := fChunkedState = hcrStarted;
+  if not result or
+     (Len <= 0) then
+    exit; // a zero-sized chunk would end the body
+  sock := THttpServerSocket(fChunkedSocket);
+  if PCardinal(sock.Http.CommandMethod)^ = HEAD_32 then
+    exit; // HEAD: only the headers
+  if rfHttp10 in sock.Http.ResponseFlags then
+    result := sock.TrySndLow(Data, Len) // delimited by the connection end
+  else
+  begin
+    // "<hexsize>"#13#10"<data>"#13#10 in a single syscall
+    tmp.Reset;
+    tmp.AppendShort(ShortString(IntToHex(Len, 1)));
+    tmp.AppendCRLF;
+    tmp.Append(Data, Len);
+    tmp.AppendCRLF;
+    result := sock.TrySndLow(tmp.Buffer, tmp.Len);
+  end;
+  if not result then
+    EndChunkedResponse({aborted=}true);
+end;
+
+procedure THttpServerRequest.EndChunkedResponse(Aborted: boolean);
+var
+  sock: THttpServerSocket;
+begin
+  if fChunkedState <> hcrStarted then
+    exit;
+  sock := THttpServerSocket(fChunkedSocket);
+  if Aborted then
+  begin
+    fChunkedState := hcrAborted;
+    sock.fKeepAliveClient := false; // close without the last chunk
+    exit;
+  end;
+  fChunkedState := hcrEnded;
+  if rfHttp10 in sock.Http.ResponseFlags then
+    sock.fKeepAliveClient := false // the end of the connection ends the body
+  else if (PCardinal(sock.Http.CommandMethod)^ <> HEAD_32) and
+          not sock.TrySndLow(PAnsiChar('0'#13#10#13#10), 5) then
+    sock.fKeepAliveClient := false;
+end;
+
+function THttpServerRequest.ChunkedConnected: boolean;
+begin
+  result := (fChunkedState = hcrStarted) and
+            not (THttpServerSocket(fChunkedSocket).SockReceivePending(0) in
+              [cspSocketError, cspSocketClosed, cspDataAvailableOnClosedSocket]);
+  if not result then
+    EndChunkedResponse({aborted=}true);
 end;
 
 procedure THttpServerRequest.SetErrorMessage(const Fmt: RawUtf8;
@@ -4099,7 +4228,18 @@ begin
     LockedInc32(@fCurrentProcess);
     // compute the response
     req.Prepare(ClientSock.Http, ClientSock.fRemoteIP, fAuthorize);
+    req.fChunkedSocket := ClientSock; // for BeginChunkedResponse/SendChunk
     DoRequest(req);
+    if req.fChunkedState <> hcrNone then
+    begin
+      // the response was sent in pieces during Request(): finish its body
+      req.EndChunkedResponse;
+      if hfConnectionClose in ClientSock.Http.HeaderFlags then
+        ClientSock.fKeepAliveClient := false;
+      if Assigned(fOnAfterResponse) then
+        DoAfterResponse(req, ClientSock, started);
+      exit; // the finally block below does the cleanup
+    end;
     output := req.SetupResponse(
       ClientSock.Http, fCompressGz, fServerSendBufferSize);
     if (hsoBan40xIP in fOptions) and
