@@ -202,6 +202,9 @@ type
     {$endif USE_WINIOCP}
     /// regressions #743 and #750: early async replies and failed sends
     procedure DoHttpAsyncResponses(Sender: TObject);
+    /// check that a later request cannot truncate a pending response
+    procedure DoHttpAsyncPendingResponse(Sender: TObject);
+    procedure CheckPipelineResponse(client: THttpSocket; const body: RawByteString);
     /// validate that hsoHeadersUnfiltered applies to kept-alive requests
     procedure DoHttpKeepAliveOptions(Sender: TObject);
     function DoKeepAliveOptionsRequest(Ctxt: THttpServerRequestAbstract): cardinal;
@@ -245,6 +248,8 @@ type
     {$endif USEWININET}
     /// asynchronously start slow tests in background threads on /multithread
     procedure SlowTests;
+    /// check that a reader resumes buffered requests after a pending response
+    procedure HttpAsyncPipeline;
     /// Engine.IO and Socket.IO regression tests
     procedure _SocketIO;
     /// validate DNS and LDAP clients (and NTP/SNTP)
@@ -680,6 +685,7 @@ begin
   Run(DoTWebSocketAsyncServer, self, 'WSBroadcast', true, false);
   Run(DoHttpAsyncShutdown, self, 'HttpAsyncShutdown', true, false);
   Run(DoHttpAsyncResponses, self, 'HttpAsyncResponses', true, false);
+  Run(DoHttpAsyncPendingResponse, self, 'HttpAsyncPendingResponse', true, false);
   Run(DoHttpKeepAliveOptions, self, 'HttpKeepAliveOptions', true, false);
   Run(DoHttpLongLine, self, 'HttpLongLine', true, false);
   Run(DoHttpReadMaxBytes, self, 'HttpReadMaxBytes', true, false);
@@ -1399,6 +1405,256 @@ begin
     // a task blocked inside WebSocketBroadcast() still references both.
     // Trying to destroy the server here could reproduce the same deadlock
     // on the test thread and prevent the test suite from reporting it.
+  end;
+end;
+
+const
+  PIPELINE_HEAD = ' HTTP/1.1'#13#10'Host: localhost'#13#10#13#10;
+  PIPELINE_NEXT = 'GET /next' + PIPELINE_HEAD;
+
+type
+  THttpPipelineRequests = class
+    Body: RawByteString;
+    Count: integer;
+    Handle: TConnectionAsyncHandle;
+    Ready, Blocked, ReleaseBlock: TSynEvent;
+    function OnRequest(Ctxt: THttpServerRequestAbstract): cardinal;
+  end;
+
+function THttpPipelineRequests.OnRequest(Ctxt: THttpServerRequestAbstract): cardinal;
+begin
+  LockedInc32(@Count);
+  result := HTTP_SUCCESS;
+  if Ctxt.Url = '/stream' then
+    Ctxt.SetOutStream(TRawByteStringStream.Create(Body), [hosOwned], BINARY_CONTENT_TYPE)
+  else if Ctxt.Url = '/first' then
+  begin
+    // this server uses the default THttpServerRequest request class
+    Handle := (Ctxt as THttpServerRequest).AsyncHandle;
+    Ready.SetEvent;
+    result := HTTP_ASYNCRESPONSE;
+  end
+  else if (Ctxt.Url = '/block') and (Blocked <> nil) then
+  begin
+    Blocked.SetEvent;
+    ReleaseBlock.WaitFor(2000);
+  end
+  else
+    Ctxt.OutContent := Ctxt.Url;
+end;
+
+procedure TNetworkProtocols.CheckPipelineResponse(client: THttpSocket;
+  const body: RawByteString);
+var
+  status: integer;
+begin
+  client.Http.Reset;
+  client.SockRecvLn(client.Http.CommandUri);
+  Check(client.Http.ParseResponse(status, true));
+  CheckEqual(status, HTTP_SUCCESS);
+  Check(client.GetHeader(true));
+  CheckEqual(client.Http.ContentLength, length(body));
+  Check(client.SockInRead(length(body)) = body, 'response body');
+end;
+
+procedure TNetworkProtocols.DoHttpAsyncPendingResponse(Sender: TObject);
+const
+  STREAM: RawUtf8 = 'GET /stream' + PIPELINE_HEAD + PIPELINE_NEXT;
+  OPTIONS: array[boolean] of THttpServerOptions = ([], [hsoEnablePipelining]);
+var
+  requests: THttpPipelineRequests;
+  server: THttpAsyncServer;
+  client: THttpSocket;
+  threads, sent: integer;
+  pipelining, deferred: boolean;
+begin
+  requests := THttpPipelineRequests.Create;
+  try
+    requests.Ready := TSynEvent.Create;
+    RandomByteString(4 shl 20, requests.Body);
+    for threads := 1 to 3 do
+      for pipelining := false to true do
+      begin
+        server := THttpAsyncServer.Create('8901', nil, nil, 'pending', threads,
+          30000, OPTIONS[pipelining]);
+        try
+          server.OnRequest := requests.OnRequest;
+          server.WaitStarted(10);
+          for deferred := false to not pipelining do
+          begin
+            requests.Count := 0;
+            client := THttpSocket.Open('127.0.0.1', server.SockPort, nlTcp, 2000);
+            try
+              client.CreateSockIn;
+              try
+                if deferred then
+                begin
+                  requests.Ready.ResetEvent;
+                  client.SndLow('GET /first' + PIPELINE_HEAD);
+                  if not Check(requests.Ready.WaitFor(2000), 'first request') then
+                    continue;
+                  client.SndLow(PIPELINE_NEXT);
+                  CheckEqual(client.SockInPending(100), 0, 'before AsyncResponse');
+                  server.AsyncResponse(requests.Handle, 'first', TEXT_CONTENT_TYPE);
+                  CheckPipelineResponse(client, 'first');
+                end
+                else
+                begin
+                  sent := length(STREAM);
+                  Check(client.Sock.Send(pointer(STREAM), sent) = nrOk);
+                  CheckEqual(sent, length(STREAM));
+                  CheckPipelineResponse(client, requests.Body);
+                end;
+                if pipelining then
+                  Check(client.SockReceivePending(100) in [cspNoData, cspDataAvailable],
+                    'keep-alive')
+                else
+                begin
+                  CheckEqual(client.SockInPending(100), 0, 'no automatic response');
+                  CheckEqual(requests.Count, 1);
+                  client.SndLow('G'); // this starts a third request
+                  CheckPipelineResponse(client, '/next');
+                  CheckEqual(requests.Count, 2);
+                end;
+              except
+                on E: ENetSock do
+                  CheckUtf8(false, 'threads=%, pipeline=%, deferred=%: %',
+                    [threads, pipelining, deferred, E.Message]);
+              end;
+            finally
+              client.Free;
+            end;
+          end;
+        finally
+          server.Free;
+        end;
+      end;
+  finally
+    requests.Ready.Free;
+    requests.Free;
+  end;
+end;
+
+procedure TNetworkProtocols.HttpAsyncPipeline;
+type
+  TPipelineCase = (pcAsync, pcStream, pcClosed);
+const
+  REQUESTS: array[boolean] of RawUtf8 = (
+    'GET /first' + PIPELINE_HEAD + PIPELINE_NEXT,
+    'GET /stream' + PIPELINE_HEAD + PIPELINE_NEXT);
+var
+  peer: THttpPipelineRequests;
+  server: THttpAsyncServer;
+  client, blocker: THttpSocket;
+  locked: TAsyncConnection;
+  threads, sent, pending: integer;
+  mode: TPipelineCase;
+  start, elapsed, released: Int64;
+begin
+  peer := THttpPipelineRequests.Create;
+  try
+    peer.Ready := TSynEvent.Create;
+    peer.Blocked := TSynEvent.Create;
+    peer.ReleaseBlock := TSynEvent.Create;
+    RandomByteString(4 shl 20, peer.Body);
+    for threads := 1 to 3 do
+    begin
+      server := THttpAsyncServer.Create('8902', nil, nil, 'pipeline', threads,
+        30000, [hsoEnablePipelining]);
+      try
+        server.OnRequest := peer.OnRequest;
+        server.WaitStarted(10);
+        for mode := low(mode) to high(mode) do
+        begin
+          if (mode = pcClosed) and (threads <> 1) then
+            continue;
+          blocker := nil;
+          client := THttpSocket.Open('127.0.0.1', server.SockPort, nlTcp, 2000);
+          try
+            client.CreateSockIn;
+            peer.Ready.ResetEvent;
+            peer.Count := 0;
+            sent := length(REQUESTS[mode = pcStream]);
+            Check(client.Sock.Send(pointer(REQUESTS[mode = pcStream]), sent) = nrOk);
+            CheckEqual(sent, length(REQUESTS[mode = pcStream]));
+            if mode = pcStream then
+            begin
+              CheckPipelineResponse(client, peer.Body);
+              QueryPerformanceMicroSeconds(start);
+            end
+            else
+            begin
+              if not Check(peer.Ready.WaitFor(2000), 'first request') then
+                continue;
+              start := GetTickCount64;
+              repeat
+                locked := server.Async.ConnectionFindAndWaitLock(peer.Handle, false, 20);
+                if locked <> nil then
+                  break;
+                SleepHiRes(1);
+              until GetTickCount64 - start >= 2000;
+              if not Check(locked <> nil, 'registered') then
+                continue;
+              try
+                if mode = pcClosed then
+                begin
+                  blocker := THttpSocket.Open('127.0.0.1', server.SockPort, nlTcp, 2000);
+                  blocker.SndLow('GET /block' + PIPELINE_HEAD);
+                  Check(peer.Blocked.WaitFor(2000), 'only reader occupied');
+                end;
+                server.AsyncResponse(peer.Handle, 'first', TEXT_CONTENT_TYPE);
+                CheckPipelineResponse(client, 'first');
+                QueryPerformanceMicroSeconds(start);
+                SleepHiRes(15); // the queued reader cannot acquire the lock yet
+              finally
+                QueryPerformanceMicroSeconds(released);
+                locked.UnLock(false);
+              end;
+              if mode = pcClosed then
+              begin
+                Check(server.Async.ConnectionRemove(peer.Handle));
+                peer.ReleaseBlock.SetEvent;
+                FreeAndNil(client);
+                client := THttpSocket.Open('127.0.0.1', server.SockPort, nlTcp, 2000);
+                client.CreateSockIn;
+                client.SndLow(PIPELINE_NEXT);
+                CheckPipelineResponse(client, '/next');
+                CheckEqual(peer.Count, 3, 'closed handle skipped');
+                continue;
+              end;
+            end;
+            pending := client.SockInPending(200);
+            if pending > 0 then
+              CheckPipelineResponse(client, '/next');
+            QueryPerformanceMicroSeconds(elapsed);
+            if mode = pcAsync then
+              AddConsole('read lock held % us, release to reply % us',
+                [released - start, elapsed - released]);
+            dec(elapsed, start);
+            AddConsole('pipeline % thread(s), mode %: % us, pending=%',
+              [threads, ord(mode), elapsed, pending]);
+            CheckUtf8((pending > 0) and (elapsed < 200000),
+              '% thread(s): second response after % us, pending=%',
+              [threads, elapsed, pending]);
+            CheckEqual(peer.Count, 2);
+            if pending > 0 then
+              CheckEqual(client.SockInPending(20), 0, 'no duplicate response');
+          finally
+            if blocker <> nil then
+              peer.ReleaseBlock.SetEvent;
+            blocker.Free;
+            client.Free;
+          end;
+        end;
+      finally
+        server.Free;
+      end;
+    end;
+  finally
+    peer.ReleaseBlock.Free;
+    peer.Blocked.Free;
+    peer.Ready.Free;
+    peer.Free;
   end;
 end;
 
