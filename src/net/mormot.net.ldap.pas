@@ -4531,7 +4531,7 @@ end;
 procedure TLdapAttribute.GetReadable(index: PtrInt; var Value: RawUtf8);
 begin
   if (self = nil) or
-     (index >= fCount) then
+     (PtrUInt(index) >= PtrUInt(fCount)) then
   begin
     FastAssignNew(Value);
     exit;

@@ -529,8 +529,11 @@ type
     function ParseCommand: boolean;
     /// parse CommandUri into result fields on client side
     // - e.g. from CommandUri = 'HTTP/1.1 200 OK'
-    // - returns 0 on parsing error, or the HTTP status (e.g. 200)
-    function ParseResponse(out RespStatus: integer): boolean;
+    // - returns true and the HTTP status (e.g. 200) within 200..599, or within
+    // 100..599 if AllowInformational is set, e.g. to forward 1xx responses
+    // - RespStatus is not meaningful when false is returned
+    function ParseResponse(out RespStatus: integer;
+      AllowInformational: boolean = false): boolean;
     /// parse a HTTP header text line into Header and fill internal properties
     // - with default HeadersUnFiltered=false, only relevant headers are retrieved:
     // use directly the ContentLength/ContentType/ServerInternalState/Upgrade
@@ -635,6 +638,7 @@ const
      hrsGetBodyChunkedHexNext,
      hrsGetBodyChunkedData,
      hrsGetBodyChunkedDataVoidLine,
+     hrsGetBodyChunkedDataLastLine,
      hrsGetBodyContentLengthFirst,
      hrsGetBodyContentLengthNext,
      hrsConnect];
@@ -3575,7 +3579,10 @@ begin
   result := true;
 end;
 
-function THttpRequestContext.ParseResponse(out RespStatus: integer): boolean;
+function THttpRequestContext.ParseResponse(out RespStatus: integer;
+  AllowInformational: boolean): boolean;
+const
+  MinStatus: array[boolean] of integer = (200, 100);
 var
   P: PUtf8Char;
 begin
@@ -3587,7 +3594,7 @@ begin
      (P[8] = ' ') then
   begin
     RespStatus := GetCardinal(P + 9);
-    result := (RespStatus >= 200) and
+    result := (RespStatus >= MinStatus[AllowInformational]) and
               (RespStatus <= 599); // the HTTP standard requires 3 digits
   end
   else
@@ -3836,15 +3843,27 @@ begin
             exit; // not enough input
         end;
       hrsGetBodyChunkedDataVoidLine:
-        if ProcessParseLine(st) then // chunks end with a void line
-          State := hrsGetBodyChunkedHexNext
+        if ProcessParseLine(st) then
+          if st.LineLen = 0 then
+            State := hrsGetBodyChunkedHexNext
+          else
+            State := hrsErrorRejected
         else if State = hrsErrorRejected then
           break // notify the rejection now, not on the next input
         else
           exit; // not enough input
       hrsGetBodyChunkedDataLastLine:
-        if ProcessParseLine(st) then // last chunk void line
-          State := hrsWaitProcessing // notice: st.Len<>0 if pipelining
+        if ProcessParseLine(st) then
+          if st.LineLen = 0 then
+            State := hrsWaitProcessing
+          else
+          begin
+            // The last chunk set fContentLeft to zero. Bound all trailer fields
+            // and their delimiters to one header line's budget on both paths.
+            inc(fContentLeft, st.LineLen + 2);
+            if fContentLeft > MaxHttpHeaderLineSize then
+              State := hrsErrorPayloadTooLarge;
+          end
         else if State = hrsErrorRejected then
           break // notify the rejection now, not on the next input
         else
@@ -4391,8 +4410,16 @@ begin
       len := ParseHex0x(chunksize, {noOx=}true); // hexa chunk length
       if len = 0 then
       begin
-        SockRecvLn; // ignore next line (normally void)
-        break;      // reached the end of input stream
+        bytes := 0;
+        repeat
+          SockRecvLn(chunk);
+          if chunk = '' then
+            break;
+          inc(bytes, length(chunk) + 2);
+          if bytes > MaxHttpHeaderLineSize then
+            ESizeOverflow.RaiseFmt(self, 'GetBody: chunk trailers', []);
+        until false;
+        break;
       end;
       if len > MaxHttpChunkSize then // allow up to 256 MB chunk
         ESizeOverflow.RaiseFmt(self, 'GetBody: chunk len=%d', [len]);
@@ -4415,7 +4442,8 @@ begin
         SockInRead(@PByteArray(Http.Content)[Http.ContentLength], len); // append
       end;
       inc(Http.ContentLength, len);
-      SockRecvLn; // ignore next #13#10
+      if SockInReadLn(@chunksize, SizeOf(chunksize)) <> 0 then
+        EHttpSocket.RaiseUtf8('%.GetBody: invalid chunk delimiter', [self]);
     until false;
   end
   else if Http.ContentLength > 0 then

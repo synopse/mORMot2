@@ -2620,6 +2620,8 @@ type
     fSourcePath: TFileNameDynArray;
     fNestedId: integer;     // for unique nested type names if no RTTI
     function CustomType(rtti: TRttiCustom): TWrapperType; virtual;
+    procedure AfterContextSet(rtti: TRttiCustom; typ: TWrapperType;
+      var context: TDocVariantData); virtual;
     function ContextFromRtti(typ: TWrapperType; rtti: TRttiCustom = nil;
       typName: RawUtf8 = ''; const parentName: RawUtf8 = ''): variant;
     function ContextNestedProperties(rtti: TRttiCustom;
@@ -8258,6 +8260,11 @@ begin
   result := wUnknown;
 end;
 
+procedure TWrapperContext.AfterContextSet(rtti: TRttiCustom; typ: TWrapperType;
+  var context: TDocVariantData);
+begin // overriden methods could add fields to context
+end;
+
 function TWrapperContext.ContextNestedProperties(rtti: TRttiCustom;
   const parentName: RawUtf8): variant;
 var
@@ -8539,6 +8546,7 @@ begin
     EWrapperContext.RaiseUtf8(
       'Unexpected type % (%) for [%]', [typAsName^, ord(typ), typName]);
   end;
+  AfterContextSet(rtti, typ, _Safe(result)^);
 end;
 
 constructor TWrapperContext.CreateFromUsedInterfaces(
