@@ -176,18 +176,28 @@ const
     {$endif CPU32}
   {$else}
     {$ifdef OSANDROID}
-      {$define NOOPENSSL3} // unsupported yet
+      {$ifdef OPENSSLANDROIDSTATIC}
+      // legacy static linking of OpenSSL 1.1 libcrypto/libssl-android*.a
+      {$define NOOPENSSL3} // static linking is 1.1 only
       {$ifdef CPU32}
       LIB_CRYPTO1 = 'libcrypto-android32.a';
       LIB_SSL1    = 'libssl-android32.a';
-      _PU = '';
-      {$define OPENSSLSTATIC}
       {$else}
       LIB_CRYPTO1 = 'libcrypto-android64.a';
       LIB_SSL1    = 'libssl-android64.a';
-      _PU = '';
-      {$define OPENSSLSTATIC}
       {$endif CPU32}
+      {$define OPENSSLSTATIC}
+      {$else}
+      // OpenSSL 3.x/4.x shared libraries packaged in the APK lib/<abi> folder
+      // - Android only packages and loads unversioned lib*.so file names
+      LIB_CRYPTO1 = 'libcrypto.so';
+      LIB_SSL1    = 'libssl.so';
+      LIB_CRYPTO3 = 'libcrypto.so';
+      LIB_SSL3    = 'libssl.so';
+      LIB_CRYPTO4 = 'libcrypto.so';
+      LIB_SSL4    = 'libssl.so';
+      {$endif OPENSSLANDROIDSTATIC}
+      _PU = '';
     {$else}
       {$ifdef OSDARWIN}
         {$ifdef CPUINTEL}
@@ -554,6 +564,7 @@ const
   EVP_PKEY_CTRL_RSA_KEYGEN_BITS = EVP_PKEY_ALG_CTRL + 3;
   EVP_PKEY_CTRL_RSA_PADDING = EVP_PKEY_ALG_CTRL + 1;
   EVP_PKEY_CTRL_RSA_PSS_SALTLEN = EVP_PKEY_ALG_CTRL + 2;
+  RSA_PSS_SALTLEN_DIGEST = -1;
   EVP_PKEY_CTRL_RSA_KEYGEN_PUBEXP = EVP_PKEY_ALG_CTRL + 4;
   EVP_PKEY_CTRL_RSA_MGF1_MD = EVP_PKEY_ALG_CTRL + 5;
   EVP_PKEY_CTRL_GET_RSA_PADDING = EVP_PKEY_ALG_CTRL + 6;
@@ -2708,6 +2719,7 @@ function BigNumFromDecimal(const Text: RawUtf8): PBIGNUM;
 function BigNumHexFromDecimal(const Text: RawUtf8): RawUtf8;
 function EVP_PKEY_CTX_set_rsa_padding(ctx: PEVP_PKEY_CTX; padding: integer): integer;
 function EVP_PKEY_CTX_set_rsa_mgf1_md(ctx: PEVP_PKEY_CTX; md: PEVP_MD): integer;
+function EVP_PKEY_CTX_set_rsa_pss_saltlen(ctx: PEVP_PKEY_CTX; len: integer): integer;
 function EVP_PKEY_CTX_set_rsa_oaep_md(ctx: PEVP_PKEY_CTX; md: PEVP_MD): integer;
 function EVP_PKEY_assign_RSA(pkey: PEVP_PKEY; rsa: PRSA): integer;
 function EVP_PKEY_assign_EC_KEY(pkey: PEVP_PKEY; ec: PEC_KEY): integer;
@@ -2845,7 +2857,7 @@ function LoadPkcs12(const Der: RawByteString): PPKCS12;
 function ParsePkcs12(const Saved: RawByteString; const Password: SpiUtf8;
   out Cert: PX509; out PrivateKey: PEVP_PKEY; CA: PPstack_st_X509 = nil): boolean;
 
-/// low-level SCrypt hash computation as available since OpenSSL 3.x / 4.x
+/// low-level SCrypt hash computation with static OpenSSL 1.1 or OpenSSL 3.x / 4.x
 // - see http://www.tarsnap.com/scrypt.html and RFC 7914
 // - OpenSSL is slower than mormot.crypt.other.pas i386/x86_64 tuned SSE2 code:
 // $ on Win32:     RawSCrypt in 101ms, OpenSslScrypt in 157ms
@@ -3011,6 +3023,44 @@ end;
 
 
 { ******************** Dynamically linked OpenSSL Library Functions }
+
+function OpenSslWinLocateEntry(const entries: TRawUtf8DynArray;
+  out majsel: integer): RawUtf8;
+var
+  p: PUtf8Char;
+  maj, min, minsel: integer;
+  i: PtrInt;
+begin // parse 'SOFTWARE\OpenSSL Corporation\OpenSSL-{maj}.{min}-OpenSSLProject'
+  result := '';
+  majsel := 0;
+  minsel := -1;
+  for i := 0 to high(entries) do
+  begin
+    p := pointer(entries[i]);
+    if not NetStartWith(p, 'OPENSSL-') then
+      continue;
+    inc(p, 8);
+    maj := GetCardinal(p);
+    if maj < majsel then
+      continue;
+    while p^ in ['0' .. '9'] do
+      inc(p);
+    if p^ <> '.' then
+      continue;
+    inc(p);
+    min := GetCardinal(p);
+    if (maj = majsel) and
+       (min < minsel) then
+      continue;
+    while p^ in ['0' .. '9'] do
+      inc(p);
+    if not NetStartWith(p, '-OPENSSLPROJECT') then
+      continue;
+    result := entries[i]; // found the highest version
+    majsel := maj;
+    minsel := min;
+  end;
+end;
 
 {$ifndef OPENSSLSTATIC}
 
@@ -6206,44 +6256,6 @@ begin
   result := openssl_initialized = lsAvailable;
 end;
 
-function OpenSslWinLocateEntry(const entries: TRawUtf8DynArray;
-  out majsel: integer): RawUtf8;
-var
-  p: PUtf8Char;
-  maj, min, minsel: integer;
-  i: PtrInt;
-begin // parse 'SOFTWARE\OpenSSL Corporation\OpenSSL-{maj}.{min}-OpenSSLProject'
-  result := '';
-  majsel := 0;
-  minsel := -1;
-  for i := 0 to high(entries) do
-  begin
-    p := pointer(entries[i]);
-    if not NetStartWith(p, 'OPENSSL-') then
-      continue;
-    inc(p, 8);
-    maj := GetCardinal(p);
-    if maj < majsel then
-      continue;
-    while p^ in ['0' .. '9'] do
-      inc(p);
-    if p^ <> '.' then
-      continue;
-    inc(p);
-    min := GetCardinal(p);
-    if (maj = majsel) and
-       (min < minsel) then
-      continue;
-    while p^ in ['0' .. '9'] do
-      inc(p);
-    if not NetStartWith(p, '-OPENSSLPROJECT') then
-      continue;
-    result := entries[i]; // found the highest version
-    majsel := maj;
-    minsel := min;
-  end;
-end;
-
 {$ifdef OSWINDOWS}
 {$ifdef CPU32}
 function OpenSslWinLocate: TFileName;
@@ -6487,14 +6499,14 @@ function SSL_CTX_set_alpn_protos(ctx: PSSL_CTX;
 function SSL_CTX_ctrl(ctx: PSSL_CTX; cmd: integer; larg: clong; parg: pointer): clong; cdecl;
   external LIB_SSL name _PU + 'SSL_CTX_ctrl';
 
-// FIXME: op is culong since OpenSSL 3.x
-function SSL_CTX_set_options(ctx: PSSL_CTX; op: cardinal): cardinal; cdecl;
+// op/result are culong for OpenSSL 1.1 (64-bit on LP64), QWord since 3.x
+function SSL_CTX_set_options(ctx: PSSL_CTX; op: QWord): QWord; cdecl;
   external LIB_SSL name _PU + 'SSL_CTX_set_options';
 
 function SSL_CTX_set_session_id_context(ctx: PSSL_CTX; sid_ctx: pointer; sid_ctx_len: cardinal): integer; cdecl;
   external LIB_SSL name _PU + 'SSL_CTX_set_session_id_context';
 
-function SSL_CTX_clear_options(ctx: PSSL_CTX; op: cardinal): cardinal; cdecl;
+function SSL_CTX_clear_options(ctx: PSSL_CTX; op: QWord): QWord; cdecl;
   external LIB_SSL name _PU + 'SSL_CTX_clear_options';
 
 function SSL_CTX_callback_ctrl(p1: PSSL_CTX; p2: integer; p3: SSL_CTX_callback_ctrl_): clong; cdecl;
@@ -6587,7 +6599,7 @@ procedure SSL_CTX_set_default_passwd_cb_userdata(ctx: PSSL_CTX; u: pointer); cde
 function SSL_CTX_use_PrivateKey_file(ctx: PSSL_CTX; _file: PUtf8Char; typ: integer): integer; cdecl;
   external LIB_SSL name _PU + 'SSL_CTX_use_PrivateKey_file';
 
-function SSL_CTX_set_cipher_list(p1: PSSL_CTX; str: PUtf8Char): integer; cdecl;
+function SSL_CTX_set_cipher_list(ctx: PSSL_CTX; str: PUtf8Char): integer; cdecl;
   external LIB_SSL name _PU + 'SSL_CTX_set_cipher_list';
 
 // only OpenSSL 1.1 is supported yet as static linking
@@ -7492,12 +7504,6 @@ function EVP_CIPHER_CTX_set_padding(c: PEVP_CIPHER_CTX; pad: integer): integer; 
 function EVP_CIPHER_CTX_iv(ctx: PEVP_CIPHER_CTX): PByte; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_CIPHER_CTX_iv';
 
-function EVP_MD_CTX_new(): PEVP_MD_CTX; cdecl;
-  external LIB_CRYPTO name _PU + 'EVP_MD_CTX_new';
-
-procedure EVP_MD_CTX_free(ctx: PEVP_MD_CTX); cdecl;
-  external LIB_CRYPTO name _PU + 'EVP_MD_CTX_free';
-
 function EVP_MD_CTX_md(ctx: PEVP_MD_CTX): PEVP_MD; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_MD_CTX_md';
 
@@ -7698,22 +7704,43 @@ function EVP_PKEY_CTX_ctrl(ctx: PEVP_PKEY_CTX; keytype: integer; optype: integer
   cmd: integer; p1: integer; p2: pointer): integer; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_PKEY_CTX_ctrl';
 
+function EVP_PKEY_CTX_ctrl_uint64(ctx: PEVP_PKEY_CTX; keytype, optype,
+  cmd: integer; value: QWord): integer;
+begin
+  result := EVP_PKEY_CTX_ctrl(ctx, keytype, optype, cmd, 0, @value);
+end;
+
 function EVP_PKEY_CTX_set1_pbe_pass(ctx: PEVP_PKEY_CTX;
-  pass: PAnsiChar; passlen: integer): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'EVP_PKEY_CTX_set1_pbe_pass';
+  pass: PAnsiChar; passlen: integer): integer;
+begin
+  result := EVP_PKEY_CTX_ctrl(ctx, -1, EVP_PKEY_OP_DERIVE, EVP_PKEY_ALG_CTRL + 8,
+    passlen, pass);
+end;
 
 function EVP_PKEY_CTX_set1_scrypt_salt(ctx: PEVP_PKEY_CTX;
-  salt: PByte; saltlen: integer): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'EVP_PKEY_CTX_set1_scrypt_salt';
+  salt: PByte; saltlen: integer): integer;
+begin
+  result := EVP_PKEY_CTX_ctrl(ctx, -1, EVP_PKEY_OP_DERIVE, EVP_PKEY_ALG_CTRL + 9,
+    saltlen, salt);
+end;
 
-function EVP_PKEY_CTX_set_scrypt_N(ctx: PEVP_PKEY_CTX; n: QWord): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'EVP_PKEY_CTX_set_scrypt_N';
+function EVP_PKEY_CTX_set_scrypt_N(ctx: PEVP_PKEY_CTX; n: QWord): integer;
+begin
+  result := EVP_PKEY_CTX_ctrl_uint64(ctx, -1, EVP_PKEY_OP_DERIVE,
+    EVP_PKEY_ALG_CTRL + 10, n);
+end;
 
-function EVP_PKEY_CTX_set_scrypt_r(ctx: PEVP_PKEY_CTX; r: QWord): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'EVP_PKEY_CTX_set_scrypt_r';
+function EVP_PKEY_CTX_set_scrypt_r(ctx: PEVP_PKEY_CTX; r: QWord): integer;
+begin
+  result := EVP_PKEY_CTX_ctrl_uint64(ctx, -1, EVP_PKEY_OP_DERIVE,
+    EVP_PKEY_ALG_CTRL + 11, r);
+end;
 
-function EVP_PKEY_CTX_set_scrypt_p(ctx: PEVP_PKEY_CTX; p: QWord): integer; cdecl;
-  external LIB_CRYPTO name _PU + 'EVP_PKEY_CTX_set_scrypt_p';
+function EVP_PKEY_CTX_set_scrypt_p(ctx: PEVP_PKEY_CTX; p: QWord): integer;
+begin
+  result := EVP_PKEY_CTX_ctrl_uint64(ctx, -1, EVP_PKEY_OP_DERIVE,
+    EVP_PKEY_ALG_CTRL + 12, p);
+end;
 
 function EVP_PKEY_CTX_new(pkey: PEVP_PKEY; e: PENGINE): PEVP_PKEY_CTX; cdecl;
   external LIB_CRYPTO name _PU + 'EVP_PKEY_CTX_new';
@@ -10293,6 +10320,7 @@ end;
 function EVP_PKEY.Sign(Algo: PEVP_MD; Msg: pointer; Len: integer): RawByteString;
 var
   ctx: PEVP_MD_CTX;
+  pctx: PEVP_PKEY_CTX;
   s: PtrUInt;
 begin
   // expects @self to be a private key
@@ -10302,7 +10330,14 @@ begin
   try
     // note: ED25519 requires single-pass EVP_DigestSign()
     s := 0;
-    if (EVP_DigestSignInit(ctx, nil, Algo, nil, @self) = OPENSSLSUCCESS) and
+    // RSA-PSS (e.g. JWA PS256/384/512) expects salt length = digest length:
+    // OpenSSL may default to the maximum length, which other implementations
+    // reject - MGF1 already defaults to the signature digest
+    pctx := nil;
+    if (EVP_DigestSignInit(ctx, @pctx, Algo, nil, @self) = OPENSSLSUCCESS) and
+       ((Algo = nil) or
+        (EVP_PKEY_id(@self) <> EVP_PKEY_RSA_PSS) or
+        (EVP_PKEY_CTX_set_rsa_pss_saltlen(pctx, RSA_PSS_SALTLEN_DIGEST) = OPENSSLSUCCESS)) and
        (EVP_DigestSign(ctx, nil, s, Msg, Len) = OPENSSLSUCCESS) then
     begin
       SetLength(result, s); // here size is maximum s bytes
@@ -10982,6 +11017,14 @@ begin
     EVP_PKEY_CTRL_RSA_MGF1_MD, 0, md);
 end;
 
+function EVP_PKEY_CTX_set_rsa_pss_saltlen(ctx: PEVP_PKEY_CTX; len: integer): integer;
+begin
+  // OpenSSL 1.1 macro, but with optype = -1: EVP_PKEY_OP_* bits changed in
+  // OpenSSL 3.x, and EVP_DigestSignInit() uses EVP_PKEY_OP_SIGNCTX there
+  result := {$ifndef OPENSSLSTATIC}libcrypto.{$endif}RSA_pkey_ctx_ctrl(ctx,
+    -1, EVP_PKEY_CTRL_RSA_PSS_SALTLEN, len, nil);
+end;
+
 function EVP_PKEY_assign_RSA(pkey: PEVP_PKEY; rsa: PRSA): integer;
 begin
   result := EVP_PKEY_assign(pkey, EVP_PKEY_RSA, rsa);
@@ -11281,6 +11324,8 @@ function OpenSslSCrypt(const Password: RawUtf8; const Salt: RawByteString;
 var
   ctx: PEVP_PKEY_CTX;
   len: PtrUInt;
+  pwd, slt: pointer;
+  empty: byte;
 begin
   FastAssignNew(result);
   // validate parameters
@@ -11296,10 +11341,18 @@ begin
   ctx := EVP_PKEY_CTX_new_id(EVP_PKEY_SCRYPT, nil);
   if ctx <> nil then
   try
+    // OpenSSL 1.1 rejects nil data pointers even for a zero-length input.
+    empty := 0;
+    pwd := pointer(Password);
+    if pwd = nil then
+      pwd := @empty;
+    slt := pointer(Salt);
+    if slt = nil then
+      slt := @empty;
     // setup parameters
     if (EVP_PKEY_derive_init(ctx) <= 0) or
-       (EVP_PKEY_CTX_set1_pbe_pass(ctx, pointer(Password), Length(Password)) <= 0) or
-       (EVP_PKEY_CTX_set1_scrypt_salt(ctx, pointer(Salt), length(Salt)) <= 0) or
+       (EVP_PKEY_CTX_set1_pbe_pass(ctx, PAnsiChar(pwd), Length(Password)) <= 0) or
+       (EVP_PKEY_CTX_set1_scrypt_salt(ctx, PByte(slt), length(Salt)) <= 0) or
        (EVP_PKEY_CTX_set_scrypt_N(ctx, N) <= 0) or
        (EVP_PKEY_CTX_set_scrypt_r(ctx, R) <= 0) or
        (EVP_PKEY_CTX_set_scrypt_p(ctx, P) <= 0) then

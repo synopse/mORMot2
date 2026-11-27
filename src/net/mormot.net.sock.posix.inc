@@ -2123,7 +2123,11 @@ begin
     exit;
   // keep the wakeup fd readable after termination: all concurrent waiters
   // must be released, not just the first one (level-triggered epoll)
+  {$ifdef OSLINUX}
   fWakeFD := LinuxEventFD({nonblocking=}true, {semaphore=}false);
+  {$else}
+  fWakeFD := 0; // e.g. Delphi Android: no LinuxEventFD() wrapper available
+  {$endif OSLINUX}
   if fWakeFD <= 0 then
     exit; // fallback to the existing bounded epoll_wait timeout
   e.events := EPOLLIN;
@@ -2158,7 +2162,9 @@ begin
   inherited Terminate; // set fTerminated flag
   // use fWakeFD to release any pending WaitForModified()
   if fWakeFD > 0 then
+    {$ifdef OSLINUX}
     LinuxEventFDWrite(fWakeFD, 1);
+    {$endif OSLINUX}
 end;
 
 class function TPollSocketEpoll.FollowEpoll: boolean;

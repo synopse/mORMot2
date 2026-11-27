@@ -91,3 +91,18 @@ backup/
 
 # Claude Code local settings
 .claude/
+
+# Android64 FMX test runner sources; keep generated APK and compiler files local.
+/test/android/*
+!/test/android/ANDROID-README.md
+!/test/android/AndroidManifest.template.xml
+!/test/android/README.md
+!/test/android/*.cmd
+!/test/android/*.deployproj
+!/test/android/*.dpr
+!/test/android/*.dproj
+!/test/android/*.pas
+!/test/android/*.ps1
+test/bin/*
+test/mormot2testsAndroidRunner/*
+test/mormot2tests/*

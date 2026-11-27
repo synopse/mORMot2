@@ -149,6 +149,8 @@ type
     // TSynQueue workers
     procedure TSynQueueSlow1(Sender: TObject);
     procedure TSynQueueSlow2(Sender: TObject);
+    // single-thread TSynEvent state transitions - should run in the main thread
+    procedure CoreClassesMainThread;
   published
     /// validate TSynEvent/TSynQueue state transitions and cross-thread coverage
     procedure CoreClasses;
@@ -1083,7 +1085,7 @@ begin
     fDone.SetEvent;
 end;
 
-procedure TTestCoreThreads.CoreClasses;
+procedure TTestCoreThreads.CoreClassesMainThread;
 var
   i: integer;
 begin
@@ -1106,6 +1108,17 @@ begin
     fEntered.SetEvent;
     Check(fEntered.WaitForSafe(INFINITE), 'WaitForSafe(INFINITE) signal');
   end;
+end;
+
+procedure TTestCoreThreads.CoreClasses;
+begin
+  // the Android FMX runner executes tests from a worker thread
+  {$ifdef OSANDROID}
+  if GetCurrentThreadID <> MainThreadID then
+    TThread.Synchronize(nil, CoreClassesMainThread)
+  else
+  {$endif OSANDROID}
+    CoreClassesMainThread;
   // validate TSynQueue with all kind of values in a background thread
   Run(TSynQueueSlow1, self, 'TSynQueue1');
   Run(TSynQueueSlow2, self, 'TSynQueue2');
