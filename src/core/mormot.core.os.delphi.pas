@@ -246,6 +246,14 @@ function fpkill(pid, sig: cint): cint; cdecl;
 function fpfork: TPid; cdecl;
   external clib name 'fork';
 
+{$ifdef OSANDROID}
+/// vfork() does not run the pthread_atfork() handlers, unlike bionic fork()
+// - some vendor GPU drivers register handlers which crash in the child process
+// - the child shares the parent memory: only syscalls until execve/_exit
+function fpvfork: TPid; cdecl;
+  external clib name 'vfork';
+{$endif OSANDROID}
+
 {$ifdef OSDARWIN}
 
 const
@@ -806,7 +814,7 @@ end;
 
 procedure fpexit(code: cint);
 begin
-  __exit(code);
+  _exit(code); // as FPC FpExit: no atexit() handlers, e.g. in a forked child
 end;
 
 function WaitProcess(pid: cint): cint;

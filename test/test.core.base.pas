@@ -3809,6 +3809,28 @@ begin
   result := GetInteger(pointer(s));
 end;
 
+{$ifdef OSANDROID}
+// the shell may ignore SIGPIPE by itself (e.g. some vendor mksh), and toybox
+// commands like cat reset it: check the "SigIgn:" mask of awk instead
+// - returns 1 if SIGPIPE is ignored, 0 if not, -1 if no valid mask was found
+function ChildIgnoresSigPipe(const status: RawUtf8): integer;
+var
+  i: PtrInt;
+  p: PUtf8Char;
+  mask: Int64;
+begin
+  result := -1;
+  i := PosEx('SigIgn:', status);
+  if i = 0 then
+    exit;
+  p := @PByteArray(status)[i + 6];
+  while p^ in [#9, ' '] do
+    inc(p);
+  if HexDisplayToInt64(PAnsiChar(p), mask) then
+    result := ord(mask and (Int64(1) shl (SIGPIPE - 1)) <> 0);
+end;
+{$endif OSANDROID}
+
 procedure TTestCoreBase.DoRunRedirect(Dummy: TObject);
 var
   r: TRunRedirectTest;
@@ -3860,7 +3882,13 @@ begin
   CheckEqual(StringToUtf8(GetCurrentDir), StringToUtf8(cwd), 'wrkdir');
   // the child should not inherit an ignored SIGPIPE, e.g. from a server
   SigPipeIntercept;
+  {$ifdef OSANDROID}
+  output := RunRedirect('awk /SigIgn/ /proc/self/status', @exitcode);
+  CheckEqual(exitcode, 0, 'sigign');
+  CheckEqual(ChildIgnoresSigPipe(output), 0, 'sigign');
+  {$else}
   Run('kill -PIPE $$; echo alive', '', -SIGPIPE);
+  {$endif OSANDROID}
   if not IsDebuggerPresent then
   begin
     {$ifdef FPC}
@@ -4228,9 +4256,15 @@ begin
   SigPipeIntercept;
   p := TExternalProcess.Create;
   try
+    {$ifdef OSANDROID}
+    Check(p.Start('awk /SigIgn/ /proc/self/status'), 'sigpipe');
+    CheckEqual(p.WaitFor(10000), 0, 'sigpipe');
+    CheckEqual(ChildIgnoresSigPipe(p.ReadAvailable), 0, 'sigpipe');
+    {$else}
     Check(p.Start('kill -PIPE $$; echo alive'), 'sigpipe');
     CheckEqual(p.WaitFor(10000), -SIGPIPE, 'sigpipe');
     CheckEqual(p.ReadAvailable, '', 'sigpipe');
+    {$endif OSANDROID}
   finally
     p.Free;
   end;

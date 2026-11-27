@@ -5779,7 +5779,7 @@ function TExternalProcess.DoStart(const cmd: TRunArg; const args: array of TRunA
   withthread: boolean): boolean;
 var
   i: PtrInt;
-  pid, nul, maxfd, e: cint;
+  pid, nul, maxfd, e, childrep: cint;
   n: ssize_t;
   inp, outp, errp, rep, wake: TFilDes;
   err: TParseCommands;
@@ -5917,11 +5917,17 @@ begin
   maxfd := ChildMaxDescriptor; // after all our own descriptors were opened
   fpsigemptyset(nomask);
   FillCharFast(dfl, SizeOf(dfl), 0); // SIG_DFL = nil handler on all systems
+  {$if defined(OSANDROID) and not defined(FPC)}
+  pid := fpvfork; // bionic fork() runs pthread_atfork() handlers - see fpvfork
+  {$else}
   pid := RunFork;
+  {$ifend}
   if pid = 0 then
   begin
     // we are in the child process: only low-level fork/vfork-safe syscalls
-    // until execve(), sending errno to the parent on any failure
+    // until execve(), sending errno to the parent on any failure - and no
+    // write to the parent variables, which are shared after vfork()
+    childrep := rep[1];
     if (fpsigprocmask(SIG_SETMASK, @nomask, nil) = 0) and // as RTL fpSystem
        (fpsigaction(SIGPIPE, @dfl, nil) = 0) and // as set by SigPipeIntercept
        (fpsetsid >= 0) and // new session/group, so the group can be signaled
@@ -5930,14 +5936,14 @@ begin
         ((fpdup2(rep[1], 3) >= 0) and
          (fpfcntl(3, F_SETFD, FCNTL_CLOEXEC) >= 0))) then
     begin
-      rep[1] := 3;
+      childrep := 3;
       CloseDescriptorsFrom(4, maxfd); // don't leak any descriptor of this process
       if (wdir = '') or
          (FpChdir(pointer(wdir)) = 0) then
         FpExecve(a[0], @a, envpp);
     end;
     e := fpgeterrno;
-    fpwrite(rep[1], @e, SizeOf(e));
+    fpwrite(childrep, @e, SizeOf(e));
     FpExit(127);
   end;
   // in the parent process: close the descriptors of the child
