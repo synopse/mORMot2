@@ -42,11 +42,17 @@ begin
   FreeAndNil(sqlite3);
   try
     sqlite3 := TSqlite3LibraryDynamic.Create(SQLITE_LIBRARY_DEFAULT_NAME);
+    {$ifndef OSANDROID}
     sqlite3.ForceToUseSharedMemoryManager; // faster process
+    {$endif OSANDROID}
   except
     on E: Exception do
+      {$ifdef OSANDROID}
+      raise;
+      {$else}
       DisplayFatalError(SQLITE_LIBRARY_DEFAULT_NAME + ' initialization failed',
         RawUtf8(E.ClassName +  ': ' + E.Message));
+      {$endif OSANDROID}
   end;
 end;
 

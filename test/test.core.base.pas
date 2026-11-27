@@ -3914,7 +3914,10 @@ procedure TTestCoreBase.DoTExternalProcess(Sender: TObject);
 var
   p, b: TExternalProcess;
   r: TRunRedirectTest;
-  data, s, dir, tool: RawUtf8;
+  data, s, dir: RawUtf8;
+  {$ifndef OSANDROID}
+  tool: RawUtf8;
+  {$endif OSANDROID}
   cwd: TFileName;
   start: Int64;
   bg, pid, hfd: cint;
@@ -4042,6 +4045,7 @@ begin
   finally
     p.Free;
   end;
+  {$ifndef OSANDROID} // no /bin/sh, and app data files are not executable (W^X)
   // the executable is searched in the PATH of the child environment
   dir := StringToUtf8(TemporaryFileName);
   Check(CreateDir(Utf8ToString(dir)), 'dir');
@@ -4058,6 +4062,7 @@ begin
   end;
   DeleteFile(Utf8ToString(tool));
   RemoveDir(Utf8ToString(dir));
+  {$endif OSANDROID}
   // wrkdir is applied to the child process only
   cwd := GetCurrentDir;
   dir := '/';
@@ -5204,6 +5209,17 @@ begin
     Check(IsMatch('[a-z0-9]?[A-Z0-9]', V, true) = isword);
     Check(IsMatch('[A-Z0-9]*', V, true) = isword);
   end;
+  {$ifdef OSANDROID}
+  // Android64 heap strings may carry a pointer tag in their high bits.
+  // SearchNoRange must retry after '*' even when that pointer is negative
+  // when interpreted as PtrInt.
+  V := 'test0' + RawUtf8(StringOfChar('0', 3)) + '.dbs';
+  Check(IsMatchs('test0*.dbs', V, false));
+  Check(IsMatchs('*.txt;test0*.dbs', V, false, ';'));
+  match.Prepare('test0*.dbs', false, true);
+  Check(match.Match(V));
+  Check(not match.Match('test0000.txt'));
+  {$endif OSANDROID}
 end;
 
 procedure TTestCoreBase._TExprParserMatch;

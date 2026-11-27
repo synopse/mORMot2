@@ -1,0 +1,26 @@
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+    <Import Condition="Exists('$(BDS)\bin\CodeGear.Deployment.targets')" Project="$(BDS)\bin\CodeGear.Deployment.targets"/>
+    <ItemGroup Condition="'$(Platform)'=='Android64'">
+        <DeployFile Include="..\..\static\arm64-v8a\libsqlite.so">
+            <RemoteDir>$(MSBuildProjectName)\library\lib\arm64-v8a\</RemoteDir>
+            <RemoteName>libsqlite.so</RemoteName>
+            <DeployClass>File</DeployClass>
+            <Operation>1</Operation>
+            <Overwrite>True</Overwrite>
+            <Required>True</Required>
+        </DeployFile>
+    </ItemGroup>
+    <Target Name="StageAndroidPackage" BeforeTargets="_AndroidMergeManifestFiles" Condition="'$(Platform)'=='Android64'">
+        <MakeDir Directories="$(APK_RootDir);$(APK_ResDir)\drawable;$(APK_ResDir)\drawable-xxxhdpi;$(APK_ResDir)\values;$(APK_ResDir)\values-night-v21;$(APK_ResDir)\values-v21;$(APK_ResDir)\values-v35;$(APK_LibraryDir)"/>
+        <Copy SourceFiles="$(GeneratedManifestFile)" DestinationFiles="$(ManifestFile)"/>
+        <Copy SourceFiles="$(MSBuildProjectDirectory)\lib$(MSBuildProjectName).so" DestinationFiles="$(APK_LibraryDir)\lib$(MSBuildProjectName).so"/>
+        <Copy SourceFiles="$(BDS)\bin\Artwork\Android\FM_LauncherIcon_192x192.png" DestinationFiles="$(APK_ResDir)\drawable-xxxhdpi\ic_launcher.png"/>
+        <Copy SourceFiles="$(BDS)\bin\Artwork\Android\FM_SplashImage_640x480.png" DestinationFiles="$(APK_ResDir)\drawable\splash_image.png"/>
+        <Copy SourceFiles="$(MSBuildProjectDirectory)\splash_image_def.xml" DestinationFiles="$(APK_ResDir)\drawable\splash_image_def.xml"/>
+        <Copy SourceFiles="$(MSBuildProjectDirectory)\colors.xml;$(MSBuildProjectDirectory)\strings.xml;$(MSBuildProjectDirectory)\styles.xml" DestinationFolder="$(APK_ResDir)\values"/>
+        <Copy SourceFiles="$(MSBuildProjectDirectory)\colors-night-v21.xml" DestinationFiles="$(APK_ResDir)\values-night-v21\colors.xml"/>
+        <Copy SourceFiles="$(MSBuildProjectDirectory)\styles-v21.xml" DestinationFiles="$(APK_ResDir)\values-v21\styles.xml"/>
+        <Copy SourceFiles="$(MSBuildProjectDirectory)\styles-v35.xml" DestinationFiles="$(APK_ResDir)\values-v35\styles.xml"/>
+    </Target>
+    <ProjectExtensions><ProjectFileVersion>12</ProjectFileVersion></ProjectExtensions>
+</Project>
