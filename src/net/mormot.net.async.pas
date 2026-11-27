@@ -529,6 +529,8 @@ type
     fWakeUp: set of (wuPossible, wuFromSlowProcess); // for atpReadPending
     fIndex: integer;
     fCustomObject: TObject;
+    // set by THttpAsyncServerConnection.DoRequest for THttpAsyncServer.DoAsyncHandle
+    fUnregistered: pointer; // THttpAsyncServerConnection
     {$ifndef USE_WINIOCP}
     fEvent: TSynEvent;
     fThreadPollingLastWakeUpTix: integer;
@@ -1146,6 +1148,7 @@ type
     function GetExecuteState: THttpServerExecuteState; override;
     function GetBanned: THttpAcceptBan; override;
     procedure AppendHttpDate(var Dest: TRawByteStringBuffer); override;
+    procedure DoAsyncHandle(Ctxt: THttpServerRequest); override;
     // the main thread will Send output packets in the background
     procedure DoExecute; override;
     {$ifdef OSWINDOWS}
@@ -5049,6 +5052,8 @@ end;
 function THttpAsyncServerConnection.DoRequest: TPollAsyncSocketOnReadWrite;
 var
   op: PHttpServerConnectionOpaque;
+  thread: TAsyncConnectionsThread;
+  done: boolean;
 begin
   // check the status
   if nfHeadersParsed in fHttp.HeaderFlags then
@@ -5092,7 +5097,18 @@ begin
   fRequest.Prepare(fHttp, fRemoteIP, fServer.fAuthorize);
   // let the associated THttpAsyncServer execute the request
   result := soClose;
-  if fServer.DoRequest(fRequest) then
+  thread := nil;
+  if not (fRegistered in fFlags) then
+  begin
+    // e.g. first request with several threads: registered by DoAsyncHandle
+    // if Ctxt.AsyncHandle is called, so that AsyncResponse() could find it
+    thread := TAsyncConnectionsThread(fReadThread);
+    thread.fUnregistered := self;
+  end;
+  done := fServer.DoRequest(fRequest);
+  if thread <> nil then
+    thread.fUnregistered := nil;
+  if done then
   begin
     result := soContinue;
     if fRequest.RespStatus = HTTP_ASYNCRESPONSE then
@@ -5431,6 +5447,21 @@ begin
   finally
     c.UnLock({LockWrite=}false); // unless CloseConnection set c := nil
   end;
+end;
+
+procedure THttpAsyncServer.DoAsyncHandle(Ctxt: THttpServerRequest);
+var
+  c: THttpAsyncServerConnection;
+begin
+  // a connection may be unregistered during its first OnRead, but should be
+  // found by AsyncResponse() from now on
+  if not (Ctxt.ConnectionThread is TAsyncConnectionsThread) then
+    exit;
+  c := TAsyncConnectionsThread(Ctxt.ConnectionThread).fUnregistered;
+  if (c <> nil) and
+     (c.fRequest = Ctxt) and
+     not (fRegistered in c.fFlags) then
+    fAsync.ConnectionAdd(c);
 end;
 
 function THttpAsyncServer.Clients: THttpAsyncClientConnections;
