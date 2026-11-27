@@ -9299,8 +9299,8 @@ begin
       if result.VCount = 0 then
         SetLength(result.VValue, n); // prepare for maximum capacity
       result.AddItem(PVariant(dv)^);
+      dec(aLimit);
     end;
-    dec(aLimit);
     if aLimit = 0 then
       exit;
     inc(v);
